@@ -16909,22 +16909,22 @@ static int touch_dbi(MDBX_cursor *mc) {
   return MDBX_SUCCESS;
 }
 
-static int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key,
-                        const MDBX_val *data) {
+static __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key,
+                              const MDBX_val *data) {
   cASSERT(mc, (mc->mc_txn->mt_flags & MDBX_TXN_RDONLY) == 0);
   cASSERT(mc, (mc->mc_flags & C_INITIALIZED) || mc->mc_snum == 0);
   cASSERT(mc, cursor_is_tracked(mc));
 
-  txn_lru_turn(mc->mc_txn);
-
-  if (unlikely((*mc->mc_dbistate & DBI_DIRTY) == 0)) {
-    int err = touch_dbi(mc);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
-  }
-
   if ((mc->mc_flags & C_SUB) == 0) {
     MDBX_txn *const txn = mc->mc_txn;
+    txn_lru_turn(txn);
+
+    if (unlikely((*mc->mc_dbistate & DBI_DIRTY) == 0)) {
+      int err = touch_dbi(mc);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+    }
+
     /* Estimate how much space this operation will take: */
     /* 1) Max b-tree height, reasonable enough with including dups' sub-tree */
     size_t need = CURSOR_STACK + 3;
