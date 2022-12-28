@@ -4183,40 +4183,51 @@ __cold static void kill_page(MDBX_txn *txn, MDBX_page *mp, pgno_t pgno,
 }
 
 /* Remove page from dirty list, etc */
-static __inline void page_wash(MDBX_txn *txn, const size_t di,
-                               MDBX_page *const mp, const size_t npages) {
+static __inline void page_wash(MDBX_txn *txn, size_t di, MDBX_page *const mp,
+                               const size_t npages) {
   tASSERT(txn, (txn->mt_flags & MDBX_TXN_RDONLY) == 0);
   mp->mp_txnid = INVALID_TXNID;
   mp->mp_flags = P_BAD;
 
-  if (di) {
-    tASSERT(txn, txn->tw.dirtylist != nullptr);
+  if (txn->tw.dirtylist) {
     tASSERT(txn, (txn->mt_flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
-    tASSERT(txn, di <= txn->tw.dirtylist->length &&
-                     txn->tw.dirtylist->items[di].ptr == mp);
-    dpl_remove_ex(txn, di, npages);
-    txn->tw.dirtyroom++;
-    tASSERT(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
-                     (txn->mt_parent ? txn->mt_parent->tw.dirtyroom
-                                     : txn->mt_env->me_options.dp_limit));
-  } else {
-    tASSERT(txn, (txn->mt_flags & MDBX_WRITEMAP));
-    if (txn->tw.dirtylist == nullptr) {
-      tASSERT(txn, !MDBX_AVOID_MSYNC);
-      txn->tw.writemap_dirty_npages -= (txn->tw.writemap_dirty_npages > npages)
-                                           ? npages
-                                           : txn->tw.writemap_dirty_npages;
+    tASSERT(txn,
+            MDBX_AVOID_MSYNC || (di && txn->tw.dirtylist->items[di].ptr == mp));
+    if (!MDBX_AVOID_MSYNC || di) {
+      dpl_remove_ex(txn, di, npages);
+      txn->tw.dirtyroom++;
+      tASSERT(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
+                       (txn->mt_parent ? txn->mt_parent->tw.dirtyroom
+                                       : txn->mt_env->me_options.dp_limit));
+      if (!MDBX_AVOID_MSYNC || !(txn->mt_flags & MDBX_WRITEMAP)) {
+        dpage_free(txn->mt_env, mp, npages);
+        return;
+      }
     }
+  } else {
+    tASSERT(txn, (txn->mt_flags & MDBX_WRITEMAP) && !MDBX_AVOID_MSYNC && !di);
+    txn->tw.writemap_dirty_npages -= (txn->tw.writemap_dirty_npages > npages)
+                                         ? npages
+                                         : txn->tw.writemap_dirty_npages;
   }
-
   VALGRIND_MAKE_MEM_UNDEFINED(mp, PAGEHDRSZ);
-  if (txn->mt_flags & MDBX_WRITEMAP) {
-    VALGRIND_MAKE_MEM_NOACCESS(page_data(mp),
-                               pgno2bytes(txn->mt_env, npages) - PAGEHDRSZ);
-    MDBX_ASAN_POISON_MEMORY_REGION(page_data(mp),
-                                   pgno2bytes(txn->mt_env, npages) - PAGEHDRSZ);
-  } else
-    dpage_free(txn->mt_env, mp, npages);
+  VALGRIND_MAKE_MEM_NOACCESS(page_data(mp),
+                             pgno2bytes(txn->mt_env, npages) - PAGEHDRSZ);
+  MDBX_ASAN_POISON_MEMORY_REGION(page_data(mp),
+                                 pgno2bytes(txn->mt_env, npages) - PAGEHDRSZ);
+}
+
+static __inline bool suitable4loose(const MDBX_txn *txn, pgno_t pgno) {
+  /* TODO:
+   *  1) при включенной "экономии последовательностей" проверить, что
+   *     страница не примыкает к какой-либо из уже находящийся в reclaimed.
+   *  2) стоит подумать над тем, чтобы при большом loose-списке отбрасывать
+         половину в reclaimed. */
+  return txn->tw.loose_count < txn->mt_env->me_options.dp_loose_limit &&
+         (!MDBX_ENABLE_REFUND ||
+          /* skip pages near to the end in favor of compactification */
+          txn->mt_next_pgno > pgno + txn->mt_env->me_options.dp_loose_limit ||
+          txn->mt_next_pgno <= txn->mt_env->me_options.dp_loose_limit);
 }
 
 /* Retire, loosen or free a single page.
@@ -4316,7 +4327,8 @@ static int page_retire_ex(MDBX_cursor *mc, const pgno_t pgno,
     tASSERT(txn, !txn->tw.spilled.list || !search_spilled(txn, pgno));
   } else if (IS_MODIFIABLE(txn, mp)) {
     status = modifable;
-    di = txn->tw.dirtylist ? dpl_exist(txn, pgno) : 0;
+    if (txn->tw.dirtylist)
+      di = dpl_exist(txn, pgno);
     tASSERT(txn, (txn->mt_flags & MDBX_WRITEMAP) || !IS_SPILLED(txn, mp));
     tASSERT(txn, !txn->tw.spilled.list || !search_spilled(txn, pgno));
   } else if (IS_SHADOWED(txn, mp)) {
@@ -4370,7 +4382,7 @@ status_done:
        * Её МОЖНО вытолкнуть в нераспределенный хвост. */
       kind = "dirty";
       /* Remove from dirty list */
-      page_wash(txn, di, mp ? mp : pgno2page(txn->mt_env, pgno), npages);
+      page_wash(txn, di, mp, npages);
     } else if (si) {
       /* Страница пролита в этой транзакции, т.е. она аллоцирована
        * и запачкана в этой или одной из родительских транзакций.
@@ -4409,71 +4421,60 @@ status_done:
   }
 
   if (status == modifable) {
-    if (di) {
-      /* Dirty page from this transaction */
-      /* If suitable we can reuse it through loose list */
-      if (likely(
-              npages == 1 &&
-              txn->tw.loose_count < txn->mt_env->me_options.dp_loose_limit &&
-              (!MDBX_ENABLE_REFUND ||
-               /* skip pages near to the end in favor of compactification */
-               txn->mt_next_pgno >
-                   pgno + txn->mt_env->me_options.dp_loose_limit ||
-               txn->mt_next_pgno <= txn->mt_env->me_options.dp_loose_limit))) {
-        DEBUG("loosen dirty page %" PRIaPGNO, pgno);
-        if (MDBX_DEBUG != 0 ||
-            unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
-          memset(page_data(mp), -1, txn->mt_env->me_psize - PAGEHDRSZ);
-        mp->mp_txnid = INVALID_TXNID;
-        mp->mp_flags = P_LOOSE;
-        mp_next(mp) = txn->tw.loose_pages;
-        txn->tw.loose_pages = mp;
-        txn->tw.loose_count++;
+    /* Dirty page from this transaction */
+    /* If suitable we can reuse it through loose list */
+    if (likely(npages == 1 && suitable4loose(txn, pgno)) &&
+        (di || !txn->tw.dirtylist)) {
+      DEBUG("loosen dirty page %" PRIaPGNO, pgno);
+      if (MDBX_DEBUG != 0 || unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
+        memset(page_data(mp), -1, txn->mt_env->me_psize - PAGEHDRSZ);
+      mp->mp_txnid = INVALID_TXNID;
+      mp->mp_flags = P_LOOSE;
+      mp_next(mp) = txn->tw.loose_pages;
+      txn->tw.loose_pages = mp;
+      txn->tw.loose_count++;
 #if MDBX_ENABLE_REFUND
-        txn->tw.loose_refund_wl = (pgno + 2 > txn->tw.loose_refund_wl)
-                                      ? pgno + 2
-                                      : txn->tw.loose_refund_wl;
+      txn->tw.loose_refund_wl = (pgno + 2 > txn->tw.loose_refund_wl)
+                                    ? pgno + 2
+                                    : txn->tw.loose_refund_wl;
 #endif /* MDBX_ENABLE_REFUND */
-        VALGRIND_MAKE_MEM_NOACCESS(page_data(mp),
-                                   txn->mt_env->me_psize - PAGEHDRSZ);
-        MDBX_ASAN_POISON_MEMORY_REGION(page_data(mp),
-                                       txn->mt_env->me_psize - PAGEHDRSZ);
-        return MDBX_SUCCESS;
-      }
+      VALGRIND_MAKE_MEM_NOACCESS(page_data(mp),
+                                 txn->mt_env->me_psize - PAGEHDRSZ);
+      MDBX_ASAN_POISON_MEMORY_REGION(page_data(mp),
+                                     txn->mt_env->me_psize - PAGEHDRSZ);
+      return MDBX_SUCCESS;
+    }
 
 #if !MDBX_DEBUG && !defined(MDBX_USE_VALGRIND) && !defined(__SANITIZE_ADDRESS__)
-      if (unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
+    if (unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
 #endif
-      {
-        /* Страница могла быть изменена в одной из родительских транзакций,
-         * в том числе, позже выгружена и затем снова загружена и изменена.
-         * В обоих случаях её нельзя затирать на диске и помечать недоступной
-         * в asan и/или valgrind */
-        for (MDBX_txn *parent = txn->mt_parent;
-             parent && (parent->mt_flags & MDBX_TXN_SPILLS);
-             parent = parent->mt_parent) {
-          if (intersect_spilled(parent, pgno, npages))
-            goto skip_invalidate;
-          if (dpl_intersect(parent, pgno, npages))
-            goto skip_invalidate;
-        }
+    {
+      /* Страница могла быть изменена в одной из родительских транзакций,
+       * в том числе, позже выгружена и затем снова загружена и изменена.
+       * В обоих случаях её нельзя затирать на диске и помечать недоступной
+       * в asan и/или valgrind */
+      for (MDBX_txn *parent = txn->mt_parent;
+           parent && (parent->mt_flags & MDBX_TXN_SPILLS);
+           parent = parent->mt_parent) {
+        if (intersect_spilled(parent, pgno, npages))
+          goto skip_invalidate;
+        if (dpl_intersect(parent, pgno, npages))
+          goto skip_invalidate;
+      }
 
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
-        if (MDBX_DEBUG != 0 ||
-            unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
+      if (MDBX_DEBUG != 0 || unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
 #endif
-          kill_page(txn, mp, pgno, npages);
-        if ((txn->mt_flags & MDBX_WRITEMAP) == 0) {
-          VALGRIND_MAKE_MEM_NOACCESS(page_data(pgno2page(txn->mt_env, pgno)),
-                                     pgno2bytes(txn->mt_env, npages) -
-                                         PAGEHDRSZ);
-          MDBX_ASAN_POISON_MEMORY_REGION(
-              page_data(pgno2page(txn->mt_env, pgno)),
-              pgno2bytes(txn->mt_env, npages) - PAGEHDRSZ);
-        }
+        kill_page(txn, mp, pgno, npages);
+      if ((txn->mt_flags & MDBX_WRITEMAP) == 0) {
+        VALGRIND_MAKE_MEM_NOACCESS(page_data(pgno2page(txn->mt_env, pgno)),
+                                   pgno2bytes(txn->mt_env, npages) - PAGEHDRSZ);
+        MDBX_ASAN_POISON_MEMORY_REGION(page_data(pgno2page(txn->mt_env, pgno)),
+                                       pgno2bytes(txn->mt_env, npages) -
+                                           PAGEHDRSZ);
       }
-    skip_invalidate:;
     }
+  skip_invalidate:
 
     /* wash dirty page */
     page_wash(txn, di, mp, npages);
@@ -4990,6 +4991,7 @@ __cold static int txn_spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0,
     dpl_clear(txn->tw.dirtylist);
     txn->tw.dirtyroom = env->me_options.dp_limit - txn->tw.loose_count;
     for (MDBX_page *lp = txn->tw.loose_pages; lp != nullptr; lp = mp_next(lp)) {
+      tASSERT(txn, lp->mp_flags == P_LOOSE);
       rc = dpl_append(txn, lp->mp_pgno, lp, 1);
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
@@ -9188,8 +9190,6 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
     if (parent->tw.loose_count) {
       do {
         MDBX_page *lp = parent->tw.loose_pages;
-        const size_t di = dpl_exist(parent, lp->mp_pgno);
-        tASSERT(parent, di && parent->tw.dirtylist->items[di].ptr == lp);
         tASSERT(parent, lp->mp_flags == P_LOOSE);
         rc = pnl_insert_range(&parent->tw.relist, lp->mp_pgno, 1);
         if (unlikely(rc != MDBX_SUCCESS))
@@ -9198,7 +9198,7 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
         VALGRIND_MAKE_MEM_DEFINED(&mp_next(lp), sizeof(MDBX_page *));
         parent->tw.loose_pages = mp_next(lp);
         /* Remove from dirty list */
-        page_wash(parent, di, lp, 1);
+        page_wash(parent, dpl_exist(parent, lp->mp_pgno), lp, 1);
       } while (parent->tw.loose_pages);
       parent->tw.loose_count = 0;
 #if MDBX_ENABLE_REFUND
@@ -19339,8 +19339,6 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
     }
   }
 
-  /* If not operating on GC, allow this page to be reused
-   * in this txn. Otherwise just add to free list. */
   rc = page_retire(csrc, (MDBX_page *)psrc);
   if (unlikely(rc))
     return rc;
