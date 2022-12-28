@@ -5963,11 +5963,8 @@ __cold static unsigned default_rp_augment_limit(const MDBX_env *env) {
 }
 
 __cold static bool default_prefault_write(const MDBX_env *env) {
-  if (env->me_incore ||
-      (env->me_flags & (MDBX_WRITEMAP | MDBX_RDONLY)) != MDBX_WRITEMAP)
-    return false;
-
-  return !MDBX_MMAP_INCOHERENT_FILE_WRITE;
+  return !MDBX_MMAP_INCOHERENT_FILE_WRITE && !env->me_incore &&
+         (env->me_flags & (MDBX_WRITEMAP | MDBX_RDONLY)) == MDBX_WRITEMAP;
 }
 
 static void adjust_defaults(MDBX_env *env) {
