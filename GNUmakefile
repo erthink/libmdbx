@@ -813,14 +813,19 @@ define bench-rule
 bench-$(1)_$(2).txt: $(3) $(IOARENA) $(lastword $(MAKEFILE_LIST))
 	@echo '  RUNNING ioarena for $1/$2...'
 	$(QUIET)(export LD_LIBRARY_PATH="./:$$$${LD_LIBRARY_PATH}"; \
-		ldd $(IOARENA) && \
+		ldd $(IOARENA) | grep -i $(1) && \
+		$(IOARENA) -D $(1) -B batch -m $(BENCH_CRUD_MODE) -n $(2) \
+			| tee $$@ | grep throughput | sed 's/throughput/batch×N/' && \
 		$(IOARENA) -D $(1) -B crud -m $(BENCH_CRUD_MODE) -n $(2) \
-			| tee $$@ | grep throughput && \
+			| tee -a $$@ | grep throughput | sed 's/throughput/   crud/' && \
 		$(IOARENA) -D $(1) -B iterate,get,iterate,get,iterate -m $(BENCH_CRUD_MODE) -r 4 -n $(2) \
-			| tee -a $$@ | grep throughput \
-	) || mv -f $$@ $$@.error
+			| tee -a $$@ | grep throughput | sed '0,/throughput/{s/throughput/iterate/};s/throughput/    get/' && \
+		$(IOARENA) -D $(1) -B delete -m $(BENCH_CRUD_MODE) -n $(2) \
+			| tee -a $$@ | grep throughput | sed 's/throughput/ delete/' && \
+	true) || mv -f $$@ $$@.error
 
 endef
+
 
 $(eval $(call bench-rule,mdbx,$(NN),libmdbx.$(SO_SUFFIX)))
 
