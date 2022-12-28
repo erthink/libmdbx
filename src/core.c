@@ -19488,6 +19488,7 @@ static int rebalance(MDBX_cursor *mc) {
         (pagetype & P_LEAF) ? "leaf" : "branch", tp->mp_pgno, numkeys,
         page_fill(mc->mc_txn->mt_env, tp), page_used(mc->mc_txn->mt_env, tp),
         room);
+  cASSERT(mc, IS_MODIFIABLE(mc->mc_txn, tp));
 
   if (unlikely(numkeys < minkeys)) {
     DEBUG("page %" PRIaPGNO " must be merged due keys < %zu threshold",
@@ -19576,8 +19577,9 @@ static int rebalance(MDBX_cursor *mc) {
                       IS_LEAF(mc->mc_pg[mc->mc_db->md_depth - 1]));
 
       rc = page_retire(mc, mp);
-      if (unlikely(rc != MDBX_SUCCESS))
-        return rc;
+      if (likely(rc == MDBX_SUCCESS))
+        rc = page_touch(mc);
+      return rc;
     } else {
       DEBUG("root page %" PRIaPGNO " doesn't need rebalancing (flags 0x%x)",
             mp->mp_pgno, mp->mp_flags);
@@ -19627,8 +19629,10 @@ static int rebalance(MDBX_cursor *mc) {
   const size_t right_room = right ? page_room(right) : 0;
   const size_t left_nkeys = left ? page_numkeys(left) : 0;
   const size_t right_nkeys = right ? page_numkeys(right) : 0;
+  bool involve = false;
 retry:
-  if (left_room > room_threshold && left_room >= right_room) {
+  if (left_room > room_threshold && left_room >= right_room &&
+      (IS_MODIFIABLE(mc->mc_txn, left) || involve)) {
     /* try merge with left */
     cASSERT(mc, left_nkeys >= minkeys);
     mn.mc_pg[mn.mc_top] = left;
@@ -19646,7 +19650,8 @@ retry:
       return rc;
     }
   }
-  if (right_room > room_threshold) {
+  if (right_room > room_threshold &&
+      (IS_MODIFIABLE(mc->mc_txn, right) || involve)) {
     /* try merge with right */
     cASSERT(mc, right_nkeys >= minkeys);
     mn.mc_pg[mn.mc_top] = right;
@@ -19662,7 +19667,8 @@ retry:
   }
 
   if (left_nkeys > minkeys &&
-      (right_nkeys <= left_nkeys || right_room >= left_room)) {
+      (right_nkeys <= left_nkeys || right_room >= left_room) &&
+      (IS_MODIFIABLE(mc->mc_txn, left) || involve)) {
     /* try move from left */
     mn.mc_pg[mn.mc_top] = left;
     mn.mc_ki[mn.mc_top - 1] = (indx_t)(ki_pre_top - 1);
@@ -19675,7 +19681,7 @@ retry:
       return rc;
     }
   }
-  if (right_nkeys > minkeys) {
+  if (right_nkeys > minkeys && (IS_MODIFIABLE(mc->mc_txn, right) || involve)) {
     /* try move from right */
     mn.mc_pg[mn.mc_top] = right;
     mn.mc_ki[mn.mc_top - 1] = (indx_t)(ki_pre_top + 1);
@@ -19696,6 +19702,10 @@ retry:
     return MDBX_SUCCESS;
   }
 
+  if (likely(!involve)) {
+    involve = true;
+    goto retry;
+  }
   if (likely(room_threshold > 0)) {
     room_threshold = 0;
     goto retry;
