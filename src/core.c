@@ -15236,12 +15236,31 @@ __hot static int cmp_lenfast(const MDBX_val *a, const MDBX_val *b) {
              : memcmp(a->iov_base, b->iov_base, a->iov_len);
 }
 
-static bool unsure_equal(MDBX_cmp_func cmp, const MDBX_val *a,
-                         const MDBX_val *b) {
-  /* checking for the use of a known good comparator
-   * or/otherwise for a full byte-to-byte match */
-  return cmp == cmp_lenfast || cmp == cmp_lexical || cmp == cmp_reverse ||
-         cmp == cmp_int_unaligned || cmp_lenfast(a, b) == 0;
+__hot static bool eq_fast_slowpath(const uint8_t *a, const uint8_t *b,
+                                   size_t l) {
+  if (likely(l > 3)) {
+    if (MDBX_UNALIGNED_OK >= 4 && likely(l < 9))
+      return ((unaligned_peek_u32(1, a) - unaligned_peek_u32(1, b)) |
+              (unaligned_peek_u32(1, a + l - 4) -
+               unaligned_peek_u32(1, b + l - 4))) == 0;
+    if (MDBX_UNALIGNED_OK >= 8 && sizeof(size_t) > 7 && likely(l < 17))
+      return ((unaligned_peek_u64(1, a) - unaligned_peek_u64(1, b)) |
+              (unaligned_peek_u64(1, a + l - 8) -
+               unaligned_peek_u64(1, b + l - 8))) == 0;
+    return memcmp(a, b, l) == 0;
+  }
+  if (likely(l)) {
+    STATIC_ASSERT(sizeof(int) > 2);
+    const unsigned a3 = a[0] << 16 | a[l >> 1] << 8 | a[l - 1];
+    const unsigned b3 = b[0] << 16 | b[l >> 1] << 8 | b[l - 1];
+    return a3 == b3;
+  }
+  return true;
+}
+
+static __always_inline bool eq_fast(const MDBX_val *a, const MDBX_val *b) {
+  return unlikely(a->iov_len == b->iov_len) &&
+         eq_fast_slowpath(a->iov_base, b->iov_base, a->iov_len);
 }
 
 /* Search for key within a page, using binary search.
@@ -17099,25 +17118,21 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
           flags -= MDBX_ALLDUPS;
           rc = MDBX_NOTFOUND;
           exact = false;
-        } else /* checking for early exit without dirtying pages */
-          if (!(flags & (MDBX_RESERVE | MDBX_MULTIPLE)) &&
-              unlikely(mc->mc_dbx->md_dcmp(data, &olddata) == 0)) {
-            if (!mc->mc_xcursor)
-              /* the same data, nothing to update */
-              return MDBX_SUCCESS;
-            if (flags & MDBX_NODUPDATA)
-              return MDBX_KEYEXIST;
-            if (flags & MDBX_APPENDDUP)
-              return MDBX_EKEYMISMATCH;
-            if (likely(unsure_equal(mc->mc_dbx->md_dcmp, data, &olddata)))
-              /* data is match exactly byte-to-byte, nothing to update */
-              return MDBX_SUCCESS;
-            else {
-              /* The data has differences, but the user-provided comparator
-               * considers them equal. So continue update since called without.
-               * Continue to update since was called without MDBX_NODUPDATA. */
+        } else if (!(flags & (MDBX_RESERVE | MDBX_MULTIPLE))) {
+          /* checking for early exit without dirtying pages */
+          if (unlikely(eq_fast(data, &olddata))) {
+            cASSERT(mc, mc->mc_dbx->md_dcmp(data, &olddata) == 0);
+            if (mc->mc_xcursor) {
+              if (flags & MDBX_NODUPDATA)
+                return MDBX_KEYEXIST;
+              if (flags & MDBX_APPENDDUP)
+                return MDBX_EKEYMISMATCH;
             }
+            /* the same data, nothing to update */
+            return MDBX_SUCCESS;
           }
+          cASSERT(mc, mc->mc_dbx->md_dcmp(data, &olddata) != 0);
+        }
       }
     } else if (unlikely(rc != MDBX_NOTFOUND))
       return rc;
@@ -17322,28 +17337,21 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
 
         /* Was a single item before, must convert now */
         if (!(node_flags(node) & F_DUPDATA)) {
-
           /* does data match? */
-          const int cmp = mc->mc_dbx->md_dcmp(data, &olddata);
-          if ((flags & MDBX_APPENDDUP) && unlikely(cmp <= 0))
-            return MDBX_EKEYMISMATCH;
-          if (cmp == 0) {
+          if (flags & MDBX_APPENDDUP) {
+            const int cmp = mc->mc_dbx->md_dcmp(data, &olddata);
+            cASSERT(mc, cmp != 0 || eq_fast(data, &olddata));
+            if (unlikely(cmp <= 0))
+              return MDBX_EKEYMISMATCH;
+          } else if (eq_fast(data, &olddata)) {
+            cASSERT(mc, mc->mc_dbx->md_dcmp(data, &olddata) == 0);
             if (flags & MDBX_NODUPDATA)
               return MDBX_KEYEXIST;
-            if (likely(unsure_equal(mc->mc_dbx->md_dcmp, data, &olddata))) {
-              /* data is match exactly byte-to-byte, nothing to update */
-              if (unlikely(flags & MDBX_MULTIPLE)) {
-                rc = MDBX_SUCCESS;
-                goto continue_multiple;
-              }
-              return MDBX_SUCCESS;
-            } else {
-              /* The data has differences, but the user-provided comparator
-               * considers them equal. So continue update since called without.
-               * Continue to update since was called without MDBX_NODUPDATA. */
-            }
-            cASSERT(mc, node_size(key, data) <= env->me_leaf_nodemax);
-            goto current;
+            /* data is match exactly byte-to-byte, nothing to update */
+            rc = MDBX_SUCCESS;
+            if (likely((flags & MDBX_MULTIPLE) == 0))
+              return rc;
+            goto continue_multiple;
           }
 
           /* Just overwrite the current item */
