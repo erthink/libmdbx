@@ -8782,9 +8782,8 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
       memcpy(txn->mt_dbs, head.ptr_c->mm_dbs, CORE_DBS * sizeof(MDBX_db));
       txn->mt_canary = head.ptr_v->mm_canary;
 
-      if (unlikely(env->me_stuck_meta >= 0))
-        break;
-      if (unlikely(meta_should_retry(env, &troika) ||
+      if (likely(env->me_stuck_meta < 0) &&
+          unlikely(meta_should_retry(env, &troika) ||
                    head.txnid < atomic_load64(&env->me_lck->mti_oldest_reader,
                                               mo_AcquireRelease))) {
         if (unlikely(++loop > 42)) {
