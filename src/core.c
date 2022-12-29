@@ -13409,8 +13409,7 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
         pv2pages(header.mm_geo.grow_pv) * pagesize,
         pv2pages(header.mm_geo.shrink_pv) * pagesize, header.mm_psize);
     if (unlikely(err != MDBX_SUCCESS)) {
-      ERROR("%s: err %d", "could not apply preconfigured geometry from db",
-            err);
+      ERROR("%s: err %d", "could not apply geometry from db", err);
       return (err == MDBX_EINVAL) ? MDBX_INCOMPATIBLE : err;
     }
   } else if (env->me_dbgeo.now) {
