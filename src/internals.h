@@ -227,6 +227,142 @@ extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
 #undef NDEBUG
 #endif
 
+#ifndef __cplusplus
+/*----------------------------------------------------------------------------*/
+/* Debug and Logging stuff */
+
+#define MDBX_RUNTIME_FLAGS_INIT                                                \
+  ((MDBX_DEBUG) > 0) * MDBX_DBG_ASSERT + ((MDBX_DEBUG) > 1) * MDBX_DBG_AUDIT
+
+extern uint8_t runtime_flags;
+extern uint8_t loglevel;
+extern MDBX_debug_func *debug_logger;
+
+MDBX_MAYBE_UNUSED static __inline void jitter4testing(bool tiny) {
+#if MDBX_DEBUG
+  if (MDBX_DBG_JITTER & runtime_flags)
+    osal_jitter(tiny);
+#else
+  (void)tiny;
+#endif
+}
+
+MDBX_INTERNAL_FUNC void MDBX_PRINTF_ARGS(4, 5)
+    debug_log(int level, const char *function, int line, const char *fmt, ...)
+        MDBX_PRINTF_ARGS(4, 5);
+MDBX_INTERNAL_FUNC void debug_log_va(int level, const char *function, int line,
+                                     const char *fmt, va_list args);
+
+#if MDBX_DEBUG
+#define LOG_ENABLED(msg) unlikely(msg <= loglevel)
+#define AUDIT_ENABLED() unlikely((runtime_flags & MDBX_DBG_AUDIT))
+#else /* MDBX_DEBUG */
+#define LOG_ENABLED(msg) (msg < MDBX_LOG_VERBOSE && msg <= loglevel)
+#define AUDIT_ENABLED() (0)
+#endif /* MDBX_DEBUG */
+
+#if MDBX_FORCE_ASSERTIONS
+#define ASSERT_ENABLED() (1)
+#elif MDBX_DEBUG
+#define ASSERT_ENABLED() likely((runtime_flags & MDBX_DBG_ASSERT))
+#else
+#define ASSERT_ENABLED() (0)
+#endif /* assertions */
+
+#define DEBUG_EXTRA(fmt, ...)                                                  \
+  do {                                                                         \
+    if (LOG_ENABLED(MDBX_LOG_EXTRA))                                           \
+      debug_log(MDBX_LOG_EXTRA, __func__, __LINE__, fmt, __VA_ARGS__);         \
+  } while (0)
+
+#define DEBUG_EXTRA_PRINT(fmt, ...)                                            \
+  do {                                                                         \
+    if (LOG_ENABLED(MDBX_LOG_EXTRA))                                           \
+      debug_log(MDBX_LOG_EXTRA, NULL, 0, fmt, __VA_ARGS__);                    \
+  } while (0)
+
+#define TRACE(fmt, ...)                                                        \
+  do {                                                                         \
+    if (LOG_ENABLED(MDBX_LOG_TRACE))                                           \
+      debug_log(MDBX_LOG_TRACE, __func__, __LINE__, fmt "\n", __VA_ARGS__);    \
+  } while (0)
+
+#define DEBUG(fmt, ...)                                                        \
+  do {                                                                         \
+    if (LOG_ENABLED(MDBX_LOG_DEBUG))                                           \
+      debug_log(MDBX_LOG_DEBUG, __func__, __LINE__, fmt "\n", __VA_ARGS__);    \
+  } while (0)
+
+#define VERBOSE(fmt, ...)                                                      \
+  do {                                                                         \
+    if (LOG_ENABLED(MDBX_LOG_VERBOSE))                                         \
+      debug_log(MDBX_LOG_VERBOSE, __func__, __LINE__, fmt "\n", __VA_ARGS__);  \
+  } while (0)
+
+#define NOTICE(fmt, ...)                                                       \
+  do {                                                                         \
+    if (LOG_ENABLED(MDBX_LOG_NOTICE))                                          \
+      debug_log(MDBX_LOG_NOTICE, __func__, __LINE__, fmt "\n", __VA_ARGS__);   \
+  } while (0)
+
+#define WARNING(fmt, ...)                                                      \
+  do {                                                                         \
+    if (LOG_ENABLED(MDBX_LOG_WARN))                                            \
+      debug_log(MDBX_LOG_WARN, __func__, __LINE__, fmt "\n", __VA_ARGS__);     \
+  } while (0)
+
+#undef ERROR /* wingdi.h                                                       \
+  Yeah, morons from M$ put such definition to the public header. */
+
+#define ERROR(fmt, ...)                                                        \
+  do {                                                                         \
+    if (LOG_ENABLED(MDBX_LOG_ERROR))                                           \
+      debug_log(MDBX_LOG_ERROR, __func__, __LINE__, fmt "\n", __VA_ARGS__);    \
+  } while (0)
+
+#define FATAL(fmt, ...)                                                        \
+  debug_log(MDBX_LOG_FATAL, __func__, __LINE__, fmt "\n", __VA_ARGS__);
+
+#if MDBX_DEBUG
+#define ASSERT_FAIL(env, msg, func, line) mdbx_assert_fail(env, msg, func, line)
+#else /* MDBX_DEBUG */
+MDBX_NORETURN __cold void assert_fail(const char *msg, const char *func,
+                                      unsigned line);
+#define ASSERT_FAIL(env, msg, func, line)                                      \
+  do {                                                                         \
+    (void)(env);                                                               \
+    assert_fail(msg, func, line);                                              \
+  } while (0)
+#endif /* MDBX_DEBUG */
+
+#define ENSURE_MSG(env, expr, msg)                                             \
+  do {                                                                         \
+    if (unlikely(!(expr)))                                                     \
+      ASSERT_FAIL(env, msg, __func__, __LINE__);                               \
+  } while (0)
+
+#define ENSURE(env, expr) ENSURE_MSG(env, expr, #expr)
+
+/* assert(3) variant in environment context */
+#define eASSERT(env, expr)                                                     \
+  do {                                                                         \
+    if (ASSERT_ENABLED())                                                      \
+      ENSURE(env, expr);                                                       \
+  } while (0)
+
+/* assert(3) variant in cursor context */
+#define cASSERT(mc, expr) eASSERT((mc)->mc_txn->mt_env, expr)
+
+/* assert(3) variant in transaction context */
+#define tASSERT(txn, expr) eASSERT((txn)->mt_env, expr)
+
+#ifndef xMDBX_TOOLS /* Avoid using internal eASSERT() */
+#undef assert
+#define assert(expr) eASSERT(NULL, expr)
+#endif
+
+#endif /* __cplusplus */
+
 /*----------------------------------------------------------------------------*/
 /* Atomics */
 
@@ -1359,139 +1495,6 @@ struct MDBX_env {
 };
 
 #ifndef __cplusplus
-/*----------------------------------------------------------------------------*/
-/* Debug and Logging stuff */
-
-#define MDBX_RUNTIME_FLAGS_INIT                                                \
-  ((MDBX_DEBUG) > 0) * MDBX_DBG_ASSERT + ((MDBX_DEBUG) > 1) * MDBX_DBG_AUDIT
-
-extern uint8_t runtime_flags;
-extern uint8_t loglevel;
-extern MDBX_debug_func *debug_logger;
-
-MDBX_MAYBE_UNUSED static __inline void jitter4testing(bool tiny) {
-#if MDBX_DEBUG
-  if (MDBX_DBG_JITTER & runtime_flags)
-    osal_jitter(tiny);
-#else
-  (void)tiny;
-#endif
-}
-
-MDBX_INTERNAL_FUNC void MDBX_PRINTF_ARGS(4, 5)
-    debug_log(int level, const char *function, int line, const char *fmt, ...)
-        MDBX_PRINTF_ARGS(4, 5);
-MDBX_INTERNAL_FUNC void debug_log_va(int level, const char *function, int line,
-                                     const char *fmt, va_list args);
-
-#if MDBX_DEBUG
-#define LOG_ENABLED(msg) unlikely(msg <= loglevel)
-#define AUDIT_ENABLED() unlikely((runtime_flags & MDBX_DBG_AUDIT))
-#else /* MDBX_DEBUG */
-#define LOG_ENABLED(msg) (msg < MDBX_LOG_VERBOSE && msg <= loglevel)
-#define AUDIT_ENABLED() (0)
-#endif /* MDBX_DEBUG */
-
-#if MDBX_FORCE_ASSERTIONS
-#define ASSERT_ENABLED() (1)
-#elif MDBX_DEBUG
-#define ASSERT_ENABLED() likely((runtime_flags & MDBX_DBG_ASSERT))
-#else
-#define ASSERT_ENABLED() (0)
-#endif /* assertions */
-
-#define DEBUG_EXTRA(fmt, ...)                                                  \
-  do {                                                                         \
-    if (LOG_ENABLED(MDBX_LOG_EXTRA))                                           \
-      debug_log(MDBX_LOG_EXTRA, __func__, __LINE__, fmt, __VA_ARGS__);         \
-  } while (0)
-
-#define DEBUG_EXTRA_PRINT(fmt, ...)                                            \
-  do {                                                                         \
-    if (LOG_ENABLED(MDBX_LOG_EXTRA))                                           \
-      debug_log(MDBX_LOG_EXTRA, NULL, 0, fmt, __VA_ARGS__);                    \
-  } while (0)
-
-#define TRACE(fmt, ...)                                                        \
-  do {                                                                         \
-    if (LOG_ENABLED(MDBX_LOG_TRACE))                                           \
-      debug_log(MDBX_LOG_TRACE, __func__, __LINE__, fmt "\n", __VA_ARGS__);    \
-  } while (0)
-
-#define DEBUG(fmt, ...)                                                        \
-  do {                                                                         \
-    if (LOG_ENABLED(MDBX_LOG_DEBUG))                                           \
-      debug_log(MDBX_LOG_DEBUG, __func__, __LINE__, fmt "\n", __VA_ARGS__);    \
-  } while (0)
-
-#define VERBOSE(fmt, ...)                                                      \
-  do {                                                                         \
-    if (LOG_ENABLED(MDBX_LOG_VERBOSE))                                         \
-      debug_log(MDBX_LOG_VERBOSE, __func__, __LINE__, fmt "\n", __VA_ARGS__);  \
-  } while (0)
-
-#define NOTICE(fmt, ...)                                                       \
-  do {                                                                         \
-    if (LOG_ENABLED(MDBX_LOG_NOTICE))                                          \
-      debug_log(MDBX_LOG_NOTICE, __func__, __LINE__, fmt "\n", __VA_ARGS__);   \
-  } while (0)
-
-#define WARNING(fmt, ...)                                                      \
-  do {                                                                         \
-    if (LOG_ENABLED(MDBX_LOG_WARN))                                            \
-      debug_log(MDBX_LOG_WARN, __func__, __LINE__, fmt "\n", __VA_ARGS__);     \
-  } while (0)
-
-#undef ERROR /* wingdi.h                                                       \
-  Yeah, morons from M$ put such definition to the public header. */
-
-#define ERROR(fmt, ...)                                                        \
-  do {                                                                         \
-    if (LOG_ENABLED(MDBX_LOG_ERROR))                                           \
-      debug_log(MDBX_LOG_ERROR, __func__, __LINE__, fmt "\n", __VA_ARGS__);    \
-  } while (0)
-
-#define FATAL(fmt, ...)                                                        \
-  debug_log(MDBX_LOG_FATAL, __func__, __LINE__, fmt "\n", __VA_ARGS__);
-
-#if MDBX_DEBUG
-#define ASSERT_FAIL(env, msg, func, line) mdbx_assert_fail(env, msg, func, line)
-#else /* MDBX_DEBUG */
-MDBX_NORETURN __cold void assert_fail(const char *msg, const char *func,
-                                      unsigned line);
-#define ASSERT_FAIL(env, msg, func, line)                                      \
-  do {                                                                         \
-    (void)(env);                                                               \
-    assert_fail(msg, func, line);                                              \
-  } while (0)
-#endif /* MDBX_DEBUG */
-
-#define ENSURE_MSG(env, expr, msg)                                             \
-  do {                                                                         \
-    if (unlikely(!(expr)))                                                     \
-      ASSERT_FAIL(env, msg, __func__, __LINE__);                               \
-  } while (0)
-
-#define ENSURE(env, expr) ENSURE_MSG(env, expr, #expr)
-
-/* assert(3) variant in environment context */
-#define eASSERT(env, expr)                                                     \
-  do {                                                                         \
-    if (ASSERT_ENABLED())                                                      \
-      ENSURE(env, expr);                                                       \
-  } while (0)
-
-/* assert(3) variant in cursor context */
-#define cASSERT(mc, expr) eASSERT((mc)->mc_txn->mt_env, expr)
-
-/* assert(3) variant in transaction context */
-#define tASSERT(txn, expr) eASSERT((txn)->mt_env, expr)
-
-#ifndef xMDBX_TOOLS /* Avoid using internal eASSERT() */
-#undef assert
-#define assert(expr) eASSERT(NULL, expr)
-#endif
-
 /*----------------------------------------------------------------------------*/
 /* Cache coherence and mmap invalidation */
 
