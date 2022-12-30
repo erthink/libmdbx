@@ -3381,9 +3381,6 @@ static int __must_check_result setup_dbx(MDBX_dbx *const dbx,
                                          const MDBX_db *const db,
                                          const unsigned pagesize);
 
-static MDBX_cmp_func cmp_lexical, cmp_reverse, cmp_int_align4, cmp_int_align2,
-    cmp_int_unaligned, cmp_lenfast;
-
 static __inline MDBX_cmp_func *get_default_keycmp(unsigned flags);
 static __inline MDBX_cmp_func *get_default_datacmp(unsigned flags);
 
@@ -11832,6 +11829,116 @@ fail:
   goto provide_latency;
 }
 
+static __always_inline int cmp_int_inline(const size_t expected_alignment,
+                                          const MDBX_val *a,
+                                          const MDBX_val *b) {
+  if (likely(a->iov_len == b->iov_len)) {
+    if (sizeof(size_t) > 7 && likely(a->iov_len == 8))
+      return CMP2INT(unaligned_peek_u64(expected_alignment, a->iov_base),
+                     unaligned_peek_u64(expected_alignment, b->iov_base));
+    if (likely(a->iov_len == 4))
+      return CMP2INT(unaligned_peek_u32(expected_alignment, a->iov_base),
+                     unaligned_peek_u32(expected_alignment, b->iov_base));
+    if (sizeof(size_t) < 8 && likely(a->iov_len == 8))
+      return CMP2INT(unaligned_peek_u64(expected_alignment, a->iov_base),
+                     unaligned_peek_u64(expected_alignment, b->iov_base));
+  }
+  ERROR("mismatch and/or invalid size %p.%zu/%p.%zu for INTEGERKEY/INTEGERDUP",
+        a->iov_base, a->iov_len, b->iov_base, b->iov_len);
+  return 0;
+}
+
+__hot static int cmp_int_unaligned(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_int_inline(1, a, b);
+}
+
+/* Compare two items pointing at 2-byte aligned unsigned int's. */
+#if MDBX_UNALIGNED_OK < 2 ||                                                   \
+    (MDBX_DEBUG || MDBX_FORCE_ASSERTIONS || !defined(NDEBUG))
+__hot static int cmp_int_align2(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_int_inline(2, a, b);
+}
+#else
+#define cmp_int_align2 cmp_int_unaligned
+#endif /* !MDBX_UNALIGNED_OK || debug */
+
+/* Compare two items pointing at aligned unsigned int's. */
+#if MDBX_UNALIGNED_OK < 4 ||                                                   \
+    (MDBX_DEBUG || MDBX_FORCE_ASSERTIONS || !defined(NDEBUG))
+__hot static int cmp_int_align4(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_int_inline(4, a, b);
+}
+#else
+#define cmp_int_align4 cmp_int_unaligned
+#endif /* !MDBX_UNALIGNED_OK || debug */
+
+/* Compare two items lexically */
+__hot static int cmp_lexical(const MDBX_val *a, const MDBX_val *b) {
+  if (a->iov_len == b->iov_len)
+    return a->iov_len ? memcmp(a->iov_base, b->iov_base, a->iov_len) : 0;
+
+  const int diff_len = (a->iov_len < b->iov_len) ? -1 : 1;
+  const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
+  int diff_data = shortest ? memcmp(a->iov_base, b->iov_base, shortest) : 0;
+  return likely(diff_data) ? diff_data : diff_len;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION static __always_inline unsigned
+tail3le(const uint8_t *p, size_t l) {
+  STATIC_ASSERT(sizeof(unsigned) > 2);
+  // 1: 0 0 0
+  // 2: 0 1 1
+  // 3: 0 1 2
+  return p[0] | p[l >> 1] << 8 | p[l - 1] << 16;
+}
+
+/* Compare two items in reverse byte order */
+__hot static int cmp_reverse(const MDBX_val *a, const MDBX_val *b) {
+  const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
+  if (likely(shortest)) {
+    const uint8_t *pa = ptr_disp(a->iov_base, a->iov_len);
+    const uint8_t *pb = ptr_disp(b->iov_base, b->iov_len);
+    const uint8_t *const end = pa - shortest;
+    do {
+      int diff = *--pa - *--pb;
+      if (likely(diff))
+        return diff;
+    } while (pa != end);
+  }
+  return CMP2INT(a->iov_len, b->iov_len);
+}
+
+/* Fast non-lexically comparator */
+__hot static int cmp_lenfast(const MDBX_val *a, const MDBX_val *b) {
+  int diff = CMP2INT(a->iov_len, b->iov_len);
+  return (likely(diff) || a->iov_len == 0)
+             ? diff
+             : memcmp(a->iov_base, b->iov_base, a->iov_len);
+}
+
+__hot static bool eq_fast_slowpath(const uint8_t *a, const uint8_t *b,
+                                   size_t l) {
+  if (likely(l > 3)) {
+    if (MDBX_UNALIGNED_OK >= 4 && likely(l < 9))
+      return ((unaligned_peek_u32(1, a) - unaligned_peek_u32(1, b)) |
+              (unaligned_peek_u32(1, a + l - 4) -
+               unaligned_peek_u32(1, b + l - 4))) == 0;
+    if (MDBX_UNALIGNED_OK >= 8 && sizeof(size_t) > 7 && likely(l < 17))
+      return ((unaligned_peek_u64(1, a) - unaligned_peek_u64(1, b)) |
+              (unaligned_peek_u64(1, a + l - 8) -
+               unaligned_peek_u64(1, b + l - 8))) == 0;
+    return memcmp(a, b, l) == 0;
+  }
+  if (likely(l))
+    return tail3le(a, l) == tail3le(b, l);
+  return true;
+}
+
+static __always_inline bool eq_fast(const MDBX_val *a, const MDBX_val *b) {
+  return unlikely(a->iov_len == b->iov_len) &&
+         eq_fast_slowpath(a->iov_base, b->iov_base, a->iov_len);
+}
+
 static int validate_meta(MDBX_env *env, MDBX_meta *const meta,
                          const MDBX_page *const page,
                          const unsigned meta_number, unsigned *guess_pagesize) {
@@ -15150,118 +15257,6 @@ __cold int mdbx_env_close(MDBX_env *env) {
   return __inline_mdbx_env_close(env);
 }
 #endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
-
-/* Compare two items pointing at aligned unsigned int's. */
-__hot static int cmp_int_align4(const MDBX_val *a, const MDBX_val *b) {
-  eASSERT(NULL, a->iov_len == b->iov_len);
-  switch (a->iov_len) {
-  case 4:
-    return CMP2INT(unaligned_peek_u32(4, a->iov_base),
-                   unaligned_peek_u32(4, b->iov_base));
-  case 8:
-    return CMP2INT(unaligned_peek_u64(4, a->iov_base),
-                   unaligned_peek_u64(4, b->iov_base));
-  default:
-    mdbx_panic("invalid size %zu for INTEGERKEY/INTEGERDUP", a->iov_len);
-    return 0;
-  }
-}
-
-/* Compare two items pointing at 2-byte aligned unsigned int's. */
-__hot static int cmp_int_align2(const MDBX_val *a, const MDBX_val *b) {
-  eASSERT(NULL, a->iov_len == b->iov_len);
-  switch (a->iov_len) {
-  case 4:
-    return CMP2INT(unaligned_peek_u32(2, a->iov_base),
-                   unaligned_peek_u32(2, b->iov_base));
-  case 8:
-    return CMP2INT(unaligned_peek_u64(2, a->iov_base),
-                   unaligned_peek_u64(2, b->iov_base));
-  default:
-    mdbx_panic("invalid size %zu for INTEGERKEY/INTEGERDUP", a->iov_len);
-    return 0;
-  }
-}
-
-/* Compare two items pointing at unsigned values with unknown alignment.
- *
- * This is also set as MDBX_INTEGERDUP|MDBX_DUPFIXED's MDBX_dbx.md_dcmp. */
-__hot static int cmp_int_unaligned(const MDBX_val *a, const MDBX_val *b) {
-  eASSERT(NULL, a->iov_len == b->iov_len);
-  switch (a->iov_len) {
-  case 4:
-    return CMP2INT(unaligned_peek_u32(1, a->iov_base),
-                   unaligned_peek_u32(1, b->iov_base));
-  case 8:
-    return CMP2INT(unaligned_peek_u64(1, a->iov_base),
-                   unaligned_peek_u64(1, b->iov_base));
-  default:
-    mdbx_panic("invalid size %zu for INTEGERKEY/INTEGERDUP", a->iov_len);
-    return 0;
-  }
-}
-
-/* Compare two items lexically */
-__hot static int cmp_lexical(const MDBX_val *a, const MDBX_val *b) {
-  if (a->iov_len == b->iov_len)
-    return a->iov_len ? memcmp(a->iov_base, b->iov_base, a->iov_len) : 0;
-
-  const int diff_len = (a->iov_len < b->iov_len) ? -1 : 1;
-  const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
-  int diff_data = shortest ? memcmp(a->iov_base, b->iov_base, shortest) : 0;
-  return likely(diff_data) ? diff_data : diff_len;
-}
-
-/* Compare two items in reverse byte order */
-__hot static int cmp_reverse(const MDBX_val *a, const MDBX_val *b) {
-  const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
-  if (likely(shortest)) {
-    const uint8_t *pa = ptr_disp(a->iov_base, a->iov_len);
-    const uint8_t *pb = ptr_disp(b->iov_base, b->iov_len);
-    const uint8_t *const end = pa - shortest;
-    do {
-      int diff = *--pa - *--pb;
-      if (likely(diff))
-        return diff;
-    } while (pa != end);
-  }
-  return CMP2INT(a->iov_len, b->iov_len);
-}
-
-/* Fast non-lexically comparator */
-__hot static int cmp_lenfast(const MDBX_val *a, const MDBX_val *b) {
-  int diff = CMP2INT(a->iov_len, b->iov_len);
-  return likely(diff) || a->iov_len == 0
-             ? diff
-             : memcmp(a->iov_base, b->iov_base, a->iov_len);
-}
-
-__hot static bool eq_fast_slowpath(const uint8_t *a, const uint8_t *b,
-                                   size_t l) {
-  if (likely(l > 3)) {
-    if (MDBX_UNALIGNED_OK >= 4 && likely(l < 9))
-      return ((unaligned_peek_u32(1, a) - unaligned_peek_u32(1, b)) |
-              (unaligned_peek_u32(1, a + l - 4) -
-               unaligned_peek_u32(1, b + l - 4))) == 0;
-    if (MDBX_UNALIGNED_OK >= 8 && sizeof(size_t) > 7 && likely(l < 17))
-      return ((unaligned_peek_u64(1, a) - unaligned_peek_u64(1, b)) |
-              (unaligned_peek_u64(1, a + l - 8) -
-               unaligned_peek_u64(1, b + l - 8))) == 0;
-    return memcmp(a, b, l) == 0;
-  }
-  if (likely(l)) {
-    STATIC_ASSERT(sizeof(int) > 2);
-    const unsigned a3 = a[0] << 16 | a[l >> 1] << 8 | a[l - 1];
-    const unsigned b3 = b[0] << 16 | b[l >> 1] << 8 | b[l - 1];
-    return a3 == b3;
-  }
-  return true;
-}
-
-static __always_inline bool eq_fast(const MDBX_val *a, const MDBX_val *b) {
-  return unlikely(a->iov_len == b->iov_len) &&
-         eq_fast_slowpath(a->iov_base, b->iov_base, a->iov_len);
-}
 
 /* Search for key within a page, using binary search.
  * Returns the smallest entry larger or equal to the key.
