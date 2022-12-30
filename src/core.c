@@ -11894,16 +11894,54 @@ tail3le(const uint8_t *p, size_t l) {
 
 /* Compare two items in reverse byte order */
 __hot static int cmp_reverse(const MDBX_val *a, const MDBX_val *b) {
-  const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
-  if (likely(shortest)) {
+  size_t left = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
+  if (likely(left)) {
     const uint8_t *pa = ptr_disp(a->iov_base, a->iov_len);
     const uint8_t *pb = ptr_disp(b->iov_base, b->iov_len);
-    const uint8_t *const end = pa - shortest;
-    do {
-      int diff = *--pa - *--pb;
-      if (likely(diff))
-        return diff;
-    } while (pa != end);
+    while (left >= sizeof(size_t)) {
+      pa -= sizeof(size_t);
+      pb -= sizeof(size_t);
+      left -= sizeof(size_t);
+      STATIC_ASSERT(sizeof(size_t) == 4 || sizeof(size_t) == 8);
+      if (sizeof(size_t) == 4) {
+        uint32_t xa = unaligned_peek_u32(1, pa);
+        uint32_t xb = unaligned_peek_u32(1, pb);
+#if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+        xa = osal_bswap32(xa);
+        xb = osal_bswap32(xb);
+#endif /* __BYTE_ORDER__ != __ORDER_BIG_ENDIAN__ */
+        if (xa != xb)
+          return (xa < xb) ? -1 : 1;
+      } else {
+        uint64_t xa = unaligned_peek_u64(1, pa);
+        uint64_t xb = unaligned_peek_u64(1, pb);
+#if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+        xa = osal_bswap64(xa);
+        xb = osal_bswap64(xb);
+#endif /* __BYTE_ORDER__ != __ORDER_BIG_ENDIAN__ */
+        if (xa != xb)
+          return (xa < xb) ? -1 : 1;
+      }
+    }
+    if (sizeof(size_t) == 8 && left >= 4) {
+      pa -= 4;
+      pb -= 4;
+      left -= 4;
+      uint32_t xa = unaligned_peek_u32(1, pa);
+      uint32_t xb = unaligned_peek_u32(1, pb);
+#if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+      xa = osal_bswap32(xa);
+      xb = osal_bswap32(xb);
+#endif /* __BYTE_ORDER__ != __ORDER_BIG_ENDIAN__ */
+      if (xa != xb)
+        return (xa < xb) ? -1 : 1;
+    }
+    if (left) {
+      unsigned xa = tail3le(pa - left, left);
+      unsigned xb = tail3le(pb - left, left);
+      if (xa != xb)
+        return (xa < xb) ? -1 : 1;
+    }
   }
   return CMP2INT(a->iov_len, b->iov_len);
 }
