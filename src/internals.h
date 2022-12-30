@@ -1681,13 +1681,7 @@ typedef struct MDBX_node {
  *                |  1, a > b
  *                \
  */
-#ifndef __e2k__
-/* LY: fast enough on most systems */
-#define CMP2INT(a, b) (((b) > (a)) ? -1 : (a) > (b))
-#else
-/* LY: more parallelable on VLIW Elbrus */
-#define CMP2INT(a, b) (((a) > (b)) - ((b) > (a)))
-#endif
+#define CMP2INT(a, b) (((a) != (b)) ? (((a) < (b)) ? -1 : 1) : 0)
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static __inline pgno_t
 int64pgno(int64_t i64) {
