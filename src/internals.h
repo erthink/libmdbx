@@ -1059,10 +1059,7 @@ typedef txnid_t *MDBX_TXL;
 /* An Dirty-Page list item is an pgno/pointer pair. */
 typedef struct MDBX_dp {
   MDBX_page *ptr;
-  pgno_t pgno;
-  uint32_t mlru;
-#define MDBX_dp_multi_mask 1
-#define MDBX_dp_lru_mask UINT32_C(0xffffFFFe)
+  pgno_t pgno, npages;
 } MDBX_dp;
 
 /* An DPL (dirty-page list) is a sorted array of MDBX_DPs. */
