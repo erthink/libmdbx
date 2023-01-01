@@ -4805,8 +4805,7 @@ static size_t cursor_keep(const MDBX_txn *const txn, const MDBX_cursor *mc) {
     tASSERT(txn, IS_LEAF(mp));
     if (!mc->mc_xcursor || mc->mc_ki[mc->mc_top] >= page_numkeys(mp))
       break;
-    const MDBX_node *const node = page_node(mp, mc->mc_ki[mc->mc_top]);
-    if (!(node->mn_flags & F_SUBDATA))
+    if (!(node_flags(page_node(mp, mc->mc_ki[mc->mc_top])) & F_SUBDATA))
       break;
     mc = &mc->mc_xcursor->mx_cursor;
   }
