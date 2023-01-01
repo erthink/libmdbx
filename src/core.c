@@ -2819,6 +2819,11 @@ static int dpl_alloc(MDBX_txn *txn) {
   const size_t wanna = (txn->mt_env->me_options.dp_initial < txn->mt_geo.upper)
                            ? txn->mt_env->me_options.dp_initial
                            : txn->mt_geo.upper;
+#if MDBX_FORCE_ASSERTIONS || MDBX_DEBUG
+  if (txn->tw.dirtylist)
+    /* обнуляем чтобы не сработал ассерт внутри dpl_reserve() */
+    txn->tw.dirtylist->sorted = txn->tw.dirtylist->length = 0;
+#endif /* asertions enabled */
   if (unlikely(!txn->tw.dirtylist || txn->tw.dirtylist->detent < wanna ||
                txn->tw.dirtylist->detent > wanna + wanna) &&
       unlikely(!dpl_reserve(txn, wanna)))
