@@ -2221,11 +2221,11 @@ static __always_inline size_t pnl_size2bytes(size_t size) {
 #endif /* MDBX_PNL_PREALLOC_FOR_RADIXSORT */
   STATIC_ASSERT(MDBX_ASSUME_MALLOC_OVERHEAD +
                     (MDBX_PGL_LIMIT * (MDBX_PNL_PREALLOC_FOR_RADIXSORT + 1) +
-                     MDBX_PNL_GRANULATE + 2) *
+                     MDBX_PNL_GRANULATE + 3) *
                         sizeof(pgno_t) <
                 SIZE_MAX / 4 * 3);
   size_t bytes =
-      ceil_powerof2(MDBX_ASSUME_MALLOC_OVERHEAD + sizeof(pgno_t) * (size + 2),
+      ceil_powerof2(MDBX_ASSUME_MALLOC_OVERHEAD + sizeof(pgno_t) * (size + 3),
                     MDBX_PNL_GRANULATE * sizeof(pgno_t)) -
       MDBX_ASSUME_MALLOC_OVERHEAD;
   return bytes;
@@ -2233,8 +2233,8 @@ static __always_inline size_t pnl_size2bytes(size_t size) {
 
 static __always_inline pgno_t pnl_bytes2size(const size_t bytes) {
   size_t size = bytes / sizeof(pgno_t);
-  assert(size > 2 && size <= MDBX_PGL_LIMIT + /* alignment gap */ 65536);
-  size -= 2;
+  assert(size > 3 && size <= MDBX_PGL_LIMIT + /* alignment gap */ 65536);
+  size -= 3;
 #if MDBX_PNL_PREALLOC_FOR_RADIXSORT
   size >>= 1;
 #endif /* MDBX_PNL_PREALLOC_FOR_RADIXSORT */
@@ -2454,9 +2454,9 @@ __hot static size_t pnl_merge(MDBX_PNL dst, const MDBX_PNL src) {
   const size_t src_len = MDBX_PNL_GETSIZE(src);
   const size_t dst_len = MDBX_PNL_GETSIZE(dst);
   size_t total = dst_len;
+  assert(MDBX_PNL_ALLOCLEN(dst) >= total);
   if (likely(src_len > 0)) {
     total += src_len;
-    assert(MDBX_PNL_ALLOCLEN(dst) >= total);
     if (!MDBX_DEBUG && total < (MDBX_HAVE_CMOV ? 21 : 12))
       goto avoid_call_libc_for_short_cases;
     if (dst_len == 0 ||
@@ -2572,9 +2572,19 @@ __hot __noinline static size_t pnl_search_nochk(const MDBX_PNL pnl,
 static __inline size_t pnl_search(const MDBX_PNL pnl, pgno_t pgno,
                                   size_t limit) {
   assert(pnl_check_allocated(pnl, limit));
+  if (MDBX_HAVE_CMOV) {
+    /* cmov-ускоренный бинарный поиск может читать (но не использовать) один
+     * элемент за концом данных, этот элемент в пределах выделенного участка
+     * памяти, но не инициализирован. */
+    VALGRIND_MAKE_MEM_DEFINED(MDBX_PNL_END(pnl), sizeof(pgno_t));
+  }
   assert(pgno < limit);
   (void)limit;
-  return pnl_search_nochk(pnl, pgno);
+  size_t n = pnl_search_nochk(pnl, pgno);
+  if (MDBX_HAVE_CMOV) {
+    VALGRIND_MAKE_MEM_UNDEFINED(MDBX_PNL_END(pnl), sizeof(pgno_t));
+  }
+  return n;
 }
 
 static __inline size_t search_spilled(const MDBX_txn *txn, pgno_t pgno) {
@@ -3788,7 +3798,8 @@ static MDBX_page *page_malloc(MDBX_txn *txn, size_t num) {
   if (likely(num == 1 && np)) {
     eASSERT(env, env->me_dp_reserve_len > 0);
     MDBX_ASAN_UNPOISON_MEMORY_REGION(np, size);
-    VALGRIND_MEMPOOL_ALLOC(env, np, size);
+    VALGRIND_MEMPOOL_ALLOC(env, ptr_disp(np, -(ptrdiff_t)sizeof(size_t)),
+                           size + sizeof(size_t));
     VALGRIND_MAKE_MEM_DEFINED(&mp_next(np), sizeof(MDBX_page *));
     env->me_dp_reserve = mp_next(np);
     env->me_dp_reserve_len -= 1;
@@ -3832,7 +3843,7 @@ static void dpage_free(MDBX_env *env, MDBX_page *dp, size_t npages) {
     MDBX_ASAN_POISON_MEMORY_REGION(dp, env->me_psize);
     MDBX_ASAN_UNPOISON_MEMORY_REGION(&mp_next(dp), sizeof(MDBX_page *));
     mp_next(dp) = env->me_dp_reserve;
-    VALGRIND_MEMPOOL_FREE(env, dp);
+    VALGRIND_MEMPOOL_FREE(env, ptr_disp(dp, -(ptrdiff_t)sizeof(size_t)));
     env->me_dp_reserve = dp;
     env->me_dp_reserve_len += 1;
   } else {
@@ -15294,7 +15305,6 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
     VALGRIND_MAKE_MEM_DEFINED(&mp_next(dp), sizeof(MDBX_page *));
     env->me_dp_reserve = mp_next(dp);
     void *const ptr = ptr_disp(dp, -(ptrdiff_t)sizeof(size_t));
-    VALGRIND_MEMPOOL_FREE(env, ptr);
     osal_free(ptr);
   }
   VALGRIND_DESTROY_MEMPOOL(env);
@@ -24669,7 +24679,6 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
         VALGRIND_MAKE_MEM_DEFINED(&mp_next(dp), sizeof(MDBX_page *));
         env->me_dp_reserve = mp_next(dp);
         void *const ptr = ptr_disp(dp, -(ptrdiff_t)sizeof(size_t));
-        VALGRIND_MEMPOOL_FREE(env, ptr);
         osal_free(ptr);
         env->me_dp_reserve_len -= 1;
       }

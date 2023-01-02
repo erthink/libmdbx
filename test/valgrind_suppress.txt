@@ -38,6 +38,14 @@
    ...
    fun:meta_sync*
 }
+{
+   msync-spill
+   Memcheck:Param
+   msync(start)
+   fun:msync
+   ...
+   fun:txn_spill*
+}
 
 # memcmp() inside iov_write() as workaround for https://libmdbx.dqdkfa.ru/dead-github/issues/269
 {
