@@ -1398,6 +1398,7 @@ struct MDBX_env {
   uint32_t me_live_reader;        /* have liveness lock in reader table */
   void *me_userctx;               /* User-settable context */
   MDBX_hsr_func *me_hsr_callback; /* Callback for kicking laggard readers */
+  size_t me_madv_threshold;
 
   struct {
     unsigned dp_reserve_limit;
