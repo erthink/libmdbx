@@ -14461,22 +14461,6 @@ typedef struct {
   size_t ent_len;
 } MDBX_handle_env_pathname;
 
-static bool path_equal(const pathchar_t *l, const pathchar_t *r, size_t len) {
-#if defined(_WIN32) || defined(_WIN64)
-  while (len > 0) {
-    pathchar_t a = *l++;
-    pathchar_t b = *r++;
-    a = (a == '\\') ? '/' : a;
-    b = (b == '\\') ? '/' : b;
-    if (a != b)
-      return false;
-  }
-  return true;
-#else
-  return memcmp(l, r, len * sizeof(pathchar_t)) == 0;
-#endif
-}
-
 __cold static int handle_env_pathname(MDBX_handle_env_pathname *ctx,
                                       const pathchar_t *pathname,
                                       MDBX_env_flags_t *flags,
@@ -14515,7 +14499,7 @@ __cold static int handle_env_pathname(MDBX_handle_env_pathname *ctx,
     if (rc != MDBX_ENOFILE)
       return rc;
     if (mode == 0 || (*flags & MDBX_RDONLY) != 0)
-      /* can't open existing */
+      /* can't open non-existing */
       return rc /* MDBX_ENOFILE */;
 
     /* auto-create directory if requested */
@@ -14549,36 +14533,51 @@ __cold static int handle_env_pathname(MDBX_handle_env_pathname *ctx,
   assert(dxb_name[0] == '/' && lck_name[0] == '/');
   const size_t pathname_len = strlen(pathname);
 #endif
-  assert(lock_suffix[0] != '\\' && lock_suffix[0] != '/');
+  assert(!osal_isdirsep(lock_suffix[0]));
   ctx->ent_len = pathname_len;
   static const size_t dxb_name_len = ARRAY_LENGTH(dxb_name) - 1;
-  if ((*flags & MDBX_NOSUBDIR) && ctx->ent_len > dxb_name_len &&
-      path_equal(pathname + ctx->ent_len - dxb_name_len, dxb_name,
-                 dxb_name_len)) {
-    *flags -= MDBX_NOSUBDIR;
-    ctx->ent_len -= dxb_name_len;
+  if (*flags & MDBX_NOSUBDIR) {
+    if (ctx->ent_len > dxb_name_len &&
+        osal_pathequal(pathname + ctx->ent_len - dxb_name_len, dxb_name,
+                       dxb_name_len)) {
+      *flags -= MDBX_NOSUBDIR;
+      ctx->ent_len -= dxb_name_len;
+    } else if (ctx->ent_len == dxb_name_len - 1 && osal_isdirsep(dxb_name[0]) &&
+               osal_isdirsep(lck_name[0]) &&
+               osal_pathequal(pathname + ctx->ent_len - dxb_name_len + 1,
+                              dxb_name + 1, dxb_name_len - 1)) {
+      *flags -= MDBX_NOSUBDIR;
+      ctx->ent_len -= dxb_name_len - 1;
+    }
   }
 
-  const size_t bytes_needed =
-      sizeof(pathchar_t) * ctx->ent_len * 2 +
-      ((*flags & MDBX_NOSUBDIR) ? sizeof(lock_suffix) + sizeof(pathchar_t)
-                                : sizeof(lck_name) + sizeof(dxb_name));
+  const size_t suflen_with_NOSUBDIR = sizeof(lock_suffix) + sizeof(pathchar_t);
+  const size_t suflen_without_NOSUBDIR = sizeof(lck_name) + sizeof(dxb_name);
+  const size_t enogh4any = (suflen_with_NOSUBDIR > suflen_without_NOSUBDIR)
+                               ? suflen_with_NOSUBDIR
+                               : suflen_without_NOSUBDIR;
+  const size_t bytes_needed = sizeof(pathchar_t) * ctx->ent_len * 2 + enogh4any;
   ctx->buffer_for_free = osal_malloc(bytes_needed);
   if (!ctx->buffer_for_free)
     return MDBX_ENOMEM;
 
   ctx->dxb = ctx->buffer_for_free;
-  ctx->lck = ctx->dxb + ctx->ent_len + 1;
-  memcpy(ctx->dxb, pathname, sizeof(pathchar_t) * (ctx->ent_len + 1));
-  if (*flags & MDBX_NOSUBDIR) {
-    memcpy(ctx->lck + ctx->ent_len, lock_suffix, sizeof(lock_suffix));
+  if (ctx->ent_len) {
+    ctx->lck = ctx->dxb + ctx->ent_len + 1;
+    memcpy(ctx->dxb, pathname, sizeof(pathchar_t) * (ctx->ent_len + 1));
+    if (*flags & MDBX_NOSUBDIR) {
+      memcpy(ctx->lck + ctx->ent_len, lock_suffix, sizeof(lock_suffix));
+    } else {
+      ctx->lck += dxb_name_len;
+      memcpy(ctx->lck + ctx->ent_len, lck_name, sizeof(lck_name));
+      memcpy(ctx->dxb + ctx->ent_len, dxb_name, sizeof(dxb_name));
+    }
+    memcpy(ctx->lck, pathname, sizeof(pathchar_t) * ctx->ent_len);
   } else {
-    ctx->lck += dxb_name_len;
-    memcpy(ctx->lck + ctx->ent_len, lck_name, sizeof(lck_name));
-    memcpy(ctx->dxb + ctx->ent_len, dxb_name, sizeof(dxb_name));
+    ctx->lck = ctx->dxb + dxb_name_len;
+    memcpy(ctx->lck, lck_name + 1, sizeof(lck_name) - sizeof(pathchar_t));
+    memcpy(ctx->dxb, dxb_name + 1, sizeof(dxb_name) - sizeof(pathchar_t));
   }
-  memcpy(ctx->lck, pathname, sizeof(pathchar_t) * ctx->ent_len);
-
   return MDBX_SUCCESS;
 }
 

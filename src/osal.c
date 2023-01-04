@@ -1185,6 +1185,23 @@ MDBX_INTERNAL_FUNC int osal_removedirectory(const pathchar_t *pathname) {
 #endif
 }
 
+MDBX_INTERNAL_FUNC bool osal_pathequal(const pathchar_t *l, const pathchar_t *r,
+                                       size_t len) {
+#if defined(_WIN32) || defined(_WIN64)
+  for (size_t i = 0; i < len; ++i) {
+    pathchar_t a = l[i];
+    pathchar_t b = r[i];
+    a = (a == '\\') ? '/' : a;
+    b = (b == '\\') ? '/' : b;
+    if (a != b)
+      return false;
+  }
+  return true;
+#else
+  return memcmp(l, r, len * sizeof(pathchar_t)) == 0;
+#endif
+}
+
 MDBX_INTERNAL_FUNC int osal_openfile(const enum osal_openfile_purpose purpose,
                                      const MDBX_env *env,
                                      const pathchar_t *pathname,

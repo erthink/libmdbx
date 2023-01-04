@@ -549,6 +549,16 @@ enum osal_openfile_purpose {
   MDBX_OPEN_DELETE
 };
 
+MDBX_MAYBE_UNUSED static __inline bool osal_isdirsep(pathchar_t c) {
+  return
+#if defined(_WIN32) || defined(_WIN64)
+      c == '\\' ||
+#endif
+      c == '/';
+}
+
+MDBX_INTERNAL_FUNC bool osal_pathequal(const pathchar_t *l, const pathchar_t *r,
+                                       size_t len);
 MDBX_INTERNAL_FUNC int osal_openfile(const enum osal_openfile_purpose purpose,
                                      const MDBX_env *env,
                                      const pathchar_t *pathname,
