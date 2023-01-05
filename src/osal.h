@@ -225,8 +225,10 @@ osal_syspagesize(void) {
 
 #if defined(_WIN32) || defined(_WIN64)
 typedef wchar_t pathchar_t;
+#define MDBX_PRIsPATH "ls"
 #else
 typedef char pathchar_t;
+#define MDBX_PRIsPATH "s"
 #endif
 
 typedef struct osal_mmap {
@@ -559,6 +561,9 @@ MDBX_MAYBE_UNUSED static __inline bool osal_isdirsep(pathchar_t c) {
 
 MDBX_INTERNAL_FUNC bool osal_pathequal(const pathchar_t *l, const pathchar_t *r,
                                        size_t len);
+MDBX_INTERNAL_FUNC pathchar_t *osal_fileext(const pathchar_t *pathname,
+                                            size_t len);
+MDBX_INTERNAL_FUNC int osal_fileexists(const pathchar_t *pathname);
 MDBX_INTERNAL_FUNC int osal_openfile(const enum osal_openfile_purpose purpose,
                                      const MDBX_env *env,
                                      const pathchar_t *pathname,

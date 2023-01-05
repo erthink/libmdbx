@@ -3471,6 +3471,9 @@ __cold const char *mdbx_liberr2str(int errnum) {
   case MDBX_TXN_OVERLAPPING:
     return "MDBX_TXN_OVERLAPPING: Overlapping read and write transactions for"
            " the current thread";
+  case MDBX_DUPLICATED_CLK:
+    return "MDBX_DUPLICATED_CLK: Alternative/Duplicate LCK-file is exists, "
+           "please keep one and remove unused other";
   default:
     return NULL;
   }
@@ -14461,6 +14464,17 @@ typedef struct {
   size_t ent_len;
 } MDBX_handle_env_pathname;
 
+__cold static int check_alternative_lck_absent(const pathchar_t *lck_pathname) {
+  int err = osal_fileexists(lck_pathname);
+  if (unlikely(err != MDBX_RESULT_FALSE)) {
+    if (err == MDBX_RESULT_TRUE)
+      err = MDBX_DUPLICATED_CLK;
+    ERROR("Alternative/Duplicate LCK-file '%" MDBX_PRIsPATH "' error %d",
+          lck_pathname, err);
+  }
+  return err;
+}
+
 __cold static int handle_env_pathname(MDBX_handle_env_pathname *ctx,
                                       const pathchar_t *pathname,
                                       MDBX_env_flags_t *flags,
@@ -14562,23 +14576,45 @@ __cold static int handle_env_pathname(MDBX_handle_env_pathname *ctx,
     return MDBX_ENOMEM;
 
   ctx->dxb = ctx->buffer_for_free;
+  ctx->lck = ctx->dxb + ctx->ent_len + dxb_name_len + 1;
+  pathchar_t *const buf = ctx->buffer_for_free;
+  rc = MDBX_SUCCESS;
   if (ctx->ent_len) {
-    ctx->lck = ctx->dxb + ctx->ent_len + 1;
+    memcpy(buf, pathname, sizeof(pathchar_t) * pathname_len);
+    if (*flags & MDBX_NOSUBDIR) {
+      const pathchar_t *const lck_ext =
+          osal_fileext(lck_name, ARRAY_LENGTH(lck_name));
+      if (lck_ext) {
+        pathchar_t *pathname_ext = osal_fileext(buf, pathname_len);
+        memcpy(pathname_ext ? pathname_ext : buf + pathname_len, lck_ext,
+               sizeof(pathchar_t) * (ARRAY_END(lck_name) - lck_ext));
+        rc = check_alternative_lck_absent(buf);
+      }
+    } else {
+      memcpy(buf + ctx->ent_len, dxb_name, sizeof(dxb_name));
+      memcpy(buf + ctx->ent_len + dxb_name_len, lock_suffix,
+             sizeof(lock_suffix));
+      rc = check_alternative_lck_absent(buf);
+    }
+
     memcpy(ctx->dxb, pathname, sizeof(pathchar_t) * (ctx->ent_len + 1));
+    memcpy(ctx->lck, pathname, sizeof(pathchar_t) * ctx->ent_len);
     if (*flags & MDBX_NOSUBDIR) {
       memcpy(ctx->lck + ctx->ent_len, lock_suffix, sizeof(lock_suffix));
     } else {
-      ctx->lck += dxb_name_len;
-      memcpy(ctx->lck + ctx->ent_len, lck_name, sizeof(lck_name));
       memcpy(ctx->dxb + ctx->ent_len, dxb_name, sizeof(dxb_name));
+      memcpy(ctx->lck + ctx->ent_len, lck_name, sizeof(lck_name));
     }
-    memcpy(ctx->lck, pathname, sizeof(pathchar_t) * ctx->ent_len);
   } else {
-    ctx->lck = ctx->dxb + dxb_name_len;
-    memcpy(ctx->lck, lck_name + 1, sizeof(lck_name) - sizeof(pathchar_t));
+    assert(!(*flags & MDBX_NOSUBDIR));
+    memcpy(buf, dxb_name + 1, sizeof(dxb_name) - sizeof(pathchar_t));
+    memcpy(buf + dxb_name_len - 1, lock_suffix, sizeof(lock_suffix));
+    rc = check_alternative_lck_absent(buf);
+
     memcpy(ctx->dxb, dxb_name + 1, sizeof(dxb_name) - sizeof(pathchar_t));
+    memcpy(ctx->lck, lck_name + 1, sizeof(lck_name) - sizeof(pathchar_t));
   }
-  return MDBX_SUCCESS;
+  return rc;
 }
 
 __cold int mdbx_env_delete(const char *pathname, MDBX_env_delete_mode_t mode) {

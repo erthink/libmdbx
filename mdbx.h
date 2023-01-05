@@ -1932,6 +1932,9 @@ enum MDBX_error_t {
    *       равнозначна \ref MDBX_PROBLEM. */
   MDBX_BACKLOG_DEPLETED = -30414,
 
+  /** Alternative/Duplicate LCK-file is exists and should be removed manually */
+  MDBX_DUPLICATED_CLK = -30413,
+
   /* The last of MDBX-added error codes */
   MDBX_LAST_ADDED_ERRCODE = MDBX_TXN_OVERLAPPING,
 

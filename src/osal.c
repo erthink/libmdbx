@@ -1185,6 +1185,33 @@ MDBX_INTERNAL_FUNC int osal_removedirectory(const pathchar_t *pathname) {
 #endif
 }
 
+MDBX_INTERNAL_FUNC int osal_fileexists(const pathchar_t *pathname) {
+#if defined(_WIN32) || defined(_WIN64)
+  if (GetFileAttributesW(pathname) != INVALID_FILE_ATTRIBUTES)
+    return MDBX_RESULT_TRUE;
+  int err = GetLastError();
+  return (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND)
+             ? MDBX_RESULT_FALSE
+             : err;
+#else
+  if (access(pathname, F_OK) == 0)
+    return MDBX_RESULT_TRUE;
+  int err = errno;
+  return (err == ENOENT || err == ENOTDIR) ? MDBX_RESULT_FALSE : err;
+#endif
+}
+
+MDBX_INTERNAL_FUNC pathchar_t *osal_fileext(const pathchar_t *pathname,
+                                            size_t len) {
+  const pathchar_t *ext = nullptr;
+  for (size_t i = 0; i < len && pathname[i]; i++)
+    if (pathname[i] == '.')
+      ext = pathname + i;
+    else if (osal_isdirsep(pathname[i]))
+      ext = nullptr;
+  return (pathchar_t *)ext;
+}
+
 MDBX_INTERNAL_FUNC bool osal_pathequal(const pathchar_t *l, const pathchar_t *r,
                                        size_t len) {
 #if defined(_WIN32) || defined(_WIN64)
