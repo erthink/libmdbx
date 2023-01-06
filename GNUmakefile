@@ -788,7 +788,7 @@ IOARENA := $(shell \
   (test -x ../ioarena/@BUILD/src/ioarena && echo ../ioarena/@BUILD/src/ioarena) || \
   (test -x ../../@BUILD/src/ioarena && echo ../../@BUILD/src/ioarena) || \
   (test -x ../../src/ioarena && echo ../../src/ioarena) || which ioarena 2>&- || \
-  (echo false && echo '$(TIP) Clone and build the https://github.com/pmwkaa/ioarena.git within a neighbouring directory for availability of benchmarking.' >&2))
+  (echo false && echo '$(TIP) Clone and build the https://abf.io/erthink/ioarena.git within a neighbouring directory for availability of benchmarking.' >&2))
 endif
 NN	?= 25000000
 BENCH_CRUD_MODE ?= nosync
@@ -802,7 +802,7 @@ re-bench: bench-clean bench
 ifeq ($(or $(IOARENA),false),false)
 bench bench-quartet bench-triplet bench-couple:
 	$(QUIET)echo 'The `ioarena` benchmark is required.' >&2 && \
-	echo 'Please clone and build the https://github.com/pmwkaa/ioarena.git within a neighbouring `ioarena` directory.' >&2 && \
+	echo 'Please clone and build the https://abf.io/erthink/ioarena.git within a neighbouring `ioarena` directory.' >&2 && \
 	false
 
 else
