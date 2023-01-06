@@ -5,12 +5,12 @@ English version [by Google](https://gitflic-ru.translate.goog/project/erthink/li
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
 
-## v0.12.3 (Акула) запланирован на 2023-01-07
+## v0.12.3 (Акула) от 2023-01-07
 
 Выпуск с существенными доработками и новой функциональностью в память о закрытом open-source проекте "Акула".
 
 ```
-20 files changed, 4504 insertions(+), 2924 deletions(-)
+20 files changed, 4508 insertions(+), 2928 deletions(-)
 Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 ```
 
