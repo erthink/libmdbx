@@ -77,7 +77,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
    системах с unified page cache. Такое поведение (без использования
    `msync(MS_ASYNC)`) соответствует неизменяемой (hardcoded) логике LMDB. В
    результате, в простых/наивных бенчмарках, libmdbx опережает LMDB
-   примерна также как при реальном применении.
+   примерно также как при реальном применении.
 
    На всякий случай стоит еще раз отметить/напомнить, что на Windows
    предположительно libmdbx будет отставать от LMDB в сценариях с
@@ -88,7 +88,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 
  - Поддержка не-печатных имен для subDb.
 
- - Добавлен явный выбор `tls_model("local-dynamic")` для обзода проблемы
+ - Добавлен явный выбор `tls_model("local-dynamic")` для обхода проблемы
    `relocation R_X86_64_TPOFF32 against FOO cannot be used with -shared`
    из-за ошибки в CLANG приводящей к использованию неверного режима `ls_model`.
 
