@@ -17172,15 +17172,15 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
     if ((flags & MDBX_APPEND) && mc->mc_db->md_entries > 0) {
       rc = cursor_last(mc, &dkey, &olddata);
       if (likely(rc == MDBX_SUCCESS)) {
-        rc = mc->mc_dbx->md_cmp(key, &dkey);
-        if (likely(rc > 0)) {
+        const int cmp = mc->mc_dbx->md_cmp(key, &dkey);
+        if (likely(cmp > 0)) {
           mc->mc_ki[mc->mc_top]++; /* step forward for appending */
           rc = MDBX_NOTFOUND;
+        } else if (unlikely(cmp != 0)) {
+          /* new-key < last-key */
+          return MDBX_EKEYMISMATCH;
         } else {
-          if (unlikely(rc != MDBX_SUCCESS))
-            /* new-key < last-key
-             * or new-key == last-key without MDBX_APPENDDUP */
-            return MDBX_EKEYMISMATCH;
+          rc = MDBX_SUCCESS;
           exact = true;
         }
       }
