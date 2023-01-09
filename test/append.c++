@@ -21,7 +21,14 @@ public:
   bool run() override;
 
   static bool review_params(actor_params &params) {
-    return testcase::review_params(params) && params.make_keygen_linear();
+    if (!testcase::review_params(params))
+      return false;
+    const bool ordered = !flipcoin_x3();
+    log_notice("the '%s' key-generation mode is selected",
+               ordered ? "ordered/linear" : "unordered/non-linear");
+    if (ordered && !params.make_keygen_linear())
+      return false;
+    return true;
   }
 };
 REGISTER_TESTCASE(append);
@@ -133,8 +140,6 @@ bool testcase_append::run() {
         }
       } else
         failure_perror("mdbx_get_equal_or_great()", err);
-
-      assert(!expect_key_mismatch);
     }
 
     err = mdbx_cursor_put(cursor_guard.get(), &key->value, &data->value, flags);
@@ -148,12 +153,25 @@ bool testcase_append::run() {
 
     if (!expect_key_mismatch) {
       if (unlikely(err != MDBX_SUCCESS))
-        failure_perror("mdbx_cursor_put(insert-a)", err);
+        failure_perror("mdbx_cursor_put(append)", err);
       ++inserted_number;
       inserted_checksum.push((uint32_t)inserted_number, key->value);
       inserted_checksum.push(10639, data->value);
+
+      if (config.params.speculum) {
+        Item item(iov2dataview(key), iov2dataview(data));
+        const auto insertion_result = speculum.insert(item);
+        if (!insertion_result.second) {
+          char dump_key[32], dump_value[32];
+          log_error(
+              "speculum.append: unexpected %s {%s, %s}", "MDBX_SUCCESS",
+              mdbx_dump_val(&key->value, dump_key, sizeof(dump_key)),
+              mdbx_dump_val(&data->value, dump_value, sizeof(dump_value)));
+          return false;
+        }
+      }
     } else if (unlikely(err != MDBX_EKEYMISMATCH))
-      failure_perror("mdbx_cursor_put(insert-a) != MDBX_EKEYMISMATCH", err);
+      failure_perror("mdbx_cursor_put(append) != MDBX_EKEYMISMATCH", err);
 
     if (++txn_nops >= config.params.batch_write) {
       err = breakable_restart();
@@ -166,6 +184,10 @@ bool testcase_append::run() {
       committed_inserted_number = inserted_number;
       committed_inserted_checksum = inserted_checksum;
       txn_nops = 0;
+      if (!speculum_verify()) {
+        log_notice("append: bailout breakable_restart");
+        return false;
+      }
     }
 
     report(1);
@@ -181,6 +203,10 @@ bool testcase_append::run() {
   }
   //----------------------------------------------------------------------------
   txn_begin(true);
+  if (!speculum_verify()) {
+    log_notice("append: bailout verify");
+    return false;
+  }
   cursor_renew();
 
   MDBX_val check_key, check_data;
@@ -209,7 +235,8 @@ bool testcase_append::run() {
     failure("read_count(%" PRIu64 ") != inserted_number(%" PRIu64 ")",
             read_count, inserted_number);
 
-  if (unlikely(read_checksum.value != inserted_checksum.value))
+  if (unlikely(read_checksum.value != inserted_checksum.value) &&
+      !keyvalue_maker.is_unordered())
     failure("read_checksum(0x%016" PRIu64 ") "
             "!= inserted_checksum(0x%016" PRIu64 ")",
             read_checksum.value, inserted_checksum.value);
