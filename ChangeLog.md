@@ -1172,7 +1172,7 @@ Fixes:
  - Fix a lot of typos & spelling (Thanks to Josh Soref for PR).
  - Fix `getopt()` messages for Windows (Thanks to Andrey Sporaw for reporting).
  - Fix MSVC compiler version requirements (Thanks to Andrey Sporaw for reporting).
- - Workarounds for QEMU's bugs to run tests for cross-builded library under QEMU.
+ - Workarounds for QEMU's bugs to run tests for cross-built[A library under QEMU.
  - Now C++ compiler optional for building by CMake.
 
 
@@ -1241,7 +1241,7 @@ Deprecated functions and flags:
  - Avoid using `pwritev()` for single-writes (up to 10% speedup for some kernels & scenarios).
  - Avoiding `MDBX_UTTERLY_NOSYNC` as result of flags merge.
  - Add `mdbx_dbi_dupsort_depthmask()` function.
- - Add `MDBX_CP_FORCE_RESIZEABLE` option.
+ - Add `MDBX_CP_FORCE_RESIZABLE` option.
  - Add deprecated `MDBX_MAP_RESIZED` for compatibility.
  - Add `MDBX_BUILD_TOOLS` option (default `ON`).
  - Refine `mdbx_dbi_open_ex()` to safe concurrently opening the same handle from different threads.

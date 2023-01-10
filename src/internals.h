@@ -35,7 +35,7 @@
 
 /** Disables using GNU/Linux libc extensions.
  * \ingroup build_option
- * \note This option couldn't be moved to the options.h since dependant
+ * \note This option couldn't be moved to the options.h since dependent
  * control macros/defined should be prepared before include the options.h */
 #ifndef MDBX_DISABLE_GNU_SOURCE
 #define MDBX_DISABLE_GNU_SOURCE 0
@@ -920,7 +920,7 @@ typedef struct MDBX_lockinfo {
 
   /* Paired counter of processes that have mlock()ed part of mmapped DB.
    * The (mti_mlcnt[0] - mti_mlcnt[1]) > 0 means at least one process
-   * lock at leat one page, so therefore madvise() could return EINVAL. */
+   * lock at least one page, so therefore madvise() could return EINVAL. */
   MDBX_atomic_uint32_t mti_mlcnt[2];
 
   MDBX_ALIGNAS(MDBX_CACHELINE_SIZE) /* cacheline ----------------------------*/
