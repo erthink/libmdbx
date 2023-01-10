@@ -4,10 +4,23 @@ ChangeLog
 English version [by Google](https://gitflic-ru.translate.goog/project/erthink/libmdbx/blob?file=ChangeLog.md&_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
+## v0.13 (в разработке)
+
+Ликвидация технических долгов и мелочи:
+
+ - Исправление опечаток.
+ - Доработка теста для полной стохастической проверки `MDBX_EKEYMISMATCH` в режиме `MDBX_APPEND`.
+
+
+-------------------------------------------------------------------------------
+
 
 ## v0.12.3 (Акула) от 2023-01-07
 
 Выпуск с существенными доработками и новой функциональностью в память о закрытом open-source проекте "Акула".
+
+Добавлена prefault-запись, переделан контроль “некогерентности” unified page/buffer cache, изменена тактика слияния страниц и т.д.
+Стало ещё быстрее, в некоторых сценариях вдвое.
 
 ```
 20 files changed, 4508 insertions(+), 2928 deletions(-)
