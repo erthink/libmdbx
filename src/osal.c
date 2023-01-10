@@ -2160,9 +2160,8 @@ static int check_mmap_limit(const size_t limit) {
   return MDBX_SUCCESS;
 }
 
-MDBX_INTERNAL_FUNC int osal_mmap(const int flags, osal_mmap_t *map,
-                                 const size_t size, const size_t limit,
-                                 const unsigned options) {
+MDBX_INTERNAL_FUNC int osal_mmap(const int flags, osal_mmap_t *map, size_t size,
+                                 const size_t limit, const unsigned options) {
   assert(size <= limit);
   map->limit = 0;
   map->current = 0;
@@ -2192,7 +2191,13 @@ MDBX_INTERNAL_FUNC int osal_mmap(const int flags, osal_mmap_t *map,
     err = osal_filesize(map->fd, &map->filesize);
     if (err != MDBX_SUCCESS)
       return err;
-#if !(defined(_WIN32) || defined(_WIN64))
+#if defined(_WIN32) || defined(_WIN64)
+    if (map->filesize < size) {
+      WARNING("file size (%zu) less than requested for mapping (%zu)",
+              (size_t)map->filesize, size);
+      size = (size_t)map->filesize;
+    }
+#else
     map->current = (map->filesize > limit) ? limit : (size_t)map->filesize;
 #endif /* !Windows */
   }
