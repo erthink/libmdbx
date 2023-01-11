@@ -25,6 +25,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 
  - Исправление опечаток.
  - Доработка теста для полной стохастической проверки `MDBX_EKEYMISMATCH` в режиме `MDBX_APPEND`.
+ - Добавление в CMake-тесты вызова mdbx_chk в режиме чтения-записи для проверки MDBX_EXCLUSIVE в этом режиме.
 
 
 -------------------------------------------------------------------------------
