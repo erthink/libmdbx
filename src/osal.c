@@ -1160,7 +1160,7 @@ MDBX_INTERNAL_FUNC void osal_ioring_destroy(osal_ioring_t *ior) {
 #else
   osal_free(ior->pool);
 #endif
-  memset(ior, -1, sizeof(osal_ioring_t));
+  memset(ior, 0, sizeof(osal_ioring_t));
 }
 
 /*----------------------------------------------------------------------------*/

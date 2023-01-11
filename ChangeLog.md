@@ -6,7 +6,16 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 
 ## v0.13 (в разработке)
 
+Благодарности:
+
+ - Max <maxc0d3r@protonmail.com> за сообщение о проблеме ERROR_SHARING_VIOLATION
+   в режиме MDBX_EXCLUSIVE на Windows.
+
 Исправления (без корректировок новых функций):
+
+ - Устранение регресса после коммита 474391c83c5f81def6fdf3b0b6f5716a87b78fbf
+   приводящего к возврату ERROR_SHARING_VIOLATION в Windows при открытии БД
+   в режиме MDBX_EXCLUSIVE для чтения-записи.
 
  - Ограничиваем размер отображения при коротком read-only файле для
    предотвращении ошибки ERROR_NOT_ENOUGH_MEMORY в Windows, которая совсем
