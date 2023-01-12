@@ -153,6 +153,10 @@ static const char *sdb_name(const MDBX_val *val) {
     return "<nullptr>";
   if (len > 65536) {
     static char buf[64];
+    /* NOTE: There is MSYS2 MinGW bug if you here got
+     * the "unknown conversion type character ‘z’ in format [-Werror=format=]"
+     * https://stackoverflow.com/questions/74504432/whats-the-proper-way-to-tell-mingw-based-gcc-to-use-ansi-stdio-output-on-windo
+     */
     snprintf(buf, sizeof(buf), "<too-long-%zu>", len);
     return buf;
   }
