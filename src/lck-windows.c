@@ -752,7 +752,7 @@ static void WINAPI stub_srwlock_AcquireShared(osal_srwlock_t *srwl) {
     //  If there's a writer already, spin without unnecessarily
     //  interlocking the CPUs
     if (srwl->writerCount != 0) {
-      YieldProcessor();
+      SwitchToThread();
       continue;
     }
 
@@ -766,7 +766,7 @@ static void WINAPI stub_srwlock_AcquireShared(osal_srwlock_t *srwl) {
 
     // Remove from the readers list, spin, try again
     _InterlockedDecrement(&srwl->readerCount);
-    YieldProcessor();
+    SwitchToThread();
   }
 }
 
@@ -782,7 +782,7 @@ static void WINAPI stub_srwlock_AcquireExclusive(osal_srwlock_t *srwl) {
     //  If there's a writer already, spin without unnecessarily
     //  interlocking the CPUs
     if (srwl->writerCount != 0) {
-      YieldProcessor();
+      SwitchToThread();
       continue;
     }
 
@@ -797,7 +797,7 @@ static void WINAPI stub_srwlock_AcquireExclusive(osal_srwlock_t *srwl) {
   // that we're the writer.
   while (srwl->readerCount != 0) {
     assert(srwl->writerCount >= 0 && srwl->readerCount >= 0);
-    YieldProcessor();
+    SwitchToThread();
   }
 }
 

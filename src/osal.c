@@ -2181,6 +2181,7 @@ MDBX_INTERNAL_FUNC int osal_mmap(const int flags, osal_mmap_t *map, size_t size,
 
   if ((flags & MDBX_RDONLY) == 0 && (options & MMAP_OPTION_TRUNCATE) != 0) {
     err = osal_ftruncate(map->fd, size);
+    VERBOSE("ftruncate %zu, err %d", size, err);
     if (err != MDBX_SUCCESS)
       return err;
     map->filesize = size;
@@ -2189,6 +2190,7 @@ MDBX_INTERNAL_FUNC int osal_mmap(const int flags, osal_mmap_t *map, size_t size,
 #endif /* !Windows */
   } else {
     err = osal_filesize(map->fd, &map->filesize);
+    VERBOSE("filesize %" PRIu64 ", err %d", map->filesize, err);
     if (err != MDBX_SUCCESS)
       return err;
 #if defined(_WIN32) || defined(_WIN64)
@@ -2306,8 +2308,7 @@ MDBX_INTERNAL_FUNC int osal_munmap(osal_mmap_t *map) {
   VALGRIND_MAKE_MEM_NOACCESS(map->base, map->current);
   /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
    * when this memory will re-used by malloc or another mmapping.
-   * See https://libmdbx.dqdkfa.ru/dead-github/pull/93#issuecomment-613687203
-   */
+   * See https://libmdbx.dqdkfa.ru/dead-github/pull/93#issuecomment-613687203 */
   MDBX_ASAN_UNPOISON_MEMORY_REGION(
       map->base, (map->filesize && map->filesize < map->limit) ? map->filesize
                                                                : map->limit);
@@ -2332,25 +2333,38 @@ MDBX_INTERNAL_FUNC int osal_munmap(osal_mmap_t *map) {
 
 MDBX_INTERNAL_FUNC int osal_mresize(const int flags, osal_mmap_t *map,
                                     size_t size, size_t limit) {
+  int rc = osal_filesize(map->fd, &map->filesize);
+  VERBOSE("flags 0x%x, size %zu, limit %zu, filesize %" PRIu64, flags, size,
+          limit, map->filesize);
   assert(size <= limit);
+  if (rc != MDBX_SUCCESS) {
+    map->filesize = 0;
+    return rc;
+  }
+
 #if defined(_WIN32) || defined(_WIN64)
   assert(size != map->current || limit != map->limit || size < map->filesize);
 
   NTSTATUS status;
   LARGE_INTEGER SectionSize;
-  int err, rc = MDBX_SUCCESS;
+  int err;
 
-  if (!(flags & MDBX_RDONLY) && limit == map->limit && size > map->current &&
-      /* workaround for Wine */ mdbx_NtExtendSection) {
-    /* growth rw-section */
-    SectionSize.QuadPart = size;
-    status = mdbx_NtExtendSection(map->section, &SectionSize);
-    if (!NT_SUCCESS(status))
-      return ntstatus2errcode(status);
-    map->current = size;
-    if (map->filesize < size)
-      map->filesize = size;
-    return MDBX_SUCCESS;
+  if (limit == map->limit && size > map->current) {
+    if ((flags & MDBX_RDONLY) && map->filesize >= size) {
+      map->current = size;
+      return MDBX_SUCCESS;
+    } else if (!(flags & MDBX_RDONLY) &&
+               /* workaround for Wine */ mdbx_NtExtendSection) {
+      /* growth rw-section */
+      SectionSize.QuadPart = size;
+      status = mdbx_NtExtendSection(map->section, &SectionSize);
+      if (!NT_SUCCESS(status))
+        return ntstatus2errcode(status);
+      map->current = size;
+      if (map->filesize < size)
+        map->filesize = size;
+      return MDBX_SUCCESS;
+    }
   }
 
   if (limit > map->limit) {
@@ -2379,13 +2393,15 @@ MDBX_INTERNAL_FUNC int osal_mresize(const int flags, osal_mmap_t *map,
    *  - change size of mapped view;
    *  - extend read-only mapping;
    * Therefore we should unmap/map entire section. */
-  if ((flags & MDBX_MRESIZE_MAY_UNMAP) == 0)
+  if ((flags & MDBX_MRESIZE_MAY_UNMAP) == 0) {
+    if (size <= map->current && limit == map->limit)
+      return MDBX_SUCCESS;
     return MDBX_EPERM;
+  }
 
   /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
    * when this memory will re-used by malloc or another mmapping.
-   * See https://libmdbx.dqdkfa.ru/dead-github/pull/93#issuecomment-613687203
-   */
+   * See https://libmdbx.dqdkfa.ru/dead-github/pull/93#issuecomment-613687203 */
   MDBX_ASAN_UNPOISON_MEMORY_REGION(map->base, map->limit);
   status = NtUnmapViewOfSection(GetCurrentProcess(), map->base);
   if (!NT_SUCCESS(status))
@@ -2398,7 +2414,6 @@ MDBX_INTERNAL_FUNC int osal_mresize(const int flags, osal_mmap_t *map,
   if (!NT_SUCCESS(status)) {
   bailout_ntstatus:
     err = ntstatus2errcode(status);
-  bailout:
     map->base = NULL;
     map->current = map->limit = 0;
     if (ReservedAddress) {
@@ -2426,10 +2441,6 @@ retry_file_and_section:
       /* the base address could be changed */
       map->base = NULL;
   }
-
-  err = osal_filesize(map->fd, &map->filesize);
-  if (err != MDBX_SUCCESS)
-    goto bailout;
 
   if ((flags & MDBX_RDONLY) == 0 && map->filesize != size) {
     err = osal_ftruncate(map->fd, size);
@@ -2507,18 +2518,17 @@ retry_mapview:;
 
 #else /* Windows */
 
-  map->filesize = 0;
-  int rc = osal_filesize(map->fd, &map->filesize);
-  if (rc != MDBX_SUCCESS)
-    return rc;
-
   if (flags & MDBX_RDONLY) {
+    if (size > map->filesize)
+      rc = MDBX_UNABLE_EXTEND_MAPSIZE;
+    else if (size < map->filesize && map->filesize > limit)
+      rc = MDBX_EPERM;
     map->current = (map->filesize > limit) ? limit : (size_t)map->filesize;
-    if (map->current != size)
-      rc = (size > map->current) ? MDBX_UNABLE_EXTEND_MAPSIZE : MDBX_EPERM;
   } else {
-    if (map->filesize != size) {
+    if (size > map->filesize ||
+        (size < map->filesize && (flags & MDBX_SHRINK_ALLOWED))) {
       rc = osal_ftruncate(map->fd, size);
+      VERBOSE("ftruncate %zu, err %d", size, rc);
       if (rc != MDBX_SUCCESS)
         return rc;
       map->filesize = size;
@@ -2713,7 +2723,8 @@ retry_mapview:;
 
   assert(rc != MDBX_SUCCESS ||
          (map->base != nullptr && map->base != MAP_FAILED &&
-          map->current == size && map->limit == limit));
+          map->current == size && map->limit == limit &&
+          map->filesize >= size));
   return rc;
 }
 
