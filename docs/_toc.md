@@ -38,4 +38,4 @@ including creating [merge-request](https://gitflic.ru/project/erthink/libmdbx/me
 
 ---
 
-\section MithrilDB MithrilDB
+\section MithrilDB MithrilDB and Future
