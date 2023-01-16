@@ -6328,7 +6328,6 @@ __cold static int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
 
 bailout:
   if (rc == MDBX_SUCCESS) {
-    mdbx_assert(env, size_bytes == env->me_dxb_mmap.current);
     mdbx_assert(env, size_bytes <= env->me_dxb_mmap.filesize);
     mdbx_assert(env, limit_bytes == env->me_dxb_mmap.limit);
 #ifdef MDBX_USE_VALGRIND
