@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2022 Leonid Yuriev <leo@yuriev.ru>.
+ * Copyright 2016-2023 Leonid Yuriev <leo@yuriev.ru>.
  * Copyright 2015 Vladimir Romanov
  * <https://www.linkedin.com/in/vladimirromanov>, Yota Lab.
  *
