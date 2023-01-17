@@ -67,7 +67,7 @@ the end is hit.
 To retrieve all keys starting from a specified key value, use \ref MDBX_SET. For
 more cursor operations, see the \ref c_api reference.
 
-When using \ref mdbx_cursor_put()\ref , either the function will position the cursor
+When using \ref mdbx_cursor_put(), either the function will position the cursor
 for you based on the key, or you can use operation \ref MDBX_CURRENT to use the
 current position of the cursor. \note Note that key must then match the current
 position's key.
