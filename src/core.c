@@ -6032,7 +6032,8 @@ __cold static int dxb_resize(MDBX_env *const env, const pgno_t used_pgno,
   const size_t prev_size = env->me_dxb_mmap.current;
   const size_t prev_limit = env->me_dxb_mmap.limit;
   const pgno_t prev_limit_pgno = bytes2pgno(env, prev_limit);
-  eASSERT(env, prev_limit_pgno >= used_pgno);
+  eASSERT(env, limit_pgno >= size_pgno);
+  eASSERT(env, size_pgno >= used_pgno);
   if (mode < explicit_resize && size_pgno <= prev_limit_pgno) {
     /* The actual mapsize may be less since the geo.upper may be changed
      * by other process. Avoids remapping until it necessary. */
