@@ -17275,7 +17275,7 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
           if (unlikely(err != MDBX_SUCCESS))
             return err;
           flags -= MDBX_ALLDUPS;
-          rc = MDBX_NOTFOUND;
+          rc = mc->mc_snum ? MDBX_NOTFOUND : MDBX_NO_ROOT;
           exact = false;
         } else if (!(flags & (MDBX_RESERVE | MDBX_MULTIPLE))) {
           /* checking for early exit without dirtying pages */

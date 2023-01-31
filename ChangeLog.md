@@ -10,7 +10,10 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 
  - Max <maxc0d3r@protonmail.com> за сообщение о проблеме ERROR_SHARING_VIOLATION
    в режиме MDBX_EXCLUSIVE на Windows.
- - Alisher Ashyrov https://t.me/a1is43ras4 за сообщение о проблеме с assert-проверкой и содействие в отладке.
+ - Alisher Ashyrov <https://t.me/a1is43ras4> за сообщение о проблеме
+   с assert-проверкой и содействие в отладке.
+ - Masatoshi Fukunaga <https://gitflic.ru/user/mah0x211> за сообщение о проблеме
+   `put(MDBX_UPSERT+MDBX_ALLDUPS)` для случая замены всех значений в subDb.
 
 Исправления (без корректировок новых функций):
 
@@ -30,6 +33,12 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
    Кроме срабатывание проверки, каких-либо других последствий не возникало.
 
  - Исправление copy&paste опечатки в разделе "Getting started" документации.
+
+ - Устранение проблемы `put(MDBX_UPSERT+MDBX_ALLDUPS)` для случая замены
+   всех значений единственного ключа в subDb. В ходе этой операции subDb
+   становится полностью пустой, без каких-либо страниц и именно эта
+   ситуация не была учтена в коде, что приводило к повреждению БД
+   при фиксации такой транзакции.
 
 Ликвидация технических долгов и мелочи:
 
