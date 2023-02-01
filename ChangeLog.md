@@ -7,9 +7,16 @@ Fixes:
 
  - Fixed insignificant typo of `||` inside `#if` byte-order condition (backport).
 
- - Fixed`SIGSEGV` or an erroneous call to `free()` in situations where
+ - Fixed `SIGSEGV` or an erroneous call to `free()` in situations where
    errors occur when reopening by `mdbx_env_open()` of a previously used
    environment (backport).
+
+ - Fixed `cursor_put_nochecklen()` internals for case when dupsort'ed named subDb
+   contains a single key with multiple values (aka duplicates), which are replaced
+   with a single value by put-operation with the `MDBX_UPSERT+MDBX_ALLDUPS` flags (backport).
+   In this case, the database becomes completely empty, without any pages.
+   However exactly this condition was not considered and thus wasn't handled correctly.
+   See [issue#8](https://gitflic.ru/project/erthink/libmdbx/issue/8) for more information.
 
 Minors:
 
