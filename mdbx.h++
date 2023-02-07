@@ -2639,7 +2639,7 @@ public:
     return buffer(src, make_reference);
   }
 
-  static buffer key_from(const silo &&src) noexcept {
+  static buffer key_from(silo &&src) noexcept {
     return buffer(::std::move(src));
   }
 
@@ -3553,7 +3553,7 @@ public:
   void close(bool dont_sync = false);
 
   env_managed(env_managed &&) = default;
-  env_managed &operator=(env_managed &&other) {
+  env_managed &operator=(env_managed &&other) noexcept {
     if (MDBX_UNLIKELY(handle_))
       MDBX_CXX20_UNLIKELY {
         assert(handle_ != other.handle_);
@@ -3852,7 +3852,7 @@ class LIBMDBX_API_TYPE txn_managed : public txn {
 public:
   MDBX_CXX11_CONSTEXPR txn_managed() noexcept = default;
   txn_managed(txn_managed &&) = default;
-  txn_managed &operator=(txn_managed &&other) {
+  txn_managed &operator=(txn_managed &&other) noexcept {
     if (MDBX_UNLIKELY(handle_))
       MDBX_CXX20_UNLIKELY {
         assert(handle_ != other.handle_);
@@ -4055,7 +4055,7 @@ public:
   void close();
 
   cursor_managed(cursor_managed &&) = default;
-  cursor_managed &operator=(cursor_managed &&other) {
+  cursor_managed &operator=(cursor_managed &&other) noexcept {
     if (MDBX_UNLIKELY(handle_))
       MDBX_CXX20_UNLIKELY {
         assert(handle_ != other.handle_);
