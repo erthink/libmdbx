@@ -14486,9 +14486,11 @@ __cold int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target) {
 __cold int mdbx_env_open_for_recovery(MDBX_env *env, const char *pathname,
                                       unsigned target_meta, bool writeable) {
 #if defined(_WIN32) || defined(_WIN64)
-  const wchar_t *pathnameW = nullptr;
+  wchar_t *pathnameW = nullptr;
   OSAL_MB2WIDE(pathname, pathnameW);
-  return mdbx_env_open_for_recoveryW(env, pathnameW, target_meta, writeable);
+  int rc = mdbx_env_open_for_recoveryW(env, pathnameW, target_meta, writeable);
+  osal_free(pathnameW);
+  return rc;
 }
 
 __cold int mdbx_env_open_for_recoveryW(MDBX_env *env, const wchar_t *pathname,
@@ -14675,9 +14677,11 @@ __cold static int handle_env_pathname(MDBX_handle_env_pathname *ctx,
 
 __cold int mdbx_env_delete(const char *pathname, MDBX_env_delete_mode_t mode) {
 #if defined(_WIN32) || defined(_WIN64)
-  const wchar_t *pathnameW = nullptr;
+  wchar_t *pathnameW = nullptr;
   OSAL_MB2WIDE(pathname, pathnameW);
-  return mdbx_env_deleteW(pathnameW, mode);
+  int rc = mdbx_env_deleteW(pathnameW, mode);
+  osal_free(pathnameW);
+  return rc;
 }
 
 __cold int mdbx_env_deleteW(const wchar_t *pathname,
@@ -14766,9 +14770,11 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname,
 __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
                          MDBX_env_flags_t flags, mdbx_mode_t mode) {
 #if defined(_WIN32) || defined(_WIN64)
-  const wchar_t *pathnameW = nullptr;
+  wchar_t *pathnameW = nullptr;
   OSAL_MB2WIDE(pathname, pathnameW);
-  return mdbx_env_openW(env, pathnameW, flags, mode);
+  int rc = mdbx_env_openW(env, pathnameW, flags, mode);
+  osal_free(pathnameW);
+  return rc;
 }
 
 __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
@@ -21772,9 +21778,11 @@ __cold int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
 __cold int mdbx_env_copy(MDBX_env *env, const char *dest_path,
                          MDBX_copy_flags_t flags) {
 #if defined(_WIN32) || defined(_WIN64)
-  const wchar_t *dest_pathW = nullptr;
+  wchar_t *dest_pathW = nullptr;
   OSAL_MB2WIDE(dest_path, dest_pathW);
-  return mdbx_env_copyW(env, dest_pathW, flags);
+  int rc = mdbx_env_copyW(env, dest_pathW, flags);
+  osal_free(dest_pathW);
+  return rc;
 }
 
 LIBMDBX_API int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest_path,
