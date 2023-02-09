@@ -3003,9 +3003,8 @@ LIBMDBX_API int mdbx_env_get_flags(const MDBX_env *env, unsigned *flags);
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
  * \retval MDBX_EINVAL  An invalid parameter was specified. */
-#if !(defined(_WIN32) || defined(_WIN64))
 LIBMDBX_API int mdbx_env_get_path(const MDBX_env *env, const char **dest);
-#else
+#if defined(_WIN32) || defined(_WIN64)
 LIBMDBX_API int mdbx_env_get_pathW(const MDBX_env *env, const wchar_t **dest);
 #endif /* Windows */
 

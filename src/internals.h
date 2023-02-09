@@ -1463,6 +1463,8 @@ struct MDBX_env {
   osal_srwlock_t me_remap_guard;
   /* Workaround for LockFileEx and WriteFile multithread bug */
   CRITICAL_SECTION me_windowsbug_lock;
+  char *me_pathname_char; /* cache of multi-byte representation of pathname
+                             to the DB files */
 #else
   osal_fastmutex_t me_remap_guard;
 #endif

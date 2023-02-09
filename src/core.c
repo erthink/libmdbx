@@ -14779,6 +14779,9 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
   if (likely(rc == MDBX_SUCCESS)) {
     rc = mdbx_env_openW(env, pathnameW, flags, mode);
     osal_free(pathnameW);
+    if (rc == MDBX_SUCCESS)
+      /* force to make cache of the multi-byte pathname representation */
+      mdbx_env_get_path(env, &pathname);
   }
   return rc;
 }
@@ -15334,6 +15337,12 @@ __cold static int env_close(MDBX_env *env) {
     osal_free(env->me_pathname);
     env->me_pathname = nullptr;
   }
+#if defined(_WIN32) || defined(_WIN64)
+  if (env->me_pathname_char) {
+    osal_free(env->me_pathname_char);
+    env->me_pathname_char = nullptr;
+  }
+#endif /* Windows */
   if (env->me_txn0) {
     dpl_free(env->me_txn0);
     txl_free(env->me_txn0->tw.lifo_reclaimed);
@@ -21929,19 +21938,7 @@ __cold int mdbx_env_set_assert(MDBX_env *env, MDBX_assert_func *func) {
 #endif
 }
 
-#if !(defined(_WIN32) || defined(_WIN64))
-__cold int mdbx_env_get_path(const MDBX_env *env, const char **arg) {
-  int rc = check_env(env, true);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  if (unlikely(!arg))
-    return MDBX_EINVAL;
-
-  *arg = env->me_pathname;
-  return MDBX_SUCCESS;
-}
-#else
+#if defined(_WIN32) || defined(_WIN64)
 __cold int mdbx_env_get_pathW(const MDBX_env *env, const wchar_t **arg) {
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -21954,6 +21951,51 @@ __cold int mdbx_env_get_pathW(const MDBX_env *env, const wchar_t **arg) {
   return MDBX_SUCCESS;
 }
 #endif /* Windows */
+
+__cold int mdbx_env_get_path(const MDBX_env *env, const char **arg) {
+  int rc = check_env(env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(!arg))
+    return MDBX_EINVAL;
+
+#if defined(_WIN32) || defined(_WIN64)
+  if (!env->me_pathname_char) {
+    *arg = nullptr;
+    DWORD flags = /* WC_ERR_INVALID_CHARS */ 0x80;
+    size_t mb_len = WideCharToMultiByte(CP_THREAD_ACP, flags, env->me_pathname,
+                                        -1, nullptr, 0, nullptr, nullptr);
+    rc = mb_len ? MDBX_SUCCESS : (int)GetLastError();
+    if (rc == ERROR_INVALID_FLAGS) {
+      mb_len = WideCharToMultiByte(CP_THREAD_ACP, flags = 0, env->me_pathname,
+                                   -1, nullptr, 0, nullptr, nullptr);
+      rc = mb_len ? MDBX_SUCCESS : (int)GetLastError();
+    }
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+
+    char *const mb_pathname = osal_malloc(mb_len);
+    if (!mb_pathname)
+      return MDBX_ENOMEM;
+    if (mb_len != (size_t)WideCharToMultiByte(CP_THREAD_ACP, flags,
+                                              env->me_pathname, -1, mb_pathname,
+                                              (int)mb_len, nullptr, nullptr)) {
+      rc = (int)GetLastError();
+      osal_free(mb_pathname);
+      return rc;
+    }
+    if (env->me_pathname_char ||
+        InterlockedCompareExchangePointer(
+            (PVOID volatile *)&env->me_pathname_char, mb_pathname, nullptr))
+      osal_free(mb_pathname);
+  }
+  *arg = env->me_pathname_char;
+#else
+  *arg = env->me_pathname;
+#endif /* Windows */
+  return MDBX_SUCCESS;
+}
 
 __cold int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *arg) {
   int rc = check_env(env, true);
