@@ -546,19 +546,32 @@ MDBX_INTERNAL_FUNC int osal_fastmutex_release(osal_fastmutex_t *fastmutex) {
 
 #if defined(_WIN32) || defined(_WIN64)
 
-#ifndef WC_ERR_INVALID_CHARS
-static const DWORD WC_ERR_INVALID_CHARS =
-    (6 /* Windows Vista */ <= /* MajorVersion */ LOBYTE(LOWORD(GetVersion())))
-        ? 0x00000080
-        : 0;
-#endif /* WC_ERR_INVALID_CHARS */
+MDBX_INTERNAL_FUNC int osal_mb2w(const char *const src, wchar_t **const pdst) {
+  const size_t dst_wlen = MultiByteToWideChar(
+      CP_THREAD_ACP, MB_ERR_INVALID_CHARS, src, -1, nullptr, 0);
+  wchar_t *dst = *pdst;
+  int rc = ERROR_INVALID_NAME;
+  if (unlikely(dst_wlen < 2 || dst_wlen > /* MAX_PATH */ INT16_MAX))
+    goto bailout;
 
-MDBX_MAYBE_UNUSED MDBX_INTERNAL_FUNC size_t osal_mb2w(wchar_t *dst,
-                                                      size_t dst_n,
-                                                      const char *src,
-                                                      size_t src_n) {
-  return MultiByteToWideChar(CP_THREAD_ACP, MB_ERR_INVALID_CHARS, src,
-                             (int)src_n, dst, (int)dst_n);
+  dst = osal_realloc(dst, dst_wlen * sizeof(wchar_t));
+  rc = MDBX_ENOMEM;
+  if (unlikely(!dst))
+    goto bailout;
+
+  *pdst = dst;
+  if (likely(dst_wlen == (size_t)MultiByteToWideChar(CP_THREAD_ACP,
+                                                     MB_ERR_INVALID_CHARS, src,
+                                                     -1, dst, (int)dst_wlen)))
+    return MDBX_SUCCESS;
+
+  rc = ERROR_INVALID_NAME;
+bailout:
+  if (*pdst) {
+    osal_free(*pdst);
+    *pdst = nullptr;
+  }
+  return rc;
 }
 
 #endif /* Windows */

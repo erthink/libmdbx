@@ -757,26 +757,7 @@ MDBX_INTERNAL_FUNC int osal_rpid_check(MDBX_env *env, uint32_t pid);
 
 #if defined(_WIN32) || defined(_WIN64)
 
-MDBX_INTERNAL_FUNC size_t osal_mb2w(wchar_t *dst, size_t dst_n, const char *src,
-                                    size_t src_n);
-
-#define OSAL_MB2WIDE(FROM, TO)                                                 \
-  do {                                                                         \
-    const char *const from_tmp = (FROM);                                       \
-    const size_t from_mblen = strlen(from_tmp);                                \
-    const size_t to_wlen = osal_mb2w(nullptr, 0, from_tmp, from_mblen);        \
-    if (unlikely(to_wlen < 1 || to_wlen > /* MAX_PATH */ INT16_MAX))           \
-      return ERROR_INVALID_NAME;                                               \
-    wchar_t *const to_tmp = osal_malloc((to_wlen + 1) * sizeof(wchar_t));      \
-    if (unlikely(!to_tmp))                                                     \
-      return MDBX_ENOMEM;                                                      \
-    if (unlikely(to_wlen + 1 !=                                                \
-                 osal_mb2w(to_tmp, to_wlen + 1, from_tmp, from_mblen + 1))) {  \
-      osal_free(to_tmp);                                                       \
-      return ERROR_INVALID_NAME;                                               \
-    }                                                                          \
-    (TO) = to_tmp;                                                             \
-  } while (0)
+MDBX_INTERNAL_FUNC int osal_mb2w(const char *const src, wchar_t **const pdst);
 
 typedef void(WINAPI *osal_srwlock_t_function)(osal_srwlock_t *);
 MDBX_INTERNAL_VAR osal_srwlock_t_function osal_srwlock_Init,
