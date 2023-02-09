@@ -2302,6 +2302,8 @@ LIBMDBX_API int mdbx_env_get_option(const MDBX_env *env,
  * be called later to discard the \ref MDBX_env handle and release associated
  * resources.
  *
+ * \note On Windows the \ref mdbx_env_openW() is recommended to use.
+ *
  * \param [in] env       An environment handle returned
  *                       by \ref mdbx_env_create()
  *
@@ -2369,8 +2371,11 @@ LIBMDBX_API int mdbx_env_get_option(const MDBX_env *env,
 LIBMDBX_API int mdbx_env_open(MDBX_env *env, const char *pathname,
                               MDBX_env_flags_t flags, mdbx_mode_t mode);
 
-#if defined(_WIN32) || defined(_WIN64)
-LIBMDBX_API int mdbx_env_openW(MDBX_env *env, const wchar_t *pathnameW,
+#if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
+/** \copydoc mdbx_env_open()
+ * \note Available only on Windows.
+ * \see mdbx_env_open() */
+LIBMDBX_API int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
                                MDBX_env_flags_t flags, mdbx_mode_t mode);
 #endif /* Windows */
 
@@ -2400,6 +2405,8 @@ typedef enum MDBX_env_delete_mode_t MDBX_env_delete_mode_t;
 /** \brief Delete the environment's files in a proper and multiprocess-safe way.
  * \ingroup c_extra
  *
+ * \note On Windows the \ref mdbx_env_deleteW() is recommended to use.
+ *
  * \param [in] pathname  The pathname for the database or the directory in which
  *                       the database files reside.
  *
@@ -2416,8 +2423,12 @@ typedef enum MDBX_env_delete_mode_t MDBX_env_delete_mode_t;
  *                            so no deletion was performed. */
 LIBMDBX_API int mdbx_env_delete(const char *pathname,
                                 MDBX_env_delete_mode_t mode);
-#if defined(_WIN32) || defined(_WIN64)
-LIBMDBX_API int mdbx_env_deleteW(const wchar_t *pathnameW,
+
+#if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
+/** \copydoc mdbx_env_delete()
+ * \note Available only on Windows.
+ * \see mdbx_env_delete() */
+LIBMDBX_API int mdbx_env_deleteW(const wchar_t *pathname,
                                  MDBX_env_delete_mode_t mode);
 #endif /* Windows */
 
@@ -2429,6 +2440,8 @@ LIBMDBX_API int mdbx_env_deleteW(const wchar_t *pathnameW,
  * \note This call can trigger significant file size growth if run in
  * parallel with write transactions, because it employs a read-only
  * transaction. See long-lived transactions under \ref restrictions section.
+ *
+ * \note On Windows the \ref mdbx_env_copyW() is recommended to use.
  *
  * \param [in] env    An environment handle returned by mdbx_env_create().
  *                    It must have already been opened successfully.
@@ -2454,7 +2467,11 @@ LIBMDBX_API int mdbx_env_deleteW(const wchar_t *pathnameW,
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *dest,
                               MDBX_copy_flags_t flags);
-#if defined(_WIN32) || defined(_WIN64)
+
+#if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
+/** \copydoc mdbx_env_copy()
+ * \note Available only on Windows.
+ * \see mdbx_env_copy() */
 LIBMDBX_API int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest,
                                MDBX_copy_flags_t flags);
 #endif /* Windows */
@@ -2995,6 +3012,8 @@ LIBMDBX_API int mdbx_env_get_flags(const MDBX_env *env, unsigned *flags);
 /** \brief Return the path that was used in mdbx_env_open().
  * \ingroup c_statinfo
  *
+ * \note On Windows the \ref mdbx_env_get_pathW() is recommended to use.
+ *
  * \param [in] env     An environment handle returned by \ref mdbx_env_create()
  * \param [out] dest   Address of a string pointer to contain the path.
  *                     This is the actual string in the environment, not a
@@ -3004,7 +3023,11 @@ LIBMDBX_API int mdbx_env_get_flags(const MDBX_env *env, unsigned *flags);
  *          some possible errors are:
  * \retval MDBX_EINVAL  An invalid parameter was specified. */
 LIBMDBX_API int mdbx_env_get_path(const MDBX_env *env, const char **dest);
-#if defined(_WIN32) || defined(_WIN64)
+
+#if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
+/** \copydoc mdbx_env_get_path()
+ * \note Available only on Windows.
+ * \see mdbx_env_get_path() */
 LIBMDBX_API int mdbx_env_get_pathW(const MDBX_env *env, const wchar_t **dest);
 #endif /* Windows */
 
@@ -5510,13 +5533,20 @@ LIBMDBX_API int mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
  *
  * This function mostly of internal API for `mdbx_chk` utility and subject to
  * change at any time. Do not use this function to avoid shooting your own
- * leg(s). */
+ * leg(s).
+ *
+ * \note On Windows the \ref mdbx_env_open_for_recoveryW() is recommended
+ * to use. */
 LIBMDBX_API int mdbx_env_open_for_recovery(MDBX_env *env, const char *pathname,
                                            unsigned target_meta,
                                            bool writeable);
-#if defined(_WIN32) || defined(_WIN64)
+
+#if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
+/** \copydoc mdbx_env_open_for_recovery()
+ * \note Available only on Windows.
+ * \see mdbx_env_open_for_recovery() */
 LIBMDBX_API int mdbx_env_open_for_recoveryW(MDBX_env *env,
-                                            const wchar_t *pathnameW,
+                                            const wchar_t *pathname,
                                             unsigned target_meta,
                                             bool writeable);
 #endif /* Windows */
