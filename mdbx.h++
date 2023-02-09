@@ -223,9 +223,10 @@
 #endif /* MDBX_CXX20_UNLIKELY */
 
 #ifndef MDBX_HAVE_CXX20_CONCEPTS
-#if defined(DOXYGEN) ||                                                        \
-    (defined(__cpp_lib_concepts) && __cpp_lib_concepts >= 202002L)
+#if defined(__cpp_lib_concepts) && __cpp_lib_concepts >= 202002L
 #include <concepts>
+#define MDBX_HAVE_CXX20_CONCEPTS 1
+#elif defined(DOXYGEN)
 #define MDBX_HAVE_CXX20_CONCEPTS 1
 #else
 #define MDBX_HAVE_CXX20_CONCEPTS 0
@@ -233,7 +234,7 @@
 #endif /* MDBX_HAVE_CXX20_CONCEPTS */
 
 #ifndef MDBX_CXX20_CONCEPT
-#if MDBX_HAVE_CXX20_CONCEPTS
+#if MDBX_HAVE_CXX20_CONCEPTS || defined(DOXYGEN)
 #define MDBX_CXX20_CONCEPT(CONCEPT, NAME) CONCEPT NAME
 #else
 #define MDBX_CXX20_CONCEPT(CONCEPT, NAME) typename NAME
@@ -241,7 +242,7 @@
 #endif /* MDBX_CXX20_CONCEPT */
 
 #ifndef MDBX_ASSERT_CXX20_CONCEPT_SATISFIED
-#if MDBX_HAVE_CXX20_CONCEPTS
+#if MDBX_HAVE_CXX20_CONCEPTS || defined(DOXYGEN)
 #define MDBX_ASSERT_CXX20_CONCEPT_SATISFIED(CONCEPT, TYPE)                     \
   static_assert(CONCEPT<TYPE>)
 #else
@@ -551,8 +552,11 @@ static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom, size_t payload,
 /// \defgroup cxx_data slices and buffers
 /// @{
 
-#if MDBX_HAVE_CXX20_CONCEPTS
+#if MDBX_HAVE_CXX20_CONCEPTS || defined(DOXYGEN)
 
+/** \concept MutableByteProducer
+ *  \interface MutableByteProducer
+ *  \brief MutableByteProducer C++20 concept */
 template <typename T>
 concept MutableByteProducer = requires(T a, char array[42]) {
   { a.is_empty() } -> std::same_as<bool>;
@@ -560,6 +564,9 @@ concept MutableByteProducer = requires(T a, char array[42]) {
   { a.write_bytes(&array[0], size_t(42)) } -> std::same_as<char *>;
 };
 
+/** \concept ImmutableByteProducer
+ *  \interface ImmutableByteProducer
+ *  \brief ImmutableByteProducer C++20 concept */
 template <typename T>
 concept ImmutableByteProducer = requires(const T &a, char array[42]) {
   { a.is_empty() } -> std::same_as<bool>;
@@ -567,6 +574,9 @@ concept ImmutableByteProducer = requires(const T &a, char array[42]) {
   { a.write_bytes(&array[0], size_t(42)) } -> std::same_as<char *>;
 };
 
+/** \concept SliceTranscoder
+ *  \interface SliceTranscoder
+ *  \brief SliceTranscoder C++20 concept */
 template <typename T>
 concept SliceTranscoder = ImmutableByteProducer<T> &&
     requires(const slice &source, const T &a) {
@@ -3106,10 +3116,12 @@ public:
     operate_parameters(const operate_parameters &) noexcept = default;
     MDBX_CXX14_CONSTEXPR operate_parameters &
     operator=(const operate_parameters &) noexcept = default;
-    MDBX_env_flags_t
-    make_flags(bool accede = true, ///< \copydoc MDBX_ACCEDE
-               bool use_subdirectory =
-                   false ///< use subdirectory to place the DB files
+    MDBX_env_flags_t make_flags(
+        bool accede = true, ///< Allows accepting incompatible operating options
+                            ///< in case the database is already being used by
+                            ///< another process(es) \see MDBX_ACCEDE
+        bool use_subdirectory =
+            false ///< use subdirectory to place the DB files
     ) const;
     static env::mode mode_from_flags(MDBX_env_flags_t) noexcept;
     static env::durability durability_from_flags(MDBX_env_flags_t) noexcept;
