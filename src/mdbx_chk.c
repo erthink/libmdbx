@@ -571,8 +571,8 @@ static int pgvisitor(const uint64_t pgno, const unsigned pgnumber,
         data_tree_problems += !is_gc_tree;
         gc_tree_problems += is_gc_tree;
       } else {
-        dbi->payload_bytes += payload_bytes + header_bytes;
-        walk.total_payload_bytes += payload_bytes + header_bytes;
+        dbi->payload_bytes += (uint64_t)payload_bytes + header_bytes;
+        walk.total_payload_bytes += (uint64_t)payload_bytes + header_bytes;
       }
     }
   }
@@ -632,7 +632,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
 
       pgno_t prev = MDBX_PNL_ASCENDING ? NUM_METAS - 1 : txn->mt_next_pgno;
       pgno_t span = 1;
-      for (unsigned i = 0; i < number; ++i) {
+      for (size_t i = 0; i < number; ++i) {
         if (check_user_break())
           return MDBX_EINTR;
         const pgno_t pgno = iptr[i];
@@ -651,7 +651,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
           if (MDBX_PNL_DISORDERED(prev, pgno)) {
             bad = " [bad sequence]";
             problem_add("entry", txnid, "bad sequence",
-                        "%" PRIaPGNO " %c [%u].%" PRIaPGNO, prev,
+                        "%" PRIaPGNO " %c [%zu].%" PRIaPGNO, prev,
                         (prev == pgno) ? '=' : (MDBX_PNL_ASCENDING ? '>' : '<'),
                         i, pgno);
           }
@@ -677,7 +677,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
               " pages, maxspan %" PRIaPGNO "%s\n",
               txnid, number, span, bad);
         if (verbose > 4) {
-          for (unsigned i = 0; i < number; i += span) {
+          for (size_t i = 0; i < number; i += span) {
             const pgno_t pgno = iptr[i];
             for (span = 1;
                  i + span < number &&

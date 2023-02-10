@@ -86,13 +86,17 @@
 #pragma warning(disable : 4464) /* relative include path contains '..' */
 #endif
 #if _MSC_VER > 1913
-#pragma warning(disable : 5045) /* Compiler will insert Spectre mitigation...  \
-                                 */
+#pragma warning(disable : 5045) /* will insert Spectre mitigation... */
 #endif
 #if _MSC_VER > 1914
 #pragma warning(                                                               \
     disable : 5105) /* winbase.h(9531): warning C5105: macro expansion         \
                        producing 'defined' has undefined behavior */
+#endif
+#if _MSC_VER > 1930
+#pragma warning(disable : 6235) /* <expression> is always a constant */
+#pragma warning(disable : 6237) /* <expression> is never evaluated and might   \
+                                   have side effects */
 #endif
 #pragma warning(disable : 4710) /* 'xyz': function not inlined */
 #pragma warning(disable : 4711) /* function 'xyz' selected for automatic       \
@@ -1693,14 +1697,14 @@ int64pgno(int64_t i64) {
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static __inline pgno_t
 pgno_add(size_t base, size_t augend) {
   assert(base <= MAX_PAGENO + 1 && augend < MAX_PAGENO);
-  return int64pgno(base + augend);
+  return int64pgno((int64_t)base + (int64_t)augend);
 }
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static __inline pgno_t
 pgno_sub(size_t base, size_t subtrahend) {
   assert(base >= MIN_PAGENO && base <= MAX_PAGENO + 1 &&
          subtrahend < MAX_PAGENO);
-  return int64pgno(base - subtrahend);
+  return int64pgno((int64_t)base - (int64_t)subtrahend);
 }
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static __always_inline bool

@@ -100,7 +100,7 @@ int testcase::hsr_callback(const MDBX_env *env, const MDBX_txn *txn,
        info.mi_geo.current >= info.mi_geo.upper)) {
     osal_yield();
     if (retry > 0)
-      osal_udelay(retry * 100);
+      osal_udelay(retry * size_t(100));
     return MDBX_RESULT_FALSE /* retry / wait until reader done */;
   }
 

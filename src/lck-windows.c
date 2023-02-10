@@ -175,7 +175,7 @@ static int funlock(mdbx_filehandle_t fd, size_t offset, size_t bytes) {
 #else
 #define DXB_MAXLEN UINT32_C(0x7ff00000)
 #endif
-#define DXB_BODY (env->me_psize * NUM_METAS), DXB_MAXLEN
+#define DXB_BODY (env->me_psize * (size_t)NUM_METAS), DXB_MAXLEN
 #define DXB_WHOLE 0, DXB_MAXLEN
 
 int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
@@ -194,8 +194,12 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
     }
   }
 
-  if (env->me_flags & MDBX_EXCLUSIVE)
+  if (env->me_flags & MDBX_EXCLUSIVE) {
+    MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(
+        26115, "Failing to release lock 'env->me_windowsbug_lock' in function "
+               "'mdbx_txn_lock'");
     return MDBX_SUCCESS;
+  }
 
   const HANDLE fd4data =
       env->me_overlapped_fd ? env->me_overlapped_fd : env->me_lazy_fd;
@@ -213,8 +217,12 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
                             LCK_EXCLUSIVE | LCK_DONTWAIT, DXB_BODY);
     }
   }
-  if (rc == MDBX_SUCCESS)
+  if (rc == MDBX_SUCCESS) {
+    MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(
+        26115, "Failing to release lock 'env->me_windowsbug_lock' in function "
+               "'mdbx_txn_lock'");
     return rc;
+  }
 
   LeaveCriticalSection(&env->me_windowsbug_lock);
   return (!dontwait || rc != ERROR_LOCK_VIOLATION) ? rc : MDBX_BUSY;
@@ -281,17 +289,18 @@ static int suspend_and_append(mdbx_handle_array_t **array,
                               const DWORD ThreadId) {
   const unsigned limit = (*array)->limit;
   if ((*array)->count == limit) {
-    void *ptr = osal_realloc(
-        (limit > ARRAY_LENGTH((*array)->handles))
-            ? *array
-            : /* don't free initial array on the stack */ NULL,
-        sizeof(mdbx_handle_array_t) +
-            sizeof(HANDLE) * (limit * 2 - ARRAY_LENGTH((*array)->handles)));
+    mdbx_handle_array_t *const ptr =
+        osal_realloc((limit > ARRAY_LENGTH((*array)->handles))
+                         ? *array
+                         : /* don't free initial array on the stack */ NULL,
+                     sizeof(mdbx_handle_array_t) +
+                         sizeof(HANDLE) * (limit * (size_t)2 -
+                                           ARRAY_LENGTH((*array)->handles)));
     if (!ptr)
       return MDBX_ENOMEM;
     if (limit == ARRAY_LENGTH((*array)->handles))
-      memcpy(ptr, *array, sizeof(mdbx_handle_array_t));
-    *array = (mdbx_handle_array_t *)ptr;
+      *ptr = **array;
+    *array = ptr;
     (*array)->limit = limit * 2;
   }
 
@@ -839,38 +848,40 @@ MDBX_SetFileIoOverlappedRange mdbx_SetFileIoOverlappedRange;
 #endif /* GCC/MINGW */
 
 static void mdbx_winnt_import(void) {
-  const HINSTANCE hNtdll = GetModuleHandleA("ntdll.dll");
-
 #define GET_PROC_ADDR(dll, ENTRY)                                              \
   mdbx_##ENTRY = (MDBX_##ENTRY)GetProcAddress(dll, #ENTRY)
 
-  if (GetProcAddress(hNtdll, "wine_get_version")) {
-    assert(mdbx_RunningUnderWine());
-  } else {
-    GET_PROC_ADDR(hNtdll, NtFsControlFile);
-    GET_PROC_ADDR(hNtdll, NtExtendSection);
-    assert(!mdbx_RunningUnderWine());
+  const HINSTANCE hNtdll = GetModuleHandleA("ntdll.dll");
+  if (hNtdll) {
+    if (GetProcAddress(hNtdll, "wine_get_version")) {
+      assert(mdbx_RunningUnderWine());
+    } else {
+      GET_PROC_ADDR(hNtdll, NtFsControlFile);
+      GET_PROC_ADDR(hNtdll, NtExtendSection);
+      assert(!mdbx_RunningUnderWine());
+    }
   }
 
   const HINSTANCE hKernel32dll = GetModuleHandleA("kernel32.dll");
-  GET_PROC_ADDR(hKernel32dll, GetFileInformationByHandleEx);
-  GET_PROC_ADDR(hKernel32dll, GetTickCount64);
-  if (!mdbx_GetTickCount64)
-    mdbx_GetTickCount64 = stub_GetTickCount64;
-  if (!mdbx_RunningUnderWine()) {
-    GET_PROC_ADDR(hKernel32dll, SetFileInformationByHandle);
-    GET_PROC_ADDR(hKernel32dll, GetVolumeInformationByHandleW);
-    GET_PROC_ADDR(hKernel32dll, GetFinalPathNameByHandleW);
-    GET_PROC_ADDR(hKernel32dll, PrefetchVirtualMemory);
-    GET_PROC_ADDR(hKernel32dll, SetFileIoOverlappedRange);
+  if (hKernel32dll) {
+    GET_PROC_ADDR(hKernel32dll, GetFileInformationByHandleEx);
+    GET_PROC_ADDR(hKernel32dll, GetTickCount64);
+    if (!mdbx_GetTickCount64)
+      mdbx_GetTickCount64 = stub_GetTickCount64;
+    if (!mdbx_RunningUnderWine()) {
+      GET_PROC_ADDR(hKernel32dll, SetFileInformationByHandle);
+      GET_PROC_ADDR(hKernel32dll, GetVolumeInformationByHandleW);
+      GET_PROC_ADDR(hKernel32dll, GetFinalPathNameByHandleW);
+      GET_PROC_ADDR(hKernel32dll, PrefetchVirtualMemory);
+      GET_PROC_ADDR(hKernel32dll, SetFileIoOverlappedRange);
+    }
   }
 
-  const HINSTANCE hAdvapi32dll = GetModuleHandleA("advapi32.dll");
-  GET_PROC_ADDR(hAdvapi32dll, RegGetValueA);
-#undef GET_PROC_ADDR
-
-  const osal_srwlock_t_function init = (osal_srwlock_t_function)GetProcAddress(
-      hKernel32dll, "InitializeSRWLock");
+  const osal_srwlock_t_function init =
+      (osal_srwlock_t_function)(hKernel32dll
+                                    ? GetProcAddress(hKernel32dll,
+                                                     "InitializeSRWLock")
+                                    : nullptr);
   if (init != NULL) {
     osal_srwlock_Init = init;
     osal_srwlock_AcquireShared = (osal_srwlock_t_function)GetProcAddress(
@@ -888,6 +899,12 @@ static void mdbx_winnt_import(void) {
     osal_srwlock_AcquireExclusive = stub_srwlock_AcquireExclusive;
     osal_srwlock_ReleaseExclusive = stub_srwlock_ReleaseExclusive;
   }
+
+  const HINSTANCE hAdvapi32dll = GetModuleHandleA("advapi32.dll");
+  if (hAdvapi32dll) {
+    GET_PROC_ADDR(hAdvapi32dll, RegGetValueA);
+  }
+#undef GET_PROC_ADDR
 }
 
 #if __GNUC_PREREQ(8, 0)

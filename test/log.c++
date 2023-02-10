@@ -142,7 +142,7 @@ void output_nocheckloglevel_ap(const logging::loglevel priority,
           prefix.c_str(), level2str(priority), suffix.c_str());
 
   va_list ones;
-  memset(&ones, 0, sizeof(ones)) /* zap MSVC and other stupid compilers */;
+  memset(&ones, 0, sizeof(ones)) /* zap MSVC and other goofy compilers */;
   if (same_or_higher(priority, error))
     va_copy(ones, ap);
   vfprintf(last, format, ap);
@@ -153,11 +153,11 @@ void output_nocheckloglevel_ap(const logging::loglevel priority,
   switch (end) {
   default:
     putc('\n', last);
-  // fall through
+    MDBX_CXX17_FALLTHROUGH; // fall through
   case '\n':
     fflush(last);
     last = nullptr;
-  // fall through
+    MDBX_CXX17_FALLTHROUGH; // fall through
   case ' ':
   case '_':
   case ':':

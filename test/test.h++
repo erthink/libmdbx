@@ -101,10 +101,10 @@ class testcase;
 
 class registry {
   struct record {
-    actor_testcase id;
+    actor_testcase id = ac_none;
     std::string name;
-    bool (*review_params)(actor_params &);
-    testcase *(*constructor)(const actor_config &, const mdbx_pid_t);
+    bool (*review_params)(actor_params &) = nullptr;
+    testcase *(*constructor)(const actor_config &, const mdbx_pid_t) = nullptr;
   };
   std::unordered_map<std::string, const record *> name2id;
   std::unordered_map<int, const record *> id2record;

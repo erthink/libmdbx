@@ -48,6 +48,7 @@ static int ntstatus2errcode(NTSTATUS status) {
   OVERLAPPED ov;
   memset(&ov, 0, sizeof(ov));
   ov.Internal = status;
+  MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6387, "'_Param_(1)' could be '0'");
   return GetOverlappedResult(NULL, &ov, &dummy, FALSE) ? MDBX_SUCCESS
                                                        : (int)GetLastError();
 }
@@ -82,6 +83,8 @@ extern NTSTATUS NTAPI NtMapViewOfSection(
 extern NTSTATUS NTAPI NtUnmapViewOfSection(IN HANDLE ProcessHandle,
                                            IN OPTIONAL PVOID BaseAddress);
 
+MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(28251,
+                                  "Inconsistent annotation for 'NtClose'...")
 extern NTSTATUS NTAPI NtClose(HANDLE Handle);
 
 extern NTSTATUS NTAPI NtAllocateVirtualMemory(
@@ -320,7 +323,7 @@ MDBX_INTERNAL_FUNC int osal_vasprintf(char **strp, const char *fmt,
     return needed;
   }
 
-  *strp = osal_malloc(needed + 1);
+  *strp = osal_malloc(needed + (size_t)1);
   if (unlikely(*strp == nullptr)) {
     va_end(ones);
 #if defined(_WIN32) || defined(_WIN64)
@@ -331,7 +334,7 @@ MDBX_INTERNAL_FUNC int osal_vasprintf(char **strp, const char *fmt,
     return -1;
   }
 
-  int actual = vsnprintf(*strp, needed + 1, fmt, ones);
+  int actual = vsnprintf(*strp, needed + (size_t)1, fmt, ones);
   va_end(ones);
 
   assert(actual == needed);
@@ -692,7 +695,7 @@ MDBX_INTERNAL_FUNC int osal_ioring_add(osal_ioring_t *ior, const size_t offset,
           ((bytes | (uintptr_t)data | ior->last_bytes |
             (uintptr_t)(uint64_t)item->sgv[0].Buffer) &
            ior_alignment_mask) == 0 &&
-          ior->last_sgvcnt + segments < OSAL_IOV_MAX) {
+          ior->last_sgvcnt + (size_t)segments < OSAL_IOV_MAX) {
         assert(ior->overlapped_fd);
         assert((item->single.iov_len & ior_WriteFile_flag) == 0);
         assert(item->sgv[ior->last_sgvcnt].Buffer == 0);
@@ -801,6 +804,8 @@ MDBX_INTERNAL_FUNC void osal_ioring_walk(
     if (bytes & ior_WriteFile_flag) {
       data = Ptr64ToPtr(item->sgv[0].Buffer);
       bytes = ior->pagesize;
+      MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(
+          6385, "Reading invalid data from 'item->sgv'");
       while (item->sgv[i].Buffer) {
         if (data + ior->pagesize != item->sgv[i].Buffer) {
           callback(ctx, offset, data, bytes);
@@ -847,6 +852,8 @@ osal_ioring_write(osal_ioring_t *ior, mdbx_filehandle_t fd) {
     if (bytes & ior_WriteFile_flag) {
       assert(ior->overlapped_fd && fd == ior->overlapped_fd);
       bytes = ior->pagesize;
+      MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(
+          6385, "Reading invalid data from 'item->sgv'");
       while (item->sgv[i].Buffer) {
         bytes += ior->pagesize;
         ++i;
@@ -985,6 +992,8 @@ osal_ioring_write(osal_ioring_t *ior, mdbx_filehandle_t fd) {
       size_t i = 1, bytes = item->single.iov_len - ior_WriteFile_flag;
       if (bytes & ior_WriteFile_flag) {
         bytes = ior->pagesize;
+        MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(
+            6385, "Reading invalid data from 'item->sgv'");
         while (item->sgv[i].Buffer) {
           bytes += ior->pagesize;
           ++i;
@@ -1078,9 +1087,12 @@ MDBX_INTERNAL_FUNC void osal_ioring_reset(osal_ioring_t *ior) {
       if (item->ov.hEvent && item->ov.hEvent != ior)
         ior_put_event(ior, item->ov.hEvent);
       size_t i = 1;
-      if ((item->single.iov_len & ior_WriteFile_flag) == 0)
+      if ((item->single.iov_len & ior_WriteFile_flag) == 0) {
+        MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(
+            6385, "Reading invalid data from 'item->sgv'");
         while (item->sgv[i].Buffer)
           ++i;
+      }
       item = ior_next(item, i);
     }
   }
@@ -1095,8 +1107,11 @@ MDBX_INTERNAL_FUNC void osal_ioring_reset(osal_ioring_t *ior) {
 static void ior_cleanup(osal_ioring_t *ior, const size_t since) {
   osal_ioring_reset(ior);
 #if defined(_WIN32) || defined(_WIN64)
-  for (size_t i = since; i < ior->event_stack; ++i)
+  for (size_t i = since; i < ior->event_stack; ++i) {
+    MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(
+        6001, "Using uninitialized memory '**ior.event_pool'");
     CloseHandle(ior->event_pool[i]);
+  }
   ior->event_stack = 0;
 #else
   (void)since;
@@ -2734,6 +2749,7 @@ retry_mapview:;
 
 #endif /* POSIX / Windows */
 
+  MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6287, "Redundant code");
   assert(rc != MDBX_SUCCESS ||
          (map->base != nullptr && map->base != MAP_FAILED &&
           map->current == size && map->limit == limit &&

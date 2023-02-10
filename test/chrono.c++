@@ -87,10 +87,11 @@ time from_ms(uint64_t ms) {
 time now_realtime() {
 #if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
   static void(WINAPI * query_time)(LPFILETIME);
-  if (!query_time) {
-    query_time = (void(WINAPI *)(LPFILETIME))GetProcAddress(
-        GetModuleHandle(TEXT("kernel32.dll")),
-        "GetSystemTimePreciseAsFileTime");
+  if (unlikely(!query_time)) {
+    HMODULE hModule = GetModuleHandle(TEXT("kernel32.dll"));
+    if (hModule)
+      query_time = (void(WINAPI *)(LPFILETIME))GetProcAddress(
+          hModule, "GetSystemTimePreciseAsFileTime");
     if (!query_time)
       query_time = GetSystemTimeAsFileTime;
   }

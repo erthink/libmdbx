@@ -248,7 +248,7 @@ Environment:
     CommandLine.push_back('"');
 
     for (auto It = Argument.begin();; ++It) {
-      unsigned NumberBackslashes = 0;
+      size_t NumberBackslashes = 0;
 
       while (It != Argument.end() && *It == '\\') {
         ++It;
@@ -435,7 +435,7 @@ void osal_udelay(size_t us) {
     unsigned timeslice_ms = 1;
     while (timeBeginPeriod(timeslice_ms) == TIMERR_NOCANDO)
       ++timeslice_ms;
-    threshold_us = timeslice_ms * 1500u;
+    threshold_us = timeslice_ms * size_t(1500);
     assert(threshold_us > 0);
   }
 
