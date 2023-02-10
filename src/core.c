@@ -23266,7 +23266,7 @@ __dll_export
 };
 
 #ifdef __SANITIZE_ADDRESS__
-LIBMDBX_API __attribute__((__weak__)) const char *__asan_default_options() {
+LIBMDBX_API __attribute__((__weak__)) const char *__asan_default_options(void) {
   return "symbolize=1:allow_addr2line=1:"
 #if MDBX_DEBUG
          "debug=1:"
