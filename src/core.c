@@ -14382,7 +14382,8 @@ __cold static int __must_check_result override_meta(MDBX_env *env,
   meta_model(env, page, target);
   MDBX_meta *const model = page_meta(page);
   meta_set_txnid(env, model, txnid);
-  eASSERT(env, coherency_check_meta(env, model, true));
+  if (txnid)
+    eASSERT(env, coherency_check_meta(env, model, true));
   if (shape) {
     if (txnid && unlikely(!coherency_check_meta(env, shape, false))) {
       ERROR("bailout overriding meta-%zu since model failed "
