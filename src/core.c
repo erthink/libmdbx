@@ -1674,7 +1674,7 @@ __cold static int uniq_check(const osal_mmap_t *pending, MDBX_env **found) {
                   ? uniq_peek(pending, &scan->me_lck_mmap)
                   : uniq_poke(pending, &scan->me_lck_mmap, &salt);
     if (err == MDBX_ENODATA) {
-      uint64_t length;
+      uint64_t length = 0;
       if (likely(osal_filesize(pending->fd, &length) == MDBX_SUCCESS &&
                  length == 0)) {
         /* LY: skip checking since LCK-file is empty, i.e. just created. */
