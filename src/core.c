@@ -397,7 +397,7 @@ node_largedata_pgno(const MDBX_node *const __restrict node) {
  *
  * BRANCH_NODE_MAX
  *   Branch-page must contain at least two nodes, within each a key and a child
- *   page number. But page can't be splitted if it contains less that 4 keys,
+ *   page number. But page can't be split if it contains less that 4 keys,
  *   i.e. a page should not overflow before adding the fourth key. Therefore,
  *   at least 3 branch-node should fit in the single branch-page. Further, the
  *   first node of a branch-page doesn't contain a key, i.e. the first node
@@ -411,8 +411,8 @@ node_largedata_pgno(const MDBX_node *const __restrict node) {
  *   Leaf-node must fit into single leaf-page, where a value could be placed on
  *   a large/overflow page. However, may require to insert a nearly page-sized
  *   node between two large nodes are already fill-up a page. In this case the
- *   page must be splitted to two if some pair of nodes fits on one page, or
- *   otherwise the page should be splitted to the THREE with a single node
+ *   page must be split to two if some pair of nodes fits on one page, or
+ *   otherwise the page should be split to the THREE with a single node
  *   per each of ones. Such 1-into-3 page splitting is costly and complex since
  *   requires TWO insertion into the parent page, that could lead to split it
  *   and so on up to the root. Therefore double-splitting is avoided here and
@@ -1087,7 +1087,7 @@ static __always_inline bool safe64_reset_compare(MDBX_atomic_uint64_t *p,
    *     the asynchronously cancellation of read transaction. Therefore,
    *     there may be a collision between the cleanup performed here and
    *     asynchronous termination and restarting of the read transaction
-   *     in another proces/thread. In general we MUST NOT reset the `mr_txnid`
+   *     in another process/thread. In general we MUST NOT reset the `mr_txnid`
    *     if a new transaction was started (i.e. if `mr_txnid` was changed). */
 #if MDBX_64BIT_CAS
   bool rc = atomic_cas64(p, compare, UINT64_MAX);
@@ -19465,8 +19465,8 @@ __cold static void compact_fixup_meta(MDBX_env *env, MDBX_meta *meta) {
   unaligned_poke_u64(4, meta->mm_datasync_sign, meta_sign(meta));
 }
 
-/* Make resizeable */
-__cold static void make_sizeable(MDBX_meta *meta) {
+/* Make resizable */
+__cold static void make_resizable(MDBX_meta *meta) {
   meta->mm_geo.lower = MIN_PAGENO;
   if (meta->mm_geo.grow_pv == 0) {
     const pgno_t step = 1 + (meta->mm_geo.upper - meta->mm_geo.lower) / 42;
@@ -19489,7 +19489,7 @@ __cold static int mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
   meta_set_txnid(env, meta, read_txn->mt_txnid);
 
   if (flags & MDBX_CP_FORCE_DYNAMIC_SIZE)
-    make_sizeable(meta);
+    make_resizable(meta);
 
   /* copy canary sequences if present */
   if (read_txn->mt_canary.v) {
@@ -19652,7 +19652,7 @@ __cold static int mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
   mdbx_txn_unlock(env);
 
   if (flags & MDBX_CP_FORCE_DYNAMIC_SIZE)
-    make_sizeable(headcopy);
+    make_resizable(headcopy);
   /* Update signature to steady */
   unaligned_poke_u64(4, headcopy->mm_datasync_sign, meta_sign(headcopy));
 
@@ -19708,7 +19708,7 @@ __cold static int mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
         break;
       rc = errno;
       if (rc == EXDEV || rc == /* workaround for ecryptfs bug(s),
-                                  maybe usefull for others fs */
+                                  maybe useful for others FS */
                              EINVAL)
         not_the_same_filesystem = true;
       else if (ignore_enosys(rc) == MDBX_RESULT_TRUE)

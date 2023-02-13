@@ -1370,7 +1370,7 @@ int main(int argc, char *argv[]) {
       alloc_pages = backed_pages;
     }
   } else {
-    /* LY: DB may be shrinked by writer down to the allocated pages. */
+    /* LY: DB may be shrunk by writer down to the allocated pages. */
     if (alloc_pages > backed_pages) {
       print(" ! alloc-pages %" PRIu64 " > backed-pages %" PRIu64 "\n",
             alloc_pages, backed_pages);
