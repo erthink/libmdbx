@@ -5,23 +5,39 @@ ChangeLog
 
 Fixes:
 
- - Fixed insignificant typo of `||` inside `#if` byte-order condition (backport).
+ - backport: Fixed insignificant typo of `||` inside `#if` byte-order condition.
 
- - Fixed `SIGSEGV` or an erroneous call to `free()` in situations where
+ - backport: Fixed `SIGSEGV` or an erroneous call to `free()` in situations where
    errors occur when reopening by `mdbx_env_open()` of a previously used
-   environment (backport).
+   environment.
 
- - Fixed `cursor_put_nochecklen()` internals for case when dupsort'ed named subDb
+ - backport: Fixed `cursor_put_nochecklen()` internals for case when dupsort'ed named subDb
    contains a single key with multiple values (aka duplicates), which are replaced
-   with a single value by put-operation with the `MDBX_UPSERT+MDBX_ALLDUPS` flags (backport).
+   with a single value by put-operation with the `MDBX_UPSERT+MDBX_ALLDUPS` flags.
    In this case, the database becomes completely empty, without any pages.
    However exactly this condition was not considered and thus wasn't handled correctly.
    See [issue#8](https://gitflic.ru/project/erthink/libmdbx/issue/8) for more information.
 
+ - backport: Fixed extra assertion inside `override_meta()`, which could
+   lead to false-positive failing of the assertion in a debug builds during
+   DB recovery and auto-rollback.
+
+ - backport: Refined the `__cold`/`__hot` macros to avoid the
+   `error: inlining failed in call to ‘always_inline FOO(...)’: target specific option mismatch`
+   issue during build using GCC >10.x for SH4 arch.
+
 Minors:
 
- - Using the https://libmdbx.dqdkfa.ru/dead-github
-   for resources deleted by the Github' administration (backport).
+ - backport: Using the https://libmdbx.dqdkfa.ru/dead-github
+   for resources deleted by the Github' administration.
+ - backport: Fixed English typos.
+ - backport: Fixed proto of `__asan_default_options()`.
+ - backport: Fixed doxygen-description of C++ API, especially of C++20 concepts.
+ - backport: Refined `const` and `noexcept` for few C++ API methods.
+ - backport: Fixed copy&paste typo of "Getting started".
+ - backport: Update MithrilDB status.
+ - backport: Resolve false-posirive `used uninitialized` warning from GCC >10.x
+   while build for SH4 arch.
 
 
 ## v0.11.13 (Swashplate) at 2022-11-10
