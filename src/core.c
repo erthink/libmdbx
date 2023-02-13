@@ -12824,7 +12824,8 @@ __cold static int __must_check_result mdbx_override_meta(
   mdbx_meta_model(env, page, target);
   MDBX_meta *const model = page_meta(page);
   meta_set_txnid(env, model, txnid);
-  mdbx_assert(env, meta_checktxnid(env, model, true));
+  if (txnid)
+    mdbx_assert(env, meta_checktxnid(env, model, true));
   if (shape) {
     if (txnid && unlikely(!meta_checktxnid(env, shape, false))) {
       mdbx_error("bailout overriding meta-%u since model failed "
