@@ -1,7 +1,14 @@
 ChangeLog
 ---------
 
-## Release engineering of v0.11.14
+## v0.11.14 (Sergey Kapitsa) at 2023-02-14
+
+The stable bugfix release in memory of [Sergey Kapitsa](https://en.wikipedia.org/wiki/Sergey_Kapitsa) on his 95th birthday.
+
+```
+22 files changed, 250 insertions(+), 174 deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
+```
 
 Fixes:
 
