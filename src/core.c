@@ -6786,7 +6786,7 @@ __hot static pgno_t *scan4seq_neon(pgno_t *range, const size_t len,
 #ifdef scan4seq_impl
 /* The scan4seq_impl() is the best or no alternatives */
 #elif !MDBX_HAVE_BUILTIN_CPU_SUPPORTS
-/* The scan4seq_default() will be used  since no cpu-features detection support
+/* The scan4seq_default() will be used since no cpu-features detection support
  * from compiler. Please don't ask to implement cpuid-based detection and don't
  * make such PRs. */
 #define scan4seq_impl scan4seq_default

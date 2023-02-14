@@ -220,7 +220,11 @@
 #endif /* MDBX_HAVE_C11ATOMICS */
 
 /** If defined then enables use the GCC's `__builtin_cpu_supports()`
- *  for runtime dispatching depending on the CPU's capabilities. */
+ * for runtime dispatching depending on the CPU's capabilities.
+ * \note Defining `MDBX_HAVE_BUILTIN_CPU_SUPPORTS` to `0` should avoided unless
+ * build for particular single-target platform, since on AMD64/x86 this disables
+ * dynamic choice (at runtime) of SSE2 / AVX2 / AVX512 instructions
+ * with fallback to non-accelerated baseline code. */
 #ifndef MDBX_HAVE_BUILTIN_CPU_SUPPORTS
 #if defined(__APPLE__) || defined(BIONIC)
 /* Never use any modern features on Apple's or Google's OSes
