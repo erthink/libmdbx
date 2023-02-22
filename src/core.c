@@ -8317,8 +8317,8 @@ static void cursors_eot(MDBX_txn *txn, const bool merge) {
       if (bk) {
         MDBX_xcursor *mx = mc->mc_xcursor;
         tASSERT(txn, txn->mt_parent != NULL);
-        MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(
-            6001, "Using uninitialized memory '*mc->mc_backup'.");
+        /* Zap: Using uninitialized memory '*mc->mc_backup'. */
+        MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6001);
         ENSURE(txn->mt_env, bk->mc_signature == MDBX_MC_LIVE);
         tASSERT(txn, mx == bk->mc_xcursor);
         if (stage == MDBX_MC_WAIT4EOT /* Cursor was closed by user */)

@@ -195,9 +195,9 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
   }
 
   if (env->me_flags & MDBX_EXCLUSIVE) {
-    MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(
-        26115, "Failing to release lock 'env->me_windowsbug_lock' in function "
-               "'mdbx_txn_lock'");
+    /* Zap: Failing to release lock 'env->me_windowsbug_lock'
+     *      in function 'mdbx_txn_lock' */
+    MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(26115);
     return MDBX_SUCCESS;
   }
 
@@ -218,9 +218,9 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
     }
   }
   if (rc == MDBX_SUCCESS) {
-    MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(
-        26115, "Failing to release lock 'env->me_windowsbug_lock' in function "
-               "'mdbx_txn_lock'");
+    /* Zap: Failing to release lock 'env->me_windowsbug_lock'
+     *      in function 'mdbx_txn_lock' */
+    MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(26115);
     return rc;
   }
 

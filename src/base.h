@@ -669,14 +669,19 @@ __extern_C key_t ftok(const char *, int);
 #endif
 #endif /* MDBX_GOOFY_MSVC_STATIC_ANALYZER */
 
-#if MDBX_GOOFY_MSVC_STATIC_ANALYZER
+#if MDBX_GOOFY_MSVC_STATIC_ANALYZER || (defined(_MSC_VER) && _MSC_VER > 1919)
 #define MDBX_ANALYSIS_ASSUME(expr) __analysis_assume(expr)
-#define MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(warn_id, note)                       \
-  _Pragma(MDBX_STRINGIFY(prefast(suppress : warn_id)))
+#ifdef _PREFAST_
+#define MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(warn_id)                             \
+  __pragma(prefast(suppress : warn_id))
+#else
+#define MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(warn_id)                             \
+  __pragma(warning(suppress : warn_id))
+#endif
 #else
 #define MDBX_ANALYSIS_ASSUME(expr) assert(expr)
-#define MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(warn_id, note)
-#endif
+#define MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(warn_id)
+#endif /* MDBX_GOOFY_MSVC_STATIC_ANALYZER */
 
 /*----------------------------------------------------------------------------*/
 
