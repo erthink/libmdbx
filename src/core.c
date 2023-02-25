@@ -14986,7 +14986,7 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
   if (!(flags &
         (MDBX_RDONLY | MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC | MDBX_EXCLUSIVE))) {
     if (MDBX_AVOID_MSYNC && (flags & MDBX_WRITEMAP)) {
-      /* Запрошен режим MDBX_SAFE_NOSYNC | MDBX_WRITEMAP при активной опции
+      /* Запрошен режим MDBX_SYNC_DURABLE | MDBX_WRITEMAP при активной опции
        * MDBX_AVOID_MSYNC.
        *
        * 1) В этой комбинации наиболее выгодно использовать WriteFileGather(),
