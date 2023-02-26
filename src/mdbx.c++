@@ -14,6 +14,12 @@
 #define __USE_MINGW_ANSI_STDIO 1
 #endif /* MinGW */
 
+/* Workaround for MSVC' header `extern "C"` vs `std::` redefinition bug */
+#if defined(_MSC_VER) && defined(__SANITIZE_ADDRESS__) &&                      \
+    !defined(_DISABLE_VECTOR_ANNOTATION)
+#define _DISABLE_VECTOR_ANNOTATION
+#endif /* _DISABLE_VECTOR_ANNOTATION */
+
 #include "../mdbx.h++"
 
 #include "internals.h"
