@@ -4,7 +4,7 @@ ChangeLog
 English version [by Google](https://gitflic-ru.translate.goog/project/erthink/libmdbx/blob?file=ChangeLog.md&_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
-## v0.13 (в разработке)
+## v0.12.4 (подготовка к релизу)
 
 Благодарности:
 
@@ -61,6 +61,9 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
  - Устранены предупреждения статического анализатора MSVC,
    все они были несущественные, либо ложные.
  - Устранено ложное предупреждение GCC при сборке для SH4.
+ - Добавлена поддержка ASAN (Address Sanitizer) при сборке посредством MSVC.
+ - Расширен набор перебираемых режимов в скрипте `test/long_stochastic.sh`,
+   добавлена опция `--extra`.
 
 
 -------------------------------------------------------------------------------
