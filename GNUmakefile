@@ -715,23 +715,23 @@ endif
 ################################################################################
 # Cross-compilation simple test
 
-CROSS_LIST = mips-linux-gnu-gcc \
+CROSS_LIST = \
+	mips64-linux-gnuabi64-gcc mips-linux-gnu-gcc \
+	hppa-linux-gnu-gcc s390x-linux-gnu-gcc \
 	powerpc64-linux-gnu-gcc powerpc-linux-gnu-gcc \
-	arm-linux-gnueabihf-gcc aarch64-linux-gnu-gcc \
-	sh4-linux-gnu-gcc mips64-linux-gnuabi64-gcc \
-	hppa-linux-gnu-gcc s390x-linux-gnu-gcc
+	arm-linux-gnueabihf-gcc aarch64-linux-gnu-gcc
 
-## On Ubuntu Focal (20.04) with QEMU 4.2 (1:4.2-3ubuntu6.6) & GCC 9.3 (9.3.0-17ubuntu1~20.04)
-# hppa-linux-gnu-gcc          - works (previously: don't supported by qemu)
-# s390x-linux-gnu-gcc         - works (previously: qemu hang/abort)
+## On Ubuntu Focal (22.04) with QEMU 6.2 (1:6.2+dfsg-2ubuntu6.6) & GCC 11.3 (11.3.0-1ubuntu1~22.04)
+# sh4-linux-gnu-gcc           - coredump (qemu mmap-troubles)
 # sparc64-linux-gnu-gcc       - coredump (qemu mmap-troubles, previously: qemu fails fcntl for F_SETLK/F_GETLK)
 # alpha-linux-gnu-gcc         - coredump (qemu mmap-troubles)
-CROSS_LIST_NOQEMU = sparc64-linux-gnu-gcc alpha-linux-gnu-gcc riscv64-linux-gnu-gcc
+# risc64-linux-gnu-gcc        - coredump (qemu qemu fails fcntl for F_SETLK/F_GETLK)
+CROSS_LIST_NOQEMU = sh4-linux-gnu-gcc sparc64-linux-gnu-gcc alpha-linux-gnu-gcc riscv64-linux-gnu-gcc
 
 cross-gcc:
 	@echo '  Re-building by cross-compiler for: $(CROSS_LIST_NOQEMU) $(CROSS_LIST)'
 	@echo "CORRESPONDING CROSS-COMPILERs ARE REQUIRED."
-	@echo "FOR INSTANCE: apt install g++-aarch64-linux-gnu g++-alpha-linux-gnu g++-arm-linux-gnueabihf g++-hppa-linux-gnu g++-mips-linux-gnu g++-mips64-linux-gnuabi64 g++-powerpc-linux-gnu g++-powerpc64-linux-gnu g++-s390x-linux-gnu g++-sh4-linux-gnu g++-sparc64-linux-gnu riscv64-linux-gnu-gcc"
+	@echo "FOR INSTANCE: sudo apt install \$$(apt list 'g++-*' | grep 'g++-[a-z0-9]\+-linux-gnu/' | cut -f 1 -d / | sort -u)"
 	$(QUIET)for CC in $(CROSS_LIST_NOQEMU) $(CROSS_LIST); do \
 		echo "===================== $$CC"; \
 		$(MAKE) IOARENA=false CXXSTD= clean && CC=$$CC CXX=$$(echo $$CC | sed 's/-gcc/-g++/') EXE_LDFLAGS=-static $(MAKE) IOARENA=false all || exit $$?; \
@@ -743,8 +743,8 @@ cross-qemu:
 	@echo '  Re-building by cross-compiler and re-check by QEMU for: $(CROSS_LIST)'
 	@echo "CORRESPONDING CROSS-COMPILERs AND QEMUs ARE REQUIRED."
 	@echo "FOR INSTANCE: "
-	@echo "	1) apt install g++-aarch64-linux-gnu g++-alpha-linux-gnu g++-arm-linux-gnueabihf g++-hppa-linux-gnu g++-mips-linux-gnu g++-mips64-linux-gnuabi64 g++-powerpc-linux-gnu g++-powerpc64-linux-gnu g++-s390x-linux-gnu g++-sh4-linux-gnu g++-sparc64-linux-gnu"
-	@echo "	2) apt install binfmt-support qemu-user-static qemu-user qemu-system-arm qemu-system-mips qemu-system-misc qemu-system-ppc qemu-system-sparc"
+	@echo "	1) sudo apt install \$$(apt list 'g++-*' | grep 'g++-[a-z0-9]\+-linux-gnu/' | cut -f 1 -d / | sort -u)"
+	@echo "	2) sudo apt install binfmt-support qemu-user-static qemu-user \$$(apt list 'qemu-system-*' | grep 'qemu-system-[a-z0-9]\+/' | cut -f 1 -d / | sort -u)"
 	$(QUIET)for CC in $(CROSS_LIST); do \
 		echo "===================== $$CC + qemu"; \
 		$(MAKE) IOARENA=false CXXSTD= clean && \
