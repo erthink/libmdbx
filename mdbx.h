@@ -2060,7 +2060,9 @@ LIBMDBX_API const char *mdbx_strerror_r_ANSI2OEM(int errnum, char *buf,
  * \returns a non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_create(MDBX_env **penv);
 
-/** \brief MDBX environment options. */
+/** \brief MDBX environment extra runtime options.
+ * \ingroup c_settings
+ * \see mdbx_env_set_option() \see mdbx_env_get_option() */
 enum MDBX_option_t {
   /** \brief Controls the maximum number of named databases for the environment.
    *
@@ -2268,7 +2270,7 @@ enum MDBX_option_t {
 typedef enum MDBX_option_t MDBX_option_t;
 #endif
 
-/** \brief Sets the value of a runtime options for an environment.
+/** \brief Sets the value of a extra runtime options for an environment.
  * \ingroup c_settings
  *
  * \param [in] env     An environment handle returned by \ref mdbx_env_create().
@@ -2281,7 +2283,7 @@ typedef enum MDBX_option_t MDBX_option_t;
 LIBMDBX_API int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
                                     uint64_t value);
 
-/** \brief Gets the value of runtime options from an environment.
+/** \brief Gets the value of extra runtime options from an environment.
  * \ingroup c_settings
  *
  * \param [in] env     An environment handle returned by \ref mdbx_env_create().

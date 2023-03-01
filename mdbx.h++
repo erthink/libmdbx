@@ -84,6 +84,11 @@
 #include <experimental/filesystem>
 #endif
 
+#if __cplusplus >= 201103L
+#include <chrono>
+#include <ratio>
+#endif
+
 #include "mdbx.h"
 
 #if (defined(__cpp_lib_bit_cast) && __cpp_lib_bit_cast >= 201806L) ||          \
@@ -385,6 +390,11 @@ using path = ::std::wstring;
 #else
 using path = ::std::string;
 #endif /* mdbx::path */
+
+#if __cplusplus >= 201103L || defined(DOXYGEN)
+/// \brief Duration in 1/65536 units of second.
+using duration = ::std::chrono::duration<unsigned, ::std::ratio<1, 65536>>;
+#endif /* Duration for C++11 */
 
 /// \defgroup cxx_exceptions exceptions and errors
 /// @{
@@ -3346,9 +3356,11 @@ public:
 
   /// \brief Returns the maximum number of threads/reader slots for the
   /// environment.
+  /// \see extra_runtime_option::max_readers
   inline unsigned max_readers() const;
 
   /// \brief Returns the maximum number of named databases for the environment.
+  /// \see extra_runtime_option::max_maps
   inline unsigned max_maps() const;
 
   /// \brief Returns the application context associated with the environment.
@@ -3360,59 +3372,117 @@ public:
   /// \brief Sets threshold to force flush the data buffers to disk, for
   /// non-sync durability modes.
   ///
-  /// The threshold value affects all processes which operates with given
-  /// environment until the last process close environment or a new value will
-  /// be settled.
-  /// Data is always written to disk when \ref txn_managed::commit() is called,
-  /// but the operating system may keep it buffered. MDBX always flushes the OS
-  /// buffers upon commit as well, unless the environment was opened with \ref
-  /// whole_fragile, \ref lazy_weak_tail or in part \ref
-  /// half_synchronous_weak_last. The default is 0, than mean no any threshold
-  /// checked, and no additional flush will be made.
+  /// \details The threshold value affects all processes which operates with
+  /// given environment until the last process close environment or a new value
+  /// will be settled. Data is always written to disk when \ref
+  /// txn_managed::commit() is called, but the operating system may keep it
+  /// buffered. MDBX always flushes the OS buffers upon commit as well, unless
+  /// the environment was opened with \ref whole_fragile, \ref lazy_weak_tail or
+  /// in part \ref half_synchronous_weak_last.
   ///
+  /// The default is 0, than mean no any threshold checked, and no additional
+  /// flush will be made.
+  /// \see extra_runtime_option::sync_bytes
   inline env &set_sync_threshold(size_t bytes);
 
+  /// \brief Gets threshold used to force flush the data buffers to disk, for
+  /// non-sync durability modes.
+  ///
+  /// \copydetails set_sync_threshold()
+  /// \see extra_runtime_option::sync_bytes
+  inline size_t sync_threshold() const;
+
+#if __cplusplus >= 201103L || defined(DOXYGEN)
   /// \brief Sets relative period since the last unsteady commit to force flush
   /// the data buffers to disk, for non-sync durability modes.
   ///
-  /// The relative period value affects all processes which operates with given
-  /// environment until the last process close environment or a new value will
-  /// be settled.
-  /// Data is always written to disk when \ref txn_managed::commit() is called,
-  /// but the operating system may keep it buffered. MDBX always flushes the OS
-  /// buffers upon commit as well, unless the environment was opened with \ref
-  /// whole_fragile, \ref lazy_weak_tail or in part \ref
-  /// half_synchronous_weak_last. Settled period don't checked asynchronously,
-  /// but only by the \ref txn_managed::commit() and \ref env::sync_to_disk()
-  /// functions. Therefore, in cases where transactions are committed
-  /// infrequently and/or irregularly, polling by \ref env::poll_sync_to_disk()
-  /// may be a reasonable solution to timeout enforcement. The default is 0,
-  /// than mean no any timeout checked, and no additional flush will be made.
+  /// \details The relative period value affects all processes which operates
+  /// with given environment until the last process close environment or a new
+  /// value will be settled. Data is always written to disk when \ref
+  /// txn_managed::commit() is called, but the operating system may keep it
+  /// buffered. MDBX always flushes the OS buffers upon commit as well, unless
+  /// the environment was opened with \ref whole_fragile, \ref lazy_weak_tail or
+  /// in part \ref half_synchronous_weak_last. Settled period don't checked
+  /// asynchronously, but only by the \ref txn_managed::commit() and \ref
+  /// env::sync_to_disk() functions. Therefore, in cases where transactions are
+  /// committed infrequently and/or irregularly, polling by \ref
+  /// env::poll_sync_to_disk() may be a reasonable solution to timeout
+  /// enforcement.
   ///
+  /// The default is 0, than mean no any timeout checked, and no additional
+  /// flush will be made.
+  /// \see extra_runtime_option::sync_period
+  inline env &set_sync_period(const duration &period);
+
+  /// \brief Gets relative period since the last unsteady commit that used to
+  /// force flush the data buffers to disk, for non-sync durability modes.
+  /// \copydetails set_sync_period(const duration&)
+  /// \see set_sync_period(const duration&)
+  /// \see extra_runtime_option::sync_period
+  inline duration sync_period() const;
+#endif
+
+  /// \copydoc set_sync_period(const duration&)
   /// \param [in] seconds_16dot16  The period in 1/65536 of second when a
   /// synchronous flush would be made since the last unsteady commit.
-  inline env &set_sync_period(unsigned seconds_16dot16);
+  inline env &set_sync_period__seconds_16dot16(unsigned seconds_16dot16);
 
-  /// \brief Sets relative period since the last unsteady commit to force flush
-  /// the data buffers to disk, for non-sync durability modes.
-  ///
-  /// The relative period value affects all processes which operates with given
-  /// environment until the last process close environment or a new value will
-  /// be settled.
-  /// Data is always written to disk when \ref txn_managed::commit() is called,
-  /// but the operating system may keep it buffered. MDBX always flushes the OS
-  /// buffers upon commit as well, unless the environment was opened with \ref
-  /// whole_fragile, \ref lazy_weak_tail or in part \ref
-  /// half_synchronous_weak_last. Settled period don't checked asynchronously,
-  /// but only by the \ref txn_managed::commit() and \ref env::sync_to_disk()
-  /// functions. Therefore, in cases where transactions are committed
-  /// infrequently and/or irregularly, polling by \ref env::poll_sync_to_disk()
-  /// may be a reasonable solution to timeout enforcement. The default is 0,
-  /// than mean no any timeout checked, and no additional flush will be made.
-  ///
+  /// \copydoc sync_period()
+  /// \see sync_period__seconds_16dot16(unsigned)
+  inline unsigned sync_period__seconds_16dot16() const;
+
+  /// \copydoc set_sync_period(const duration&)
   /// \param [in] seconds  The period in second when a synchronous flush would
   /// be made since the last unsteady commit.
-  inline env &set_sync_period(double seconds);
+  inline env &set_sync_period__seconds_double(double seconds);
+
+  /// \copydoc sync_period()
+  /// \see set_sync_period__seconds_double(double)
+  inline double sync_period__seconds_double() const;
+
+  /// \copydoc MDBX_option_t
+  enum class extra_runtime_option {
+    /// \copydoc MDBX_opt_max_db
+    /// \see max_maps() \see env::operate_parameters::max_maps
+    max_maps = MDBX_opt_max_db,
+    /// \copydoc MDBX_opt_max_readers
+    /// \see max_readers() \see env::operate_parameters::max_readers
+    max_readers = MDBX_opt_max_readers,
+    /// \copydoc MDBX_opt_sync_bytes
+    /// \see sync_threshold() \see set_sync_threshold()
+    sync_bytes = MDBX_opt_sync_bytes,
+    /// \copydoc MDBX_opt_sync_period
+    /// \see sync_period() \see set_sync_period()
+    sync_period = MDBX_opt_sync_period,
+    /// \copydoc MDBX_opt_rp_augment_limit
+    rp_augment_limit = MDBX_opt_rp_augment_limit,
+    /// \copydoc MDBX_opt_loose_limit
+    loose_limit = MDBX_opt_loose_limit,
+    /// \copydoc MDBX_opt_dp_reserve_limit
+    dp_reserve_limit = MDBX_opt_dp_reserve_limit,
+    /// \copydoc MDBX_opt_txn_dp_limit
+    dp_limit = MDBX_opt_txn_dp_limit,
+    /// \copydoc MDBX_opt_txn_dp_initial
+    dp_initial = MDBX_opt_txn_dp_initial,
+    /// \copydoc MDBX_opt_spill_max_denominator
+    spill_max_denominator = MDBX_opt_spill_max_denominator,
+    /// \copydoc MDBX_opt_spill_min_denominator
+    spill_min_denominator = MDBX_opt_spill_min_denominator,
+    /// \copydoc MDBX_opt_spill_parent4child_denominator
+    spill_parent4child_denominator = MDBX_opt_spill_parent4child_denominator,
+    /// \copydoc MDBX_opt_merge_threshold_16dot16_percent
+    merge_threshold_16dot16_percent = MDBX_opt_merge_threshold_16dot16_percent,
+    /// \copydoc MDBX_opt_writethrough_threshold
+    writethrough_threshold = MDBX_opt_writethrough_threshold,
+    /// \copydoc MDBX_opt_prefault_write_enable
+    prefault_write_enable = MDBX_opt_prefault_write_enable,
+  };
+
+  /// \copybrief mdbx_env_set_option()
+  inline env &set_extra_option(extra_runtime_option option, uint64_t value);
+
+  /// \copybrief mdbx_env_get_option()
+  inline uint64_t extra_option(extra_runtime_option option) const;
 
   /// \brief Alter environment flags.
   inline env &alter_flags(MDBX_env_flags_t flags, bool on_off);
@@ -5068,13 +5138,53 @@ inline env &env::set_sync_threshold(size_t bytes) {
   return *this;
 }
 
-inline env &env::set_sync_period(unsigned seconds_16dot16) {
+inline size_t env::sync_threshold() const {
+  size_t bytes;
+  error::success_or_throw(::mdbx_env_get_syncbytes(handle_, &bytes));
+  return bytes;
+}
+
+inline env &env::set_sync_period__seconds_16dot16(unsigned seconds_16dot16) {
   error::success_or_throw(::mdbx_env_set_syncperiod(handle_, seconds_16dot16));
   return *this;
 }
 
-inline env &env::set_sync_period(double seconds) {
-  return set_sync_period(unsigned(seconds * 65536));
+inline unsigned env::sync_period__seconds_16dot16() const {
+  unsigned seconds_16dot16;
+  error::success_or_throw(::mdbx_env_get_syncperiod(handle_, &seconds_16dot16));
+  return seconds_16dot16;
+}
+
+inline env &env::set_sync_period__seconds_double(double seconds) {
+  return set_sync_period__seconds_16dot16(unsigned(seconds * 65536));
+}
+
+inline double env::sync_period__seconds_double() const {
+  return sync_period__seconds_16dot16() / 65536.0;
+}
+
+#if __cplusplus >= 201103L
+inline env &env::set_sync_period(const duration &period) {
+  return set_sync_period__seconds_16dot16(period.count());
+}
+
+inline duration env::sync_period() const {
+  return duration(sync_period__seconds_16dot16());
+}
+#endif
+
+inline env &env::set_extra_option(enum env::extra_runtime_option option,
+                                  uint64_t value) {
+  error::success_or_throw(
+      ::mdbx_env_set_option(handle_, ::MDBX_option_t(option), value));
+  return *this;
+}
+
+inline uint64_t env::extra_option(enum env::extra_runtime_option option) const {
+  uint64_t value;
+  error::success_or_throw(
+      ::mdbx_env_get_option(handle_, ::MDBX_option_t(option), &value));
+  return value;
 }
 
 inline env &env::alter_flags(MDBX_env_flags_t flags, bool on_off) {
