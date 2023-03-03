@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2022 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2017-2023 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -14,13 +14,13 @@
 
 #pragma once
 
-#include "base.h"
-#include "chrono.h"
-#include "config.h"
-#include "keygen.h"
-#include "log.h"
-#include "osal.h"
-#include "utils.h"
+#include "base.h++"
+#include "chrono.h++"
+#include "config.h++"
+#include "keygen.h++"
+#include "log.h++"
+#include "osal.h++"
+#include "utils.h++"
 
 #include <deque>
 #include <set>
@@ -101,10 +101,10 @@ class testcase;
 
 class registry {
   struct record {
-    actor_testcase id;
+    actor_testcase id = ac_none;
     std::string name;
-    bool (*review_params)(actor_params &);
-    testcase *(*constructor)(const actor_config &, const mdbx_pid_t);
+    bool (*review_params)(actor_params &) = nullptr;
+    testcase *(*constructor)(const actor_config &, const mdbx_pid_t) = nullptr;
   };
   std::unordered_map<std::string, const record *> name2id;
   std::unordered_map<int, const record *> id2record;

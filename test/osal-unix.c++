@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2022 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2017-2023 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "test.h"
+#include "test.h++"
 
 #if !(defined(_WIN32) || defined(_WIN64))
 

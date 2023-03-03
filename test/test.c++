@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2022 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2017-2023 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "test.h"
+#include "test.h++"
 
 const char *testcase2str(const actor_testcase testcase) {
   switch (testcase) {
@@ -100,7 +100,7 @@ int testcase::hsr_callback(const MDBX_env *env, const MDBX_txn *txn,
        info.mi_geo.current >= info.mi_geo.upper)) {
     osal_yield();
     if (retry > 0)
-      osal_udelay(retry * 100);
+      osal_udelay(retry * size_t(100));
     return MDBX_RESULT_FALSE /* retry / wait until reader done */;
   }
 
@@ -158,11 +158,16 @@ void testcase::db_open() {
   if (config.params.random_writemap && flipcoin())
     mode ^= MDBX_WRITEMAP;
 
-  actual_env_mode = mode;
   int rc = mdbx_env_open(db_guard.get(), config.params.pathname_db.c_str(),
                          mode, 0640);
   if (unlikely(rc != MDBX_SUCCESS))
     failure_perror("mdbx_env_open()", rc);
+
+  unsigned env_flags_proxy;
+  rc = mdbx_env_get_flags(db_guard.get(), &env_flags_proxy);
+  if (unlikely(rc != MDBX_SUCCESS))
+    failure_perror("mdbx_env_get_flags()", rc);
+  actual_env_mode = MDBX_env_flags_t(env_flags_proxy);
 
   rc = mdbx_env_set_syncperiod(db_guard.get(), unsigned(0.042 * 65536));
   if (unlikely(rc != MDBX_SUCCESS) && rc != MDBX_BUSY)
@@ -199,6 +204,19 @@ void testcase::txn_begin(bool readonly, MDBX_txn_flags_t flags) {
 
   log_trace("<< txn_begin(%s, 0x%04X)", readonly ? "read-only" : "read-write",
             flags);
+
+  if (flipcoin_n(5)) {
+    const unsigned mask =
+        unsigned(MDBX_warmup_default | MDBX_warmup_force | MDBX_warmup_oomsafe |
+                 MDBX_warmup_lock | MDBX_warmup_touchlimit);
+    static unsigned counter;
+    MDBX_warmup_flags_t warmup_flags = MDBX_warmup_flags_t(
+        (counter > MDBX_warmup_release) ? prng64() & mask : counter);
+    counter += 1;
+    int err = mdbx_env_warmup(db_guard.get(), txn, warmup_flags, 0);
+    log_trace("== counter %u, env_warmup(flags %u), rc %d", counter,
+              warmup_flags, err);
+  }
 }
 
 int testcase::breakable_commit() {

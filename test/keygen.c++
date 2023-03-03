@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2022 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2017-2023 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "test.h"
+#include "test.h++"
 
 namespace keygen {
 
@@ -227,7 +227,8 @@ void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
 
   (void)thread_number;
   mapping = actor.keygen;
-  salt = (actor.keygen.seed + actor_id) * UINT64_C(14653293970879851569);
+  salt =
+      (actor.keygen.seed + uint64_t(actor_id)) * UINT64_C(14653293970879851569);
 
   base = actor.serial_base();
 }
@@ -315,11 +316,12 @@ void __hot maker::mk_begin(const serial_t serial, const essentials &params,
   out.value.iov_len = std::max(unsigned(params.minlen), length(serial));
   const auto variation = params.maxlen - params.minlen;
   if (variation) {
-    if (serial % (variation + 1)) {
+    if (serial % (variation + serial_t(1))) {
       auto refix = serial * UINT64_C(48835288005252737);
       refix ^= refix >> 32;
-      out.value.iov_len = std::max(
-          out.value.iov_len, params.minlen + 1 + size_t(refix) % variation);
+      out.value.iov_len =
+          std::max(out.value.iov_len,
+                   params.minlen + size_t(1) + size_t(refix) % variation);
     }
   }
 

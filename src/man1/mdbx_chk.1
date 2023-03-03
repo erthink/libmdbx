@@ -1,6 +1,6 @@
-.\" Copyright 2015-2022 Leonid Yuriev <leo@yuriev.ru>.
+.\" Copyright 2015-2023 Leonid Yuriev <leo@yuriev.ru>.
 .\" Copying restrictions apply.  See COPYRIGHT/LICENSE.
-.TH MDBX_CHK 1 "2023-02-14" "MDBX 0.11.14"
+.TH MDBX_CHK 1 "2023-03-03" "MDBX 0.12.4"
 .SH NAME
 mdbx_chk \- MDBX checking tool
 .SH SYNOPSIS
@@ -80,6 +80,13 @@ Turn to a specified meta-page on successful check.
 .TP
 .BR \-T
 Turn to a specified meta-page EVEN ON UNSUCCESSFUL CHECK!
+.TP
+.BR \-u
+Warms up the DB before checking via notifying OS kernel of subsequent access to the database pages.
+.TP
+.BR \-U
+Warms up the DB before checking, notifying the OS kernel of subsequent access to the database pages,
+then forcibly loads ones by sequential access and tries to lock database pages in memory.
 .TP
 .BR \-n
 Open MDBX environment(s) which do not use subdirectories.

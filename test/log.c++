@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2022 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2017-2023 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "test.h"
+#include "test.h++"
 
 static void fflushall() { fflush(nullptr); }
 
@@ -61,7 +61,8 @@ static FILE *last;
 void setlevel(loglevel priority) {
   level = priority;
   int rc = mdbx_setup_debug(MDBX_log_level_t(priority),
-                            MDBX_DBG_ASSERT | MDBX_DBG_AUDIT | MDBX_DBG_JITTER,
+                            MDBX_DBG_ASSERT | MDBX_DBG_AUDIT | MDBX_DBG_JITTER |
+                                MDBX_DBG_DUMP,
                             mdbx_logger);
   log_trace("set mdbx debug-opts: 0x%02x", rc);
 }
@@ -141,7 +142,7 @@ void output_nocheckloglevel_ap(const logging::loglevel priority,
           prefix.c_str(), level2str(priority), suffix.c_str());
 
   va_list ones;
-  memset(&ones, 0, sizeof(ones)) /* zap MSVC and other stupid compilers */;
+  memset(&ones, 0, sizeof(ones)) /* zap MSVC and other goofy compilers */;
   if (same_or_higher(priority, error))
     va_copy(ones, ap);
   vfprintf(last, format, ap);
@@ -152,11 +153,11 @@ void output_nocheckloglevel_ap(const logging::loglevel priority,
   switch (end) {
   default:
     putc('\n', last);
-  // fall through
+    MDBX_CXX17_FALLTHROUGH; // fall through
   case '\n':
     fflush(last);
     last = nullptr;
-  // fall through
+    MDBX_CXX17_FALLTHROUGH; // fall through
   case ' ':
   case '_':
   case ':':

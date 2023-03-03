@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020-2022, Leonid Yuriev <leo@yuriev.ru>.
+// Copyright (c) 2020-2023, Leonid Yuriev <leo@yuriev.ru>.
 // SPDX-License-Identifier: Apache-2.0
 //
 // Non-inline part of the libmdbx C++ API
@@ -13,6 +13,12 @@
     !defined(__USE_MINGW_ANSI_STDIO)
 #define __USE_MINGW_ANSI_STDIO 1
 #endif /* MinGW */
+
+/* Workaround for MSVC' header `extern "C"` vs `std::` redefinition bug */
+#if defined(_MSC_VER) && defined(__SANITIZE_ADDRESS__) &&                      \
+    !defined(_DISABLE_VECTOR_ANNOTATION)
+#define _DISABLE_VECTOR_ANNOTATION
+#endif /* _DISABLE_VECTOR_ANNOTATION */
 
 #include "../mdbx.h++"
 
@@ -200,41 +206,6 @@ __cold  bug::~bug() noexcept {}
   RAISE_BUG(__LINE__, "not_implemented", __func__, __FILE__);
 
 #endif /* Unused*/
-
-//------------------------------------------------------------------------------
-
-#if defined(_WIN32) || defined(_WIN64)
-
-std::string w2mb(const std::wstring &in) {
-  std::string out;
-  if (!in.empty()) {
-    const auto out_len = mdbx_w2mb(nullptr, 0, in.data(), in.size());
-    if (out_len < 1)
-      mdbx::error::throw_exception(GetLastError());
-    out.append(out_len, '\0');
-    if (out_len != mdbx_w2mb(const_cast<char *>(out.data()), out_len, in.data(),
-                             in.size()))
-      mdbx::error::throw_exception(GetLastError());
-  }
-  return out;
-}
-
-std::wstring mb2w(const char *in) {
-  std::wstring out;
-  if (in && *in) {
-    const auto in_len = strlen(in);
-    const auto out_len = mdbx_mb2w(nullptr, 0, in, in_len);
-    if (out_len < 1)
-      mdbx::error::throw_exception(GetLastError());
-    out.append(out_len, '\0');
-    if (out_len !=
-        mdbx_mb2w(const_cast<wchar_t *>(out.data()), out_len, in, in_len))
-      mdbx::error::throw_exception(GetLastError());
-  }
-  return out;
-}
-
-#endif /* Windows */
 
 } // namespace
 
@@ -1240,6 +1211,23 @@ env &env::copy(const ::std::string &destination, bool compactify,
   return copy(destination.c_str(), compactify, force_dynamic_size);
 }
 
+#if defined(_WIN32) || defined(_WIN64)
+env &env::copy(const wchar_t *destination, bool compactify,
+               bool force_dynamic_size) {
+  error::success_or_throw(
+      ::mdbx_env_copyW(handle_, destination,
+                       (compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
+                           (force_dynamic_size ? MDBX_CP_FORCE_DYNAMIC_SIZE
+                                               : MDBX_CP_DEFAULTS)));
+  return *this;
+}
+
+env &env::copy(const ::std::wstring &destination, bool compactify,
+               bool force_dynamic_size) {
+  return copy(destination.c_str(), compactify, force_dynamic_size);
+}
+#endif /* Windows */
+
 #ifdef MDBX_STD_FILESYSTEM_PATH
 env &env::copy(const MDBX_STD_FILESYSTEM_PATH &destination, bool compactify,
                bool force_dynamic_size) {
@@ -1247,20 +1235,15 @@ env &env::copy(const MDBX_STD_FILESYSTEM_PATH &destination, bool compactify,
 }
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 
-#if defined(_WIN32) || defined(_WIN64)
-env &env::copy(const ::std::wstring &destination, bool compactify,
-               bool force_dynamic_size) {
-  return copy(w2mb(destination), compactify, force_dynamic_size);
-}
-#endif /* Windows */
-
 path env::get_path() const {
+#if defined(_WIN32) || defined(_WIN64)
+  const wchar_t *c_wstr;
+  error::success_or_throw(::mdbx_env_get_pathW(handle_, &c_wstr));
+  static_assert(sizeof(path::value_type) == sizeof(wchar_t), "Oops");
+  return path(c_wstr);
+#else
   const char *c_str;
   error::success_or_throw(::mdbx_env_get_path(handle_, &c_str));
-#if defined(_WIN32) || defined(_WIN64)
-  static_assert(sizeof(path::value_type) == sizeof(wchar_t), "Oops");
-  return path(mb2w(c_str));
-#else
   static_assert(sizeof(path::value_type) == sizeof(char), "Oops");
   return path(c_str);
 #endif
@@ -1275,18 +1258,23 @@ bool env::remove(const ::std::string &pathname, const remove_mode mode) {
   return remove(pathname.c_str(), mode);
 }
 
+#if defined(_WIN32) || defined(_WIN64)
+bool env::remove(const wchar_t *pathname, const remove_mode mode) {
+  return error::boolean_or_throw(
+      ::mdbx_env_deleteW(pathname, MDBX_env_delete_mode_t(mode)));
+}
+
+bool env::remove(const ::std::wstring &pathname, const remove_mode mode) {
+  return remove(pathname.c_str(), mode);
+}
+#endif /* Windows */
+
 #ifdef MDBX_STD_FILESYSTEM_PATH
 bool env::remove(const MDBX_STD_FILESYSTEM_PATH &pathname,
                  const remove_mode mode) {
   return remove(pathname.native(), mode);
 }
 #endif /* MDBX_STD_FILESYSTEM_PATH */
-
-#if defined(_WIN32) || defined(_WIN64)
-bool env::remove(const ::std::wstring &pathname, const remove_mode mode) {
-  return remove(w2mb(pathname), mode);
-}
-#endif /* Windows */
 
 //------------------------------------------------------------------------------
 
@@ -1360,6 +1348,44 @@ __cold env_managed::env_managed(const ::std::string &pathname,
                                 const env::operate_parameters &op, bool accede)
     : env_managed(pathname.c_str(), cp, op, accede) {}
 
+#if defined(_WIN32) || defined(_WIN64)
+__cold env_managed::env_managed(const wchar_t *pathname,
+                                const operate_parameters &op, bool accede)
+    : env_managed(create_env()) {
+  setup(op.max_maps, op.max_readers);
+  error::success_or_throw(
+      ::mdbx_env_openW(handle_, pathname, op.make_flags(accede), 0));
+
+  if (op.options.nested_write_transactions &&
+      !get_options().nested_write_transactions)
+    MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
+}
+
+__cold env_managed::env_managed(const wchar_t *pathname,
+                                const env_managed::create_parameters &cp,
+                                const env::operate_parameters &op, bool accede)
+    : env_managed(create_env()) {
+  setup(op.max_maps, op.max_readers);
+  set_geometry(cp.geometry);
+  error::success_or_throw(::mdbx_env_openW(
+      handle_, pathname, op.make_flags(accede, cp.use_subdirectory),
+      cp.file_mode_bits));
+
+  if (op.options.nested_write_transactions &&
+      !get_options().nested_write_transactions)
+    MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
+}
+
+__cold env_managed::env_managed(const ::std::wstring &pathname,
+                                const operate_parameters &op, bool accede)
+    : env_managed(pathname.c_str(), op, accede) {}
+
+__cold env_managed::env_managed(const ::std::wstring &pathname,
+                                const env_managed::create_parameters &cp,
+                                const env::operate_parameters &op, bool accede)
+    : env_managed(pathname.c_str(), cp, op, accede) {}
+#endif /* Windows */
+
 #ifdef MDBX_STD_FILESYSTEM_PATH
 __cold env_managed::env_managed(const MDBX_STD_FILESYSTEM_PATH &pathname,
                                 const operate_parameters &op, bool accede)
@@ -1370,17 +1396,6 @@ __cold env_managed::env_managed(const MDBX_STD_FILESYSTEM_PATH &pathname,
                                 const env::operate_parameters &op, bool accede)
     : env_managed(pathname.native(), cp, op, accede) {}
 #endif /* MDBX_STD_FILESYSTEM_PATH */
-
-#if defined(_WIN32) || defined(_WIN64)
-__cold env_managed::env_managed(const ::std::wstring &pathname,
-                                const operate_parameters &op, bool accede)
-    : env_managed(w2mb(pathname), op, accede) {}
-
-__cold env_managed::env_managed(const ::std::wstring &pathname,
-                                const env_managed::create_parameters &cp,
-                                const env::operate_parameters &op, bool accede)
-    : env_managed(w2mb(pathname), cp, op, accede) {}
-#endif /* Windows */
 
 //------------------------------------------------------------------------------
 
@@ -1409,6 +1424,15 @@ void txn_managed::abort() {
 
 void txn_managed::commit() {
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_commit(handle_));
+  if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
+    MDBX_CXX20_LIKELY handle_ = nullptr;
+  if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS))
+    MDBX_CXX20_UNLIKELY err.throw_exception();
+}
+
+void txn_managed::commit(commit_latency *latency) {
+  const error err =
+      static_cast<MDBX_error_t>(::mdbx_txn_commit_ex(handle_, latency));
   if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
     MDBX_CXX20_LIKELY handle_ = nullptr;
   if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS))

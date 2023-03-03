@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2022 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2017-2023 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "base.h"
-#include "log.h"
-#include "utils.h"
+#include "base.h++"
+#include "log.h++"
+#include "utils.h++"
 
 #define ACTOR_ID_MAX INT16_MAX
 

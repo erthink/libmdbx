@@ -1,7 +1,7 @@
 /* mdbx_dump.c - memory-mapped database dump tool */
 
 /*
- * Copyright 2015-2022 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2015-2023 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -20,7 +20,7 @@
 #pragma warning(disable : 4996) /* The POSIX name is deprecated... */
 #endif                          /* _MSC_VER (warnings) */
 
-#define xMDBX_TOOLS /* Avoid using internal mdbx_assert() */
+#define xMDBX_TOOLS /* Avoid using internal eASSERT() */
 #include "internals.h"
 
 #include <ctype.h>
@@ -66,7 +66,7 @@ static const char hexc[] = "0123456789abcdef";
 
 static void dumpbyte(unsigned char c) {
   putchar(hexc[c >> 4]);
-  putchar(hexc[c & 0xf]);
+  putchar(hexc[c & 15]);
 }
 
 static void text(MDBX_val *v) {
@@ -186,10 +186,10 @@ static int dump_sdb(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
     error("mdbx_cursor_open", rc);
     return rc;
   }
-  if (MDBX_DEBUG > 0 && rescue) {
-    cursor->mc_flags |= C_SKIPORD;
+  if (rescue) {
+    cursor->mc_checking |= CC_SKIPORD;
     if (cursor->mc_xcursor)
-      cursor->mc_xcursor->mx_cursor.mc_flags |= C_SKIPORD;
+      cursor->mc_xcursor->mx_cursor.mc_checking |= CC_SKIPORD;
   }
 
   while ((rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT)) ==
@@ -217,19 +217,23 @@ static int dump_sdb(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
 }
 
 static void usage(void) {
-  fprintf(stderr,
-          "usage: %s [-V] [-q] [-f file] [-l] [-p] [-r] [-a|-s subdb] "
-          "dbpath\n"
-          "  -V\t\tprint version and exit\n"
-          "  -q\t\tbe quiet\n"
-          "  -f\t\twrite to file instead of stdout\n"
-          "  -l\t\tlist subDBs and exit\n"
-          "  -p\t\tuse printable characters\n"
-          "  -r\t\trescue mode (ignore errors to dump corrupted DB)\n"
-          "  -a\t\tdump main DB and all subDBs\n"
-          "  -s name\tdump only the specified named subDB\n"
-          "  \t\tby default dump only the main DB\n",
-          prog);
+  fprintf(
+      stderr,
+      "usage: %s "
+      "[-V] [-q] [-f file] [-l] [-p] [-r] [-a|-s subdb] [-u|U] "
+      "dbpath\n"
+      "  -V\t\tprint version and exit\n"
+      "  -q\t\tbe quiet\n"
+      "  -f\t\twrite to file instead of stdout\n"
+      "  -l\t\tlist subDBs and exit\n"
+      "  -p\t\tuse printable characters\n"
+      "  -r\t\trescue mode (ignore errors to dump corrupted DB)\n"
+      "  -a\t\tdump main DB and all subDBs\n"
+      "  -s name\tdump only the specified named subDB\n"
+      "  -u\t\twarmup database before dumping\n"
+      "  -U\t\twarmup and try lock database pages in memory before dumping\n"
+      "  \t\tby default dump only the main DB\n",
+      prog);
   exit(EXIT_FAILURE);
 }
 
@@ -250,11 +254,14 @@ int main(int argc, char *argv[]) {
   char *subname = nullptr, *buf4free = nullptr;
   unsigned envflags = 0;
   bool alldbs = false, list = false;
+  bool warmup = false;
+  MDBX_warmup_flags_t warmup_flags = MDBX_warmup_default;
 
   if (argc < 2)
     usage();
 
   while ((i = getopt(argc, argv,
+                     "uU"
                      "a"
                      "f:"
                      "l"
@@ -311,6 +318,14 @@ int main(int argc, char *argv[]) {
     case 'r':
       rescue = true;
       break;
+    case 'u':
+      warmup = true;
+      break;
+    case 'U':
+      warmup = true;
+      warmup_flags =
+          MDBX_warmup_force | MDBX_warmup_touchlimit | MDBX_warmup_lock;
+      break;
     default:
       usage();
     }
@@ -356,10 +371,20 @@ int main(int argc, char *argv[]) {
 
   rc = mdbx_env_open(
       env, envname,
-      envflags | (rescue ? MDBX_RDONLY | MDBX_EXCLUSIVE : MDBX_RDONLY), 0);
+      envflags | (rescue ? MDBX_RDONLY | MDBX_EXCLUSIVE | MDBX_VALIDATION
+                         : MDBX_RDONLY),
+      0);
   if (unlikely(rc != MDBX_SUCCESS)) {
     error("mdbx_env_open", rc);
     goto env_close;
+  }
+
+  if (warmup) {
+    rc = mdbx_env_warmup(env, nullptr, warmup_flags, 3600 * 65536);
+    if (MDBX_IS_ERROR(rc)) {
+      error("mdbx_env_warmup", rc);
+      goto env_close;
+    }
   }
 
   rc = mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn);
@@ -383,10 +408,10 @@ int main(int argc, char *argv[]) {
       error("mdbx_cursor_open", rc);
       goto txn_abort;
     }
-    if (MDBX_DEBUG > 0 && rescue) {
-      cursor->mc_flags |= C_SKIPORD;
+    if (rescue) {
+      cursor->mc_checking |= CC_SKIPORD;
       if (cursor->mc_xcursor)
-        cursor->mc_xcursor->mx_cursor.mc_flags |= C_SKIPORD;
+        cursor->mc_xcursor->mx_cursor.mc_checking |= CC_SKIPORD;
     }
 
     bool have_raw = false;
@@ -401,7 +426,7 @@ int main(int argc, char *argv[]) {
 
       if (memchr(key.iov_base, '\0', key.iov_len))
         continue;
-      subname = mdbx_realloc(buf4free, key.iov_len + 1);
+      subname = osal_realloc(buf4free, key.iov_len + 1);
       if (!subname) {
         rc = MDBX_ENOMEM;
         break;

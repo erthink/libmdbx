@@ -53,8 +53,9 @@ CFLAGS_EXTRA ?=
 LD      ?= ld
 
 # build options
-MDBX_BUILD_OPTIONS ?=-DNDEBUG=1
+MDBX_BUILD_OPTIONS   ?=-DNDEBUG=1
 MDBX_BUILD_TIMESTAMP ?=$(shell date +%Y-%m-%dT%H:%M:%S%z)
+MDBX_BUILD_CXX       ?= YES
 
 # probe and compose common compiler flags with variable expansion trick (seems this work two times per session for GNU Make 3.81)
 CFLAGS       ?= $(strip $(eval CFLAGS := -std=gnu11 -O2 -g -Wall -Werror -Wextra -Wpedantic -ffunction-sections -fPIC -fvisibility=hidden -pthread -Wno-error=attributes $$(shell for opt in -fno-semantic-interposition -Wno-unused-command-line-argument -Wno-tautological-compare; do [ -z "$$$$($(CC) '-DMDBX_BUILD_FLAGS="probe"' $$$${opt} -c $(SRC_PROBE_C) -o /dev/null >/dev/null 2>&1 || echo failed)" ] && echo "$$$${opt} "; done)$(CFLAGS_EXTRA))$(CFLAGS))
@@ -127,6 +128,9 @@ TIP        := // TIP:
 .PHONY: all help options lib libs tools clean install uninstall check_buildflags_tag tools-static
 .PHONY: install-strip install-no-strip strip libmdbx mdbx show-options lib-static lib-shared
 
+boolean = $(if $(findstring $(strip $($1)),YES Yes yes y ON On on 1 true True TRUE),1,$(if $(findstring $(strip $($1)),NO No no n OFF Off off 0 false False FALSE),,$(error Wrong value `$($1)` of $1 for YES/NO option)))
+select_by = $(if $(call boolean,$(1)),$(2),$(3))
+
 ifeq ("$(origin V)", "command line")
   MDBX_BUILD_VERBOSE := $(V)
 endif
@@ -134,7 +138,7 @@ ifndef MDBX_BUILD_VERBOSE
   MDBX_BUILD_VERBOSE := 0
 endif
 
-ifeq ($(MDBX_BUILD_VERBOSE),1)
+ifeq ($(call boolean,MDBX_BUILD_VERBOSE),1)
   QUIET :=
   HUSH :=
   $(info $(TIP) Use `make V=0` for quiet.)
@@ -193,12 +197,12 @@ help:
 
 show-options:
 	@echo "  MDBX_BUILD_OPTIONS   = $(MDBX_BUILD_OPTIONS)"
+	@echo "  MDBX_BUILD_CXX       = $(MDBX_BUILD_CXX)"
 	@echo "  MDBX_BUILD_TIMESTAMP = $(MDBX_BUILD_TIMESTAMP)"
 	@echo '$(TIP) Use `make options` to listing available build options.'
-	@echo "  CC       =`which $(CC)` | `$(CC) --version | head -1`"
-	@echo "  CFLAGS   =$(CFLAGS)"
-	@echo "  CXXFLAGS =$(CXXFLAGS)"
-	@echo "  LDFLAGS  =$(LDFLAGS) $(LIB_STDCXXFS) $(LIBS) $(EXE_LDFLAGS)"
+	@echo $(call select_by,MDBX_BUILD_CXX,"  CXX      =`which $(CXX)` | `$(CXX) --version | head -1`","  CC       =`which $(CC)` | `$(CC) --version | head -1`")
+	@echo $(call select_by,MDBX_BUILD_CXX,"  CXXFLAGS =$(CXXFLAGS)","  CFLAGS   =$(CFLAGS)")
+	@echo $(call select_by,MDBX_BUILD_CXX,"  LDFLAGS  =$(LDFLAGS) $(LIB_STDCXXFS) $(LIBS) $(EXE_LDFLAGS)","  LDFLAGS  =$(LDFLAGS) $(LIBS) $(EXE_LDFLAGS)")
 	@echo '$(TIP) Use `make help` to listing available targets.'
 
 options:
@@ -254,7 +258,7 @@ clean:
 		config.h src/config.h src/version.c *.tar* buildflags.tag \
 		mdbx_*.static mdbx_*.static-lto
 
-MDBX_BUILD_FLAGS =$(strip $(MDBX_BUILD_OPTIONS) $(CXXSTD) $(CFLAGS) $(LDFLAGS) $(LIBS))
+MDBX_BUILD_FLAGS =$(strip MDBX_BUILD_CXX=$(MDBX_BUILD_CXX) $(MDBX_BUILD_OPTIONS) $(call select_by,MDBX_BUILD_CXX,$(CXXFLAGS) $(LDFLAGS) $(LIB_STDCXXFS) $(LIBS),$(CFLAGS) $(LDFLAGS) $(LIBS)))
 check_buildflags_tag:
 	$(QUIET)if [ "$(MDBX_BUILD_FLAGS)" != "$$(cat buildflags.tag 2>&1)" ]; then \
 		echo -n "  CLEAN for build with specified flags..." && \
@@ -264,13 +268,13 @@ check_buildflags_tag:
 
 buildflags.tag: check_buildflags_tag
 
-lib-static libmdbx.a: mdbx-static.o mdbx++-static.o
+lib-static libmdbx.a: mdbx-static.o $(call select_by,MDBX_BUILD_CXX,mdbx++-static.o)
 	@echo '  AR $@'
 	$(QUIET)$(AR) rcs $@ $? $(HUSH)
 
-lib-shared libmdbx.$(SO_SUFFIX): mdbx-dylib.o mdbx++-dylib.o
+lib-shared libmdbx.$(SO_SUFFIX): mdbx-dylib.o $(call select_by,MDBX_BUILD_CXX,mdbx++-dylib.o)
 	@echo '  LD $@'
-	$(QUIET)$(CXX) $(CXXFLAGS) $^ -pthread -shared $(LDFLAGS) $(LIB_STDCXXFS) $(LIBS) -o $@
+	$(QUIET)$(call select_by,MDBX_BUILD_CXX,$(CXX) $(CXXFLAGS),$(CC) $(CFLAGS)) $^ -pthread -shared $(LDFLAGS) $(call select_by,MDBX_BUILD_CXX,$(LIB_STDCXXFS)) $(LIBS) -o $@
 
 #> dist-cutoff-begin
 ifeq ($(wildcard mdbx.c),mdbx.c)
@@ -349,9 +353,9 @@ TEST_DB    ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.d
 TEST_LOG   ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log
 TEST_OSAL  := $(shell $(uname2osal))
 TEST_ITER  := $(shell $(uname2titer))
-TEST_SRC   := test/osal-$(TEST_OSAL).cc $(filter-out $(wildcard test/osal-*.cc), $(wildcard test/*.cc))
-TEST_INC   := $(wildcard test/*.h)
-TEST_OBJ   := $(patsubst %.cc,%.o,$(TEST_SRC))
+TEST_SRC   := test/osal-$(TEST_OSAL).c++ $(filter-out $(wildcard test/osal-*.c++),$(wildcard test/*.c++)) $(call select_by,MDBX_BUILD_CXX,,src/mdbx.c++)
+TEST_INC   := $(wildcard test/*.h++)
+TEST_OBJ   := $(patsubst %.c++,%.o,$(TEST_SRC))
 TAR        ?= $(shell which gnu-tar || echo tar)
 ZIP        ?= $(shell which zip || echo "echo 'Please install zip'")
 CLANG_FORMAT ?= $(shell (which clang-format-14 || which clang-format-13 || which clang-format) 2>/dev/null)
@@ -359,7 +363,7 @@ CLANG_FORMAT ?= $(shell (which clang-format-14 || which clang-format-13 || which
 reformat:
 	@echo '  RUNNING clang-format...'
 	$(QUIET)if [ -n "$(CLANG_FORMAT)" ]; then \
-		git ls-files | grep -E '\.(c|cxx|cc|cpp|h|hxx|hpp)(\.in)?$$' | xargs -r $(CLANG_FORMAT) -i --style=file; \
+		git ls-files | grep -E '\.(c|c++|h|h++)(\.in)?$$' | xargs -r $(CLANG_FORMAT) -i --style=file; \
 	else \
 		echo "clang-format version 13..14 not found for 'reformat'"; \
 	fi
@@ -382,11 +386,11 @@ MDBX_SMOKE_EXTRA ?=
 check: DESTDIR = $(shell pwd)/@check-install
 check: test dist install
 
-smoke-assertion: MDBX_BUILD_OPTIONS=-DMDBX_FORCE_ASSERTIONS=1
+smoke-assertion: MDBX_BUILD_OPTIONS:=$(strip $(MDBX_BUILD_OPTIONS) -DMDBX_FORCE_ASSERTIONS=1)
 smoke-assertion: smoke
-test-assertion: MDBX_BUILD_OPTIONS=-DMDBX_FORCE_ASSERTIONS=1
+test-assertion: MDBX_BUILD_OPTIONS:=$(strip $(MDBX_BUILD_OPTIONS) -DMDBX_FORCE_ASSERTIONS=1)
 test-assertion: smoke
-long-test-assertion: MDBX_BUILD_OPTIONS=-DMDBX_FORCE_ASSERTIONS=1
+long-test-assertion: MDBX_BUILD_OPTIONS:=$(strip $(MDBX_BUILD_OPTIONS) -DMDBX_FORCE_ASSERTIONS=1)
 long-test-assertion: smoke
 
 smoke: build-test
@@ -414,7 +418,7 @@ smoke-fault: build-test
 
 test: build-test
 	@echo '  RUNNING `test/long_stochastic.sh --loops 2`...'
-	$(QUIET)test/long_stochastic.sh --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG)
+	$(QUIET)test/long_stochastic.sh --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 long-test: build-test
 	@echo '  RUNNING `test/long_stochastic.sh --loops 42`...'
@@ -422,12 +426,12 @@ long-test: build-test
 
 test-singleprocess: build-test
 	@echo '  RUNNING `test/long_stochastic.sh --single --loops 2`...'
-	$(QUIET)test/long_stochastic.sh --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG)
+	$(QUIET)test/long_stochastic.sh --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 test-valgrind: CFLAGS_EXTRA=-Ofast -DMDBX_USE_VALGRIND
 test-valgrind: build-test
 	@echo '  RUNNING `test/long_stochastic.sh --with-valgrind --loops 2`...'
-	$(QUIET)test/long_stochastic.sh --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG)
+	$(QUIET)test/long_stochastic.sh --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt
 memcheck: CFLAGS_EXTRA=-Ofast -DMDBX_USE_VALGRIND
@@ -448,7 +452,7 @@ gcc-analyzer:
 
 test-ubsan:
 	@echo '  RE-TEST with `-fsanitize=undefined` option...'
-	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error" test
+	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-DENABLE_UBSAN -Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error" test
 
 test-asan:
 	@echo '  RE-TEST with `-fsanitize=address` option...'
@@ -465,7 +469,7 @@ mdbx_example: mdbx.h example/example-mdbx.c libmdbx.$(SO_SUFFIX)
 build-test: all mdbx_example mdbx_test
 
 define test-rule
-$(patsubst %.cc,%.o,$(1)): $(1) $(TEST_INC) $(HEADERS) $(lastword $(MAKEFILE_LIST))
+$(patsubst %.c++,%.o,$(1)): $(1) $(TEST_INC) $(HEADERS) $(lastword $(MAKEFILE_LIST))
 	@echo '  CC $$@'
 	$(QUIET)$$(CXX) $$(CXXFLAGS) $$(MDBX_BUILD_OPTIONS) -c $(1) -o $$@
 
@@ -711,23 +715,23 @@ endif
 ################################################################################
 # Cross-compilation simple test
 
-CROSS_LIST = mips-linux-gnu-gcc \
+CROSS_LIST = \
+	mips64-linux-gnuabi64-gcc mips-linux-gnu-gcc \
+	hppa-linux-gnu-gcc s390x-linux-gnu-gcc \
 	powerpc64-linux-gnu-gcc powerpc-linux-gnu-gcc \
-	arm-linux-gnueabihf-gcc aarch64-linux-gnu-gcc \
-	sh4-linux-gnu-gcc mips64-linux-gnuabi64-gcc \
-	hppa-linux-gnu-gcc s390x-linux-gnu-gcc
+	arm-linux-gnueabihf-gcc aarch64-linux-gnu-gcc
 
-## On Ubuntu Focal (20.04) with QEMU 4.2 (1:4.2-3ubuntu6.6) & GCC 9.3 (9.3.0-17ubuntu1~20.04)
-# hppa-linux-gnu-gcc          - works (previously: don't supported by qemu)
-# s390x-linux-gnu-gcc         - works (previously: qemu hang/abort)
+## On Ubuntu Focal (22.04) with QEMU 6.2 (1:6.2+dfsg-2ubuntu6.6) & GCC 11.3 (11.3.0-1ubuntu1~22.04)
+# sh4-linux-gnu-gcc           - coredump (qemu mmap-troubles)
 # sparc64-linux-gnu-gcc       - coredump (qemu mmap-troubles, previously: qemu fails fcntl for F_SETLK/F_GETLK)
 # alpha-linux-gnu-gcc         - coredump (qemu mmap-troubles)
-CROSS_LIST_NOQEMU = sparc64-linux-gnu-gcc alpha-linux-gnu-gcc
+# risc64-linux-gnu-gcc        - coredump (qemu qemu fails fcntl for F_SETLK/F_GETLK)
+CROSS_LIST_NOQEMU = sh4-linux-gnu-gcc sparc64-linux-gnu-gcc alpha-linux-gnu-gcc riscv64-linux-gnu-gcc
 
 cross-gcc:
 	@echo '  Re-building by cross-compiler for: $(CROSS_LIST_NOQEMU) $(CROSS_LIST)'
 	@echo "CORRESPONDING CROSS-COMPILERs ARE REQUIRED."
-	@echo "FOR INSTANCE: apt install g++-aarch64-linux-gnu g++-alpha-linux-gnu g++-arm-linux-gnueabihf g++-hppa-linux-gnu g++-mips-linux-gnu g++-mips64-linux-gnuabi64 g++-powerpc-linux-gnu g++-powerpc64-linux-gnu g++-s390x-linux-gnu g++-sh4-linux-gnu g++-sparc64-linux-gnu"
+	@echo "FOR INSTANCE: sudo apt install \$$(apt list 'g++-*' | grep 'g++-[a-z0-9]\+-linux-gnu/' | cut -f 1 -d / | sort -u)"
 	$(QUIET)for CC in $(CROSS_LIST_NOQEMU) $(CROSS_LIST); do \
 		echo "===================== $$CC"; \
 		$(MAKE) IOARENA=false CXXSTD= clean && CC=$$CC CXX=$$(echo $$CC | sed 's/-gcc/-g++/') EXE_LDFLAGS=-static $(MAKE) IOARENA=false all || exit $$?; \
@@ -739,8 +743,8 @@ cross-qemu:
 	@echo '  Re-building by cross-compiler and re-check by QEMU for: $(CROSS_LIST)'
 	@echo "CORRESPONDING CROSS-COMPILERs AND QEMUs ARE REQUIRED."
 	@echo "FOR INSTANCE: "
-	@echo "	1) apt install g++-aarch64-linux-gnu g++-alpha-linux-gnu g++-arm-linux-gnueabihf g++-hppa-linux-gnu g++-mips-linux-gnu g++-mips64-linux-gnuabi64 g++-powerpc-linux-gnu g++-powerpc64-linux-gnu g++-s390x-linux-gnu g++-sh4-linux-gnu g++-sparc64-linux-gnu"
-	@echo "	2) apt install binfmt-support qemu-user-static qemu-user qemu-system-arm qemu-system-mips qemu-system-misc qemu-system-ppc qemu-system-sparc"
+	@echo "	1) sudo apt install \$$(apt list 'g++-*' | grep 'g++-[a-z0-9]\+-linux-gnu/' | cut -f 1 -d / | sort -u)"
+	@echo "	2) sudo apt install binfmt-support qemu-user-static qemu-user \$$(apt list 'qemu-system-*' | grep 'qemu-system-[a-z0-9]\+/' | cut -f 1 -d / | sort -u)"
 	$(QUIET)for CC in $(CROSS_LIST); do \
 		echo "===================== $$CC + qemu"; \
 		$(MAKE) IOARENA=false CXXSTD= clean && \
@@ -784,7 +788,7 @@ IOARENA := $(shell \
   (test -x ../ioarena/@BUILD/src/ioarena && echo ../ioarena/@BUILD/src/ioarena) || \
   (test -x ../../@BUILD/src/ioarena && echo ../../@BUILD/src/ioarena) || \
   (test -x ../../src/ioarena && echo ../../src/ioarena) || which ioarena 2>&- || \
-  (echo false && echo '$(TIP) Clone and build the https://github.com/pmwkaa/ioarena.git within a neighbouring directory for availability of benchmarking.' >&2))
+  (echo false && echo '$(TIP) Clone and build the https://abf.io/erthink/ioarena.git within a neighbouring directory for availability of benchmarking.' >&2))
 endif
 NN	?= 25000000
 BENCH_CRUD_MODE ?= nosync
@@ -798,7 +802,7 @@ re-bench: bench-clean bench
 ifeq ($(or $(IOARENA),false),false)
 bench bench-quartet bench-triplet bench-couple:
 	$(QUIET)echo 'The `ioarena` benchmark is required.' >&2 && \
-	echo 'Please clone and build the https://github.com/pmwkaa/ioarena.git within a neighbouring `ioarena` directory.' >&2 && \
+	echo 'Please clone and build the https://abf.io/erthink/ioarena.git within a neighbouring `ioarena` directory.' >&2 && \
 	false
 
 else
@@ -809,14 +813,19 @@ define bench-rule
 bench-$(1)_$(2).txt: $(3) $(IOARENA) $(lastword $(MAKEFILE_LIST))
 	@echo '  RUNNING ioarena for $1/$2...'
 	$(QUIET)(export LD_LIBRARY_PATH="./:$$$${LD_LIBRARY_PATH}"; \
-		ldd $(IOARENA) && \
+		ldd $(IOARENA) | grep -i $(1) && \
+		$(IOARENA) -D $(1) -B batch -m $(BENCH_CRUD_MODE) -n $(2) \
+			| tee $$@ | grep throughput | sed 's/throughput/batch×N/' && \
 		$(IOARENA) -D $(1) -B crud -m $(BENCH_CRUD_MODE) -n $(2) \
-			| tee $$@ | grep throughput && \
+			| tee -a $$@ | grep throughput | sed 's/throughput/   crud/' && \
 		$(IOARENA) -D $(1) -B iterate,get,iterate,get,iterate -m $(BENCH_CRUD_MODE) -r 4 -n $(2) \
-			| tee -a $$@ | grep throughput \
-	) || mv -f $$@ $$@.error
+			| tee -a $$@ | grep throughput | sed '0,/throughput/{s/throughput/iterate/};s/throughput/    get/' && \
+		$(IOARENA) -D $(1) -B delete -m $(BENCH_CRUD_MODE) -n $(2) \
+			| tee -a $$@ | grep throughput | sed 's/throughput/ delete/' && \
+	true) || mv -f $$@ $$@.error
 
 endef
+
 
 $(eval $(call bench-rule,mdbx,$(NN),libmdbx.$(SO_SUFFIX)))
 

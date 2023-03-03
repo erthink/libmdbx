@@ -1,53 +1,447 @@
 ChangeLog
 ---------
 
-## v0.11.14 (Sergey Kapitsa) at 2023-02-14
+English version [by Google](https://gitflic-ru.translate.goog/project/erthink/libmdbx/blob?file=ChangeLog.md&_x_tr_sl=ru&_x_tr_tl=en)
+and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
-The stable bugfix release in memory of [Sergey Kapitsa](https://en.wikipedia.org/wiki/Sergey_Kapitsa) on his 95th birthday.
+## v0.12.4 (Арта-333) от 2023-03-03
+
+Стабилизирующий выпуск с исправлением обнаруженных ошибок, устранением
+недочетов и технических долгов. Ветка 0.12 считается готовой к
+продуктовому использованию, получает статус стабильной и далее будет
+получать только исправление ошибок. Разработка будет продолжена в ветке
+0.13, а ветка 0.11 становится архивной.
 
 ```
-22 files changed, 250 insertions(+), 174 deletions(-)
+63 files changed, 1161 insertions(+), 569 deletions(-)
 Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 ```
 
+Благодарности:
+
+ - Max <maxc0d3r@protonmail.com> за сообщение о проблеме ERROR_SHARING_VIOLATION
+   в режиме MDBX_EXCLUSIVE на Windows.
+ - Alisher Ashyrov <https://t.me/a1is43ras4> за сообщение о проблеме
+   с assert-проверкой и содействие в отладке.
+ - Masatoshi Fukunaga <https://gitflic.ru/user/mah0x211> за сообщение о проблеме
+   `put(MDBX_UPSERT+MDBX_ALLDUPS)` для случая замены всех значений в subDb.
+
+Исправления (без корректировок новых функций):
+
+ - Устранен регресс после коммита 474391c83c5f81def6fdf3b0b6f5716a87b78fbf,
+   приводящий к возврату ERROR_SHARING_VIOLATION в Windows при открытии БД
+   в режиме MDBX_EXCLUSIVE для чтения-записи.
+
+ - Добавлено ограничение размера отображения при коротком read-only файле, для
+   предотвращения ошибки ERROR_NOT_ENOUGH_MEMORY в Windows, которая возникает
+   в этом случае и совсем не информативна для пользователя.
+
+ - Произведен рефакторинг `dxb_resize()`, в том числе, для устранения срабатывания
+   assert-проверки `size_bytes == env->me_dxb_mmap.current` в специфических
+   многопоточных сценариях использования. Проверка срабатывала только в
+   отладочных сборках, при специфическом наложении во времени читающей и
+   пишущей транзакции в разных потоках, одновременно с изменением размера БД.
+   Кроме срабатывание проверки, каких-либо других последствий не возникало.
+
+ - Устранена проблема в `put(MDBX_UPSERT+MDBX_ALLDUPS)` для случая замены
+   всех значений единственного ключа в subDb. В ходе этой операции subDb
+   становится полностью пустой, без каких-либо страниц и именно эта
+   ситуация не была учтена в коде, что приводило к повреждению БД
+   при фиксации такой транзакции.
+
+ - Устранена излишняя assert-проверка внутри `override_meta()`.
+   Что в отладочных сборках могло приводить к ложным срабатываниям
+   при восстановлении БД, в том числе при автоматическом откате слабых
+   мета-страниц.
+
+ - Скорректированы макросы `__cold`/`__hot`, в том числе для устранения проблемы
+   `error: inlining failed in call to ‘always_inline FOO(...)’: target specific option mismatch`
+   при сборке посредством GCC >10.x для SH4.
+
+Ликвидация технических долгов и мелочи:
+
+ - Исправлены многочисленные опечатки в документации.
+ - Доработан тест для полной стохастической проверки `MDBX_EKEYMISMATCH` в режиме `MDBX_APPEND`.
+ - Расширены сценарии запуска `mdbx_chk` из CMake-тестов для проверки как в обычном,
+   так и эксклюзивном режимах чтения-записи.
+ - Уточнены спецификаторы `const` и `noexcept` для нескольких методов в C++ API.
+ - Устранено использование стека под буферы для `wchar`-преобразования путей.
+ - Для Windows добавлена функция `mdbx_env_get_path()` для получения пути к БД
+   в формате многобайтных символов.
+ - Добавлены doxygen-описания для API с широкими символами.
+ - Устранены предупреждения статического анализатора MSVC,
+   все они были несущественные, либо ложные.
+ - Устранено ложное предупреждение GCC при сборке для SH4.
+ - Добавлена поддержка ASAN (Address Sanitizer) при сборке посредством MSVC.
+ - Расширен набор перебираемых режимов в скрипте `test/long_stochastic.sh`,
+   добавлена опция `--extra`.
+ - В C++ API добавлена поддержка расширенных опций времени выполнения `mdbx::extra_runtime_option`,
+   аналогично `enum MDBX_option_t` из C API.
+ - Вывод всех счетчиков page-operations в `mdbx_stat`.
+
+
+-------------------------------------------------------------------------------
+
+
+## v0.12.3 (Акула) от 2023-01-07
+
+Выпуск с существенными доработками и новой функциональностью в память о закрытом open-source
+[проекте "Акула"](https://erigon.substack.com/p/winding-down-support-for-akula-project).
+
+Добавлена prefault-запись, переделан контроль “некогерентности” unified page/buffer cache, изменена тактика слияния страниц и т.д.
+Стало ещё быстрее, в некоторых сценариях вдвое.
+
+```
+20 files changed, 4508 insertions(+), 2928 deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
+```
+
+Благодарности:
+
+ - [Alex Sharov](https://t.me/AskAlexSharov) и команде [Erigon](https://github.com/ledgerwatch/erigon) за тестирование.
+ - [Simon Leier](https://t.me/leisim) за сообщение о сбоях и тестирование.
+
+Новое:
+
+ - Использование адреса [https://libmdbx.dqdkfa.ru/dead-github](https://libmdbx.dqdkfa.ru/dead-github)
+   для отсылки к сохранённым в web.archive.org копиям ресурсов, уничтоженных администрацией Github.
+
+ - Реализована prefault-запись при выделении страниц для read-write отображений.
+   Это приводит к кратному снижению системных издержек и существенному увеличению
+   производительности в соответствующих сценариях использования, когда:
+    - размер БД и объём данных существенно больше ОЗУ;
+    - используется режим `MDBX_WRITEMAP`;
+    - не-мелкие транзакции (по ходу транзакции выделяется многие сотни или тысячи страниц).
+
+   В режиме `MDBX_WRITEMAP` выделение/переиспользование страниц приводит
+   к page-fault и чтению страницы с диска, даже если содержимое страницы
+   не нужно (будет перезаписано). Это является следствием работы подсистемы
+   виртуальной памяти, а штатный способ лечения через `MADV_REMOVE`
+   работает не на всех ФС и обычно дороже получаемой экономии.
+
+   Теперь в libmdbx используется "упреждающая запись" таких страниц,
+   которая на системах с [unified page cache](https://www.opennet.ru/base/dev/ubc.txt.html)
+   приводит к "вталкиванию" данных, устраняя необходимость чтения с диска при
+   обращении к такой странице памяти.
+
+   Новый функционал работает в согласованности с автоматическим управлением read-ahead
+   и кэшем статуса присутствия страниц в ОЗУ, посредством [mincore()](https://man7.org/linux/man-pages/man2/mincore.2.html).
+
+ - Добавлена опция `MDBX_opt_prefault_write_enable` для возможности принудительного
+   включения/выключения prefault-записи.
+
+ - Реализован динамический выбор между сквозной записью на диск и обычной записью
+   с последующим [fdatasync()](https://man7.org/linux/man-pages/man3/fdatasync.3p.html)
+   управляемый опцией `MDBX_opt_writethrough_threshold`.
+
+   В долговечных (durable) режимах данные на диск могут быть сброшены двумя способами:
+     - сквозной записью через файловый дескриптор открытый с `O_DSYNC`;
+     - обычной записью с последующим вызовом `fdatasync()`.
+
+   Первый способ выгоднее при записи малого количества страниц и/или если
+   канал взаимодействия с диском/носителем имеет близкую к нулю задержку.
+   Второй способ выгоднее если требуется записать много страниц и/или канал
+   взаимодействия имеет весомую задержку (датацентры, облака). Добавленная
+   опция `MDBX_opt_writethrough_threshold` позволяет во время выполнения
+   задать порог для динамического выбора способа записи в зависимости от
+   объема и конкретных условия использования.
+
+ - Автоматическая установка `MDBX_opt_rp_augment_limit` в зависимости от размера БД.
+
+ - Запрещение разного режима `MDBX_WRITEMAP` между процессами в режимах
+   с отложенной/ленивой записью, так как в этом случае невозможно
+   обеспечить сброс данных на диск во всех случаях на всех поддерживаемых платформах.
+
+ - Добавлена опция сборки `MDBX_MMAP_USE_MS_ASYNC` позволяющая отключить
+   использование системного вызова `msync(MS_ASYNC)`, в использовании
+   которого нет необходимости на подавляющем большинстве актуальных ОС.
+   По-умолчанию `MDBX_MMAP_USE_MS_ASYNC=0` (выключено) на Linux и других
+   системах с unified page cache. Такое поведение (без использования
+   `msync(MS_ASYNC)`) соответствует неизменяемой (hardcoded) логике LMDB. В
+   результате, в простых/наивных бенчмарках, libmdbx опережает LMDB
+   примерно также как при реальном применении.
+
+   На всякий случай стоит еще раз отметить/напомнить, что на Windows
+   предположительно libmdbx будет отставать от LMDB в сценариях с
+   множеством мелких транзакций, так как libmdbx осознанно использует на
+   Windows файловые блокировки, которые медленные (плохо реализованы в ядре
+   ОС), но позволяют застраховать пользователей от массы неверных действий
+   приводящих к повреждению БД.
+
+ - Поддержка не-печатных имен для subDb.
+
+ - Добавлен явный выбор `tls_model("local-dynamic")` для обхода проблемы
+   `relocation R_X86_64_TPOFF32 against FOO cannot be used with -shared`
+   из-за ошибки в CLANG приводящей к использованию неверного режима `ls_model`.
+
+ - Изменение тактики слияния страниц при удалении.
+   Теперь слияние выполняется преимущественно с уже измененной/грязной страницей.
+   Если же справа и слева обе страницы с одинаковым статусом,
+   то с наименее заполненной, как прежде. В сценариях с массивным удалением
+   это позволяет увеличить производительность до 50%.
+
+ - Добавлен контроль отсутствия LCK-файлов с альтернативным именованием.
+
+Исправления (без корректировок новых функций):
+
+ - Изменение размера отображения если это требуется для сброса данных на
+   диск при вызове `mdbx_env_sync()` из параллельного потока выполнения вне
+   работающей транзакции.
+
+ - Исправление регресса после коммита db72763de049d6e4546f838277fe83b9081ad1de от 2022-10-08
+   в логике возврата грязных страниц в режиме `MDBX_WRITEMAP`, из-за чего
+   освободившиеся страницы использовались не немедленно, а попадали в
+   retired-список совершаемой транзакции и происходил необоснованный рост
+   размера транзакции.
+
+ - Устранение SIGSEGV или ошибочного вызова `free()` в ситуациях
+   повторного открытия среды посредством `mdbx_env_open()`.
+
+ - Устранение ошибки совершенной в коммите fe20de136c22ed3bc4c6d3f673e79c106e824f60 от 2022-09-18,
+   в результате чего на Linux в режиме `MDBX_WRITEMAP` никогда не вызывался `msync()`.
+   Проблема существует только в релизе 0.12.2.
+
+ - Добавление подсчета грязных страниц в `MDBX_WRITEMAP` для предоставления посредством `mdbx_txn_info()`
+   актуальной информации об объеме изменений в процессе транзакций чтения-записи.
+
+ - Исправление несущественной опечатки в условиях `#if` определения порядка байт.
+
+ - Исправление сборки для случая `MDBX_PNL_ASCENDING=1`.
+
+Ликвидация технических долгов и мелочи:
+
+ - Доработка поддержки авто-слияния записей GC внутри `page_alloc_slowpath()`.
+ - Устранение несущественных предупреждений Coverity.
+ - Использование единого курсора для поиска в GC.
+ - Переработка внутренних флагов связанных с выделением страниц из GC.
+ - Доработка подготовки резерва перед обновлением GC при включенном BigFoot.
+ - Оптимизация `pnl_merge()` для случаев неперекрывающихся объединяемых списков.
+ - Оптимизация поддержки отсортированного списка страниц в `dpl_append()`.
+ - Ускорение работы `mdbx_chk` при обработке пользовательских записей в `@MAIN`.
+ - Переработка LRU-отметок для спиллинга.
+ - Переработка контроля "некогерентности" Unified page cache для уменьшения накладных расходов.
+ - Рефакторинг и микрооптимизация.
+
+
+-------------------------------------------------------------------------------
+
+
+## v0.12.2 (Иван Ярыгин) от 2022-11-11
+
+Выпуск с существенными доработками и новой функциональностью
+в память о российском борце [Иване Сергеевиче Ярыгине](https://ru.wikipedia.org/wiki/Ярыгин,_Иван_Сергеевич).
+
+На Олимпийских играх в Мюнхене в 1972 году Иван Ярыгин уложил всех соперников на лопатки,
+суммарно затратив менее 9 минут. Этот рекорд никем не побит до сих пор.
+
+```
+64 files changed, 5573 insertions(+), 2510 deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
+```
+
+Новое:
+
+ - Поддержка всех основных опций при сборке посредством CMake.
+
+ - Требования к CMake понижены до версии 3.0.2 для возможности сборки для устаревших платформ.
+
+ - Добавлена возможность профилирования работы GC в сложных и/или нагруженных
+   сценариях (например Ethereum/Erigon). По-умолчанию соответствующий код отключен,
+   а для его активации необходимо указать опцию сборки `MDBX_ENABLE_PROFGC=1`.
+
+ - Добавлена функция `mdbx_env_warmup()` для "прогрева" БД с возможностью
+   закрепления страниц в памяти.
+   В утилиты `mdbx_chk`, `mdbx_copy` и `mdbx_dump` добавлены опции `-u` и `-U`
+   для активации соответствующего функционала.
+
+ - Отключение учета «грязных» страниц в не требующих этого режимах
+   (`MDBX_WRITEMAP` при `MDBX_AVOID_MSYNC=0`). Доработка позволяет снизить
+   накладные расходы и была запланирована давно, но откладывалась так как
+   требовала других изменений.
+
+ - Вытеснение из памяти (спиллинг) «грязных» страниц с учетом размера
+   large/overflow-страниц. Доработка позволяет корректно соблюдать политику
+   задаваемую опциями `MDBX_opt_txn_dp_limit`,
+   `MDBX_opt_spill_max_denominator`, `MDBX_opt_spill_min_denominator` и
+   была запланирована давно, но откладывалась так как требовала других
+   изменений.
+
+ - Для Windows в API добавлены UNICODE-зависимые определения макросов
+  `MDBX_DATANAME`, `MDBX_LOCKNAME` и `MDBX_LOCK_SUFFIX`.
+
+ - Переход на преимущественное использование типа `size_t` для
+   уменьшения накладных расходов на платформе Эльбрус.
+
+ - В API добавлены функции `mdbx_limits_valsize4page_max()` и
+   `mdbx_env_get_valsize4page_max()` возвращающие максимальный размер в
+   байтах значения, которое может быть размещена в одной
+   large/overflow-странице, а не последовательности из двух или более таких
+   страниц. Для таблиц с поддержкой дубликатов вынос значений на
+   large/overflow-страницы не поддерживается, поэтому результат совпадает с
+   `mdbx_limits_valsize_max()`.
+
+ - В API добавлены функции `mdbx_limits_pairsize4page_max()`и
+   `mdbx_env_get_pairsize4page_max()` возвращающие в байтах максимальный
+   суммарный размер пары ключ-значение для их размещения на одной листовой
+   страницы, без выноса значения на отдельную large/overflow-страницу. Для
+   таблиц с поддержкой дубликатов вынос значений на large/overflow-страницы
+   не поддерживается, поэтому результат определяет максимальный/допустимый
+   суммарный размер пары ключ-значение.
+
+ - Реализовано использование асинхронной (overlapped) записи в Windows,
+   включая использования небуфферизированного ввода-вывода и `WriteGather()`.
+   Это позволяет сократить накладные расходы и частично обойти проблемы
+   Windows с низкой производительностью ввода-вывода, включая большие
+   задержки `FlushFileBuffers()`. Новый код также обеспечивает консолидацию
+   записываемых регионов на всех платформах, а на Windows использование
+   событий (events) сведено к минимум, одновременно с автоматических
+   использованием `WriteGather()`. Поэтому ожидается существенное снижение
+   накладных расходов взаимодействия с ОС, а в Windows это ускорение, в
+   некоторых сценариях, может быть кратным в сравнении с LMDB.
+
+ - Добавлена опция сборки `MDBX_AVOID_MSYNC`, которая определяет
+   поведение libmdbx в режиме `MDBX_WRITE_MAP` (когда данные изменяются
+   непосредственно в отображенных в ОЗУ страницах БД):
+
+    * Если `MDBX_AVOID_MSYNC=0` (по умолчанию на всех системах кроме Windows),
+      то (как прежде) сохранение данных выполняется посредством `msync()`,
+      либо `FlushViewOfFile()` на Windows. На платформах с полноценной
+      подсистемой виртуальной памяти и адекватным файловым вводом-выводом
+      это обеспечивает минимум накладных расходов (один системный вызов)
+      и максимальную производительность. Однако, на Windows приводит
+      к значительной деградации, в том числе из-за того что после
+      `FlushViewOfFile()` требуется также вызов `FlushFileBuffers()`
+      с массой проблем и суеты внутри ядра ОС.
+
+    * Если `MDBX_AVOID_MSYNC=1` (по умолчанию только на Windows), то
+      сохранение данных выполняется явной записью в файл каждой измененной
+      страницы БД. Это требует дополнительных накладных расходов, как
+      на отслеживание измененных страниц (ведение списков "грязных"
+      страниц), так и на системные вызовы для их записи.
+      Кроме этого, с точки зрения подсистемы виртуальной памяти ядра ОС,
+      страницы БД измененные в ОЗУ и явно записанные в файл, могут либо
+      оставаться "грязными" и быть повторно записаны ядром ОС позже,
+      либо требовать дополнительных накладных расходов для отслеживания
+      PTE (Page Table Entries), их модификации и дополнительного копирования
+      данных. Тем не менее, по имеющейся информации, на Windows такой путь
+      записи данных в целом обеспечивает более высокую производительность.
+
+ - Улучшение эвристики включения авто-слияния записей GC.
+
+ - Изменение формата LCK и семантики некоторых внутренних полей. Версии
+   libmdbx использующие разный формат не смогут работать с одной БД
+   одновременно, а только поочередно (LCK-файл переписывается при открытии
+   первым открывающим БД процессом).
+
+ - В `C++` API добавлены методы фиксации транзакции с получением информации
+   о задержках.
+
+ - Added `MDBX_HAVE_BUILT IN_CPU_SUPPORTS` build option to control use GCC's
+   `__builtin_cpu_supports()` function, which could be unavailable on a fake
+   OSes (macos, ios, android, etc).
+
+Исправления (без корректировок вышеперечисленных новых функций):
+
+ - Устранения ряда предупреждений при сборке посредством MinGW.
+ - Устранение ложно-положительных сообщений от Valgrind об использовании
+   не инициализированных данных из-за выравнивающих зазоров в `struct troika`.
+ - Исправлен возврат неожиданной ошибки `MDBX_BUSY` из функций `mdbx_env_set_option()`,
+   `mdbx_env_set_syncbytes()` и `mdbx_env_set_syncperiod()`.
+ - Небольшие исправления для совместимости с CMake 3.8
+ - Больше контроля и осторожности (паранойи) для страховки от дефектов `mremap()`.
+ - Костыль для починки сборки со старыми версиями `stdatomic.h` из GNU Lib C,
+   где макросы `ATOMIC_*_LOCK_FREE` ошибочно переопределяются через функции.
+ - Использование `fcntl64(F_GETLK64/F_SETLK64/F_SETLKW64)` при наличии.
+   Это решает проблему срабатывания проверочного утверждения при сборке для
+   платформ где тип `off_t` шире соответствующих полей `структуры flock`,
+   используемой для блокировки файлов.
+ - Доработан сбор информации о задержках при фиксации транзакций:
+    * Устранено искажение замеров длительности обновления GC
+      при включении отладочного внутреннего аудита;
+    * Защита от undeflow-нуля только общей задержки в метриках,
+      чтобы исключить ситуации, когда сумма отдельных стадий
+      больше общей длительности.
+ - Ряд исправлений для устранения срабатываний проверочных утверждения в
+   отладочных сборках.
+ - Более осторожное преобразование к типу `mdbx_tid_t` для устранения
+   предупреждений.
+ - Исправление лишнего сброса данных на диск в режиме `MDBX_SAFE_NOSYNC`
+   при обновлении GC.
+ - Fixed an extra check for `MDBX_APPENDDUP` inside `mdbx_cursor_put()`
+   which could result in returning `MDBX_EKEYMISMATCH` for valid cases.
+ - Fixed nasty `clz()` bug (by using `_BitScanReverse()`, only MSVC builds affected).
+
+Мелочи:
+
+ - Исторические ссылки cвязанные с удалённым на ~~github~~ проектом  перенаправлены на [web.archive.org](https://web.archive.org/web/https://github.com/erthink/libmdbx).
+ - Синхронизированны конструкции CMake между проектами.
+ - Добавлено предупреждение о небезопасности RISC-V.
+ - Добавлено описание параметров `MDBX_debug_func` и `MDBX_debug_func`.
+ - Добавлено обходное решение для минимизации ложно-положительных
+   конфликтов при использовании файловых блокировок в Windows.
+ - Проверка атомарности C11-операций c 32/64-битными данными.
+ - Уменьшение в 42 раза значения по-умолчанию для `me_options.dp_limit`
+   в отладочных сборках.
+ - Добавление платформы `gcc-riscv64-linux-gnu` в список для цели `cross-gcc`.
+ - Небольшие правки скрипта `long_stochastic.sh` для работы в Windows.
+ - Удаление ненужного вызова `LockFileEx()` внутри `mdbx_env_copy()`.
+ - Добавлено описание использования файловых дескрипторов в различных режимах.
+ - Добавлено использование `_CrtDbgReport()` в отладочных сборках.
+ - Fixed an extra ensure/assertion check of `oldest_reader` inside `txn_end()`.
+ - Removed description of deprecated usage of `MDBX_NODUPDATA`.
+ - Fixed regression ASAN/Valgring-enabled builds.
+ - Fixed minor MingGW warning.
+
+
+-------------------------------------------------------------------------------
+
+
+## v0.12.1 (Positive Proxima) at 2022-08-24
+
+The planned frontward release with new superior features on the day of 20 anniversary of [Positive Technologies](https://ptsecurty.com).
+
+```
+37 files changed, 7604 insertions(+), 7417 deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
+```
+
+New:
+
+ - The `Big Foot` feature which significantly reduces GC overhead for processing large lists of retired pages from huge transactions.
+   Now _libmdbx_ avoid creating large chunks of PNLs (page number lists) which required a long sequences of free pages, aka large/overflow pages.
+   Thus avoiding searching, allocating and storing such sequences inside GC.
+ - Improved hot/online validation and checking of database pages both for more robustness and performance.
+ - New solid and fast method to latch meta-pages called `Troika`.
+   The minimum of memory barriers, reads, comparisons and conditional transitions are used.
+ - New `MDBX_VALIDATION` environment options to extra validation of DB structure and pages content for carefully/safe handling damaged or untrusted DB.
+ - Accelerated ×16/×8/×4 by AVX512/AVX2/SSE2/Neon implementations of search page sequences.
+ - Added the `gcrtime_seconds16dot16` counter to the "Page Operation Statistics" that accumulates time spent for GC searching and reclaiming.
+ - Copy-with-compactification now clears/zeroes unused gaps inside database pages.
+ - The `C` and `C++` APIs has been extended and/or refined to simplify using `wchar_t` pathnames.
+   On Windows the `mdbx_env_openW()`, ``mdbx_env_get_pathW()`()`, `mdbx_env_copyW()`, `mdbx_env_open_for_recoveryW()` are available for now,
+   but the `mdbx_env_get_path()` has been replaced in favor of `mdbx_env_get_pathW()`.
+ - Added explicit error message for Buildroot's Microblaze toolchain maintainers.
+ - Added `MDBX_MANAGE_BUILD_FLAGS` build options for CMake.
+ - Speed-up internal `bsearch`/`lower_bound` implementation using branchless tactic, including workaround for CLANG x86 optimiser bug.
+ - A lot internal refinement and micro-optimisations.
+ - Internally counted volume of dirty pages (unused for now but for coming features).
+
 Fixes:
 
- - backport: Fixed insignificant typo of `||` inside `#if` byte-order condition.
-
- - backport: Fixed `SIGSEGV` or an erroneous call to `free()` in situations where
-   errors occur when reopening by `mdbx_env_open()` of a previously used
-   environment.
-
- - backport: Fixed `cursor_put_nochecklen()` internals for case when dupsort'ed named subDb
-   contains a single key with multiple values (aka duplicates), which are replaced
-   with a single value by put-operation with the `MDBX_UPSERT+MDBX_ALLDUPS` flags.
-   In this case, the database becomes completely empty, without any pages.
-   However exactly this condition was not considered and thus wasn't handled correctly.
-   See [issue#8](https://gitflic.ru/project/erthink/libmdbx/issue/8) for more information.
-
- - backport: Fixed extra assertion inside `override_meta()`, which could
-   lead to false-positive failing of the assertion in a debug builds during
-   DB recovery and auto-rollback.
-
- - backport: Refined the `__cold`/`__hot` macros to avoid the
-   `error: inlining failed in call to ‘always_inline FOO(...)’: target specific option mismatch`
-   issue during build using GCC >10.x for SH4 arch.
-
-Minors:
-
- - backport: Using the https://libmdbx.dqdkfa.ru/dead-github
-   for resources deleted by the Github' administration.
- - backport: Fixed English typos.
- - backport: Fixed proto of `__asan_default_options()`.
- - backport: Fixed doxygen-description of C++ API, especially of C++20 concepts.
- - backport: Refined `const` and `noexcept` for few C++ API methods.
- - backport: Fixed copy&paste typo of "Getting started".
- - backport: Update MithrilDB status.
- - backport: Resolve false-posirive `used uninitialized` warning from GCC >10.x
-   while build for SH4 arch.
+ - Never use modern `__cxa_thread_atexit()` on Apple's OSes.
+ - Don't check owner for finished transactions.
+ - Fixed typo in `MDBX_EINVAL` which breaks MingGW builds with CLANG.
 
 
-## v0.11.13 (Swashplate) at 2022-11-10
+## v0.12.0 at 2022-06-19
+
+Not a release but preparation for changing feature set and API.
+
+
+-------------------------------------------------------------------------------
+
+
+## v0.11.13 at (Swashplate) 2022-11-10
 
 The stable bugfix release in memory of [Boris Yuryev](https://ru.wikipedia.org/wiki/Юрьев,_Борис_Николаевич) on his 133rd birthday.
 
@@ -113,12 +507,14 @@ Fixes:
  - Fixed derived C++ builds by removing `MDBX_INTERNAL_FUNC` for `mdbx_w2mb()` and `mdbx_mb2w()`.
 
 
--------------------------------------------------------------------------------
-
-
 ## v0.11.10 (the TriColor) at 2022-08-22
 
 The stable bugfix release.
+
+```
+14 files changed, 263 insertions(+), 252 deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
+```
 
 New:
 
@@ -140,8 +536,6 @@ Minors:
  - Use current transaction geometry for untouched parameters when `env_set_geometry()` called within a write transaction.
  - Minor clarified `iov_page()` failure case.
 
-
--------------------------------------------------------------------------------
 
 
 ## v0.11.9 (Чирчик-1992) at 2022-08-02
@@ -259,7 +653,7 @@ New:
  - Support build by MinGW' make from command line without CMake.
  - Added `mdbx::filesystem` C++ API namespace that corresponds to `std::filesystem` or `std::experimental::filesystem`.
  - Created [website](https://libmdbx.dqdkfa.ru/) for online auto-generated documentation.
- - Used `https://web.archive.org/web/20220414235959/https://github.com/erthink/` for dead (or temporarily lost) resources deleted by ~~Github~~.
+ - Used `https://web.archive.org/web/https://github.com/erthink/libmdbx` for dead (or temporarily lost) resources deleted by ~~Github~~.
  - Added `--loglevel=` command-line option to the `mdbx_test` tool.
  - Added few fast smoke-like tests into CMake builds.
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2022 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2017-2023 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "base.h"
-#include "chrono.h"
+#include "base.h++"
+#include "chrono.h++"
 
 MDBX_NORETURN void usage(void);
 MDBX_NORETURN void MDBX_PRINTF_ARGS(1, 2) failure(const char *fmt, ...);

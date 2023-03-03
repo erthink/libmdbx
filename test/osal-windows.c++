@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2022 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2017-2023 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "test.h"
+#include "test.h++"
 
 #if defined(_WIN32) || defined(_WIN64)
 
@@ -71,7 +71,7 @@ void osal_setup(const std::vector<actor_config> &actors) {
   events.reserve(n);
 
   for (unsigned i = 0; i < n; ++i) {
-    HANDLE hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    HANDLE hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!hEvent)
       failure_perror("CreateEvent()", GetLastError());
     hEvent = make_inheritable(hEvent);
@@ -79,22 +79,22 @@ void osal_setup(const std::vector<actor_config> &actors) {
     events[i] = hEvent;
   }
 
-  hBarrierSemaphore = CreateSemaphore(NULL, 0, (LONG)actors.size(), NULL);
+  hBarrierSemaphore = CreateSemaphoreW(NULL, 0, (LONG)actors.size(), NULL);
   if (!hBarrierSemaphore)
     failure_perror("CreateSemaphore(BarrierSemaphore)", GetLastError());
   hBarrierSemaphore = make_inheritable(hBarrierSemaphore);
 
-  hBarrierEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+  hBarrierEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
   if (!hBarrierEvent)
     failure_perror("CreateEvent(BarrierEvent)", GetLastError());
   hBarrierEvent = make_inheritable(hBarrierEvent);
 
-  hProgressActiveEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+  hProgressActiveEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
   if (!hProgressActiveEvent)
     failure_perror("CreateEvent(ProgressActiveEvent)", GetLastError());
   hProgressActiveEvent = make_inheritable(hProgressActiveEvent);
 
-  hProgressPassiveEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+  hProgressPassiveEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
   if (!hProgressPassiveEvent)
     failure_perror("CreateEvent(ProgressPassiveEvent)", GetLastError());
   hProgressPassiveEvent = make_inheritable(hProgressPassiveEvent);
@@ -248,7 +248,7 @@ Environment:
     CommandLine.push_back('"');
 
     for (auto It = Argument.begin();; ++It) {
-      unsigned NumberBackslashes = 0;
+      size_t NumberBackslashes = 0;
 
       while (It != Argument.end() && *It == '\\') {
         ++It;
@@ -348,6 +348,7 @@ actor_status osal_actor_info(const mdbx_pid_t pid) {
     status = as_debugging;
     break;
   case STATUS_CONTROL_C_EXIT:
+  case /* STATUS_INTERRUPTED */ 0xC0000515L:
     status = as_killed;
     break;
   case EXCEPTION_ACCESS_VIOLATION:
@@ -357,6 +358,12 @@ actor_status osal_actor_info(const mdbx_pid_t pid) {
   case EXCEPTION_INVALID_DISPOSITION:
   case EXCEPTION_ILLEGAL_INSTRUCTION:
   case EXCEPTION_NONCONTINUABLE_EXCEPTION:
+  case /* STATUS_STACK_BUFFER_OVERRUN, STATUS_BUFFER_OVERFLOW_PREVENTED */
+      0xC0000409L:
+  case /* STATUS_ASSERTION_FAILURE */ 0xC0000420L:
+  case /* STATUS_HEAP_CORRUPTION */ 0xC0000374L:
+  case /* STATUS_CONTROL_STACK_VIOLATION */ 0xC00001B2L:
+    log_error("pid %zu, exception 0x%x", (intptr_t)pid, (unsigned)ExitCode);
     status = as_coredump;
     break;
   default:
@@ -428,7 +435,7 @@ void osal_udelay(size_t us) {
     unsigned timeslice_ms = 1;
     while (timeBeginPeriod(timeslice_ms) == TIMERR_NOCANDO)
       ++timeslice_ms;
-    threshold_us = timeslice_ms * 1500u;
+    threshold_us = timeslice_ms * size_t(1500);
     assert(threshold_us > 0);
   }
 

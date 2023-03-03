@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2022 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2017-2023 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "test.h"
+#include "test.h++"
 
 #if defined(_MSC_VER) && !defined(strcasecmp)
 #define strcasecmp(str, len) _stricmp(str, len)
@@ -369,7 +369,6 @@ const struct option_verb mode_bits[] = {
     {"notls", unsigned(MDBX_NOTLS)},
     {"nordahead", unsigned(MDBX_NORDAHEAD)},
     {"nomeminit", unsigned(MDBX_NOMEMINIT)},
-    {"coalesce", unsigned(MDBX_COALESCE)},
     {"lifo", unsigned(MDBX_LIFORECLAIM)},
     {"perturb", unsigned(MDBX_PAGEPERTURB)},
     {"accede", unsigned(MDBX_ACCEDE)},

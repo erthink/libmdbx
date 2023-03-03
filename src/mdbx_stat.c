@@ -1,7 +1,7 @@
 /* mdbx_stat.c - memory-mapped database status tool */
 
 /*
- * Copyright 2015-2022 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2015-2023 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -20,7 +20,7 @@
 #pragma warning(disable : 4996) /* The POSIX name is deprecated... */
 #endif                          /* _MSC_VER (warnings) */
 
-#define xMDBX_TOOLS /* Avoid using internal mdbx_assert() */
+#define xMDBX_TOOLS /* Avoid using internal eASSERT() */
 #include "internals.h"
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -256,6 +256,17 @@ int main(int argc, char *argv[]) {
     printf("      WOP: %8" PRIu64
            "\t// number of explicit write operations (not a pages) to a disk\n",
            mei.mi_pgop_stat.wops);
+    printf(" PreFault: %8" PRIu64
+           "\t// number of prefault write operations (not a pages)\n",
+           mei.mi_pgop_stat.prefault);
+    printf("  mInCore: %8" PRIu64 "\t// number of mincore() calls\n",
+           mei.mi_pgop_stat.mincore);
+    printf("    mSync: %8" PRIu64
+           "\t// number of explicit msync-to-disk operations (not a pages)\n",
+           mei.mi_pgop_stat.msync);
+    printf("    fSync: %8" PRIu64
+           "\t// number of explicit fsync-to-disk operations (not a pages)\n",
+           mei.mi_pgop_stat.fsync);
   }
 
   if (envinfo) {
@@ -469,13 +480,13 @@ int main(int argc, char *argv[]) {
       MDBX_dbi subdbi;
       if (memchr(key.iov_base, '\0', key.iov_len))
         continue;
-      subname = mdbx_malloc(key.iov_len + 1);
+      subname = osal_malloc(key.iov_len + 1);
       memcpy(subname, key.iov_base, key.iov_len);
       subname[key.iov_len] = '\0';
       rc = mdbx_dbi_open(txn, subname, MDBX_DB_ACCEDE, &subdbi);
       if (rc == MDBX_SUCCESS)
         printf("Status of %s\n", subname);
-      mdbx_free(subname);
+      osal_free(subname);
       if (unlikely(rc != MDBX_SUCCESS)) {
         if (rc == MDBX_INCOMPATIBLE)
           continue;

@@ -2,32 +2,32 @@ enable_language(CXX)
 include(../cmake/compiler.cmake)
 
 set(LIBMDBX_TEST_SOURCES
-  base.h
-  cases.cc
-  chrono.cc
-  chrono.h
-  config.cc
-  config.h
-  copy.cc
-  dead.cc
-  hill.cc
-  jitter.cc
-  keygen.cc
-  keygen.h
-  log.cc
-  log.h
-  main.cc
-  osal.h
-  osal-unix.cc
-  osal-windows.cc
-  test.cc
-  test.h
-  try.cc
-  utils.cc
-  utils.h
-  append.cc
-  ttl.cc
-  nested.cc
+  base.h++
+  cases.c++
+  chrono.c++
+  chrono.h++
+  config.c++
+  config.h++
+  copy.c++
+  dead.c++
+  hill.c++
+  jitter.c++
+  keygen.c++
+  keygen.h++
+  log.c++
+  log.h++
+  main.c++
+  osal.h++
+  osal-unix.c++
+  osal-windows.c++
+  test.c++
+  test.h++
+  try.c++
+  utils.c++
+  utils.h++
+  append.c++
+  ttl.c++
+  nested.c++
   )
 
 if(NOT MDBX_BUILD_CXX)
@@ -92,11 +92,13 @@ else()
     set_tests_properties(smoke_chk PROPERTIES
       DEPENDS smoke
       TIMEOUT 60
+      FAIL_REGULAR_EXPRESSION "cooperative mode"
       REQUIRED_FILES smoke.db)
     add_test(NAME smoke_chk_copy COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv smoke.db-copy)
     set_tests_properties(smoke_chk_copy PROPERTIES
       DEPENDS smoke
       TIMEOUT 60
+      FAIL_REGULAR_EXPRESSION "cooperative mode"
       REQUIRED_FILES smoke.db-copy)
   endif()
 
@@ -109,15 +111,16 @@ else()
     TIMEOUT 600
     RUN_SERIAL OFF)
   if(MDBX_BUILD_TOOLS)
-    add_test(NAME dupsort_writemap_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv dupsort_writemap.db)
+    add_test(NAME dupsort_writemap_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvvwc dupsort_writemap.db)
     set_tests_properties(dupsort_writemap_chk PROPERTIES
       DEPENDS dupsort_writemap
       TIMEOUT 60
       REQUIRED_FILES dupsort_writemap.db)
-    add_test(NAME dupsort_writemap_chk_copy COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv dupsort_writemap.db-copy)
+    add_test(NAME dupsort_writemap_chk_copy COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvvc dupsort_writemap.db-copy)
     set_tests_properties(dupsort_writemap_chk_copy PROPERTIES
       DEPENDS dupsort_writemap
       TIMEOUT 60
+      FAIL_REGULAR_EXPRESSION "monopolistic mode"
       REQUIRED_FILES dupsort_writemap.db-copy)
   endif()
 
@@ -128,15 +131,17 @@ else()
     TIMEOUT 1800
     RUN_SERIAL OFF)
   if(MDBX_BUILD_TOOLS)
-    add_test(NAME uniq_nested_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv uniq_nested.db)
+    add_test(NAME uniq_nested_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvvw uniq_nested.db)
     set_tests_properties(uniq_nested_chk PROPERTIES
       DEPENDS uniq_nested
       TIMEOUT 60
+      FAIL_REGULAR_EXPRESSION "cooperative mode"
       REQUIRED_FILES uniq_nested.db)
     add_test(NAME uniq_nested_chk_copy COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv uniq_nested.db-copy)
     set_tests_properties(uniq_nested_chk_copy PROPERTIES
       DEPENDS uniq_nested
       TIMEOUT 60
+      FAIL_REGULAR_EXPRESSION "cooperative mode"
       REQUIRED_FILES uniq_nested.db-copy)
   endif()
 

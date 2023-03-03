@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2022 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2017-2023 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -30,6 +30,10 @@
 #define _WIN32_WINNT 0x0601 /* Windows 7 */
 #endif
 #ifdef _MSC_VER
+/* Workaround for MSVC' header `extern "C"` vs `std::` redefinition bug */
+#if defined(__SANITIZE_ADDRESS__) && !defined(_DISABLE_VECTOR_ANNOTATION)
+#define _DISABLE_VECTOR_ANNOTATION
+#endif /* _DISABLE_VECTOR_ANNOTATION */
 #ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
 #endif /* _CRT_SECURE_NO_WARNINGS */
@@ -94,7 +98,7 @@
 
 #define MDBX_INTERNAL_FUNC
 #define MDBX_INTERNAL_VAR extern
-#define xMDBX_TOOLS /* Avoid using internal mdbx_assert() */
+#define xMDBX_TOOLS /* Avoid using internal eASSERT() */
 #include "../mdbx.h++"
 #include "../src/base.h"
 #include "../src/osal.h"

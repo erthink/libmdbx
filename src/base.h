@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2022 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2015-2023 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -63,7 +63,7 @@
 #define SSIZE_MAX INTPTR_MAX
 #endif
 
-#if UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
+#if UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul || defined(_WIN64)
 #define MDBX_WORDBITS 64
 #else
 #define MDBX_WORDBITS 32
@@ -259,8 +259,10 @@ __extern_C key_t ftok(const char *, int);
 #include <sys/ipc.h>
 #include <sys/mman.h>
 #include <sys/param.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
+#include <sys/time.h>
 #include <sys/uio.h>
 
 #endif /*---------------------------------------------------------------------*/
@@ -302,8 +304,9 @@ __extern_C key_t ftok(const char *, int);
 /* LY: define neutral __ia32__ for x86 and x86-64 */
 #define __ia32__ 1
 #endif /* __ia32__ */
-#if !defined(__amd64__) && (defined(__x86_64) || defined(__x86_64__) ||        \
-                            defined(__amd64) || defined(_M_X64))
+#if !defined(__amd64__) &&                                                     \
+    (defined(__x86_64) || defined(__x86_64__) || defined(__amd64) ||           \
+     defined(_M_X64) || defined(_M_AMD64))
 /* LY: define trusty __amd64__ for all AMD64/x86-64 arch */
 #define __amd64__ 1
 #endif /* __amd64__ */
@@ -372,17 +375,49 @@ __extern_C key_t ftok(const char *, int);
 #endif /* __BYTE_ORDER__ || __ORDER_LITTLE_ENDIAN__ || __ORDER_BIG_ENDIAN__ */
 
 /*----------------------------------------------------------------------------*/
+/* Availability of CMOV or equivalent */
+
+#ifndef MDBX_HAVE_CMOV
+#if defined(__e2k__)
+#define MDBX_HAVE_CMOV 1
+#elif defined(__thumb2__) || defined(__thumb2)
+#define MDBX_HAVE_CMOV 1
+#elif defined(__thumb__) || defined(__thumb) || defined(__TARGET_ARCH_THUMB)
+#define MDBX_HAVE_CMOV 0
+#elif defined(_M_ARM) || defined(_M_ARM64) || defined(__aarch64__) ||          \
+    defined(__aarch64) || defined(__arm__) || defined(__arm) ||                \
+    defined(__CC_ARM)
+#define MDBX_HAVE_CMOV 1
+#elif (defined(__riscv__) || defined(__riscv64)) &&                            \
+    (defined(__riscv_b) || defined(__riscv_bitmanip))
+#define MDBX_HAVE_CMOV 1
+#elif defined(i686) || defined(__i686) || defined(__i686__) ||                 \
+    (defined(_M_IX86) && _M_IX86 > 600) || defined(__x86_64) ||                \
+    defined(__x86_64__) || defined(__amd64__) || defined(__amd64) ||           \
+    defined(_M_X64) || defined(_M_AMD64)
+#define MDBX_HAVE_CMOV 1
+#else
+#define MDBX_HAVE_CMOV 0
+#endif
+#endif /* MDBX_HAVE_CMOV */
+
+/*----------------------------------------------------------------------------*/
 /* Compiler's includes for builtins/intrinsics */
 
 #if defined(_MSC_VER) || defined(__INTEL_COMPILER)
 #include <intrin.h>
 #elif __GNUC_PREREQ(4, 4) || defined(__clang__)
-#if defined(__ia32__) || defined(__e2k__)
+#if defined(__e2k__)
+#include <e2kintrin.h>
 #include <x86intrin.h>
-#endif /* __ia32__ */
+#endif /* __e2k__ */
 #if defined(__ia32__)
 #include <cpuid.h>
+#include <x86intrin.h>
 #endif /* __ia32__ */
+#ifdef __ARM_NEON
+#include <arm_neon.h>
+#endif
 #elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
 #include <mbarrier.h>
 #elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) &&       \
@@ -603,6 +638,16 @@ __extern_C key_t ftok(const char *, int);
 #endif
 #endif /* __anonymous_struct_extension__ */
 
+#ifndef expect_with_probability
+#if defined(__builtin_expect_with_probability) ||                              \
+    __has_builtin(__builtin_expect_with_probability) || __GNUC_PREREQ(9, 0)
+#define expect_with_probability(expr, value, prob)                             \
+  __builtin_expect_with_probability(expr, value, prob)
+#else
+#define expect_with_probability(expr, value, prob) (expr)
+#endif
+#endif /* expect_with_probability */
+
 #ifndef MDBX_WEAK_IMPORT_ATTRIBUTE
 #ifdef WEAK_IMPORT_ATTRIBUTE
 #define MDBX_WEAK_IMPORT_ATTRIBUTE WEAK_IMPORT_ATTRIBUTE
@@ -615,6 +660,28 @@ __extern_C key_t ftok(const char *, int);
 #define MDBX_WEAK_IMPORT_ATTRIBUTE
 #endif
 #endif /* MDBX_WEAK_IMPORT_ATTRIBUTE */
+
+#ifndef MDBX_GOOFY_MSVC_STATIC_ANALYZER
+#ifdef _PREFAST_
+#define MDBX_GOOFY_MSVC_STATIC_ANALYZER 1
+#else
+#define MDBX_GOOFY_MSVC_STATIC_ANALYZER 0
+#endif
+#endif /* MDBX_GOOFY_MSVC_STATIC_ANALYZER */
+
+#if MDBX_GOOFY_MSVC_STATIC_ANALYZER || (defined(_MSC_VER) && _MSC_VER > 1919)
+#define MDBX_ANALYSIS_ASSUME(expr) __analysis_assume(expr)
+#ifdef _PREFAST_
+#define MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(warn_id)                             \
+  __pragma(prefast(suppress : warn_id))
+#else
+#define MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(warn_id)                             \
+  __pragma(warning(suppress : warn_id))
+#endif
+#else
+#define MDBX_ANALYSIS_ASSUME(expr) assert(expr)
+#define MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(warn_id)
+#endif /* MDBX_GOOFY_MSVC_STATIC_ANALYZER */
 
 /*----------------------------------------------------------------------------*/
 

@@ -1,12 +1,12 @@
 #if defined(__GNUC__) && !defined(__LCC__)
 
-#pragma pop_macro("mdbx_trace")
-#pragma pop_macro("mdbx_debug")
-#pragma pop_macro("mdbx_verbose")
-#pragma pop_macro("mdbx_notice")
-#pragma pop_macro("mdbx_warning")
-#pragma pop_macro("mdbx_error")
-#pragma pop_macro("mdbx_assert")
+#pragma pop_macro("TRACE")
+#pragma pop_macro("DEBUG")
+#pragma pop_macro("VERBOSE")
+#pragma pop_macro("NOTICE")
+#pragma pop_macro("WARNING")
+#pragma pop_macro("ERROR")
+#pragma pop_macro("eASSERT")
 
 #if !defined(__clang__)
 #pragma GCC reset_options

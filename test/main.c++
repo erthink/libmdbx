@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2022 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2017-2023 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "test.h"
+#include "test.h++"
 
 #if !(defined(_WIN32) || defined(_WIN64))
 #include <sys/resource.h>
@@ -98,7 +98,6 @@ MDBX_NORETURN void usage(void) {
       "    accede         == MDBX_ACCEDE\n"
       "    nometasync     == MDBX_NOMETASYNC\n"
       "    lifo           == MDBX_LIFORECLAIM\n"
-      "    coalesce       == MDBX_COALESCE\n"
       "    nosync-safe    == MDBX_SAFE_NOSYNC\n"
       "    writemap       == MDBX_WRITEMAP\n"
       "    nosync-utterly == MDBX_UTTERLY_NOSYNC\n"
@@ -130,8 +129,7 @@ void actor_params::set_defaults(const std::string &tmpdir) {
 #endif
 
   pathname_db = tmpdir + "mdbx-test.db";
-  mode_flags = MDBX_NOSUBDIR | MDBX_WRITEMAP | MDBX_SAFE_NOSYNC |
-               MDBX_NOMEMINIT | MDBX_COALESCE | MDBX_LIFORECLAIM | MDBX_ACCEDE;
+  mode_flags = MDBX_NOSUBDIR | MDBX_WRITEMAP | MDBX_SYNC_DURABLE | MDBX_ACCEDE;
   table_flags = MDBX_DUPSORT;
 
   size_lower = -1;
@@ -682,9 +680,9 @@ int main(int argc, char *const argv[]) {
         if (!actor)
           continue;
 
-        log_verbose("actor #%u, id %d, pid %ld: %s\n", actor->actor_id,
-                    actor->space_id, (long)pid, status2str(status));
         if (status > as_running) {
+          log_notice("actor #%u, id %d, pid %ld: %s\n", actor->actor_id,
+                     actor->space_id, (long)pid, status2str(status));
           left -= 1;
           if (status != as_successful) {
             if (global::config::failfast && !failed) {
@@ -694,6 +692,9 @@ int main(int argc, char *const argv[]) {
             }
             failed = true;
           }
+        } else {
+          log_verbose("actor #%u, id %d, pid %ld: %s\n", actor->actor_id,
+                      actor->space_id, (long)pid, status2str(status));
         }
       } else {
         if (timeout_seconds_left == 0)
