@@ -256,6 +256,17 @@ int main(int argc, char *argv[]) {
     printf("      WOP: %8" PRIu64
            "\t// number of explicit write operations (not a pages) to a disk\n",
            mei.mi_pgop_stat.wops);
+    printf(" PreFault: %8" PRIu64
+           "\t// number of prefault write operations (not a pages)\n",
+           mei.mi_pgop_stat.prefault);
+    printf("  mInCore: %8" PRIu64 "\t// number of mincore() calls\n",
+           mei.mi_pgop_stat.mincore);
+    printf("    mSync: %8" PRIu64
+           "\t// number of explicit msync-to-disk operations (not a pages)\n",
+           mei.mi_pgop_stat.msync);
+    printf("    fSync: %8" PRIu64
+           "\t// number of explicit fsync-to-disk operations (not a pages)\n",
+           mei.mi_pgop_stat.fsync);
   }
 
   if (envinfo) {
