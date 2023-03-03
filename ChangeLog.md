@@ -4,7 +4,7 @@ ChangeLog
 English version [by Google](https://gitflic-ru.translate.goog/project/erthink/libmdbx/blob?file=ChangeLog.md&_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
-## v0.12.4 (подготовка к релизу)
+## v0.12.4 (Арта-333) от 2023-03-03
 
 Стабилизирующий выпуск с исправлением обнаруженных ошибок, устранением
 недочетов и технических долгов. Ветка 0.12 считается готовой к
@@ -13,7 +13,8 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 0.13, а ветка 0.11 становится архивной.
 
 ```
-63 files changed, 1144 insertions(+), 569 deletions(-)
+63 files changed, 1161 insertions(+), 569 deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 ```
 
 Благодарности:
@@ -76,6 +77,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
    добавлена опция `--extra`.
  - В C++ API добавлена поддержка расширенных опций времени выполнения `mdbx::extra_runtime_option`,
    аналогично `enum MDBX_option_t` из C API.
+ - Вывод всех счетчиков page-operations в `mdbx_stat`.
 
 
 -------------------------------------------------------------------------------
