@@ -16020,19 +16020,11 @@ static __noinline int node_read_bigdata(MDBX_cursor *mc, const MDBX_node *node,
   if (!MDBX_DISABLE_VALIDATION) {
     const MDBX_env *env = mc->mc_txn->mt_env;
     const size_t dsize = data->iov_len;
-    if (unlikely(node_size_len(node_ks(node), dsize) <= env->me_leaf_nodemax) &&
-        mc->mc_dbi != FREE_DBI)
-      poor_page(mp, "too small data (%zu bytes) for bigdata-node", dsize);
     const unsigned npages = number_of_ovpages(env, dsize);
-    if (unlikely(lp.page->mp_pages != npages)) {
-      if (lp.page->mp_pages < npages)
-        return bad_page(lp.page,
-                        "too less n-pages %u for bigdata-node (%zu bytes)",
-                        lp.page->mp_pages, dsize);
-      else if (mc->mc_dbi != FREE_DBI)
-        poor_page(lp.page, "extra n-pages %u for bigdata-node (%zu bytes)",
-                  lp.page->mp_pages, dsize);
-    }
+    if (unlikely(lp.page->mp_pages < npages))
+      return bad_page(lp.page,
+                      "too less n-pages %u for bigdata-node (%zu bytes)",
+                      lp.page->mp_pages, dsize);
   }
   return MDBX_SUCCESS;
 }
