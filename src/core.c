@@ -22384,7 +22384,7 @@ static __inline MDBX_cmp_func *get_default_datacmp(unsigned flags) {
 
 static int dbi_bind(MDBX_txn *txn, const MDBX_dbi dbi, unsigned user_flags,
                     MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp) {
-  /* LY: so, accepting only three cases for the table's flags:
+  /* Accepting only three cases:
    * 1) user_flags and both comparators are zero
    *    = assume that a by-default mode/flags is requested for reading;
    * 2) user_flags exactly the same
