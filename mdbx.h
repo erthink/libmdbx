@@ -3057,6 +3057,8 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  * it is reasonable to know some details in order to make optimal decisions
  * when choosing parameters.
  *
+ * \see mdbx_env_info_ex()
+ *
  * Both \ref mdbx_env_set_geometry() and legacy \ref mdbx_env_set_mapsize() are
  * inapplicable to read-only opened environment.
  *
@@ -3166,7 +3168,7 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  * \note Actual values may be different than your have specified because of
  * rounding to specified database page size, the system page size and/or the
  * size of the system virtual memory management unit. You can get actual values
- * by \ref mdbx_env_sync_ex() or see by using the tool `mdbx_chk` with the `-v`
+ * by \ref mdbx_env_info_ex() or see by using the tool `mdbx_chk` with the `-v`
  * option.
  *
  * Legacy \ref mdbx_env_set_mapsize() correspond to calling
