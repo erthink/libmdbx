@@ -8244,14 +8244,6 @@ __cold int mdbx_env_sync_ex(MDBX_env *env, bool force, bool nonblock) {
   return env_sync(env, force, nonblock);
 }
 
-#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
-__cold int mdbx_env_sync(MDBX_env *env) { return __inline_mdbx_env_sync(env); }
-
-__cold int mdbx_env_sync_poll(MDBX_env *env) {
-  return __inline_mdbx_env_sync_poll(env);
-}
-#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
-
 /* Back up parent txn's cursors, then grab the originals for tracking */
 static int cursor_shadow(MDBX_txn *parent, MDBX_txn *nested) {
   tASSERT(parent, parent->mt_cursors[FREE_DBI] == nullptr);
@@ -9170,13 +9162,6 @@ int mdbx_txn_renew(MDBX_txn *txn) {
   }
   return rc;
 }
-
-#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
-int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
-                   MDBX_txn **ret) {
-  return __inline_mdbx_txn_begin(env, parent, flags, ret);
-}
-#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 int mdbx_txn_set_userctx(MDBX_txn *txn, void *ctx) {
   int rc = check_txn(txn, MDBX_TXN_FINISHED);
@@ -11123,10 +11108,6 @@ static __always_inline bool check_dbi(MDBX_txn *txn, MDBX_dbi dbi,
   }
   return dbi_import(txn, dbi);
 }
-
-#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
-int mdbx_txn_commit(MDBX_txn *txn) { return __inline_mdbx_txn_commit(txn); }
-#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 /* Merge child txn into parent */
 static __inline void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
@@ -13173,10 +13154,10 @@ __cold static intptr_t get_reasonable_db_maxsize(intptr_t *cached_result) {
   return *cached_result;
 }
 
-__cold LIBMDBX_API int
-mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
-                      intptr_t size_upper, intptr_t growth_step,
-                      intptr_t shrink_threshold, intptr_t pagesize) {
+__cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
+                                 intptr_t size_now, intptr_t size_upper,
+                                 intptr_t growth_step,
+                                 intptr_t shrink_threshold, intptr_t pagesize) {
   int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -13557,28 +13538,6 @@ bailout:
     mdbx_txn_unlock(env);
   return rc;
 }
-
-#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
-__cold int mdbx_env_set_mapsize(MDBX_env *env, size_t size) {
-  return __inline_mdbx_env_set_mapsize(env, size);
-}
-
-__cold int mdbx_env_set_maxdbs(MDBX_env *env, MDBX_dbi dbs) {
-  return __inline_mdbx_env_set_maxdbs(env, dbs);
-}
-
-__cold int mdbx_env_get_maxdbs(const MDBX_env *env, MDBX_dbi *dbs) {
-  return __inline_mdbx_env_get_maxdbs(env, dbs);
-}
-
-__cold int mdbx_env_set_maxreaders(MDBX_env *env, unsigned readers) {
-  return __inline_mdbx_env_set_maxreaders(env, readers);
-}
-
-__cold int mdbx_env_get_maxreaders(const MDBX_env *env, unsigned *readers) {
-  return __inline_mdbx_env_get_maxreaders(env, readers);
-}
-#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 __cold static int alloc_page_buf(MDBX_env *env) {
   return env->me_pbuf ? MDBX_SUCCESS
@@ -15460,12 +15419,6 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
 
   return rc;
 }
-
-#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
-__cold int mdbx_env_close(MDBX_env *env) {
-  return __inline_mdbx_env_close(env);
-}
-#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 /* Search for key within a page, using binary search.
  * Returns the smallest entry larger or equal to the key.
@@ -21827,8 +21780,8 @@ __cold int mdbx_env_copy(MDBX_env *env, const char *dest_path,
   return rc;
 }
 
-LIBMDBX_API int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest_path,
-                               MDBX_copy_flags_t flags) {
+__cold int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest_path,
+                          MDBX_copy_flags_t flags) {
 #endif /* Windows */
 
   int rc = check_env(env, true);
@@ -22034,12 +21987,6 @@ __cold int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *arg) {
   return MDBX_SUCCESS;
 }
 
-#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
-__cold int mdbx_env_stat(const MDBX_env *env, MDBX_stat *stat, size_t bytes) {
-  return __inline_mdbx_env_stat(env, stat, bytes);
-}
-#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
-
 static void stat_get(const MDBX_db *db, MDBX_stat *st, size_t bytes) {
   st->ms_depth = db->md_depth;
   st->ms_branch_pages = db->md_branch_pages;
@@ -22210,13 +22157,6 @@ __cold int mdbx_dbi_dupsort_depthmask(MDBX_txn *txn, MDBX_dbi dbi,
 
   return (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
 }
-
-#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
-__cold int mdbx_env_info(const MDBX_env *env, MDBX_envinfo *info,
-                         size_t bytes) {
-  return __inline_mdbx_env_info(env, info, bytes);
-}
-#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 __cold static int fetch_envinfo_ex(const MDBX_env *env, const MDBX_txn *txn,
                                    MDBX_envinfo *arg, const size_t bytes) {
@@ -22881,12 +22821,6 @@ int mdbx_dbi_flags_ex(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
   return MDBX_SUCCESS;
 }
 
-#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
-int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags) {
-  return __inline_mdbx_dbi_flags(txn, dbi, flags);
-}
-#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
-
 static int drop_tree(MDBX_cursor *mc, const bool may_have_subDBs) {
   int rc = page_search(mc, NULL, MDBX_PS_FIRST);
   if (likely(rc == MDBX_SUCCESS)) {
@@ -23395,16 +23329,6 @@ __cold static txnid_t kick_longlived_readers(MDBX_env *env,
   }
   return oldest;
 }
-
-#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
-__cold int mdbx_env_set_syncbytes(MDBX_env *env, size_t threshold) {
-  return __inline_mdbx_env_set_syncbytes(env, threshold);
-}
-
-__cold int mdbx_env_set_syncperiod(MDBX_env *env, unsigned seconds_16dot16) {
-  return __inline_mdbx_env_set_syncperiod(env, seconds_16dot16);
-}
-#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 __cold int mdbx_env_set_hsr(MDBX_env *env, MDBX_hsr_func *hsr) {
   int rc = check_env(env, false);
@@ -24479,16 +24403,6 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
 
 /*----------------------------------------------------------------------------*/
 
-#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
-__cold MDBX_NOTHROW_CONST_FUNCTION intptr_t mdbx_limits_pgsize_min(void) {
-  return __inline_mdbx_limits_pgsize_min();
-}
-
-__cold MDBX_NOTHROW_CONST_FUNCTION intptr_t mdbx_limits_pgsize_max(void) {
-  return __inline_mdbx_limits_pgsize_max();
-}
-#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
-
 __cold intptr_t mdbx_limits_dbsize_min(intptr_t pagesize) {
   if (pagesize < 1)
     pagesize = (intptr_t)mdbx_default_pagesize();
@@ -24591,16 +24505,6 @@ uint32_t mdbx_key_from_float(const float ieee754_32bit) {
 uint32_t mdbx_key_from_ptrfloat(const float *const ieee754_32bit) {
   return float2key(ieee754_32bit);
 }
-
-#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
-MDBX_NOTHROW_CONST_FUNCTION uint64_t mdbx_key_from_int64(const int64_t i64) {
-  return __inline_mdbx_key_from_int64(i64);
-}
-
-MDBX_NOTHROW_CONST_FUNCTION uint32_t mdbx_key_from_int32(const int32_t i32) {
-  return __inline_mdbx_key_from_int32(i32);
-}
-#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 #define IEEE754_DOUBLE_MANTISSA_SIZE 52
 #define IEEE754_DOUBLE_EXPONENTA_BIAS 0x3FF
@@ -25409,6 +25313,109 @@ __cold void global_ctor(void) {
   fflush(stdout);
 #endif /* #if 0 */
 }
+
+/*------------------------------------------------------------------------------
+ * Legacy API */
+
+#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
+
+LIBMDBX_API int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent,
+                               MDBX_txn_flags_t flags, MDBX_txn **ret) {
+  return __inline_mdbx_txn_begin(env, parent, flags, ret);
+}
+
+LIBMDBX_API int mdbx_txn_commit(MDBX_txn *txn) {
+  return __inline_mdbx_txn_commit(txn);
+}
+
+LIBMDBX_API __cold int mdbx_env_stat(const MDBX_env *env, MDBX_stat *stat,
+                                     size_t bytes) {
+  return __inline_mdbx_env_stat(env, stat, bytes);
+}
+
+LIBMDBX_API __cold int mdbx_env_info(const MDBX_env *env, MDBX_envinfo *info,
+                                     size_t bytes) {
+  return __inline_mdbx_env_info(env, info, bytes);
+}
+
+LIBMDBX_API int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags) {
+  return __inline_mdbx_dbi_flags(txn, dbi, flags);
+}
+
+LIBMDBX_API __cold int mdbx_env_sync(MDBX_env *env) {
+  return __inline_mdbx_env_sync(env);
+}
+
+LIBMDBX_API __cold int mdbx_env_sync_poll(MDBX_env *env) {
+  return __inline_mdbx_env_sync_poll(env);
+}
+
+LIBMDBX_API __cold int mdbx_env_close(MDBX_env *env) {
+  return __inline_mdbx_env_close(env);
+}
+
+LIBMDBX_API __cold int mdbx_env_set_mapsize(MDBX_env *env, size_t size) {
+  return __inline_mdbx_env_set_mapsize(env, size);
+}
+
+LIBMDBX_API __cold int mdbx_env_set_maxdbs(MDBX_env *env, MDBX_dbi dbs) {
+  return __inline_mdbx_env_set_maxdbs(env, dbs);
+}
+
+LIBMDBX_API __cold int mdbx_env_get_maxdbs(const MDBX_env *env, MDBX_dbi *dbs) {
+  return __inline_mdbx_env_get_maxdbs(env, dbs);
+}
+
+LIBMDBX_API __cold int mdbx_env_set_maxreaders(MDBX_env *env,
+                                               unsigned readers) {
+  return __inline_mdbx_env_set_maxreaders(env, readers);
+}
+
+LIBMDBX_API __cold int mdbx_env_get_maxreaders(const MDBX_env *env,
+                                               unsigned *readers) {
+  return __inline_mdbx_env_get_maxreaders(env, readers);
+}
+
+LIBMDBX_API __cold int mdbx_env_set_syncbytes(MDBX_env *env, size_t threshold) {
+  return __inline_mdbx_env_set_syncbytes(env, threshold);
+}
+
+LIBMDBX_API __cold int mdbx_env_get_syncbytes(const MDBX_env *env,
+                                              size_t *threshold) {
+  return __inline_mdbx_env_get_syncbytes(env, threshold);
+}
+
+LIBMDBX_API __cold int mdbx_env_set_syncperiod(MDBX_env *env,
+                                               unsigned seconds_16dot16) {
+  return __inline_mdbx_env_set_syncperiod(env, seconds_16dot16);
+}
+
+LIBMDBX_API __cold int mdbx_env_get_syncperiod(const MDBX_env *env,
+                                               unsigned *seconds_16dot16) {
+  return __inline_mdbx_env_get_syncperiod(env, seconds_16dot16);
+}
+
+LIBMDBX_API __cold MDBX_NOTHROW_CONST_FUNCTION intptr_t
+mdbx_limits_pgsize_min(void) {
+  return __inline_mdbx_limits_pgsize_min();
+}
+
+LIBMDBX_API __cold MDBX_NOTHROW_CONST_FUNCTION intptr_t
+mdbx_limits_pgsize_max(void) {
+  return __inline_mdbx_limits_pgsize_max();
+}
+
+LIBMDBX_API MDBX_NOTHROW_CONST_FUNCTION uint64_t
+mdbx_key_from_int64(const int64_t i64) {
+  return __inline_mdbx_key_from_int64(i64);
+}
+
+LIBMDBX_API MDBX_NOTHROW_CONST_FUNCTION uint32_t
+mdbx_key_from_int32(const int32_t i32) {
+  return __inline_mdbx_key_from_int32(i32);
+}
+
+#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 /******************************************************************************/
 /* *INDENT-OFF* */
