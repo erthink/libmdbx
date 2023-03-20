@@ -4,6 +4,34 @@ ChangeLog
 English version [by Google](https://gitflic-ru.translate.goog/project/erthink/libmdbx/blob?file=ChangeLog.md&_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
+
+## v0.12.5 (поддержка и подготовка выпуска)
+
+Стабилизирующий выпуск с исправлением обнаруженных ошибок, устранением
+недочетов и опечаток.
+
+Благодарности:
+
+ - Max <maxc0d3r@protonmail.com> за сообщение о проблеме экспорта из DSO/DLL
+   устаревших функций API.
+
+Исправления:
+
+ - Поправлен экспорт из DSO/DLL устаревших функций,
+   которые заменены на inline в текущем API.
+
+Мелочи:
+
+ - Удалена дублирующая диагностика внутри `node_read_bigdata()`.
+ - Исправлены ссылки в описании `mdbx_env_set_geometry()`.
+ - Добавлен отдельный тест `extra/upsert_alldups` для специфического
+   сценария замены/перезаписи одним значением всех multi-значений
+   соответствующих ключу, т. е. замена всех «дубликатов» одним значением.
+
+
+-------------------------------------------------------------------------------
+
+
 ## v0.12.4 (Арта-333) от 2023-03-03
 
 Стабилизирующий выпуск с исправлением обнаруженных ошибок, устранением
@@ -26,7 +54,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
  - Masatoshi Fukunaga <https://gitflic.ru/user/mah0x211> за сообщение о проблеме
    `put(MDBX_UPSERT+MDBX_ALLDUPS)` для случая замены всех значений в subDb.
 
-Исправления (без корректировок новых функций):
+Исправления:
 
  - Устранен регресс после коммита 474391c83c5f81def6fdf3b0b6f5716a87b78fbf,
    приводящий к возврату ERROR_SHARING_VIOLATION в Windows при открытии БД
