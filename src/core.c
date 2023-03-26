@@ -9246,6 +9246,9 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
          (MDBX_GOOFY_MSVC_STATIC_ANALYZER && base > size) ? size : base);
   txn->mt_dbs = ptr_disp(txn, base);
   txn->mt_cursors = ptr_disp(txn->mt_dbs, sizeof(MDBX_db) * env->me_maxdbs);
+#if MDBX_DEBUG
+  txn->mt_cursors[FREE_DBI] = nullptr; /* avoid SIGSEGV in an assertion later */
+#endif                                 /* MDBX_DEBUG */
   txn->mt_dbistate = ptr_disp(txn, size - env->me_maxdbs);
   txn->mt_dbxs = env->me_dbxs; /* static */
   txn->mt_flags = flags;
