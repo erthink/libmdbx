@@ -816,7 +816,7 @@ typedef struct iovec MDBX_val;
 #endif /* ! SunOS */
 
 enum MDBX_constants {
-  /** The hard limit for DBI handles */
+  /** The hard limit for DBI handles. */
   MDBX_MAX_DBI = UINT32_C(32765),
 
   /** The maximum size of a data item. */
@@ -5519,9 +5519,9 @@ LIBMDBX_API int mdbx_env_set_hsr(MDBX_env *env, MDBX_hsr_func *hsr_callback);
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API MDBX_hsr_func *
 mdbx_env_get_hsr(const MDBX_env *env);
 
-/** \defgroup btree_traversal B-tree Traversal
- * This is internal API for mdbx_chk tool. You should avoid to use it, except
- * some extremal special cases.
+/** \defgroup chk Checking and Recovery
+ * Basically this is internal API for `mdbx_chk` tool, etc.
+ * You should avoid to use it, except some extremal special cases.
  * \ingroup c_extra
  * @{ */
 
@@ -5562,6 +5562,16 @@ MDBX_pgvisitor_func(const uint64_t pgno, const unsigned number, void *const ctx,
 LIBMDBX_API int mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
                                 void *ctx, bool dont_check_keys_ordering);
 
+/** \brief Acquires write-transaction lock.
+ * Provided for custom and/or complex locking scenarios.
+ * \returns A non-zero error value on failure and 0 on success. */
+LIBMDBX_API int mdbx_txn_lock(MDBX_env *env, bool dont_wait);
+
+/** \brief Releases write-transaction lock.
+ * Provided for custom and/or complex locking scenarios.
+ * \returns A non-zero error value on failure and 0 on success. */
+LIBMDBX_API void mdbx_txn_unlock(MDBX_env *env);
+
 /** \brief Open an environment instance using specific meta-page
  * for checking and recovery.
  *
@@ -5592,7 +5602,218 @@ LIBMDBX_API int mdbx_env_open_for_recoveryW(MDBX_env *env,
  * leg(s). */
 LIBMDBX_API int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target_meta);
 
-/** end of btree_traversal @} */
+/** \brief Флаги/опции для проверки целостности БД.
+ * \see mdbx_env_chk() */
+enum MDBX_chk_flags_t {
+  /** Режим проверки по-умолчанию, в том числе в режиме только-чтения. */
+  MDBX_CHK_DEFAULTS = 0,
+
+  /** Проверка в режиме чтения-записи, с захватом блокировки и приостановки
+   * пишущих транзакций. */
+  MDBX_CHK_READWRITE = 1,
+
+  /** Пропустить обход дерева страниц. */
+  MDBX_CHK_SKIP_BTREE_TRAVERSAL = 2,
+
+  /** Пропустить просмотр записей ключ-значение. */
+  MDBX_CHK_SKIP_KV_TRAVERSAL = 4,
+
+  /** Игнорировать порядок ключей и записей.
+   * \note Требуется при проверке унаследованных БД созданных с использованием
+   * нестандартных (пользовательских) функций сравнения ключей или значений. */
+  MDBX_CHK_IGNORE_ORDER = 8
+};
+#ifndef __cplusplus
+/** \ingroup c_opening */
+typedef enum MDBX_chk_flags_t MDBX_chk_flags_t;
+#else
+DEFINE_ENUM_FLAG_OPERATORS(MDBX_chk_flags_t)
+#endif
+
+/** \brief Уровни логирование/детализации информации,
+ * поставляемой через обратные вызовы при проверке целостности БД.
+ * \see mdbx_env_chk() */
+enum MDBX_chk_severity {
+  MDBX_chk_severity_prio_shift = 4,
+  MDBX_chk_severity_kind_mask = 0xF,
+  MDBX_chk_fatal = 0x00u,
+  MDBX_chk_error = 0x11u,
+  MDBX_chk_warning = 0x22u,
+  MDBX_chk_notice = 0x33u,
+  MDBX_chk_result = 0x44u,
+  MDBX_chk_resolution = 0x55u,
+  MDBX_chk_processing = 0x56u,
+  MDBX_chk_info = 0x67u,
+  MDBX_chk_verbose = 0x78u,
+  MDBX_chk_details = 0x89u,
+  MDBX_chk_extra = 0x9Au
+};
+
+/** \brief Стадии проверки,
+ * сообщаемые через обратные вызовы при проверке целостности БД.
+ * \see mdbx_env_chk() */
+enum MDBX_chk_stage {
+  MDBX_chk_none,
+  MDBX_chk_init,
+  MDBX_chk_lock,
+  MDBX_chk_meta,
+  MDBX_chk_traversal_tree,
+  MDBX_chk_traversal_freedb,
+  MDBX_chk_space,
+  MDBX_chk_traversal_maindb,
+  MDBX_chk_traversal_subdbs,
+  MDBX_chk_conclude,
+  MDBX_chk_unlock,
+  MDBX_chk_finalize
+};
+
+/** \brief Виртуальная строка отчета, формируемого при проверке целостности БД.
+ * \see mdbx_env_chk() */
+typedef struct MDBX_chk_line {
+  struct MDBX_chk_context *ctx;
+  uint8_t severity, scope_depth, empty;
+  char *begin, *end, *out;
+} MDBX_chk_line_t;
+
+/** \brief Проблема обнаруженная при проверке целостности БД.
+ * \see mdbx_env_chk() */
+typedef struct MDBX_chk_issue {
+  struct MDBX_chk_issue *next;
+  size_t count;
+  const char *caption;
+} MDBX_chk_issue_t;
+
+/** \brief Иерархический контекст при проверке целостности БД.
+ * \see mdbx_env_chk() */
+typedef struct MDBX_chk_scope {
+  MDBX_chk_issue_t *issues;
+  struct MDBX_chk_internal *internal;
+  const void *object;
+  enum MDBX_chk_stage stage;
+  enum MDBX_chk_severity verbosity;
+  size_t subtotal_issues;
+  union {
+    void *ptr;
+    size_t number;
+  } usr_z, usr_v, usr_o;
+} MDBX_chk_scope_t;
+
+/** \brief Пользовательский тип для привязки дополнительных данных,
+ * связанных с некоторой таблицей ключ-значение, при проверке целостности БД.
+ * \see mdbx_env_chk() */
+typedef struct MDBX_chk_user_subdb_cookie MDBX_chk_user_subdb_cookie_t;
+
+/** \brief Гистограмма с некоторой статистической информацией,
+ * собираемой при проверке целостности БД.
+ * \see mdbx_env_chk() */
+struct MDBX_chk_histogram {
+  size_t amount, count, ones, pad;
+  struct {
+    size_t begin, end, amount, count;
+  } ranges[9];
+};
+
+/** \brief Информация о некоторой таблицей ключ-значение,
+ * при проверке целостности БД.
+ * \see mdbx_env_chk() */
+typedef struct MDBX_chk_subdb {
+  MDBX_chk_user_subdb_cookie_t *cookie;
+  MDBX_val name;
+  MDBX_db_flags_t flags;
+  int id;
+
+  size_t payload_bytes, lost_bytes;
+  struct {
+    size_t all, empty, other;
+    size_t branch, leaf;
+    size_t nested_branch, nested_leaf, nested_subleaf;
+  } pages;
+  struct {
+    /// Tree deep histogram
+    struct MDBX_chk_histogram deep;
+    /// Histogram of large/overflow pages length
+    struct MDBX_chk_histogram large_pages;
+    /// Histogram of nested trees height, span length for GC
+    struct MDBX_chk_histogram nested_tree;
+    /// Keys length histogram
+    struct MDBX_chk_histogram key_len;
+    /// Values length histogram
+    struct MDBX_chk_histogram val_len;
+  } histogram;
+} MDBX_chk_subdb_t;
+
+/** \brief Контекст проверки целостности БД.
+ * \see mdbx_env_chk() */
+typedef struct MDBX_chk_context {
+  struct MDBX_chk_internal *internal;
+  MDBX_env *env;
+  MDBX_txn *txn;
+  MDBX_chk_scope_t *scope;
+  unsigned scope_nesting;
+  struct {
+    size_t total_payload_bytes;
+    size_t subdb_total, subdb_processed;
+    size_t total_unused_bytes, unused_pages;
+    size_t processed_pages, reclaimable_pages, gc_pages, alloc_pages,
+        backed_pages;
+    size_t problems_meta, tree_problems, gc_tree_problems, kv_tree_problems,
+        problems_gc, problems_kv, total_problems;
+    uint64_t steady_txnid, recent_txnid;
+    /** Указатель на массив размером subdb_total с указателями на экземпляры
+     * структур MDBX_chk_subdb_t с информацией о всех таблицах ключ-значние,
+     * включая MainDB и GC/FreeDB. */
+    const MDBX_chk_subdb_t *const *subdbs;
+  } result;
+} MDBX_chk_context_t;
+
+/** FIXME */
+typedef struct MDBX_chk_callbacks {
+  bool (*check_break)(MDBX_chk_context_t *ctx);
+  int (*scope_push)(MDBX_chk_context_t *ctx, MDBX_chk_scope_t *outer,
+                    MDBX_chk_scope_t *inner, const char *fmt, va_list args);
+  int (*scope_conclude)(MDBX_chk_context_t *ctx, MDBX_chk_scope_t *outer,
+                        MDBX_chk_scope_t *inner, int err);
+  void (*scope_pop)(MDBX_chk_context_t *ctx, MDBX_chk_scope_t *outer,
+                    MDBX_chk_scope_t *inner);
+  void (*issue)(MDBX_chk_context_t *ctx, const char *object,
+                size_t entry_number, const char *issue, const char *extra_fmt,
+                va_list extra_args);
+  MDBX_chk_user_subdb_cookie_t *(*subdb_filter)(MDBX_chk_context_t *ctx,
+                                                const MDBX_val *name,
+                                                MDBX_db_flags_t flags);
+  int (*subdb_conclude)(MDBX_chk_context_t *ctx, const MDBX_chk_subdb_t *subdb,
+                        MDBX_cursor *cursor, int err);
+  void (*subdb_dispose)(MDBX_chk_context_t *ctx, const MDBX_chk_subdb_t *subdb);
+
+  int (*subdb_handle_kv)(MDBX_chk_context_t *ctx, const MDBX_chk_subdb_t *subdb,
+                         size_t entry_number, const MDBX_val *key,
+                         const MDBX_val *value);
+
+  int (*stage_begin)(MDBX_chk_context_t *ctx, enum MDBX_chk_stage);
+  int (*stage_end)(MDBX_chk_context_t *ctx, enum MDBX_chk_stage, int err);
+
+  struct {
+    MDBX_chk_line_t *(*begin)(MDBX_chk_context_t *ctx,
+                              enum MDBX_chk_severity severity);
+    void (*flush)(MDBX_chk_line_t *);
+    void (*done)(MDBX_chk_line_t *);
+    void (*chars)(MDBX_chk_line_t *, const char *str, size_t len);
+    void (*format)(MDBX_chk_line_t *, const char *fmt, va_list args);
+    void (*size)(MDBX_chk_line_t *, const char *prefix, const uint64_t value,
+                 const char *suffix);
+  } print;
+} MDBX_chk_callbacks_t;
+
+/** FIXME */
+LIBMDBX_API int mdbx_env_chk(MDBX_env *env, const MDBX_chk_callbacks_t *cb,
+                             MDBX_chk_context_t *ctx,
+                             const enum MDBX_chk_flags_t flags,
+                             enum MDBX_chk_severity verbosity,
+                             unsigned timeout_seconds_16dot16);
+/** FIXME */
+LIBMDBX_API int mdbx_env_chk_problem(MDBX_chk_context_t *ctx);
+
+/** end of chk @} */
 
 /** end of c_api @} */
 
