@@ -3298,9 +3298,8 @@ static int __must_check_result page_split(MDBX_cursor *mc,
                                           MDBX_val *const newdata,
                                           pgno_t newpgno, const unsigned naf);
 
-static int coherency_timeout(uint64_t *timestamp, pgno_t pgno);
-static bool coherency_check_meta(const MDBX_env *env,
-                                 const volatile MDBX_meta *meta, bool report);
+static int coherency_timeout(uint64_t *timestamp, intptr_t pgno,
+                             const MDBX_env *env);
 static int __must_check_result validate_meta_copy(MDBX_env *env,
                                                   const MDBX_meta *meta,
                                                   MDBX_meta *dest);
@@ -4680,7 +4679,7 @@ static void iov_callback4dirtypages(iov_ctx_t *ctx, size_t offset, void *data,
       WARNING("catch delayed/non-arrived page %" PRIaPGNO " %s", wp->mp_pgno,
               "(workaround for incoherent flaw of unified page/buffer cache)");
       do
-        if (coherency_timeout(&ctx->coherency_timestamp, wp->mp_pgno) !=
+        if (coherency_timeout(&ctx->coherency_timestamp, wp->mp_pgno, env) !=
             MDBX_RESULT_TRUE) {
           ctx->err = MDBX_PROBLEM;
           break;
@@ -8592,20 +8591,26 @@ static bool coherency_check(const MDBX_env *env, const txnid_t txnid,
                (!freedb_mod_txnid && freedb_root &&
                 likely(magic_and_version == MDBX_DATA_MAGIC)))) {
     if (report)
-      WARNING("catch invalid %sdb.mod_txnid %" PRIaTXN
-              " for meta_txnid %" PRIaTXN " %s",
-              "free", freedb_mod_txnid, txnid,
-              "(workaround for incoherent flaw of unified page/buffer cache)");
+      WARNING(
+          "catch invalid %sdb.mod_txnid %" PRIaTXN " for meta_txnid %" PRIaTXN
+          " %s",
+          "free", freedb_mod_txnid, txnid,
+          (env->me_stuck_meta < 0)
+              ? "(workaround for incoherent flaw of unified page/buffer cache)"
+              : "(wagering meta)");
     ok = false;
   }
   if (unlikely(txnid < maindb_mod_txnid ||
                (!maindb_mod_txnid && maindb_root &&
                 likely(magic_and_version == MDBX_DATA_MAGIC)))) {
     if (report)
-      WARNING("catch invalid %sdb.mod_txnid %" PRIaTXN
-              " for meta_txnid %" PRIaTXN " %s",
-              "main", maindb_mod_txnid, txnid,
-              "(workaround for incoherent flaw of unified page/buffer cache)");
+      WARNING(
+          "catch invalid %sdb.mod_txnid %" PRIaTXN " for meta_txnid %" PRIaTXN
+          " %s",
+          "main", maindb_mod_txnid, txnid,
+          (env->me_stuck_meta < 0)
+              ? "(workaround for incoherent flaw of unified page/buffer cache)"
+              : "(wagering meta)");
     ok = false;
   }
   if (likely(freedb_root && freedb_mod_txnid)) {
@@ -8615,11 +8620,12 @@ static bool coherency_check(const MDBX_env *env, const txnid_t txnid,
     const txnid_t root_txnid = freedb_root->mp_txnid;
     if (unlikely(root_txnid != freedb_mod_txnid)) {
       if (report)
-        WARNING(
-            "catch invalid root_page %" PRIaPGNO " mod_txnid %" PRIaTXN
-            " for %sdb.mod_txnid %" PRIaTXN " %s",
-            freedb_root_pgno, root_txnid, "free", freedb_mod_txnid,
-            "(workaround for incoherent flaw of unified page/buffer cache)");
+        WARNING("catch invalid root_page %" PRIaPGNO " mod_txnid %" PRIaTXN
+                " for %sdb.mod_txnid %" PRIaTXN " %s",
+                freedb_root_pgno, root_txnid, "free", freedb_mod_txnid,
+                (env->me_stuck_meta < 0) ? "(workaround for incoherent flaw of "
+                                           "unified page/buffer cache)"
+                                         : "(wagering meta)");
       ok = false;
     }
   }
@@ -8630,11 +8636,12 @@ static bool coherency_check(const MDBX_env *env, const txnid_t txnid,
     const txnid_t root_txnid = maindb_root->mp_txnid;
     if (unlikely(root_txnid != maindb_mod_txnid)) {
       if (report)
-        WARNING(
-            "catch invalid root_page %" PRIaPGNO " mod_txnid %" PRIaTXN
-            " for %sdb.mod_txnid %" PRIaTXN " %s",
-            maindb_root_pgno, root_txnid, "main", maindb_mod_txnid,
-            "(workaround for incoherent flaw of unified page/buffer cache)");
+        WARNING("catch invalid root_page %" PRIaPGNO " mod_txnid %" PRIaTXN
+                " for %sdb.mod_txnid %" PRIaTXN " %s",
+                maindb_root_pgno, root_txnid, "main", maindb_mod_txnid,
+                (env->me_stuck_meta < 0) ? "(workaround for incoherent flaw of "
+                                           "unified page/buffer cache)"
+                                         : "(wagering meta)");
       ok = false;
     }
   }
@@ -8646,15 +8653,16 @@ static bool coherency_check(const MDBX_env *env, const txnid_t txnid,
   return ok;
 }
 
-__cold static int coherency_timeout(uint64_t *timestamp, pgno_t pgno) {
+__cold static int coherency_timeout(uint64_t *timestamp, intptr_t pgno,
+                                    const MDBX_env *env) {
   if (likely(timestamp && *timestamp == 0))
     *timestamp = osal_monotime();
   else if (unlikely(!timestamp || osal_monotime() - *timestamp >
                                       osal_16dot16_to_monotime(65536 / 10))) {
-    if (pgno)
-      ERROR("bailout waiting for %" PRIaPGNO " page arrival %s", pgno,
+    if (pgno >= 0 && pgno != env->me_stuck_meta)
+      ERROR("bailout waiting for %" PRIuSIZE " page arrival %s", pgno,
             "(workaround for incoherent flaw of unified page/buffer cache)");
-    else
+    else if (env->me_stuck_meta < 0)
       ERROR("bailout waiting for valid snapshot (%s)",
             "workaround for incoherent flaw of unified page/buffer cache");
     return MDBX_PROBLEM;
@@ -8675,23 +8683,25 @@ __cold static int coherency_timeout(uint64_t *timestamp, pgno_t pgno) {
 
 /* check with timeout as the workaround
  * for https://libmdbx.dqdkfa.ru/dead-github/issues/269 */
-__hot static int coherency_check_readed(const MDBX_env *env,
-                                        const txnid_t txnid,
-                                        const volatile MDBX_db *dbs,
-                                        const volatile MDBX_meta *meta,
-                                        uint64_t *timestamp) {
-  const bool report = !(timestamp && *timestamp);
-  if (unlikely(!coherency_check(env, txnid, dbs, meta, report)))
-    return coherency_timeout(timestamp, 0);
+__hot static int coherency_check_head(MDBX_txn *txn, const meta_ptr_t head,
+                                      uint64_t *timestamp) {
+  /* Copy the DB info and flags */
+  txn->mt_geo = head.ptr_v->mm_geo;
+  memcpy(txn->mt_dbs, head.ptr_c->mm_dbs, CORE_DBS * sizeof(MDBX_db));
+  txn->mt_canary = head.ptr_v->mm_canary;
+
+  if (unlikely(!coherency_check(txn->mt_env, head.txnid, txn->mt_dbs,
+                                head.ptr_v, *timestamp == 0)))
+    return coherency_timeout(timestamp, -1, txn->mt_env);
   return MDBX_SUCCESS;
 }
 
 static int coherency_check_written(const MDBX_env *env, const txnid_t txnid,
                                    const volatile MDBX_meta *meta,
-                                   uint64_t *timestamp) {
+                                   const intptr_t pgno, uint64_t *timestamp) {
   const bool report = !(timestamp && *timestamp);
   const txnid_t head_txnid = meta_txnid(meta);
-  if (unlikely(head_txnid < MIN_TXNID || (head_txnid < txnid))) {
+  if (unlikely(head_txnid < MIN_TXNID || head_txnid < txnid)) {
     if (report) {
       env->me_lck->mti_pgop_stat.incoherence.weak =
           (env->me_lck->mti_pgop_stat.incoherence.weak >= INT32_MAX)
@@ -8702,16 +8712,18 @@ static int coherency_check_written(const MDBX_env *env, const txnid_t txnid,
               bytes2pgno(env, ptr_dist(meta, env->me_map)),
               "(workaround for incoherent flaw of unified page/buffer cache)");
     }
-    return coherency_timeout(timestamp, 0);
+    return coherency_timeout(timestamp, pgno, env);
   }
-  return coherency_check_readed(env, head_txnid, meta->mm_dbs, meta, timestamp);
+  if (unlikely(!coherency_check(env, head_txnid, meta->mm_dbs, meta, report)))
+    return coherency_timeout(timestamp, pgno, env);
+  return MDBX_SUCCESS;
 }
 
-static bool coherency_check_meta(const MDBX_env *env,
+static bool check_meta_coherency(const MDBX_env *env,
                                  const volatile MDBX_meta *meta, bool report) {
   uint64_t timestamp = 0;
-  return coherency_check_written(env, 0, meta, report ? &timestamp : nullptr) ==
-         MDBX_SUCCESS;
+  return coherency_check_written(env, 0, meta, -1,
+                                 report ? &timestamp : nullptr) == MDBX_SUCCESS;
 }
 
 /* Common code for mdbx_txn_begin() and mdbx_txn_renew(). */
@@ -8823,10 +8835,6 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
 
       /* Snap the state from current meta-head */
       txn->mt_txnid = head.txnid;
-      txn->mt_geo = head.ptr_v->mm_geo;
-      memcpy(txn->mt_dbs, head.ptr_c->mm_dbs, CORE_DBS * sizeof(MDBX_db));
-      txn->mt_canary = head.ptr_v->mm_canary;
-
       if (likely(env->me_stuck_meta < 0) &&
           unlikely(meta_should_retry(env, &troika) ||
                    head.txnid < atomic_load64(&env->me_lck->mti_oldest_reader,
@@ -8844,8 +8852,7 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
         continue;
       }
 
-      rc = coherency_check_readed(env, head.txnid, txn->mt_dbs, head.ptr_v,
-                                  &timestamp);
+      rc = coherency_check_head(txn, head, &timestamp);
       jitter4testing(false);
       if (likely(rc == MDBX_SUCCESS))
         break;
@@ -8915,14 +8922,12 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
     const meta_ptr_t head = meta_recent(env, &txn->tw.troika);
     uint64_t timestamp = 0;
     while ("workaround for https://libmdbx.dqdkfa.ru/dead-github/issues/269") {
-      rc = coherency_check_readed(env, head.txnid, head.ptr_v->mm_dbs,
-                                  head.ptr_v, &timestamp);
+      rc = coherency_check_head(txn, head, &timestamp);
       if (likely(rc == MDBX_SUCCESS))
         break;
       if (unlikely(rc != MDBX_RESULT_TRUE))
         goto bailout;
     }
-    txn->mt_canary = head.ptr_c->mm_canary;
     eASSERT(env, meta_txnid(head.ptr_v) == head.txnid);
     txn->mt_txnid = safe64_txnid_next(head.txnid);
     if (unlikely(txn->mt_txnid > MAX_TXNID)) {
@@ -8947,10 +8952,6 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
     env->me_txn = txn;
     txn->mt_numdbs = env->me_numdbs;
     memcpy(txn->mt_dbiseqs, env->me_dbiseqs, txn->mt_numdbs * sizeof(unsigned));
-    /* Copy the DB info and flags */
-    memcpy(txn->mt_dbs, head.ptr_c->mm_dbs, CORE_DBS * sizeof(MDBX_db));
-    /* Moved to here to avoid a data race in read TXNs */
-    txn->mt_geo = head.ptr_c->mm_geo;
 
     if ((txn->mt_flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC) {
       rc = dpl_alloc(txn);
@@ -12493,7 +12494,7 @@ __cold static MDBX_page *meta_model(const MDBX_env *env, MDBX_page *model,
   model_meta->mm_dbs[MAIN_DBI].md_root = P_INVALID;
   meta_set_txnid(env, model_meta, MIN_TXNID + num);
   unaligned_poke_u64(4, model_meta->mm_sign, meta_sign(model_meta));
-  eASSERT(env, coherency_check_meta(env, model_meta, true));
+  eASSERT(env, check_meta_coherency(env, model_meta, true));
   return ptr_disp(model, env->me_psize);
 }
 
@@ -12664,7 +12665,7 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
                 goto fail;
               }
               meta_set_txnid(env, pending, txnid);
-              eASSERT(env, coherency_check_meta(env, pending, true));
+              eASSERT(env, check_meta_coherency(env, pending, true));
             }
           }
         }
@@ -12710,7 +12711,7 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
     rc = (flags & MDBX_SAFE_NOSYNC) ? MDBX_RESULT_TRUE /* carry non-steady */
                                     : MDBX_RESULT_FALSE /* carry steady */;
   }
-  eASSERT(env, coherency_check_meta(env, pending, true));
+  eASSERT(env, check_meta_coherency(env, pending, true));
 
   /* Steady or Weak */
   if (rc == MDBX_RESULT_FALSE /* carry steady */) {
@@ -12815,7 +12816,7 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
       /* LY: 'commit' the meta */
       meta_update_end(env, target, unaligned_peek_u64(4, pending->mm_txnid_b));
       jitter4testing(true);
-      eASSERT(env, coherency_check_meta(env, target, true));
+      eASSERT(env, check_meta_coherency(env, target, true));
     } else {
       /* dangerous case (target == head), only mm_sign could
        * me updated, check assertions once again */
@@ -12888,8 +12889,9 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
 
   uint64_t timestamp = 0;
   while ("workaround for https://libmdbx.dqdkfa.ru/dead-github/issues/269") {
-    rc =
-        coherency_check_written(env, pending->unsafe_txnid, target, &timestamp);
+    rc = coherency_check_written(env, pending->unsafe_txnid, target,
+                                 bytes2pgno(env, ptr_dist(target, env->me_map)),
+                                 &timestamp);
     if (likely(rc == MDBX_SUCCESS))
       break;
     if (unlikely(rc != MDBX_RESULT_TRUE))
@@ -12918,7 +12920,7 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
                     pending->mm_geo.upper, impilict_shrink);
     if (rc != MDBX_SUCCESS && rc != MDBX_EPERM)
       goto fail;
-    eASSERT(env, coherency_check_meta(env, target, true));
+    eASSERT(env, check_meta_coherency(env, target, true));
   }
 
   MDBX_lockinfo *const lck = env->me_lck_mmap.lck;
@@ -13412,7 +13414,6 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
     ENSURE(env, pagesize == (intptr_t)env->me_psize);
     MDBX_meta meta;
     memset(&meta, 0, sizeof(meta));
-    const MDBX_geo *current_geo;
     if (!inside_txn) {
       eASSERT(env, need_unlock);
       const meta_ptr_t head = meta_recent(env, &env->me_txn0->tw.troika);
@@ -13420,14 +13421,13 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
       uint64_t timestamp = 0;
       while ("workaround for "
              "https://libmdbx.dqdkfa.ru/dead-github/issues/269") {
-        meta = *head.ptr_c;
-        rc = coherency_check_readed(env, head.txnid, meta.mm_dbs, &meta,
-                                    &timestamp);
+        rc = coherency_check_head(env->me_txn0, head, &timestamp);
         if (likely(rc == MDBX_SUCCESS))
           break;
         if (unlikely(rc != MDBX_RESULT_TRUE))
           goto bailout;
       }
+      meta = *head.ptr_c;
       const txnid_t txnid = safe64_txnid_next(head.txnid);
       if (unlikely(txnid > MAX_TXNID)) {
         rc = MDBX_TXN_FULL;
@@ -13435,11 +13435,10 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
         goto bailout;
       }
       meta_set_txnid(env, &meta, txnid);
-      current_geo = &meta.mm_geo;
-    } else {
-      current_geo = &env->me_txn->mt_geo;
     }
 
+    const MDBX_geo *const current_geo =
+        &(env->me_txn ? env->me_txn : env->me_txn0)->mt_geo;
     /* update env-geo to avoid influences */
     env->me_dbgeo.now = pgno2bytes(env, current_geo->now);
     env->me_dbgeo.lower = pgno2bytes(env, current_geo->lower);
@@ -14345,9 +14344,9 @@ __cold static int __must_check_result override_meta(MDBX_env *env,
   MDBX_meta *const model = page_meta(page);
   meta_set_txnid(env, model, txnid);
   if (txnid)
-    eASSERT(env, coherency_check_meta(env, model, true));
+    eASSERT(env, check_meta_coherency(env, model, true));
   if (shape) {
-    if (txnid && unlikely(!coherency_check_meta(env, shape, false))) {
+    if (txnid && unlikely(!check_meta_coherency(env, shape, false))) {
       ERROR("bailout overriding meta-%zu since model failed "
             "freedb/maindb %s-check for txnid #%" PRIaTXN,
             target, "pre", constmeta_txnid(shape));
@@ -14371,7 +14370,7 @@ __cold static int __must_check_result override_meta(MDBX_env *env,
            model->mm_dbs[MAIN_DBI].md_root != P_INVALID))
         memcpy(&model->mm_magic_and_version, &shape->mm_magic_and_version,
                sizeof(model->mm_magic_and_version));
-      if (unlikely(!coherency_check_meta(env, model, false))) {
+      if (unlikely(!check_meta_coherency(env, model, false))) {
         ERROR("bailout overriding meta-%zu since model failed "
               "freedb/maindb %s-check for txnid #%" PRIaTXN,
               target, "post", txnid);
