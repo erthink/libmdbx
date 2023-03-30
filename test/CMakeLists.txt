@@ -71,6 +71,16 @@ if(UNIX AND NOT SUBPROJECT)
   add_executable(test_extra_upsert_alldups extra/upsert_alldups.c)
   target_include_directories(test_extra_upsert_alldups PRIVATE "${PROJECT_SOURCE_DIR}")
   target_link_libraries(test_extra_upsert_alldups ${TOOL_MDBX_LIB})
+
+  if(MDBX_BUILD_CXX)
+    add_executable(test_extra_maindb_ordinal extra/maindb_ordinal.c++)
+    target_include_directories(test_extra_maindb_ordinal PRIVATE "${PROJECT_SOURCE_DIR}")
+    target_link_libraries(test_extra_maindb_ordinal ${TOOL_MDBX_LIB})
+    if(MDBX_CXX_STANDARD)
+      set_target_properties(test_extra_maindb_ordinal PROPERTIES
+        CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
+    endif()
+  endif()
 endif()
 
 ################################################################################
