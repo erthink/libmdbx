@@ -22406,6 +22406,10 @@ static int dbi_bind(MDBX_txn *txn, const MDBX_dbi dbi, unsigned user_flags,
       /* make sure flags changes get committed */
       txn->mt_dbs[dbi].md_flags = user_flags & DB_PERSISTENT_FLAGS;
       txn->mt_flags |= MDBX_TXN_DIRTY;
+      /* обнуляем компараторы для установки в соответствии с флагами,
+       * либо заданных пользователем */
+      txn->mt_dbxs[dbi].md_cmp = nullptr;
+      txn->mt_dbxs[dbi].md_dcmp = nullptr;
     } else {
       return /* FIXME: return extended info */ MDBX_INCOMPATIBLE;
     }
