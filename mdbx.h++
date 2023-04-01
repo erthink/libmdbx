@@ -356,6 +356,9 @@ class cursor_managed;
      __cpp_lib_memory_resource >= 201603L && _GLIBCXX_USE_CXX11_ABI)
 /// \brief Default polymorphic allocator for modern code.
 using polymorphic_allocator = ::std::pmr::string::allocator_type;
+using default_allocator = polymorphic_allocator;
+#else
+using default_allocator = legacy_allocator;
 #endif /* __cpp_lib_memory_resource >= 201603L */
 
 /// \brief Default singe-byte string.

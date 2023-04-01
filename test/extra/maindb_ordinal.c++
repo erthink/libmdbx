@@ -13,7 +13,7 @@ int main(int argc, const char *argv[]) {
                         mdbx::env::operate_parameters());
 
   using buffer =
-      mdbx::buffer<mdbx::polymorphic_allocator, mdbx::default_capacity_policy>;
+      mdbx::buffer<mdbx::default_allocator, mdbx::default_capacity_policy>;
   auto txn = env.start_write();
   auto map = txn.create_map(nullptr, mdbx::key_mode::ordinal,
                             mdbx::value_mode::single);
