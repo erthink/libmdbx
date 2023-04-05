@@ -37,6 +37,7 @@ int main(int argc, const char *argv[]) {
 
   txn = env.start_read();
   auto cursor = txn.open_cursor(map);
+#if defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L
   if (cursor.to_first().value.string_view() == "a" &&
       cursor.to_next().value.string_view() == "b" &&
       cursor.to_next().value.string_view() == "c" &&
@@ -47,9 +48,12 @@ int main(int argc, const char *argv[]) {
       cursor.to_next().value.string_view() == "h" &&
       !cursor.to_next(false).done && cursor.eof()) {
     std::cout << "OK\n";
-    return 0;
+    return EXIT_SUCCESS;
   }
-
   std::cerr << "Fail\n";
   return EXIT_FAILURE;
+#else
+  std::cerr << "Skipped since no std::string_view\n";
+  return EXIT_SUCCESS;
+#endif /* __cpp_lib_string_view >= 201606L */
 }
