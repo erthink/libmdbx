@@ -43,7 +43,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 -------------------------------------------------------------------------------
 
 
-## v0.12.4 (Арта-333) от 2023-03-03
+## v0.12.4 "Арта-333" от 2023-03-03
 
 Стабилизирующий выпуск с исправлением обнаруженных ошибок, устранением
 недочетов и технических долгов. Ветка 0.12 считается готовой к
@@ -122,7 +122,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 -------------------------------------------------------------------------------
 
 
-## v0.12.3 (Акула) от 2023-01-07
+## v0.12.3 "Акула" от 2023-01-07
 
 Выпуск с существенными доработками и новой функциональностью в память о закрытом open-source
 [проекте "Акула"](https://erigon.substack.com/p/winding-down-support-for-akula-project).
@@ -265,7 +265,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 -------------------------------------------------------------------------------
 
 
-## v0.12.2 (Иван Ярыгин) от 2022-11-11
+## v0.12.2 "Иван Ярыгин" от 2022-11-11
 
 Выпуск с существенными доработками и новой функциональностью
 в память о российском борце [Иване Сергеевиче Ярыгине](https://ru.wikipedia.org/wiki/Ярыгин,_Иван_Сергеевич).
@@ -413,7 +413,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 Мелочи:
 
  - Исторические ссылки cвязанные с удалённым на ~~github~~ проектом  перенаправлены на [web.archive.org](https://web.archive.org/web/https://github.com/erthink/libmdbx).
- - Синхронизированны конструкции CMake между проектами.
+ - Синхронизированы конструкции CMake между проектами.
  - Добавлено предупреждение о небезопасности RISC-V.
  - Добавлено описание параметров `MDBX_debug_func` и `MDBX_debug_func`.
  - Добавлено обходное решение для минимизации ложно-положительных
@@ -435,7 +435,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 -------------------------------------------------------------------------------
 
 
-## v0.12.1 (Positive Proxima) at 2022-08-24
+## v0.12.1 "Positive Proxima" at 2022-08-24
 
 The planned frontward release with new superior features on the day of 20 anniversary of [Positive Technologies](https://ptsecurty.com).
 
@@ -477,10 +477,54 @@ Fixes:
 Not a release but preparation for changing feature set and API.
 
 
+===============================================================================
+
+
+## v0.11.14 "Sergey Kapitsa" at 2023-02-14
+
+The stable bugfix release in memory of [Sergey Kapitsa](https://en.wikipedia.org/wiki/Sergey_Kapitsa) on his 95th birthday.
+
+```
+22 files changed, 250 insertions(+), 174 deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
+```
+
+Fixes:
+ - backport: Fixed insignificant typo of `||` inside `#if` byte-order condition.
+ - backport: Fixed `SIGSEGV` or an erroneous call to `free()` in situations where
+   errors occur when reopening by `mdbx_env_open()` of a previously used
+   environment.
+ - backport: Fixed `cursor_put_nochecklen()` internals for case when dupsort'ed named subDb
+   contains a single key with multiple values (aka duplicates), which are replaced
+   with a single value by put-operation with the `MDBX_UPSERT+MDBX_ALLDUPS` flags.
+   In this case, the database becomes completely empty, without any pages.
+   However exactly this condition was not considered and thus wasn't handled correctly.
+   See [issue#8](https://gitflic.ru/project/erthink/libmdbx/issue/8) for more information.
+ - backport: Fixed extra assertion inside `override_meta()`, which could
+   lead to false-positive failing of the assertion in a debug builds during
+   DB recovery and auto-rollback.
+ - backport: Refined the `__cold`/`__hot` macros to avoid the
+   `error: inlining failed in call to ‘always_inline FOO(...)’: target specific option mismatch`
+   issue during build using GCC >10.x for SH4 arch.
+
+Minors:
+
+ - backport: Using the https://libmdbx.dqdkfa.ru/dead-github
+   for resources deleted by the Github' administration.
+ - backport: Fixed English typos.
+ - backport: Fixed proto of `__asan_default_options()`.
+ - backport: Fixed doxygen-description of C++ API, especially of C++20 concepts.
+ - backport: Refined `const` and `noexcept` for few C++ API methods.
+ - backport: Fixed copy&paste typo of "Getting started".
+ - backport: Update MithrilDB status.
+ - backport: Resolve false-posirive `used uninitialized` warning from GCC >10.x
+   while build for SH4 arch.
+
+
 -------------------------------------------------------------------------------
 
 
-## v0.11.13 at (Swashplate) 2022-11-10
+## v0.11.13 at "Swashplate" 2022-11-10
 
 The stable bugfix release in memory of [Boris Yuryev](https://ru.wikipedia.org/wiki/Юрьев,_Борис_Николаевич) on his 133rd birthday.
 
@@ -508,7 +552,10 @@ Minors:
  - Use `--dont-check-ram-size` for small-tests make-targets (backport).
 
 
-## v0.11.12 (Эребуни) at 2022-10-12
+-------------------------------------------------------------------------------
+
+
+## v0.11.12 "Эребуни" at 2022-10-12
 
 The stable bugfix release.
 
@@ -530,7 +577,10 @@ Minors:
  - Removed needless `LockFileEx()` inside `mdbx_env_copy()` (backport).
 
 
-## v0.11.11 (Тендра-1790) at 2022-09-11
+-------------------------------------------------------------------------------
+
+
+## v0.11.11 "Тендра-1790" at 2022-09-11
 
 The stable bugfix release.
 
@@ -546,7 +596,10 @@ Fixes:
  - Fixed derived C++ builds by removing `MDBX_INTERNAL_FUNC` for `mdbx_w2mb()` and `mdbx_mb2w()`.
 
 
-## v0.11.10 (the TriColor) at 2022-08-22
+-------------------------------------------------------------------------------
+
+
+## v0.11.10 "the TriColor" at 2022-08-22
 
 The stable bugfix release.
 
@@ -576,8 +629,10 @@ Minors:
  - Minor clarified `iov_page()` failure case.
 
 
+-------------------------------------------------------------------------------
 
-## v0.11.9 (Чирчик-1992) at 2022-08-02
+
+## v0.11.9 "Чирчик-1992" at 2022-08-02
 
 The stable bugfix release.
 
@@ -586,7 +641,7 @@ The stable bugfix release.
 Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 ```
 
-Acknowledgements:
+Acknowledgments:
 
  - [Alex Sharov](https://github.com/AskAlexSharov) and Erigon team for reporting and testing.
  - [Andrew Ashikhmin](https://gitflic.ru/user/yperbasis) for contributing.
@@ -618,11 +673,11 @@ Minors:
 -------------------------------------------------------------------------------
 
 
-## v0.11.8 (Baked Apple) at 2022-06-12
+## v0.11.8 "Baked Apple" at 2022-06-12
 
 The stable release with an important fixes and workaround for the critical macOS thread-local-storage issue.
 
-Acknowledgements:
+Acknowledgments:
 
  - [Masatoshi Fukunaga](https://github.com/mah0x211) for [Lua bindings](https://github.com/mah0x211/lua-libmdbx).
 
@@ -671,7 +726,7 @@ Minors:
 -------------------------------------------------------------------------------
 
 
-## v0.11.7 (Resurrected Sarmat) at 2022-04-22
+## v0.11.7 "Resurrected Sarmat" at 2022-04-22
 
 The stable risen release after the Github's intentional malicious disaster.
 
@@ -717,7 +772,7 @@ Minors:
  - Switched to using `MDBX_EPERM` instead of `MDBX_RESULT_TRUE` to indicate that the geometry cannot be updated.
  - Added `NULL` checking during memory allocation inside `mdbx_chk`.
  - Resolved all warnings from MinGW while used without CMake.
- - Added inheretable `target_include_directories()` to `CMakeLists.txt` for easy integration.
+ - Added inheritable `target_include_directories()` to `CMakeLists.txt` for easy integration.
  - Added build-time checks and paranoid runtime assertions for the `off_t` arguments of `fcntl()` which are used for locking.
  - Added `-Wno-lto-type-mismatch` to avoid false-positive warnings from old GCC during LTO-enabled builds.
  - Added checking for TID (system thread id) to avoid hang on 32-bit Bionic/Android within `pthread_mutex_lock()`.
@@ -734,7 +789,7 @@ The stable release with the complete workaround for an incoherence flaw of Linux
 Nonetheless the cause for this trouble may be an issue of Intel CPU cache/MESI.
 See [issue#269](https://libmdbx.dqdkfa.ru/dead-github/issues/269) for more information.
 
-Acknowledgements:
+Acknowledgments:
 
  - [David Bouyssié](https://github.com/david-bouyssie) for [Scala bindings](https://github.com/david-bouyssie/mdbx4s).
  - [Michelangelo Riccobene](https://github.com/mriccobene) for reporting and testing.
@@ -754,12 +809,15 @@ Minors:
  - Clarified error messages of a signature/version mismatch.
 
 
+-------------------------------------------------------------------------------
+
+
 ## v0.11.5 at 2022-02-23
 
 The release with the temporary hotfix for a flaw of Linux unified page/buffer cache.
 See [issue#269](https://libmdbx.dqdkfa.ru/dead-github/issues/269) for more information.
 
-Acknowledgements:
+Acknowledgments:
 
  - [Simon Leier](https://github.com/leisim) for reporting and testing.
  - [Kai Wetlesen](https://github.com/kaiwetlesen) for [RPMs](http://copr.fedorainfracloud.org/coprs/kwetlesen/libmdbx/).
@@ -783,11 +841,14 @@ Minors:
  - Minor fixes Doxygen references, comments, descriptions, etc.
 
 
+-------------------------------------------------------------------------------
+
+
 ## v0.11.4 at 2022-02-02
 
 The stable release with fixes for large and huge databases sized of 4..128 TiB.
 
-Acknowledgements:
+Acknowledgments:
 
  - [Ledgerwatch](https://github.com/ledgerwatch), [Binance](https://github.com/binance-chain) and [Positive Technologies](https://www.ptsecurity.com/) teams for reporting, assistance in investigation and testing.
  - [Alex Sharov](https://github.com/AskAlexSharov) for reporting, testing and provide resources for remote debugging/investigation.
@@ -828,9 +889,12 @@ Minors:
  - Using the `-fno-semantic interposition` option to reduce the overhead to calling self own public functions.
 
 
+-------------------------------------------------------------------------------
+
+
 ## v0.11.3 at 2021-12-31
 
-Acknowledgements:
+Acknowledgments:
 
  - [gcxfd <i@rmw.link>](https://github.com/gcxfd) for reporting, contributing and testing.
  - [장세연 (Чан Се Ен)](https://github.com/sasgas) for reporting and testing.
@@ -861,9 +925,12 @@ Minors:
  - For compatibility reverted returning `MDBX_ENODATA`for some cases.
 
 
+-------------------------------------------------------------------------------
+
+
 ## v0.11.2 at 2021-12-02
 
-Acknowledgements:
+Acknowledgments:
 
  - [장세연 (Чан Се Ен)](https://github.com/sasgas) for contributing to C++ API.
  - [Alain Picard](https://github.com/castortech) for [Java bindings](https://github.com/castortech/mdbxjni).
@@ -887,6 +954,9 @@ Minors:
  - Remove unneeded `#undef P_DIRTY`.
 
 
+-------------------------------------------------------------------------------
+
+
 ## v0.11.1 at 2021-10-23
 
 ### Backward compatibility break:
@@ -901,12 +971,12 @@ This change is mostly invisible:
  - previously versions are unable to read/write a new DBs;
  - but the new release is able to handle an old DBs and will silently upgrade ones.
 
-Acknowledgements:
+Acknowledgments:
 
  - [Alex Sharov](https://github.com/AskAlexSharov) for reporting and testing.
 
 
--------------------------------------------------------------------------------
+===============================================================================
 
 
 ## v0.10.5 at 2021-10-13 (obsolete, please use v0.11.1)
@@ -919,7 +989,7 @@ Unfortunately, the `v0.10.5` accidentally comes not full-compatible with previou
 This cannot be fixed, as it requires fixing past versions, which as a result we will just get a current version.
 Therefore, it is recommended to use `v0.11.1` instead of `v0.10.5`.
 
-Acknowledgements:
+Acknowledgments:
 
  - [Noel Kuntze](https://github.com/Thermi) for immediately bug reporting.
 
@@ -935,9 +1005,12 @@ Minors:
  - Refined providing information for the `@MAIN` and `@GC` sub-databases of a last committed modification transaction's ID.
 
 
+-------------------------------------------------------------------------------
+
+
 ## v0.10.4 at 2021-10-10
 
-Acknowledgements:
+Acknowledgments:
 
  - [Artem Vorotnikov](https://github.com/vorot93) for support [Rust wrapper](https://github.com/vorot93/libmdbx-rs).
  - [Andrew Ashikhmin](https://github.com/yperbasis) for contributing to C++ API.
@@ -955,9 +1028,12 @@ Minors:
  - In debugging builds fixed a too small (single page) by default DB shrink threshold.
 
 
+-------------------------------------------------------------------------------
+
+
 ## v0.10.3 at 2021-08-27
 
-Acknowledgements:
+Acknowledgments:
 
  - [Francisco Vallarino](https://github.com/fjvallarino) for [Haskell bindings for libmdbx](https://hackage.haskell.org/package/libmdbx).
  - [Alex Sharov](https://github.com/AskAlexSharov) for reporting and testing.
@@ -983,9 +1059,12 @@ Minors:
  - Fixed CMake warning about compatibility with 3.8.2
 
 
+-------------------------------------------------------------------------------
+
+
 ## v0.10.2 at 2021-07-26
 
-Acknowledgements:
+Acknowledgments:
 
  - [Alex Sharov](https://github.com/AskAlexSharov) for reporting and testing.
  - [Andrea Lanfranchi](https://github.com/AndreaLanfranchi) for reporting bugs.
@@ -1030,9 +1109,12 @@ Fixes:
  - Fixed [test framework keygen-related issue](https://libmdbx.dqdkfa.ru/dead-github/issues/127).
 
 
+-------------------------------------------------------------------------------
+
+
 ## v0.10.1 at 2021-06-01
 
-Acknowledgements:
+Acknowledgments:
 
  - [Alexey Akhunov](https://github.com/AlexeyAkhunov) and [Alex Sharov](https://github.com/AskAlexSharov) for bug reporting and testing.
  - [Andrea Lanfranchi](https://github.com/AndreaLanfranchi) for bug reporting and testing related to WSL2.
@@ -1054,9 +1136,12 @@ Fixes:
  - Re-Fixed WSL1/WSL2 detection with distinguishing (https://libmdbx.dqdkfa.ru/dead-github/issues/97).
 
 
+-------------------------------------------------------------------------------
+
+
 ## v0.10.0 at 2021-05-09
 
-Acknowledgements:
+Acknowledgments:
 
  - [Mahlon E. Smith](https://github.com/mahlonsmith) for [Ruby bindings](https://rubygems.org/gems/mdbx/).
  - [Alex Sharov](https://github.com/AskAlexSharov) for [mdbx-go](https://github.com/torquem-ch/mdbx-go), bug reporting and testing.
@@ -1140,12 +1225,12 @@ Fixes:
  - Fixed building by MinGW for Windows (https://libmdbx.dqdkfa.ru/dead-github/issues/155).
 
 
--------------------------------------------------------------------------------
+===============================================================================
 
 
 ## v0.9.3 at 2021-02-02
 
-Acknowledgements:
+Acknowledgments:
 
  - [Mahlon E. Smith](http://www.martini.nu/) for [FreeBSD port of libmdbx](https://svnweb.freebsd.org/ports/head/databases/mdbx/).
  - [장세연](http://www.castis.com) for bug fixing and PR.
@@ -1201,9 +1286,12 @@ Fixes:
  - Fixed operation on systems with unusual small/large page size, including PowerPC (https://libmdbx.dqdkfa.ru/dead-github/issues/157).
 
 
+-------------------------------------------------------------------------------
+
+
 ## v0.9.2 at 2020-11-27
 
-Acknowledgements:
+Acknowledgments:
 
  - Jens Alfke (Mobile Architect at [Couchbase](https://www.couchbase.com/)) for [NimDBX](https://github.com/snej/nimdbx).
  - Clément Renault (CTO at [MeiliSearch](https://www.meilisearch.com/)) for [mdbx-rs](https://github.com/Kerollmops/mdbx-rs).
@@ -1249,6 +1337,9 @@ Fixes:
  - Added workaround for Wine (https://github.com/miranda-ng/miranda-ng/issues/1209).
  - Fixed `ERROR_NOT_SUPPORTED` while opening DB by UNC pathnames (https://github.com/miranda-ng/miranda-ng/issues/2627).
  - Added handling `EXCEPTION_POSSIBLE_DEADLOCK` condition for Windows.
+
+
+-------------------------------------------------------------------------------
 
 
 ## v0.9.1 2020-09-30
@@ -1297,6 +1388,9 @@ Fixes:
  - Now C++ compiler optional for building by CMake.
 
 
+-------------------------------------------------------------------------------
+
+
 ## v0.9.0 2020-07-31 (not a release, but API changes)
 
 Added features:
@@ -1310,7 +1404,7 @@ Deprecated functions and flags:
    Please use the value-to-key functions to provide keys that are compatible with the built-in libmdbx comparators.
 
 
--------------------------------------------------------------------------------
+===============================================================================
 
 
 ## 2020-07-06
@@ -1450,6 +1544,8 @@ Deprecated functions and flags:
  - API description.
  - Checking for non-local filesystems to avoid DB corruption.
 
--------------------------------------------------------------------------------
+
+===============================================================================
+
 
 For early changes see the git commit history.
