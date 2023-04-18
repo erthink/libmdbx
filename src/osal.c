@@ -316,17 +316,16 @@ MDBX_INTERNAL_FUNC int osal_vasprintf(char **strp, const char *fmt,
                                       va_list ap) {
   va_list ones;
   va_copy(ones, ap);
-  int needed = vsnprintf(nullptr, 0, fmt, ap);
+  const int needed = vsnprintf(nullptr, 0, fmt, ones);
+  va_end(ones);
 
   if (unlikely(needed < 0 || needed >= INT_MAX)) {
     *strp = nullptr;
-    va_end(ones);
     return needed;
   }
 
   *strp = osal_malloc(needed + (size_t)1);
   if (unlikely(*strp == nullptr)) {
-    va_end(ones);
 #if defined(_WIN32) || defined(_WIN64)
     SetLastError(MDBX_ENOMEM);
 #else
@@ -335,9 +334,7 @@ MDBX_INTERNAL_FUNC int osal_vasprintf(char **strp, const char *fmt,
     return -1;
   }
 
-  int actual = vsnprintf(*strp, needed + (size_t)1, fmt, ones);
-  va_end(ones);
-
+  const int actual = vsnprintf(*strp, needed + (size_t)1, fmt, ap);
   assert(actual == needed);
   if (unlikely(actual < 0)) {
     osal_free(*strp);
@@ -351,7 +348,7 @@ MDBX_INTERNAL_FUNC int osal_vasprintf(char **strp, const char *fmt,
 MDBX_INTERNAL_FUNC int osal_asprintf(char **strp, const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  int rc = osal_vasprintf(strp, fmt, ap);
+  const int rc = osal_vasprintf(strp, fmt, ap);
   va_end(ap);
   return rc;
 }
