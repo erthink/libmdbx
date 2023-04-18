@@ -5,10 +5,15 @@ English version [by Google](https://gitflic-ru.translate.goog/project/erthink/li
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
 
-## v0.12.5 (поддержка и подготовка выпуска)
+## v0.12.5 "Динамо" от 2023-04-18
 
-Стабилизирующий выпуск с исправлением обнаруженных ошибок, устранением
-недочетов и опечаток.
+Стабилизирующий выпуск с исправлением обнаруженных ошибок и устранением
+недочетов, в день 100-летнего юбилея спортивного общества [«Динамо»](https://ru.wikipedia.org/wiki/Динамо_(спортивное_общество)).
+
+```
+16 files changed, 686 insertions(+), 247 deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
+```
 
 Благодарности:
 
