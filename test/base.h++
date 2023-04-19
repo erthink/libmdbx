@@ -111,8 +111,8 @@
 
 #ifdef _MSC_VER
 #pragma warning(pop)
-#pragma warning(disable : 4201) /* nonstandard extension used :                \
-                                   nameless struct / union */
+#pragma warning(disable : 4201) /* nonstandard extension used: nameless        \
+                                   struct/union */
 #pragma warning(disable : 4127) /* conditional expression is constant */
 #if _MSC_VER < 1900
 #pragma warning(disable : 4510) /* default constructor could                   \

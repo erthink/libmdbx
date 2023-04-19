@@ -6799,7 +6799,7 @@ static pgno_t *(*scan4seq_impl)(pgno_t *range, const size_t len,
 
 static pgno_t *scan4seq_resolver(pgno_t *range, const size_t len,
                                  const size_t seq) {
-  pgno_t *(*choice)(pgno_t * range, const size_t len, const size_t seq) =
+  pgno_t *(*choice)(pgno_t *range, const size_t len, const size_t seq) =
       nullptr;
 #if __has_builtin(__builtin_cpu_init) || defined(__BUILTIN_CPU_INIT__) ||      \
     __GNUC_PREREQ(4, 8)
@@ -16719,7 +16719,7 @@ static int cursor_last(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
 
 static __hot int cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
                             MDBX_cursor_op op) {
-  int (*mfunc)(MDBX_cursor * mc, MDBX_val * key, MDBX_val * data);
+  int (*mfunc)(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data);
   int rc;
 
   switch (op) {

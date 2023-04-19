@@ -591,11 +591,11 @@ concept ImmutableByteProducer = requires(const T &a, char array[42]) {
  *  \interface SliceTranscoder
  *  \brief SliceTranscoder C++20 concept */
 template <typename T>
-concept SliceTranscoder = ImmutableByteProducer<T> &&
-    requires(const slice &source, const T &a) {
-  T(source);
-  { a.is_erroneous() } -> std::same_as<bool>;
-};
+concept SliceTranscoder =
+    ImmutableByteProducer<T> && requires(const slice &source, const T &a) {
+      T(source);
+      { a.is_erroneous() } -> std::same_as<bool>;
+    };
 
 #endif /* MDBX_HAVE_CXX20_CONCEPTS */
 
