@@ -3400,8 +3400,8 @@ static int __must_check_result setup_dbx(MDBX_dbx *const dbx,
                                          const MDBX_db *const db,
                                          const unsigned pagesize);
 
-static __inline MDBX_cmp_func *get_default_keycmp(unsigned flags);
-static __inline MDBX_cmp_func *get_default_datacmp(unsigned flags);
+static __inline MDBX_cmp_func *get_default_keycmp(MDBX_db_flags_t flags);
+static __inline MDBX_cmp_func *get_default_datacmp(MDBX_db_flags_t flags);
 
 __cold const char *mdbx_liberr2str(int errnum) {
   /* Table of descriptions for MDBX errors */
@@ -17889,7 +17889,7 @@ static __hot int cursor_put_checklen(MDBX_cursor *mc, const MDBX_val *key,
 }
 
 int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
-                    unsigned flags) {
+                    MDBX_put_flags_t flags) {
   if (unlikely(mc == NULL || key == NULL || data == NULL))
     return MDBX_EINVAL;
 
@@ -21016,7 +21016,7 @@ done:
 }
 
 int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
-             unsigned flags) {
+             MDBX_put_flags_t flags) {
   int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -21431,7 +21431,8 @@ __cold static void meta_make_sizeable(MDBX_meta *meta) {
 /* Copy environment with compaction. */
 __cold static int env_compact(MDBX_env *env, MDBX_txn *read_txn,
                               mdbx_filehandle_t fd, uint8_t *buffer,
-                              const bool dest_is_pipe, const int flags) {
+                              const bool dest_is_pipe,
+                              const MDBX_copy_flags_t flags) {
   const size_t meta_bytes = pgno2bytes(env, NUM_METAS);
   uint8_t *const data_buffer =
       buffer + ceil_powerof2(meta_bytes, env->me_os_psize);
@@ -21578,7 +21579,8 @@ __cold static int env_compact(MDBX_env *env, MDBX_txn *read_txn,
 /* Copy environment as-is. */
 __cold static int env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
                                 mdbx_filehandle_t fd, uint8_t *buffer,
-                                const bool dest_is_pipe, const int flags) {
+                                const bool dest_is_pipe,
+                                const MDBX_copy_flags_t flags) {
   /* We must start the actual read txn after blocking writers */
   int rc = txn_end(read_txn, MDBX_END_RESET_TMP);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -21704,7 +21706,7 @@ __cold static int env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
 }
 
 __cold int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
-                            unsigned flags) {
+                            MDBX_copy_flags_t flags) {
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -22367,13 +22369,13 @@ __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
   }
 }
 
-static __inline MDBX_cmp_func *get_default_keycmp(unsigned flags) {
+static __inline MDBX_cmp_func *get_default_keycmp(MDBX_db_flags_t flags) {
   return (flags & MDBX_REVERSEKEY)   ? cmp_reverse
          : (flags & MDBX_INTEGERKEY) ? cmp_int_align2
                                      : cmp_lexical;
 }
 
-static __inline MDBX_cmp_func *get_default_datacmp(unsigned flags) {
+static __inline MDBX_cmp_func *get_default_datacmp(MDBX_db_flags_t flags) {
   return !(flags & MDBX_DUPSORT)
              ? cmp_lenfast
              : ((flags & MDBX_INTEGERDUP)
@@ -23220,7 +23222,8 @@ __cold MDBX_INTERNAL_FUNC int cleanup_dead_readers(MDBX_env *env,
   return rc;
 }
 
-__cold int mdbx_setup_debug(int level, int flags, MDBX_debug_func *logger) {
+__cold int mdbx_setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags,
+                            MDBX_debug_func *logger) {
   const int rc = runtime_flags | (loglevel << 16);
 
   if (level != MDBX_LOG_DONTCHANGE)
@@ -24671,11 +24674,11 @@ int64_t mdbx_int64_from_key(const MDBX_val v) {
                    UINT64_C(0x8000000000000000));
 }
 
-__cold MDBX_cmp_func *mdbx_get_keycmp(unsigned flags) {
+__cold MDBX_cmp_func *mdbx_get_keycmp(MDBX_db_flags_t flags) {
   return get_default_keycmp(flags);
 }
 
-__cold MDBX_cmp_func *mdbx_get_datacmp(unsigned flags) {
+__cold MDBX_cmp_func *mdbx_get_datacmp(MDBX_db_flags_t flags) {
   return get_default_datacmp(flags);
 }
 
