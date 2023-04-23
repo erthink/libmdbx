@@ -5,6 +5,14 @@ English version [by Google](https://gitflic-ru.translate.goog/project/erthink/li
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
 
+## v0.13.0 at 2023-04-23
+
+Не выпуск, а начало ветки `0.13` с новым функционалом и изменением API.
+
+
+********************************************************************************
+
+
 ## v0.12.8 (сопровождение и подготовка к релизу)
 
 Поддержка стабильной ветки.
@@ -21,6 +29,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 
 
 ## v0.12.8 "Владимир Уткин" от 2023-10-17
+
 
 Стабилизирующий выпуск с исправлением обнаруженных ошибок и устранением недочетов,
 в день 100-летия со дня рождения выдающегося советского и российского ученого и конструктора [Влади́мира Фёдоровича У́ткина](https://ru.wikipedia.org/wiki/Уткин,_Владимир_Фёдорович).
