@@ -2571,9 +2571,7 @@ struct MDBX_envinfo {
   uint64_t mi_latter_reader_txnid; /**< ID of the last reader transaction */
   uint64_t mi_self_latter_reader_txnid; /**< ID of the last reader transaction
                                            of caller process */
-  uint64_t mi_meta0_txnid, mi_meta0_sign;
-  uint64_t mi_meta1_txnid, mi_meta1_sign;
-  uint64_t mi_meta2_txnid, mi_meta2_sign;
+  uint64_t mi_meta_txnid[3], mi_meta_sign[3];
   uint32_t mi_maxreaders;   /**< Total reader slots in the environment */
   uint32_t mi_numreaders;   /**< Max reader slots used in the environment */
   uint32_t mi_dxb_pagesize; /**< Database pagesize */
@@ -2590,7 +2588,7 @@ struct MDBX_envinfo {
   struct {
     struct {
       uint64_t x, y;
-    } current, meta0, meta1, meta2;
+    } current, meta[3];
   } mi_bootid;
 
   /** Bytes not explicitly synchronized to disk */
@@ -5525,43 +5523,6 @@ mdbx_env_get_hsr(const MDBX_env *env);
  * \ingroup c_extra
  * @{ */
 
-/** \brief Page types for traverse the b-tree.
- * \see mdbx_env_pgwalk() \see MDBX_pgvisitor_func */
-enum MDBX_page_type_t {
-  MDBX_page_broken,
-  MDBX_page_meta,
-  MDBX_page_large,
-  MDBX_page_branch,
-  MDBX_page_leaf,
-  MDBX_page_dupfixed_leaf,
-  MDBX_subpage_leaf,
-  MDBX_subpage_dupfixed_leaf,
-  MDBX_subpage_broken,
-};
-#ifndef __cplusplus
-typedef enum MDBX_page_type_t MDBX_page_type_t;
-#endif
-
-/** \brief Pseudo-name for MainDB */
-#define MDBX_PGWALK_MAIN ((void *)((ptrdiff_t)0))
-/** \brief Pseudo-name for GarbageCollectorDB */
-#define MDBX_PGWALK_GC ((void *)((ptrdiff_t)-1))
-/** \brief Pseudo-name for MetaPages */
-#define MDBX_PGWALK_META ((void *)((ptrdiff_t)-2))
-
-/** \brief Callback function for traverse the b-tree. \see mdbx_env_pgwalk() */
-typedef int
-MDBX_pgvisitor_func(const uint64_t pgno, const unsigned number, void *const ctx,
-                    const int deep, const MDBX_val *dbi_name,
-                    const size_t page_size, const MDBX_page_type_t type,
-                    const MDBX_error_t err, const size_t nentries,
-                    const size_t payload_bytes, const size_t header_bytes,
-                    const size_t unused_bytes) MDBX_CXX17_NOEXCEPT;
-
-/** \brief B-tree traversal function. */
-LIBMDBX_API int mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
-                                void *ctx, bool dont_check_keys_ordering);
-
 /** \brief Acquires write-transaction lock.
  * Provided for custom and/or complex locking scenarios.
  * \returns A non-zero error value on failure and 0 on success. */
@@ -5718,6 +5679,14 @@ struct MDBX_chk_histogram {
  * \see mdbx_env_chk() */
 typedef struct MDBX_chk_subdb {
   MDBX_chk_user_subdb_cookie_t *cookie;
+
+/** \brief Pseudo-name for MainDB */
+#define MDBX_CHK_MAIN ((void *)((ptrdiff_t)0))
+/** \brief Pseudo-name for GarbageCollectorDB */
+#define MDBX_CHK_GC ((void *)((ptrdiff_t)-1))
+/** \brief Pseudo-name for MetaPages */
+#define MDBX_CHK_META ((void *)((ptrdiff_t)-2))
+
   MDBX_val name;
   MDBX_db_flags_t flags;
   int id;
@@ -5749,7 +5718,7 @@ typedef struct MDBX_chk_context {
   MDBX_env *env;
   MDBX_txn *txn;
   MDBX_chk_scope_t *scope;
-  unsigned scope_nesting;
+  uint8_t scope_nesting;
   struct {
     size_t total_payload_bytes;
     size_t subdb_total, subdb_processed;
@@ -5776,7 +5745,7 @@ typedef struct MDBX_chk_callbacks {
   void (*scope_pop)(MDBX_chk_context_t *ctx, MDBX_chk_scope_t *outer,
                     MDBX_chk_scope_t *inner);
   void (*issue)(MDBX_chk_context_t *ctx, const char *object,
-                size_t entry_number, const char *issue, const char *extra_fmt,
+                uint64_t entry_number, const char *issue, const char *extra_fmt,
                 va_list extra_args);
   MDBX_chk_user_subdb_cookie_t *(*subdb_filter)(MDBX_chk_context_t *ctx,
                                                 const MDBX_val *name,
@@ -5792,16 +5761,14 @@ typedef struct MDBX_chk_callbacks {
   int (*stage_begin)(MDBX_chk_context_t *ctx, enum MDBX_chk_stage);
   int (*stage_end)(MDBX_chk_context_t *ctx, enum MDBX_chk_stage, int err);
 
-  struct {
-    MDBX_chk_line_t *(*begin)(MDBX_chk_context_t *ctx,
-                              enum MDBX_chk_severity severity);
-    void (*flush)(MDBX_chk_line_t *);
-    void (*done)(MDBX_chk_line_t *);
-    void (*chars)(MDBX_chk_line_t *, const char *str, size_t len);
-    void (*format)(MDBX_chk_line_t *, const char *fmt, va_list args);
-    void (*size)(MDBX_chk_line_t *, const char *prefix, const uint64_t value,
-                 const char *suffix);
-  } print;
+  MDBX_chk_line_t *(*print_begin)(MDBX_chk_context_t *ctx,
+                                  enum MDBX_chk_severity severity);
+  void (*print_flush)(MDBX_chk_line_t *);
+  void (*print_done)(MDBX_chk_line_t *);
+  void (*print_chars)(MDBX_chk_line_t *, const char *str, size_t len);
+  void (*print_format)(MDBX_chk_line_t *, const char *fmt, va_list args);
+  void (*print_size)(MDBX_chk_line_t *, const char *prefix,
+                     const uint64_t value, const char *suffix);
 } MDBX_chk_callbacks_t;
 
 /** FIXME */

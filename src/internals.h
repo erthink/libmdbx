@@ -703,7 +703,8 @@ typedef struct MDBX_page {
 
 #define PAGETYPE_WHOLE(p) ((uint8_t)(p)->mp_flags)
 
-/* Drop legacy P_DIRTY flag for sub-pages for compatilibity */
+/* Drop legacy P_DIRTY flag for sub-pages for compatilibity,
+ * for assertions only. */
 #define PAGETYPE_COMPAT(p)                                                     \
   (unlikely(PAGETYPE_WHOLE(p) & P_SUBP)                                        \
        ? PAGETYPE_WHOLE(p) & ~(P_SUBP | P_LEGACY_DIRTY)                        \
@@ -1136,10 +1137,10 @@ typedef struct troika {
 #if MDBX_WORDBITS > 32 /* Workaround for false-positives from Valgrind */
   uint32_t unused_pad;
 #endif
-#define TROIKA_HAVE_STEADY(troika) ((troika)->fsm & 7)
-#define TROIKA_STRICT_VALID(troika) ((troika)->tail_and_flags & 64)
-#define TROIKA_VALID(troika) ((troika)->tail_and_flags & 128)
-#define TROIKA_TAIL(troika) ((troika)->tail_and_flags & 3)
+#define TROIKA_HAVE_STEADY(troika) ((troika)->fsm & 7u)
+#define TROIKA_STRICT_VALID(troika) ((troika)->tail_and_flags & 64u)
+#define TROIKA_VALID(troika) ((troika)->tail_and_flags & 128u)
+#define TROIKA_TAIL(troika) ((troika)->tail_and_flags & 3u)
   txnid_t txnid[NUM_METAS];
 } meta_troika_t;
 
@@ -1787,3 +1788,33 @@ MDBX_MAYBE_UNUSED static void static_checks(void) {
           (size_t)(size), __LINE__);                                           \
     ASAN_UNPOISON_MEMORY_REGION(addr, size);                                   \
   } while (0)
+
+/******************************************************************************/
+
+/** \brief Page types for traverse the b-tree.
+ * \see mdbx_env_pgwalk() \see MDBX_pgvisitor_func */
+enum MDBX_page_type_t {
+  MDBX_page_broken,
+  MDBX_page_large,
+  MDBX_page_branch,
+  MDBX_page_leaf,
+  MDBX_page_dupfixed_leaf,
+  MDBX_subpage_leaf,
+  MDBX_subpage_dupfixed_leaf,
+  MDBX_subpage_broken,
+};
+typedef enum MDBX_page_type_t MDBX_page_type_t;
+
+typedef struct MDBX_walk_sdb {
+  MDBX_val name;
+  struct MDBX_db *internal, *nested;
+} MDBX_walk_sdb_t;
+
+/** \brief Callback function for traverse the b-tree. \see mdbx_env_pgwalk() */
+typedef int
+MDBX_pgvisitor_func(const size_t pgno, const unsigned number, void *const ctx,
+                    const int deep, const MDBX_walk_sdb_t *subdb,
+                    const size_t page_size, const MDBX_page_type_t page_type,
+                    const MDBX_error_t err, const size_t nentries,
+                    const size_t payload_bytes, const size_t header_bytes,
+                    const size_t unused_bytes);
