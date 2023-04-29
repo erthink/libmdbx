@@ -4,15 +4,24 @@ ChangeLog
 English version [by Google](https://gitflic-ru.translate.goog/project/erthink/libmdbx/blob?file=ChangeLog.md&_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
-## v0.12.6 (сопровождение и подготовка к релизу)
 
-Поддержка стабильной ветки.
+## v0.12.6 "ЦСКА" от 2023-04-29
+
+Стабилизирующий выпуск с исправлением обнаруженных ошибок и устранением
+недочетов, в день 100-летнего юбилея спортивного клуба [«ЦСКА»](https://ru.wikipedia.org/wiki/Центральный_спортивный_клуб_Армии).
+
+```
+14 files changed, 117 insertions(+), 83 deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
+```
 
 Мелочи:
 
  - Обновление патча для старых версий buildroot.
  - Использование clang-format-16.
- - Использование enum-типов вместо int для устранения предупреждений GCC 13.
+ - Использование `enum`-типов вместо `int` для устранения предупреждений GCC 13,
+   что могло ломать сборку в Fedora 38.
+
 
 --------------------------------------------------------------------------------
 
