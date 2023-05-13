@@ -5134,7 +5134,7 @@ inline filehandle env::get_filehandle() const {
 }
 
 inline MDBX_env_flags_t env::get_flags() const {
-  unsigned bits;
+  unsigned bits = 0;
   error::success_or_throw(::mdbx_env_get_flags(handle_, &bits));
   return MDBX_env_flags_t(bits);
 }
