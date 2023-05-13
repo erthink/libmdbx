@@ -12,8 +12,8 @@
 #include <unistd.h>
 
 static int dump(MDBX_cursor *cur) {
-  MDBX_val key = {};
-  MDBX_val data = {};
+  MDBX_val key = {NULL, 0};
+  MDBX_val data = {NULL, 0};
   int rc = mdbx_cursor_get(cur, &key, &data, MDBX_FIRST);
 
   while (rc == 0) {
@@ -25,15 +25,14 @@ static int dump(MDBX_cursor *cur) {
 }
 
 static int clear(MDBX_cursor *cur) {
-  MDBX_val key = {};
-  MDBX_val data = {};
+  MDBX_val key = {NULL, 0};
+  MDBX_val data = {NULL, 0};
   int rc = mdbx_cursor_get(cur, &key, &data, MDBX_FIRST);
 
   while (rc == 0) {
     rc = mdbx_cursor_del(cur, MDBX_ALLDUPS);
-    if (rc) {
+    if (rc)
       return rc;
-    }
     rc = mdbx_cursor_get(cur, &key, &data, MDBX_NEXT);
   }
   return (rc == MDBX_NOTFOUND) ? 0 : rc;
