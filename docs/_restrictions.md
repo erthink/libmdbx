@@ -35,10 +35,11 @@ or debugging of a client application while retaining an active read
 transaction. LMDB this results in `MDB_MAP_FULL` error and subsequent write
 performance degradation.
 
-MDBX mostly solve "long-lived" readers issue by using the Handle-Slow-Readers
-\ref MDBX_hsr_func callback which allows to abort long-lived read transactions,
-and using the \ref MDBX_LIFORECLAIM mode which addresses subsequent performance degradation.
-The "next" version of libmdbx (\ref MithrilDB) will completely solve this.
+MDBX mostly solve "long-lived" readers issue by using the
+Handle-Slow-Readers \ref MDBX_hsr_func callback which allows to abort
+long-lived read transactions, and using the \ref MDBX_LIFORECLAIM mode
+which addresses subsequent performance degradation. The "next" version
+of libmdbx (\ref MithrilDB) will completely solve this.
 
 - Avoid suspending a process with active transactions. These would then be
   "long-lived" as above.
@@ -80,6 +81,19 @@ list of pages to be retired.
 
 Both of these issues will be addressed in MithrilDB.
 
+#### Since v0.12.1 and later
+Some aspects related to GC have been refined and improved, in particular:
+
+  - The search for free consecutive/adjacent pages through GC has been
+    significantly speeded, including acceleration using
+    NOEN/SSE2/AVX2/AVX512 instructions.
+
+  - The `Big Foot` feature which significantly reduces GC overhead for
+    processing large lists of retired pages from huge transactions. Now
+    libmdbx avoid creating large chunks of PNLs (page number lists) which
+    required a long sequences of free pages, aka large/overflow pages. Thus
+    avoiding searching, allocating and storing such sequences inside GC.
+
 
 ## Space reservation
 An MDBX database configuration will often reserve considerable unused
@@ -87,6 +101,10 @@ memory address space and maybe file size for future growth. This does
 not use actual memory or disk space, but users may need to understand
 the difference so they won't be scared off.
 
+However, on 64-bit systems with a relative small amount of RAM, such
+reservation can deplete system resources (trigger ENOMEM error, etc)
+when setting an inadequately large upper DB size using \ref
+mdbx_env_set_geometry() or \ref mdbx::env::geometry. So just avoid this.
 
 ## Remote filesystems
 Do not use MDBX databases on remote filesystems, even between processes
