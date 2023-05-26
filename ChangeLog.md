@@ -17,6 +17,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
  - Устранение причины ложно-позитивного предупреждения новых версий GCC в C++ API.
  - Исправление ссылки на репозиторий бенчмарка ioarena.
  - Добавление перекрестных ссылок в doxygen-документацию по C++ API.
+ - уточнение ограничений в разделе [Restrictions & Caveats](https://libmdbx.dqdkfa.ru/intro.html#restrictions).
 
 
 --------------------------------------------------------------------------------
@@ -500,7 +501,7 @@ New:
  - Added the `gcrtime_seconds16dot16` counter to the "Page Operation Statistics" that accumulates time spent for GC searching and reclaiming.
  - Copy-with-compactification now clears/zeroes unused gaps inside database pages.
  - The `C` and `C++` APIs has been extended and/or refined to simplify using `wchar_t` pathnames.
-   On Windows the `mdbx_env_openW()`, ``mdbx_env_get_pathW()`()`, `mdbx_env_copyW()`, `mdbx_env_open_for_recoveryW()` are available for now,
+   On Windows the `mdbx_env_openW()`, `mdbx_env_get_pathW()`, `mdbx_env_copyW()`, `mdbx_env_open_for_recoveryW()` are available for now,
    but the `mdbx_env_get_path()` has been replaced in favor of `mdbx_env_get_pathW()`.
  - Added explicit error message for Buildroot's Microblaze toolchain maintainers.
  - Added `MDBX_MANAGE_BUILD_FLAGS` build options for CMake.
