@@ -4031,7 +4031,7 @@ LIBMDBX_API int mdbx_txn_renew(MDBX_txn *txn);
 /** \brief The fours integers markers (aka "canary") associated with the
  * environment.
  * \ingroup c_crud
- * \see mdbx_canary_set()
+ * \see mdbx_canary_put()
  * \see mdbx_canary_get()
  *
  * The `x`, `y` and `z` values could be set by \ref mdbx_canary_put(), while the
@@ -4069,10 +4069,10 @@ LIBMDBX_API int mdbx_canary_put(MDBX_txn *txn, const MDBX_canary *canary);
 /** \brief Returns fours integers markers (aka "canary") associated with the
  * environment.
  * \ingroup c_crud
- * \see mdbx_canary_set()
+ * \see mdbx_canary_put()
  *
  * \param [in] txn     A transaction handle returned by \ref mdbx_txn_begin().
- * \param [in] canary  The address of an MDBX_canary structure where the
+ * \param [in] canary  The address of an \ref MDBX_canary structure where the
  *                     information will be copied.
  *
  * \returns A non-zero error value on failure and 0 on success. */

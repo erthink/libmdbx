@@ -3002,7 +3002,8 @@ public:
 
   /// \brief Database geometry for size management.
   /// \see env_managed::create_parameters
-  /// \see env_managed::env_managed(const ::std::string &pathname, const create_parameters &, const operate_parameters &, bool accede)
+  /// \see env_managed::env_managed(const ::std::string &pathname, const
+  /// create_parameters &, const operate_parameters &, bool accede)
 
   struct LIBMDBX_API_TYPE geometry {
     enum : int64_t {
@@ -3662,7 +3663,8 @@ public:
                        bool accede = true);
 
   /// \brief Additional parameters for creating a new database.
-  /// \see env_managed(const ::std::string &pathname, const create_parameters &, const operate_parameters &, bool accede)
+  /// \see env_managed(const ::std::string &pathname, const create_parameters &,
+  /// const operate_parameters &, bool accede)
   struct create_parameters {
     env::geometry geometry;
     mdbx_mode_t file_mode_bits{0640};
