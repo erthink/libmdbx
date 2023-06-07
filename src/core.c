@@ -14443,7 +14443,7 @@ __cold int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target) {
   for (size_t n = 0; n < NUM_METAS; ++n) {
     if (n == target)
       continue;
-    MDBX_meta meta = *METAPAGE(env, target);
+    MDBX_meta meta = *METAPAGE(env, n);
     if (validate_meta(env, &meta, pgno2page(env, n), (pgno_t)n, nullptr) !=
         MDBX_SUCCESS) {
       int err = override_meta(env, n, 0, nullptr);
