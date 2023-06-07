@@ -13933,7 +13933,12 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
     }
 
     const meta_ptr_t recent = meta_recent(env, &troika);
-    if (memcmp(&header.mm_geo, &recent.ptr_c->mm_geo, sizeof(header.mm_geo))) {
+    if (/* не учитываем различия в geo.next */
+        header.mm_geo.grow_pv != recent.ptr_c->mm_geo.grow_pv ||
+        header.mm_geo.shrink_pv != recent.ptr_c->mm_geo.shrink_pv ||
+        header.mm_geo.lower != recent.ptr_c->mm_geo.lower ||
+        header.mm_geo.upper != recent.ptr_c->mm_geo.upper ||
+        header.mm_geo.now != recent.ptr_c->mm_geo.now) {
       if ((env->me_flags & MDBX_RDONLY) != 0 ||
           /* recovery mode */ env->me_stuck_meta >= 0) {
         WARNING("skipped update meta.geo in %s mode: from l%" PRIaPGNO
