@@ -6472,27 +6472,47 @@ MDBX_MAYBE_UNUSED static __always_inline size_t __builtin_clzl(size_t value) {
 #define MDBX_ATTRIBUTE_TARGET(target) __attribute__((__target__(target)))
 #endif /* MDBX_ATTRIBUTE_TARGET */
 
-#if defined(__SSE2__)
+#ifndef MDBX_GCC_FASTMATH_i686_SIMD_WORKAROUND
+/* Workaround for GCC's bug with `-m32 -march=i686 -Ofast`
+ * gcc/i686-buildroot-linux-gnu/12.2.0/include/xmmintrin.h:814:1:
+ *     error: inlining failed in call to 'always_inline' '_mm_movemask_ps':
+ *            target specific option mismatch */
+#if !defined(__FAST_MATH__) || !__FAST_MATH__ || !defined(__GNUC__) ||         \
+    defined(__e2k__) || defined(__clang__) || defined(__amd64__) ||            \
+    defined(__SSE2__)
+#define MDBX_GCC_FASTMATH_i686_SIMD_WORKAROUND 0
+#else
+#define MDBX_GCC_FASTMATH_i686_SIMD_WORKAROUND 1
+#endif
+#endif /* MDBX_GCC_FASTMATH_i686_SIMD_WORKAROUND */
+
+#if defined(__SSE2__) && defined(__SSE__)
 #define MDBX_ATTRIBUTE_TARGET_SSE2 /* nope */
 #elif (defined(_M_IX86_FP) && _M_IX86_FP >= 2) || defined(__amd64__)
 #define __SSE2__
 #define MDBX_ATTRIBUTE_TARGET_SSE2 /* nope */
-#elif defined(MDBX_ATTRIBUTE_TARGET) && defined(__ia32__)
-#define MDBX_ATTRIBUTE_TARGET_SSE2 MDBX_ATTRIBUTE_TARGET("sse2")
+#elif defined(MDBX_ATTRIBUTE_TARGET) && defined(__ia32__) &&                   \
+    !MDBX_GCC_FASTMATH_i686_SIMD_WORKAROUND
+#define MDBX_ATTRIBUTE_TARGET_SSE2 MDBX_ATTRIBUTE_TARGET("sse,sse2")
 #endif /* __SSE2__ */
 
 #if defined(__AVX2__)
 #define MDBX_ATTRIBUTE_TARGET_AVX2 /* nope */
-#elif defined(MDBX_ATTRIBUTE_TARGET) && defined(__ia32__)
-#define MDBX_ATTRIBUTE_TARGET_AVX2 MDBX_ATTRIBUTE_TARGET("avx2")
+#elif defined(MDBX_ATTRIBUTE_TARGET) && defined(__ia32__) &&                   \
+    !MDBX_GCC_FASTMATH_i686_SIMD_WORKAROUND
+#define MDBX_ATTRIBUTE_TARGET_AVX2 MDBX_ATTRIBUTE_TARGET("sse,sse2,avx,avx2")
 #endif /* __AVX2__ */
 
+#if defined(MDBX_ATTRIBUTE_TARGET_AVX2)
 #if defined(__AVX512BW__)
 #define MDBX_ATTRIBUTE_TARGET_AVX512BW /* nope */
 #elif defined(MDBX_ATTRIBUTE_TARGET) && defined(__ia32__) &&                   \
+    !MDBX_GCC_FASTMATH_i686_SIMD_WORKAROUND &&                                 \
     (__GNUC_PREREQ(6, 0) || __CLANG_PREREQ(5, 0))
-#define MDBX_ATTRIBUTE_TARGET_AVX512BW MDBX_ATTRIBUTE_TARGET("avx512bw")
+#define MDBX_ATTRIBUTE_TARGET_AVX512BW                                         \
+  MDBX_ATTRIBUTE_TARGET("sse,sse2,avx,avx2,avx512bw")
 #endif /* __AVX512BW__ */
+#endif /* MDBX_ATTRIBUTE_TARGET_AVX2 for MDBX_ATTRIBUTE_TARGET_AVX512BW */
 
 #ifdef MDBX_ATTRIBUTE_TARGET_SSE2
 MDBX_ATTRIBUTE_TARGET_SSE2 static __always_inline unsigned
@@ -6566,6 +6586,15 @@ diffcmp2mask_avx2(const pgno_t *const ptr, const ptrdiff_t offset,
   return _mm256_movemask_ps(*(const __m256 *)&cmp);
 }
 
+MDBX_ATTRIBUTE_TARGET_AVX2 static __always_inline unsigned
+diffcmp2mask_sse2avx(const pgno_t *const ptr, const ptrdiff_t offset,
+                     const __m128i pattern) {
+  const __m128i f = _mm_loadu_si128((const __m128i *)ptr);
+  const __m128i l = _mm_loadu_si128((const __m128i *)(ptr + offset));
+  const __m128i cmp = _mm_cmpeq_epi32(_mm_sub_epi32(f, l), pattern);
+  return _mm_movemask_ps(*(const __m128 *)&cmp);
+}
+
 MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_AVX2 static pgno_t *
 scan4seq_avx2(pgno_t *range, const size_t len, const size_t seq) {
   assert(seq > 0 && len > seq);
@@ -6611,7 +6640,7 @@ scan4seq_avx2(pgno_t *range, const size_t len, const size_t seq) {
   }
 #endif /* __SANITIZE_ADDRESS__ */
   if (range - 3 > detent) {
-    mask = diffcmp2mask_sse2(range - 3, offset, *(const __m128i *)&pattern);
+    mask = diffcmp2mask_sse2avx(range - 3, offset, *(const __m128i *)&pattern);
     if (mask)
       return range + 28 - __builtin_clz(mask);
     range -= 4;
@@ -6685,7 +6714,7 @@ scan4seq_avx512bw(pgno_t *range, const size_t len, const size_t seq) {
     range -= 8;
   }
   if (range - 3 > detent) {
-    mask = diffcmp2mask_sse2(range - 3, offset, *(const __m128i *)&pattern);
+    mask = diffcmp2mask_sse2avx(range - 3, offset, *(const __m128i *)&pattern);
     if (mask)
       return range + 28 - __builtin_clz(mask);
     range -= 4;
