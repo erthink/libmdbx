@@ -8086,13 +8086,9 @@ retry:;
   }
 
   const bool inside_txn = (env->me_txn0->mt_owner == osal_thread_self());
-  meta_ptr_t head;
-  if (inside_txn | locked)
-    head = meta_recent(env, &env->me_txn0->tw.troika);
-  else {
-    const meta_troika_t troika = meta_tap(env);
-    head = meta_recent(env, &troika);
-  }
+  const meta_troika_t troika =
+      (inside_txn | locked) ? env->me_txn0->tw.troika : meta_tap(env);
+  const meta_ptr_t head = meta_recent(env, &troika);
   const uint64_t unsynced_pages =
       atomic_load64(&env->me_lck->mti_unsynced_pages, mo_Relaxed);
   if (unsynced_pages == 0) {
@@ -8105,10 +8101,19 @@ retry:;
   if (!inside_txn && locked && (env->me_flags & MDBX_WRITEMAP) &&
       unlikely(head.ptr_c->mm_geo.next >
                bytes2pgno(env, env->me_dxb_mmap.current))) {
-    rc = dxb_resize(env, head.ptr_c->mm_geo.next, head.ptr_c->mm_geo.now,
-                    head.ptr_c->mm_geo.upper, implicit_grow);
-    if (unlikely(rc != MDBX_SUCCESS))
-      goto bailout;
+
+    if (unlikely(env->me_stuck_meta >= 0) &&
+        troika.recent != (uint8_t)env->me_stuck_meta) {
+      NOTICE("skip %s since wagering meta-page (%u) is mispatch the recent "
+             "meta-page (%u)",
+             "sync datafile", env->me_stuck_meta, troika.recent);
+      rc = MDBX_RESULT_TRUE;
+    } else {
+      rc = dxb_resize(env, head.ptr_c->mm_geo.next, head.ptr_c->mm_geo.now,
+                      head.ptr_c->mm_geo.upper, implicit_grow);
+      if (unlikely(rc != MDBX_SUCCESS))
+        goto bailout;
+    }
   }
 
   const size_t autosync_threshold =
@@ -8187,6 +8192,14 @@ retry:;
   eASSERT(env, inside_txn || locked);
   eASSERT(env, !inside_txn || (flags & MDBX_SHRINK_ALLOWED) == 0);
 
+  if (!head.is_steady && unlikely(env->me_stuck_meta >= 0) &&
+      troika.recent != (uint8_t)env->me_stuck_meta) {
+    NOTICE("skip %s since wagering meta-page (%u) is mispatch the recent "
+           "meta-page (%u)",
+           "sync datafile", env->me_stuck_meta, troika.recent);
+    rc = MDBX_RESULT_TRUE;
+    goto bailout;
+  }
   if (!head.is_steady || ((flags & MDBX_SAFE_NOSYNC) == 0 && unsynced_pages)) {
     DEBUG("meta-head %" PRIaPGNO ", %s, sync_pending %" PRIu64,
           data_page(head.ptr_c)->mp_pgno, durable_caption(head.ptr_c),
@@ -13732,8 +13745,9 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
       mdbx_is_readahead_reasonable(used_bytes, 0) == MDBX_RESULT_TRUE;
 #endif /* MDBX_ENABLE_MADVISE */
 
-  err = osal_mmap(env->me_flags, &env->me_dxb_mmap, env->me_dbgeo.now,
-                  env->me_dbgeo.upper, lck_rc ? MMAP_OPTION_TRUNCATE : 0);
+  err = osal_mmap(
+      env->me_flags, &env->me_dxb_mmap, env->me_dbgeo.now, env->me_dbgeo.upper,
+      (lck_rc && env->me_stuck_meta < 0) ? MMAP_OPTION_TRUNCATE : 0);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
