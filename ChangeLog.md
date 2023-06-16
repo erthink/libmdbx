@@ -5,9 +5,15 @@ English version [by Google](https://gitflic-ru.translate.goog/project/erthink/li
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
 
-## v0.12.7 (сопровождение и подготовка к релизу)
+## v0.12.7 "Артек" от 2023-06-16
 
-Поддержка стабильной ветки.
+Стабилизирующий выпуск с исправлением обнаруженных ошибок и устранением
+недочетов, в день основания международного детского центра [«Арте́к»](https://ru.wikipedia.org/wiki/Артек).
+
+```
+14 files changed, 222 insertions(+), 56 deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
+```
 
 Исправления и доработки:
 
