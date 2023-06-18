@@ -90,8 +90,8 @@
 #endif
 #if _MSC_VER > 1914
 #pragma warning(                                                               \
-    disable : 5105) /* winbase.h(9531): warning C5105: macro expansion         \
-                       producing 'defined' has undefined behavior */
+        disable : 5105) /* winbase.h(9531): warning C5105: macro expansion     \
+                           producing 'defined' has undefined behavior */
 #endif
 #if _MSC_VER > 1930
 #pragma warning(disable : 6235) /* <expression> is always a constant */
@@ -101,16 +101,16 @@
 #pragma warning(disable : 4710) /* 'xyz': function not inlined */
 #pragma warning(disable : 4711) /* function 'xyz' selected for automatic       \
                                    inline expansion */
-#pragma warning(                                                               \
-    disable : 4201) /* nonstandard extension used : nameless struct / union */
+#pragma warning(disable : 4201) /* nonstandard extension used: nameless        \
+                                   struct/union */
 #pragma warning(disable : 4702) /* unreachable code */
 #pragma warning(disable : 4706) /* assignment within conditional expression */
 #pragma warning(disable : 4127) /* conditional expression is constant */
 #pragma warning(disable : 4324) /* 'xyz': structure was padded due to          \
                                    alignment specifier */
 #pragma warning(disable : 4310) /* cast truncates constant value */
-#pragma warning(                                                               \
-    disable : 4820) /* bytes padding added after data member for alignment */
+#pragma warning(disable : 4820) /* bytes padding added after data member for   \
+                                   alignment */
 #pragma warning(disable : 4548) /* expression before comma has no effect;      \
                                    expected expression with side - effect */
 #pragma warning(disable : 4366) /* the result of the unary '&' operator may be \
@@ -120,8 +120,8 @@
 #pragma warning(disable : 4204) /* nonstandard extension used: non-constant    \
                                    aggregate initializer */
 #pragma warning(                                                               \
-    disable : 4505) /* unreferenced local function has been removed */
-#endif              /* _MSC_VER (warnings) */
+        disable : 4505) /* unreferenced local function has been removed */
+#endif                  /* _MSC_VER (warnings) */
 
 #if defined(__GNUC__) && __GNUC__ < 9
 #pragma GCC diagnostic ignored "-Wattributes"

@@ -277,7 +277,7 @@ the user's point of view.
    > and up to 30% faster when _libmdbx_ compiled with specific build options
    > which downgrades several runtime checks to be match with LMDB behaviour.
    >
-   > These and other results could be easily reproduced with [ioArena](https://abf.io/erthink/ioarena.git) just by `make bench-quartet` command,
+   > These and other results could be easily reproduced with [ioArena](https://abf.io/erthink/ioarena) just by `make bench-quartet` command,
    > including comparisons with [RockDB](https://en.wikipedia.org/wiki/RocksDB)
    > and [WiredTiger](https://en.wikipedia.org/wiki/WiredTiger).
 
@@ -659,7 +659,7 @@ Bindings
 Performance comparison
 ======================
 
-All benchmarks were done in 2015 by [IOArena](https://abf.io/erthink/ioarena.git)
+All benchmarks were done in 2015 by [IOArena](https://abf.io/erthink/ioarena)
 and multiple [scripts](https://github.com/pmwkaa/ioarena/tree/HL%2B%2B2015)
 runs on Lenovo Carbon-2 laptop, i7-4600U 2.1 GHz (2 physical cores, 4 HyperThreading cores), 8 Gb RAM,
 SSD SAMSUNG MZNTD512HAGL-000L1 (DXT23L0Q) 512 Gb.

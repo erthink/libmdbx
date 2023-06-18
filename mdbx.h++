@@ -591,11 +591,11 @@ concept ImmutableByteProducer = requires(const T &a, char array[42]) {
  *  \interface SliceTranscoder
  *  \brief SliceTranscoder C++20 concept */
 template <typename T>
-concept SliceTranscoder = ImmutableByteProducer<T> &&
-    requires(const slice &source, const T &a) {
-  T(source);
-  { a.is_erroneous() } -> std::same_as<bool>;
-};
+concept SliceTranscoder =
+    ImmutableByteProducer<T> && requires(const slice &source, const T &a) {
+      T(source);
+      { a.is_erroneous() } -> std::same_as<bool>;
+    };
 
 #endif /* MDBX_HAVE_CXX20_CONCEPTS */
 
@@ -3000,7 +3000,11 @@ public:
 
   //----------------------------------------------------------------------------
 
-  /// Database geometry for size management.
+  /// \brief Database geometry for size management.
+  /// \see env_managed::create_parameters
+  /// \see env_managed::env_managed(const ::std::string &pathname, const
+  /// create_parameters &, const operate_parameters &, bool accede)
+
   struct LIBMDBX_API_TYPE geometry {
     enum : int64_t {
       default_value = -1,         ///< Means "keep current or use default"
@@ -3659,6 +3663,8 @@ public:
                        bool accede = true);
 
   /// \brief Additional parameters for creating a new database.
+  /// \see env_managed(const ::std::string &pathname, const create_parameters &,
+  /// const operate_parameters &, bool accede)
   struct create_parameters {
     env::geometry geometry;
     mdbx_mode_t file_mode_bits{0640};
@@ -5134,7 +5140,7 @@ inline filehandle env::get_filehandle() const {
 }
 
 inline MDBX_env_flags_t env::get_flags() const {
-  unsigned bits;
+  unsigned bits = 0;
   error::success_or_throw(::mdbx_env_get_flags(handle_, &bits));
   return MDBX_env_flags_t(bits);
 }

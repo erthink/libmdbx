@@ -246,8 +246,12 @@ typedef struct osal_mmap {
 } osal_mmap_t;
 
 typedef union bin128 {
-  __anonymous_struct_extension__ struct { uint64_t x, y; };
-  __anonymous_struct_extension__ struct { uint32_t a, b, c, d; };
+  __anonymous_struct_extension__ struct {
+    uint64_t x, y;
+  };
+  __anonymous_struct_extension__ struct {
+    uint32_t a, b, c, d;
+  };
 } bin128_t;
 
 #if defined(_WIN32) || defined(_WIN64)

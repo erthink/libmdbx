@@ -41,7 +41,7 @@
 
 #if _MSC_FULL_VER < 190024215
 #pragma message(                                                               \
-    "It is recommended to use Visual Studio 2015 (MSC 19.0) or newer.")
+        "It is recommended to use Visual Studio 2015 (MSC 19.0) or newer.")
 #endif
 
 #define bswap64(v) _byteswap_uint64(v)
