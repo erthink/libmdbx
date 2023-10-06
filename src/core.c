@@ -17225,7 +17225,7 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
         DDBI(mc), DKEY_DEBUG(key), key->iov_len,
         DVAL_DEBUG((flags & MDBX_RESERVE) ? nullptr : data), data->iov_len);
 
-  int dupdata_flag = 0;
+  bool dupdata_flag = false;
   if ((flags & MDBX_CURRENT) != 0 && (mc->mc_flags & C_SUB) == 0) {
     if (unlikely(flags & (MDBX_APPEND | MDBX_NOOVERWRITE)))
       return MDBX_EINVAL;
@@ -17576,7 +17576,7 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
           /* Back up original data item */
           memcpy(dkey.iov_base = fp + 1, olddata.iov_base,
                  dkey.iov_len = olddata.iov_len);
-          dupdata_flag = 1;
+          dupdata_flag = true;
 
           /* Make sub-page header for the dup items, with dummy body */
           fp->mp_flags = P_LEAF | P_SUBP;
@@ -17857,7 +17857,7 @@ new_sub:;
         data[1].iov_len = mcount;
         if (mcount < dcount) {
           data[0].iov_base = ptr_disp(data[0].iov_base, data[0].iov_len);
-          insert_key = insert_data = false;
+          dupdata_flag = insert_key = insert_data = false;
           goto more;
         }
       }
