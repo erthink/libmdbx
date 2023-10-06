@@ -394,6 +394,16 @@ using path = ::std::wstring;
 using path = ::std::string;
 #endif /* mdbx::path */
 
+#if defined(__SIZEOF_INT128__) ||                                              \
+    (defined(_INTEGRAL_MAX_BITS) && _INTEGRAL_MAX_BITS >= 128)
+#ifndef MDBX_U128_TYPE
+#define MDBX_U128_TYPE __uint128_t
+#endif /* MDBX_U128_TYPE */
+#ifndef MDBX_I128_TYPE
+#define MDBX_I128_TYPE __int128_t
+#endif /* MDBX_I128_TYPE */
+#endif /* __SIZEOF_INT128__ || _INTEGRAL_MAX_BITS >= 128 */
+
 #if __cplusplus >= 201103L || defined(DOXYGEN)
 /// \brief Duration in 1/65536 units of second.
 using duration = ::std::chrono::duration<unsigned, ::std::ratio<1, 65536>>;
@@ -552,6 +562,7 @@ MDBX_DECLARE_EXCEPTION(transaction_overlapping);
 [[noreturn]] LIBMDBX_API void throw_max_length_exceeded();
 [[noreturn]] LIBMDBX_API void throw_out_range();
 [[noreturn]] LIBMDBX_API void throw_allocators_mismatch();
+[[noreturn]] LIBMDBX_API void throw_bad_value_size();
 static MDBX_CXX14_CONSTEXPR size_t check_length(size_t bytes);
 static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom,
                                                 size_t payload);
@@ -1028,6 +1039,35 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   MDBX_CXX14_CONSTEXPR static slice invalid() noexcept {
     return slice(size_t(-1));
   }
+
+  template <typename POD> MDBX_CXX14_CONSTEXPR POD as_pod() const {
+    static_assert(::std::is_standard_layout<POD>::value &&
+                      !::std::is_pointer<POD>::value,
+                  "Must be a standard layout type!");
+    if (MDBX_LIKELY(size() == sizeof(POD)))
+      MDBX_CXX20_LIKELY {
+        POD r;
+        memcpy(&r, data(), sizeof(r));
+        return r;
+      }
+    throw_bad_value_size();
+  }
+
+#ifdef MDBX_U128_TYPE
+  MDBX_U128_TYPE as_uint128() const;
+#endif /* MDBX_U128_TYPE */
+  uint64_t as_uint64() const;
+  uint32_t as_uint32() const;
+  uint16_t as_uint16() const;
+  uint8_t as_uint8() const;
+
+#ifdef MDBX_I128_TYPE
+  MDBX_I128_TYPE as_int128() const;
+#endif /* MDBX_I128_TYPE */
+  int64_t as_int64() const;
+  int32_t as_int32() const;
+  int16_t as_int16() const;
+  int8_t as_int8() const;
 
 protected:
   MDBX_CXX11_CONSTEXPR slice(size_t invalid_length) noexcept
@@ -2290,6 +2330,10 @@ public:
   static buffer wrap(const POD &pod, bool make_reference = false,
                      const allocator_type &allocator = allocator_type()) {
     return buffer(::mdbx::slice::wrap(pod), make_reference, allocator);
+  }
+
+  template <typename POD> MDBX_CXX14_CONSTEXPR POD as_pod() const {
+    return slice_.as_pod<POD>();
   }
 
   /// \brief Reserves storage space.
