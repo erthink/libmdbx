@@ -4019,10 +4019,20 @@ public:
                       size_t values_count, put_mode mode,
                       bool allow_partial = false);
   template <typename VALUE>
+  size_t put_multiple(map_handle map, const slice &key,
+                      const VALUE *values_array, size_t values_count,
+                      put_mode mode, bool allow_partial = false) {
+    static_assert(::std::is_standard_layout<VALUE>::value &&
+                      !::std::is_pointer<VALUE>::value &&
+                      !::std::is_array<VALUE>::value,
+                  "Must be a standard layout type!");
+    return put_multiple(map, key, sizeof(VALUE), values_array, values_count,
+                        mode, allow_partial);
+  }
+  template <typename VALUE>
   void put_multiple(map_handle map, const slice &key,
                     const ::std::vector<VALUE> &vector, put_mode mode) {
-    put_multiple(map, key, sizeof(VALUE), vector.data(), vector.size(), mode,
-                 false);
+    put_multiple(map, key, vector.data(), vector.size(), mode);
   }
 
   inline ptrdiff_t estimate(map_handle map, pair from, pair to) const;
