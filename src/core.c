@@ -21110,6 +21110,10 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
         tASSERT(txn, XCURSOR_INITED(&cx.outer) &&
                          cx.outer.mc_xcursor->mx_db.md_entries > 1);
         rc = MDBX_EMULTIVAL;
+        if ((flags & MDBX_NOOVERWRITE) == 0) {
+          flags -= MDBX_CURRENT;
+          rc = cursor_del(&cx.outer, MDBX_ALLDUPS);
+        }
       }
     }
   }
