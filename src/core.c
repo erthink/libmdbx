@@ -11929,6 +11929,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
           (size_t)(commit_txnid - txn->mt_txnid));
   }
 #endif
+  meta.unsafe_sign = MDBX_DATASIGN_NONE;
   meta_set_txnid(env, &meta, commit_txnid);
 
   rc = sync_locked(env, env->me_flags | txn->mt_flags | MDBX_SHRINK_ALLOWED,
