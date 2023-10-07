@@ -182,6 +182,7 @@ int main(int argc, const char *argv[]) {
     errmsg = "failed to mdbx_txn_commit: %s\n";
     goto Fail;
   }
+  mdbx_cursor_close(cur);
   if ((rc = mdbx_env_close(env))) {
     errmsg = "failed to mdbx_env_close: %s\n";
     goto Fail;
