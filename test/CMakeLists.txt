@@ -166,4 +166,12 @@ else()
       REQUIRED_FILES uniq_nested.db-copy)
   endif()
 
+  if(UNIX AND NOT SUBPROJECT)
+    add_test(NAME extra_upsert_alldups COMMAND test_extra_upsert_alldups)
+    if(MDBX_BUILD_CXX)
+      add_test(NAME extra_maindb_ordinal COMMAND test_extra_maindb_ordinal)
+      add_test(NAME extra_dupfixed_multiple COMMAND test_extra_dupfixed_multiple)
+    endif()
+  endif()
+
 endif()
