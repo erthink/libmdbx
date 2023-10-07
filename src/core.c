@@ -9131,7 +9131,7 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
     }
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
     txn_valgrind(env, txn);
-#endif
+#endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
     txn->mt_owner = tid;
     return MDBX_SUCCESS;
   }
@@ -9813,8 +9813,10 @@ static int txn_end(MDBX_txn *txn, const unsigned mode) {
                 txn->mt_txnid == slot->mr_txnid.weak &&
                     slot->mr_txnid.weak >= env->me_lck->mti_oldest_reader.weak);
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+        atomic_add32(&env->me_ignore_EDEADLK, 1);
         txn_valgrind(env, nullptr);
-#endif
+        atomic_sub32(&env->me_ignore_EDEADLK, 1);
+#endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
         atomic_store32(&slot->mr_snapshot_pages_used, 0, mo_Relaxed);
         safe64_reset(&slot->mr_txnid, false);
         atomic_store32(&env->me_lck->mti_readers_refresh_flag, true,
@@ -9843,7 +9845,7 @@ static int txn_end(MDBX_txn *txn, const unsigned mode) {
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
     if (txn == env->me_txn0)
       txn_valgrind(env, nullptr);
-#endif
+#endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
 
     txn->mt_flags = MDBX_TXN_FINISHED;
     txn->mt_owner = 0;
@@ -15292,7 +15294,7 @@ bailout:
   } else {
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
     txn_valgrind(env, nullptr);
-#endif
+#endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
   }
   osal_free(env_pathname.buffer_for_free);
   return rc;
