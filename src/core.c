@@ -10257,6 +10257,14 @@ static int gcu_prepare_backlog(MDBX_txn *txn, gcu_context_t *ctx) {
 }
 
 static __inline void gcu_clean_reserved(MDBX_env *env, MDBX_val pnl) {
+#if MDBX_DEBUG && (defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__))
+  /* Для предотвращения предупреждения Valgrind из mdbx_dump_val()
+   * вызванное через макрос DVAL_DEBUG() на выходе
+   * из cursor_set(MDBX_SET_KEY), которая вызывается ниже внутри update_gc() в
+   * цикле очистки и цикле заполнения зарезервированных элементов. */
+  memset(pnl.iov_base, 0xBB, pnl.iov_len);
+#endif /* MDBX_DEBUG && (MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__) */
+
   /* PNL is initially empty, zero out at least the length */
   memset(pnl.iov_base, 0, sizeof(pgno_t));
   if ((env->me_flags & (MDBX_WRITEMAP | MDBX_NOMEMINIT)) == 0)
@@ -10572,6 +10580,15 @@ retry:
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
 
+#if MDBX_DEBUG && (defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__))
+          /* Для предотвращения предупреждения Valgrind из mdbx_dump_val()
+           * вызванное через макрос DVAL_DEBUG() на выходе
+           * из cursor_set(MDBX_SET_KEY), которая вызывается как выше в цикле
+           * очистки, так и ниже в цикле заполнения зарезервированных элементов.
+           */
+          memset(data.iov_base, 0xBB, data.iov_len);
+#endif /* MDBX_DEBUG && (MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__) */
+
           if (retired_pages_before == MDBX_PNL_GETSIZE(txn->tw.retired_pages)) {
             const size_t at = (ctx->lifo == MDBX_PNL_ASCENDING)
                                   ? left - chunk
@@ -10609,6 +10626,16 @@ retry:
         rc = cursor_put_nochecklen(&ctx->cursor, &key, &data, MDBX_RESERVE);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
+
+#if MDBX_DEBUG && (defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__))
+        /* Для предотвращения предупреждения Valgrind из mdbx_dump_val()
+         * вызванное через макрос DVAL_DEBUG() на выходе
+         * из cursor_set(MDBX_SET_KEY), которая вызывается как выше в цикле
+         * очистки, так и ниже в цикле заполнения зарезервированных элементов.
+         */
+        memset(data.iov_base, 0xBB, data.iov_len);
+#endif /* MDBX_DEBUG && (MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__) */
+
         /* Retry if tw.retired_pages[] grew during the Put() */
       } while (data.iov_len < MDBX_PNL_SIZEOF(txn->tw.retired_pages));
 
