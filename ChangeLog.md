@@ -29,6 +29,8 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
  - Микрооптимизация и рефакториг `cursor_put_nochecklen()` в продолжение исправления
    регресса/ошибки в пути обработки `put(MDBX_MULTIPLE)`.
 
+ - Уточнение формулировок о `SIGSEGV` и недопустимости прямого изменения данных.
+
 Мелочи:
 
  - Исправление несущественных предупреждений при `MDBX_ENABLE_PROFGC=ON`.

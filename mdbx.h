@@ -2846,9 +2846,9 @@ LIBMDBX_INLINE_API(int, mdbx_env_get_syncperiod,
  *
  * Only a single thread may call this function. All transactions, databases,
  * and cursors must already be closed before calling this function. Attempts
- * to use any such handles after calling this function will cause a `SIGSEGV`.
- * The environment handle will be freed and must not be used again after this
- * call.
+ * to use any such handles after calling this function is UB and would cause
+ * a `SIGSEGV`. The environment handle will be freed and must not be used again
+ * after this call.
  *
  * \param [in] env        An environment handle returned by
  *                        \ref mdbx_env_create().
@@ -4398,9 +4398,14 @@ LIBMDBX_API int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del);
  * items requires the use of \ref mdbx_cursor_get().
  *
  * \note The memory pointed to by the returned values is owned by the
- * database. The caller need not dispose of the memory, and may not
- * modify it in any way. For values returned in a read-only transaction
- * any modification attempts will cause a `SIGSEGV`.
+ * database. The caller MUST not dispose of the memory, and MUST not modify it
+ * in any way regardless in a read-only nor read-write transactions!
+ * For case a database opened without the \ref MDBX_WRITEMAP modification
+ * attempts likely will cause a `SIGSEGV`. However, when a database opened with
+ * the \ref MDBX_WRITEMAP or in case values returned inside read-write
+ * transaction are located on a "dirty" (modified and pending to commit) pages,
+ * such modification will silently accepted and likely will lead to DB and/or
+ * data corruption.
  *
  * \note Values returned from the database are valid only until a
  * subsequent update operation, or the end of the transaction.
@@ -4834,6 +4839,16 @@ LIBMDBX_API int mdbx_cursor_copy(const MDBX_cursor *src, MDBX_cursor *dest);
  * to which data refers.
  * \see mdbx_get()
  *
+ * \note The memory pointed to by the returned values is owned by the
+ * database. The caller MUST not dispose of the memory, and MUST not modify it
+ * in any way regardless in a read-only nor read-write transactions!
+ * For case a database opened without the \ref MDBX_WRITEMAP modification
+ * attempts likely will cause a `SIGSEGV`. However, when a database opened with
+ * the \ref MDBX_WRITEMAP or in case values returned inside read-write
+ * transaction are located on a "dirty" (modified and pending to commit) pages,
+ * such modification will silently accepted and likely will lead to DB and/or
+ * data corruption.
+ *
  * \param [in] cursor    A cursor handle returned by \ref mdbx_cursor_open().
  * \param [in,out] key   The key for a retrieved item.
  * \param [in,out] data  The data of a retrieved item.
@@ -4859,6 +4874,16 @@ LIBMDBX_API int mdbx_cursor_get(MDBX_cursor *cursor, MDBX_val *key,
  * refers. The addresses and lengths of the keys and values are returned in the
  * array to which `pairs` refers.
  * \see mdbx_cursor_get()
+ *
+ * \note The memory pointed to by the returned values is owned by the
+ * database. The caller MUST not dispose of the memory, and MUST not modify it
+ * in any way regardless in a read-only nor read-write transactions!
+ * For case a database opened without the \ref MDBX_WRITEMAP modification
+ * attempts likely will cause a `SIGSEGV`. However, when a database opened with
+ * the \ref MDBX_WRITEMAP or in case values returned inside read-write
+ * transaction are located on a "dirty" (modified and pending to commit) pages,
+ * such modification will silently accepted and likely will lead to DB and/or
+ * data corruption.
  *
  * \param [in] cursor     A cursor handle returned by \ref mdbx_cursor_open().
  * \param [out] count     The number of key and value item returned, on success
