@@ -46,6 +46,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
    т.е. проверку БД в кооперативном (не эксклюзивном) режиме чтения-записи
    в сборках с поддержкой Valgrind или включеным ASAN. Для более подробной
    информации см. [соответствующий коммит](https://gitflic.ru/project/erthink/libmdbx/commit/1aead6869a7eff1a85e400ab3eeecb4c8b904fe6).
+ - Доработка `mdbx_dump_val()` используемой для логирования и отладки.
 
 
 --------------------------------------------------------------------------------

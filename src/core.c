@@ -3634,18 +3634,15 @@ const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
     char *const detent = buf + bufsize - 2;
     char *ptr = buf;
     *ptr++ = '<';
-    for (size_t i = 0; i < key->iov_len; i++) {
-      const ptrdiff_t left = detent - ptr;
-      assert(left > 0);
-      int len = snprintf(ptr, left, "%02x", data[i]);
-      if (len < 0 || len >= left)
-        break;
-      ptr += len;
+    for (size_t i = 0; i < key->iov_len && ptr < detent; i++) {
+      const char hex[16] = {'0', '1', '2', '3', '4', '5', '6', '7',
+                            '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+      *ptr++ = hex[data[i] >> 4];
+      *ptr++ = hex[data[i] & 15];
     }
-    if (ptr < detent) {
-      ptr[0] = '>';
-      ptr[1] = '\0';
-    }
+    if (ptr < detent)
+      *ptr++ = '>';
+    *ptr = '\0';
   }
   return buf;
 }
