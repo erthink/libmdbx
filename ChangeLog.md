@@ -48,6 +48,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
    информации см. [соответствующий коммит](https://gitflic.ru/project/erthink/libmdbx/commit/1aead6869a7eff1a85e400ab3eeecb4c8b904fe6).
  - Доработка `mdbx_dump_val()` используемой для логирования и отладки.
  - Устранение предупреждений Valgrind при логировании в отладочных сборках.
+ - Доработка использования `filesystem` для старых компиляторов.
 
 
 --------------------------------------------------------------------------------

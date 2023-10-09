@@ -80,7 +80,8 @@
 
 #if defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L
 #include <filesystem>
-#elif __has_include(<experimental/filesystem>)
+#elif defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L &&    \
+    __has_include(<experimental/filesystem>)
 #include <experimental/filesystem>
 #endif
 
@@ -368,6 +369,7 @@ using string = ::std::basic_string<char, ::std::char_traits<char>, ALLOCATOR>;
 using filehandle = ::mdbx_filehandle_t;
 #if defined(DOXYGEN) ||                                                        \
     (defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L &&       \
+     defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L &&     \
      (!defined(__MAC_OS_X_VERSION_MIN_REQUIRED) ||                             \
       __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500) &&                            \
      (!defined(__IPHONE_OS_VERSION_MIN_REQUIRED) ||                            \
