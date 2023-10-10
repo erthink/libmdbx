@@ -16879,11 +16879,13 @@ static __hot int cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     }
     break;
   case MDBX_GET_MULTIPLE:
-    if (unlikely(data == NULL || !(mc->mc_flags & C_INITIALIZED)))
+    if (unlikely(!data))
       return MDBX_EINVAL;
-    if (unlikely(!(mc->mc_db->md_flags & MDBX_DUPFIXED)))
+    if (unlikely((mc->mc_db->md_flags & MDBX_DUPFIXED) == 0))
       return MDBX_INCOMPATIBLE;
-    rc = MDBX_SUCCESS;
+    rc = (mc->mc_flags & C_INITIALIZED)
+             ? MDBX_SUCCESS
+             : cursor_set(mc, key, data, MDBX_SET).err;
     if ((mc->mc_xcursor->mx_cursor.mc_flags & (C_INITIALIZED | C_EOF)) !=
         C_INITIALIZED)
       break;
