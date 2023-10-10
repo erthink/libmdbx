@@ -8200,7 +8200,7 @@ retry:;
         rc = MDBX_SUCCESS /* means "some data was synced" */;
       }
 
-      err = mdbx_txn_lock(env, nonblock);
+      err = osal_txn_lock(env, nonblock);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
 
@@ -8247,7 +8247,7 @@ retry:;
 
 bailout:
   if (locked)
-    mdbx_txn_unlock(env);
+    osal_txn_unlock(env);
   return rc;
 }
 
@@ -8442,7 +8442,7 @@ static void txn_valgrind(MDBX_env *env, MDBX_txn *txn) {
     } else if (env->me_flags & MDBX_RDONLY) {
       /* read-only mode, no write-txn, no wlock mutex */
       last = NUM_METAS;
-    } else if (mdbx_txn_lock(env, true) == MDBX_SUCCESS) {
+    } else if (osal_txn_lock(env, true) == MDBX_SUCCESS) {
       /* no write-txn */
       last = NUM_METAS;
       should_unlock = true;
@@ -8463,7 +8463,7 @@ static void txn_valgrind(MDBX_env *env, MDBX_txn *txn) {
           pgno2bytes(env, edge - last));
     }
     if (should_unlock)
-      mdbx_txn_unlock(env);
+      osal_txn_unlock(env);
   }
 }
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
@@ -8840,6 +8840,7 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
       txn->mt_flags = MDBX_TXN_RDONLY | MDBX_TXN_FINISHED;
       return MDBX_SUCCESS;
     }
+    txn->mt_owner = tid;
 
     /* Seek & fetch the last meta */
     uint64_t timestamp = 0;
@@ -8915,12 +8916,11 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
       rc = MDBX_CORRUPTED;
       goto bailout;
     }
-    eASSERT(env, txn->mt_txnid >= env->me_lck->mti_oldest_reader.weak);
     txn->mt_dbxs = env->me_dbxs; /* mostly static anyway */
+    txn->mt_numdbs = env->me_numdbs;
     ENSURE(env, txn->mt_txnid >=
                     /* paranoia is appropriate here */ env->me_lck
                         ->mti_oldest_reader.weak);
-    txn->mt_numdbs = env->me_numdbs;
   } else {
     eASSERT(env, (flags & ~(MDBX_TXN_RW_BEGIN_FLAGS | MDBX_TXN_SPILLS |
                             MDBX_WRITEMAP)) == 0);
@@ -8946,16 +8946,16 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
 
     /* Not yet touching txn == env->me_txn0, it may be active */
     jitter4testing(false);
-    rc = mdbx_txn_lock(env, !!(flags & MDBX_TXN_TRY));
+    rc = osal_txn_lock(env, !!(flags & MDBX_TXN_TRY));
     if (unlikely(rc))
       return rc;
     if (unlikely(env->me_flags & MDBX_FATAL_ERROR)) {
-      mdbx_txn_unlock(env);
+      osal_txn_unlock(env);
       return MDBX_PANIC;
     }
 #if defined(_WIN32) || defined(_WIN64)
     if (unlikely(!env->me_map)) {
-      mdbx_txn_unlock(env);
+      osal_txn_unlock(env);
       return MDBX_EPERM;
     }
 #endif /* Windows */
@@ -9129,7 +9129,6 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
     txn_valgrind(env, txn);
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
-    txn->mt_owner = tid;
     return MDBX_SUCCESS;
   }
 bailout:
@@ -9810,9 +9809,7 @@ static int txn_end(MDBX_txn *txn, const unsigned mode) {
                 txn->mt_txnid == slot->mr_txnid.weak &&
                     slot->mr_txnid.weak >= env->me_lck->mti_oldest_reader.weak);
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
-        atomic_add32(&env->me_ignore_EDEADLK, 1);
         txn_valgrind(env, nullptr);
-        atomic_sub32(&env->me_ignore_EDEADLK, 1);
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
         atomic_store32(&slot->mr_snapshot_pages_used, 0, mo_Relaxed);
         safe64_reset(&slot->mr_txnid, false);
@@ -9845,7 +9842,6 @@ static int txn_end(MDBX_txn *txn, const unsigned mode) {
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
 
     txn->mt_flags = MDBX_TXN_FINISHED;
-    txn->mt_owner = 0;
     env->me_txn = txn->mt_parent;
     pnl_free(txn->tw.spilled.list);
     txn->tw.spilled.list = nullptr;
@@ -9858,7 +9854,7 @@ static int txn_end(MDBX_txn *txn, const unsigned mode) {
       if (!(env->me_flags & MDBX_WRITEMAP))
         dlist_free(txn);
       /* The writer mutex was locked in mdbx_txn_begin. */
-      mdbx_txn_unlock(env);
+      osal_txn_unlock(env);
     } else {
       eASSERT(env, txn->mt_parent != NULL);
       MDBX_txn *const parent = txn->mt_parent;
@@ -9870,6 +9866,7 @@ static int txn_end(MDBX_txn *txn, const unsigned mode) {
       eASSERT(env, memcmp(&txn->tw.troika, &parent->tw.troika,
                           sizeof(meta_troika_t)) == 0);
 
+      txn->mt_owner = 0;
       if (txn->tw.lifo_reclaimed) {
         eASSERT(env, MDBX_PNL_GETSIZE(txn->tw.lifo_reclaimed) >=
                          (uintptr_t)parent->tw.lifo_reclaimed);
@@ -13258,7 +13255,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
       return MDBX_EACCESS;
 
     if (!inside_txn) {
-      int err = mdbx_txn_lock(env, false);
+      int err = osal_txn_lock(env, false);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
       need_unlock = true;
@@ -13609,7 +13606,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
 
 bailout:
   if (need_unlock)
-    mdbx_txn_unlock(env);
+    osal_txn_unlock(env);
   return rc;
 }
 
@@ -21675,13 +21672,13 @@ __cold static int env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
     return rc;
 
   /* Temporarily block writers until we snapshot the meta pages */
-  rc = mdbx_txn_lock(env, false);
+  rc = osal_txn_lock(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
   rc = txn_renew(read_txn, MDBX_TXN_RDONLY);
   if (unlikely(rc != MDBX_SUCCESS)) {
-    mdbx_txn_unlock(env);
+    osal_txn_unlock(env);
     return rc;
   }
 
@@ -21693,7 +21690,7 @@ __cold static int env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
   memcpy(buffer, env->me_map, meta_bytes);
   MDBX_meta *const headcopy = /* LY: get pointer to the snapshot copy */
       ptr_disp(buffer, ptr_dist(meta_recent(env, &troika).ptr_c, env->me_map));
-  mdbx_txn_unlock(env);
+  osal_txn_unlock(env);
 
   if (flags & MDBX_CP_FORCE_DYNAMIC_SIZE)
     meta_make_sizeable(headcopy);
@@ -21953,7 +21950,7 @@ __cold int mdbx_env_set_flags(MDBX_env *env, MDBX_env_flags_t flags,
                            env->me_txn0->mt_owner != osal_thread_self();
   bool should_unlock = false;
   if (lock_needed) {
-    rc = mdbx_txn_lock(env, false);
+    rc = osal_txn_lock(env, false);
     if (unlikely(rc))
       return rc;
     should_unlock = true;
@@ -21965,7 +21962,7 @@ __cold int mdbx_env_set_flags(MDBX_env *env, MDBX_env_flags_t flags,
     env->me_flags &= ~flags;
 
   if (should_unlock)
-    mdbx_txn_unlock(env);
+    osal_txn_unlock(env);
   return MDBX_SUCCESS;
 }
 
@@ -24828,7 +24825,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
       return MDBX_EINVAL;
     if (env->me_options.dp_reserve_limit != (unsigned)value) {
       if (lock_needed) {
-        err = mdbx_txn_lock(env, false);
+        err = osal_txn_lock(env, false);
         if (unlikely(err != MDBX_SUCCESS))
           return err;
         should_unlock = true;
@@ -24868,7 +24865,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     if (unlikely(env->me_flags & MDBX_RDONLY))
       return MDBX_EACCESS;
     if (lock_needed) {
-      err = mdbx_txn_lock(env, false);
+      err = osal_txn_lock(env, false);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
       should_unlock = true;
@@ -24968,7 +24965,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
   }
 
   if (should_unlock)
-    mdbx_txn_unlock(env);
+    osal_txn_unlock(env);
   return err;
 }
 
@@ -25489,6 +25486,39 @@ mdbx_key_from_int32(const int32_t i32) {
 }
 
 #endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
+
+/*------------------------------------------------------------------------------
+ * Locking API */
+
+int mdbx_txn_lock(MDBX_env *env, bool dont_wait) {
+  int rc = check_env(env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(env->me_flags & MDBX_RDONLY))
+    return MDBX_EACCESS;
+  if (unlikely(env->me_txn0->mt_owner ||
+               (env->me_txn0->mt_flags & MDBX_TXN_FINISHED) == 0))
+    return MDBX_BUSY;
+
+  return osal_txn_lock(env, dont_wait);
+}
+
+int mdbx_txn_unlock(MDBX_env *env) {
+  int rc = check_env(env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(env->me_flags & MDBX_RDONLY))
+    return MDBX_EACCESS;
+  if (unlikely(env->me_txn0->mt_owner != osal_thread_self()))
+    return MDBX_THREAD_MISMATCH;
+  if (unlikely((env->me_txn0->mt_flags & MDBX_TXN_FINISHED) == 0))
+    return MDBX_BUSY;
+
+  osal_txn_unlock(env);
+  return MDBX_SUCCESS;
+}
 
 /******************************************************************************/
 /* *INDENT-OFF* */

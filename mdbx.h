@@ -5570,7 +5570,7 @@ LIBMDBX_API int mdbx_txn_lock(MDBX_env *env, bool dont_wait);
 /** \brief Releases write-transaction lock.
  * Provided for custom and/or complex locking scenarios.
  * \returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API void mdbx_txn_unlock(MDBX_env *env);
+LIBMDBX_API int mdbx_txn_unlock(MDBX_env *env);
 
 /** \brief Open an environment instance using specific meta-page
  * for checking and recovery.

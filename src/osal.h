@@ -718,6 +718,8 @@ MDBX_INTERNAL_FUNC int osal_lck_seize(MDBX_env *env);
 ///   operational lock.
 /// \return Error code or zero on success
 MDBX_INTERNAL_FUNC int osal_lck_downgrade(MDBX_env *env);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL_FUNC int osal_lck_upgrade(MDBX_env *env,
+                                                          bool dont_wait);
 
 /// \brief Locks LCK-file or/and table of readers for (de)registering.
 /// \return Error code or zero on success
@@ -726,16 +728,12 @@ MDBX_INTERNAL_FUNC int osal_rdt_lock(MDBX_env *env);
 /// \brief Unlocks LCK-file or/and table of readers after (de)registering.
 MDBX_INTERNAL_FUNC void osal_rdt_unlock(MDBX_env *env);
 
-/// \brief Acquires lock for DB change (on writing transaction start)
-///   Reading transactions will not be blocked.
-///   Declared as LIBMDBX_API because it is used in mdbx_chk.
+/// \brief Acquires write-transaction lock.
 /// \return Error code or zero on success
-LIBMDBX_API int mdbx_txn_lock(MDBX_env *env, bool dont_wait);
+MDBX_INTERNAL_FUNC int osal_txn_lock(MDBX_env *env, bool dont_wait);
 
-/// \brief Releases lock once DB changes is made (after writing transaction
-///   has finished).
-///   Declared as LIBMDBX_API because it is used in mdbx_chk.
-LIBMDBX_API void mdbx_txn_unlock(MDBX_env *env);
+/// \brief Releases write-transaction lock..
+MDBX_INTERNAL_FUNC void osal_txn_unlock(MDBX_env *env);
 
 /// \brief Sets alive-flag of reader presence (indicative lock) for PID of
 ///   the current process. The function does no more than needed for
