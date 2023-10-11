@@ -369,7 +369,7 @@ static void usage(char *prog) {
       "usage: %s "
       "[-V] [-v] [-q] [-c] [-0|1|2] [-w] [-d] [-i] [-s subdb] [-u|U] dbpath\n"
       "  -V\t\tprint version and exit\n"
-      "  -v\t\tmore verbose, could be repeated upto 9 times\n"
+      "  -v\t\tmore verbose, could be repeated upto 9 times for extra details\n"
       "  -q\t\tbe quiet\n"
       "  -c\t\tforce cooperative mode (don't try exclusive)\n"
       "  -w\t\twrite-mode checking\n"
@@ -493,8 +493,14 @@ int main(int argc, char *argv[]) {
     case 'v':
       if (verbose >= 9 && 0)
         usage(prog);
-      else
+      else {
         verbose += 1;
+        if (verbose == 0 && !MDBX_DEBUG)
+          printf("Verbosity level %u exposures only to"
+                 " a debug/extra-logging-enabled builds (with NDEBUG undefined"
+                 " or MDBX_DEBUG > 0)\n",
+                 verbose);
+      }
       break;
     case '0':
       stuck_meta = 0;
@@ -604,10 +610,15 @@ int main(int argc, char *argv[]) {
 
   envname = argv[optind];
   print(MDBX_chk_result,
-        "mdbx_chk %s (%s, T-%s)\nRunning for %s in 'read-%s' mode...",
+        "mdbx_chk %s (%s, T-%s)\nRunning for %s in 'read-%s' mode with "
+        "verbosity level %u (%s)...",
         mdbx_version.git.describe, mdbx_version.git.datetime,
         mdbx_version.git.tree, envname,
-        (env_flags & MDBX_RDONLY) ? "only" : "write");
+        (env_flags & MDBX_RDONLY) ? "only" : "write", verbose,
+        (verbose > 8)
+            ? (MDBX_DEBUG ? "extra details for debugging"
+                          : "same as 8 for non-debug builds with MDBX_DEBUG=0")
+            : "of 0..9");
   lf_flush();
   mdbx_setup_debug((verbose + MDBX_LOG_WARN < MDBX_LOG_TRACE)
                        ? (MDBX_log_level_t)(verbose + MDBX_LOG_WARN)
