@@ -22260,6 +22260,8 @@ __cold static int env_info_snap(const MDBX_env *env, const MDBX_txn *txn,
                                 meta_troika_t *const troika) {
   const size_t size_before_bootid = offsetof(MDBX_envinfo, mi_bootid);
   const size_t size_before_pgop_stat = offsetof(MDBX_envinfo, mi_pgop_stat);
+  if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
+    return MDBX_PANIC;
 
   /* is the environment open?
    * (https://libmdbx.dqdkfa.ru/dead-github/issues/171) */
@@ -22287,18 +22289,12 @@ __cold static int env_info_snap(const MDBX_env *env, const MDBX_txn *txn,
 #endif
   }
 
+  *troika = (txn && !(txn->mt_flags & MDBX_TXN_RDONLY)) ? txn->tw.troika
+                                                        : meta_tap(env);
+  const meta_ptr_t head = meta_recent(env, troika);
   const MDBX_meta *const meta0 = METAPAGE(env, 0);
   const MDBX_meta *const meta1 = METAPAGE(env, 1);
   const MDBX_meta *const meta2 = METAPAGE(env, 2);
-  if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
-    return MDBX_PANIC;
-
-  if (txn && !(txn->mt_flags & MDBX_TXN_RDONLY))
-    *troika = txn->tw.troika;
-  else
-    *troika = meta_tap(env);
-
-  const meta_ptr_t head = meta_recent(env, troika);
   out->mi_recent_txnid = head.txnid;
   out->mi_meta_txnid[0] = troika->txnid[0];
   out->mi_meta_sign[0] = unaligned_peek_u64(4, meta0->mm_sign);
@@ -22330,11 +22326,6 @@ __cold static int env_info_snap(const MDBX_env *env, const MDBX_txn *txn,
   out->mi_geo.upper = pgno2bytes(env, txn_meta->mm_geo.upper);
   out->mi_geo.shrink = pgno2bytes(env, pv2pages(txn_meta->mm_geo.shrink_pv));
   out->mi_geo.grow = pgno2bytes(env, pv2pages(txn_meta->mm_geo.grow_pv));
-  const uint64_t unsynced_pages =
-      atomic_load64(&env->me_lck->mti_unsynced_pages, mo_Relaxed) +
-      (atomic_load32(&env->me_lck->mti_meta_sync_txnid, mo_Relaxed) !=
-       (uint32_t)out->mi_recent_txnid);
-
   out->mi_mapsize = env->me_dxb_mmap.limit;
 
   const MDBX_lockinfo *const lck = env->me_lck;
@@ -22346,6 +22337,10 @@ __cold static int env_info_snap(const MDBX_env *env, const MDBX_txn *txn,
   out->mi_sys_pagesize = env->me_os_psize;
 
   if (likely(bytes > size_before_bootid)) {
+    const uint64_t unsynced_pages =
+        atomic_load64(&lck->mti_unsynced_pages, mo_Relaxed) +
+        ((uint32_t)out->mi_recent_txnid !=
+         atomic_load32(&lck->mti_meta_sync_txnid, mo_Relaxed));
     out->mi_unsync_volume = pgno2bytes(env, (size_t)unsynced_pages);
     const uint64_t monotime_now = osal_monotime();
     uint64_t ts = atomic_load64(&lck->mti_eoos_timestamp, mo_Relaxed);
@@ -22390,25 +22385,27 @@ __cold static int env_info_snap(const MDBX_env *env, const MDBX_txn *txn,
     out->mi_pgop_stat.fsync =
         atomic_load64(&lck->mti_pgop_stat.fsync, mo_Relaxed);
 #else
-    memset(&arg->mi_pgop_stat, 0, sizeof(arg->mi_pgop_stat));
+    memset(&out->mi_pgop_stat, 0, sizeof(out->mi_pgop_stat));
 #endif /* MDBX_ENABLE_PGOP_STAT*/
   }
 
-  out->mi_self_latter_reader_txnid = out->mi_latter_reader_txnid =
-      out->mi_recent_txnid;
+  txnid_t overall_latter_reader_txnid = out->mi_recent_txnid;
+  txnid_t self_latter_reader_txnid = overall_latter_reader_txnid;
   if (env->me_lck_mmap.lck) {
     for (size_t i = 0; i < out->mi_numreaders; ++i) {
       const uint32_t pid =
           atomic_load32(&lck->mti_readers[i].mr_pid, mo_AcquireRelease);
       if (pid) {
         const txnid_t txnid = safe64_read(&lck->mti_readers[i].mr_txnid);
-        if (out->mi_latter_reader_txnid > txnid)
-          out->mi_latter_reader_txnid = txnid;
-        if (pid == env->me_pid && out->mi_self_latter_reader_txnid > txnid)
-          out->mi_self_latter_reader_txnid = txnid;
+        if (overall_latter_reader_txnid > txnid)
+          overall_latter_reader_txnid = txnid;
+        if (pid == env->me_pid && self_latter_reader_txnid > txnid)
+          self_latter_reader_txnid = txnid;
       }
     }
   }
+  out->mi_self_latter_reader_txnid = self_latter_reader_txnid;
+  out->mi_latter_reader_txnid = overall_latter_reader_txnid;
 
   osal_compiler_barrier();
   return MDBX_SUCCESS;
@@ -22421,6 +22418,7 @@ __cold int env_info(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo *out,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
+  eASSERT(env, sizeof(snap) >= bytes);
   while (1) {
     rc = env_info_snap(env, txn, out, bytes, troika);
     if (unlikely(rc != MDBX_SUCCESS))
@@ -22439,6 +22437,12 @@ __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
   if (unlikely((env == NULL && txn == NULL) || arg == NULL))
     return MDBX_EINVAL;
 
+  const size_t size_before_bootid = offsetof(MDBX_envinfo, mi_bootid);
+  const size_t size_before_pgop_stat = offsetof(MDBX_envinfo, mi_pgop_stat);
+  if (unlikely(bytes != sizeof(MDBX_envinfo)) && bytes != size_before_bootid &&
+      bytes != size_before_pgop_stat)
+    return MDBX_EINVAL;
+
   if (txn) {
     int err = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR);
     if (unlikely(err != MDBX_SUCCESS))
@@ -22453,12 +22457,6 @@ __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
   } else {
     env = txn->mt_env;
   }
-
-  const size_t size_before_bootid = offsetof(MDBX_envinfo, mi_bootid);
-  const size_t size_before_pgop_stat = offsetof(MDBX_envinfo, mi_pgop_stat);
-  if (unlikely(bytes != sizeof(MDBX_envinfo)) && bytes != size_before_bootid &&
-      bytes != size_before_pgop_stat)
-    return MDBX_EINVAL;
 
   meta_troika_t troika;
   return env_info(env, txn, arg, bytes, &troika);
