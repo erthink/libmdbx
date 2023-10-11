@@ -60,7 +60,7 @@ do
     echo "       For instance, when the process 'A' explicitly marks a memory"
     echo "       region as 'undefined', the process 'B' fill it,"
     echo "       and after this process 'A' read such region, etc."
-    MONITOR="valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt"
+    MONITOR="valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt"
     rm -f valgrind-*.log
   ;;
   --skip-make)
