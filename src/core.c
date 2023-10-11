@@ -8828,6 +8828,7 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
       r = brs.rslot;
     }
     txn->to.reader = r;
+    STATIC_ASSERT(MDBX_TXN_RDONLY_PREPARE > MDBX_TXN_RDONLY);
     if (flags & (MDBX_TXN_RDONLY_PREPARE - MDBX_TXN_RDONLY)) {
       eASSERT(env, txn->mt_txnid == 0);
       eASSERT(env, txn->mt_owner == 0);
