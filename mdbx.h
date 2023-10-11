@@ -3764,7 +3764,7 @@ mdbx_txn_env(const MDBX_txn *txn);
  * \param [in] txn  A transaction handle returned by \ref mdbx_txn_begin().
  *
  * \returns A transaction flags, valid if input is an valid transaction,
- *          otherwise -1. */
+ *          otherwise \ref MDBX_TXN_INVALID. */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int mdbx_txn_flags(const MDBX_txn *txn);
 
 /** \brief Return the transaction's ID.

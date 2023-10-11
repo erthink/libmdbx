@@ -9570,10 +9570,13 @@ uint64_t mdbx_txn_id(const MDBX_txn *txn) {
 }
 
 int mdbx_txn_flags(const MDBX_txn *txn) {
-  if (unlikely(!txn || txn->mt_signature != MDBX_MT_SIGNATURE)) {
-    assert((-1 & (int)MDBX_TXN_INVALID) != 0);
-    return -1;
-  }
+  STATIC_ASSERT(
+      (MDBX_TXN_INVALID &
+       (MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_DIRTY | MDBX_TXN_SPILLS |
+        MDBX_TXN_HAS_CHILD | MDBX_TXN_DRAINED_GC | MDBX_SHRINK_ALLOWED |
+        MDBX_TXN_RW_BEGIN_FLAGS | MDBX_TXN_RO_BEGIN_FLAGS)) == 0);
+  if (unlikely(!txn || txn->mt_signature != MDBX_MT_SIGNATURE))
+    return MDBX_TXN_INVALID;
   assert(0 == (int)(txn->mt_flags & MDBX_TXN_INVALID));
   return txn->mt_flags;
 }
