@@ -26219,7 +26219,13 @@ __cold static void chk_verbose_meta(MDBX_chk_scope_t *const scope,
                               &chk->envinfo.mi_bootid.current,
                               sizeof(chk->envinfo.mi_bootid.current)) == 0;
 
-    line = chk_print(line, "meta-%u: ", num);
+    const char *status = "stay";
+    if (num == chk->troika.recent)
+      status = "head";
+    else if (num == TROIKA_TAIL(&chk->troika))
+      status = "tail";
+    line = chk_print(line, "meta-%u: %s, ", num, status);
+
     switch (chk->envinfo.mi_meta_sign[num]) {
     case MDBX_DATASIGN_NONE:
       line = chk_puts(line, "no-sync/legacy");
@@ -26235,14 +26241,14 @@ __cold static void chk_verbose_meta(MDBX_chk_scope_t *const scope,
       break;
     }
     const txnid_t meta_txnid = chk->envinfo.mi_meta_txnid[num];
-    line = chk_print(line, " txn#%" PRIaTXN, meta_txnid);
-
-    const char *status = "stay";
-    if (num == chk->troika.recent)
-      status = "head";
-    else if (num == TROIKA_TAIL(&chk->troika))
-      status = "tail";
-    line = chk_print(line, ", %s", status);
+    line = chk_print(line, " txn#%" PRIaTXN ", ", meta_txnid);
+    if (chk->envinfo.mi_bootid.meta[num].x | chk->envinfo.mi_bootid.meta[num].y)
+      line = chk_print(line, "boot-id %" PRIx64 "-%" PRIx64 " (%s)",
+                       chk->envinfo.mi_bootid.meta[num].x,
+                       chk->envinfo.mi_bootid.meta[num].y,
+                       bootid_match ? "live" : "not match");
+    else
+      line = chk_puts(line, "no boot-id");
 
     if (env->me_stuck_meta >= 0) {
       if (num == (unsigned)env->me_stuck_meta)
