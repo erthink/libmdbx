@@ -19019,6 +19019,32 @@ void mdbx_cursor_close(MDBX_cursor *mc) {
   }
 }
 
+int mdbx_txn_release_all_cursors(const MDBX_txn *txn, bool unbind) {
+  int rc = check_txn(txn, MDBX_TXN_FINISHED | MDBX_TXN_HAS_CHILD);
+  if (likely(rc == MDBX_SUCCESS)) {
+    for (size_t i = FREE_DBI; i < txn->mt_numdbs; ++i) {
+      while (txn->mt_cursors[i]) {
+        MDBX_cursor *mc = txn->mt_cursors[i];
+        ENSURE(NULL, mc->mc_signature == MDBX_MC_LIVE &&
+                         (mc->mc_flags & C_UNTRACK) && !mc->mc_backup);
+        rc = likely(rc < INT_MAX) ? rc + 1 : rc;
+        txn->mt_cursors[i] = mc->mc_next;
+        if (unbind) {
+          mc->mc_signature = MDBX_MC_READY4CLOSE;
+          mc->mc_flags = 0;
+        } else {
+          mc->mc_signature = 0;
+          mc->mc_next = mc;
+          osal_free(mc);
+        }
+      }
+    }
+  } else {
+    eASSERT(nullptr, rc < 0);
+  }
+  return rc;
+}
+
 MDBX_txn *mdbx_cursor_txn(const MDBX_cursor *mc) {
   if (unlikely(!mc || mc->mc_signature != MDBX_MC_LIVE))
     return NULL;

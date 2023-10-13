@@ -3841,6 +3841,15 @@ public:
   /// \brief Opens cursor for specified key-value map handle.
   inline cursor_managed open_cursor(map_handle map);
 
+  /// \brief Unbind or close all cursors.
+  inline size_t release_all_cursors(bool unbind) const;
+
+  /// \brief Close all cursors.
+  inline size_t close_all_cursors() const { return release_all_cursors(false); }
+
+  /// \brief Unbind all cursors.
+  inline size_t unbind_all_cursors() const { return release_all_cursors(true); }
+
   /// \brief Open existing key-value map.
   inline map_handle open_map(
       const char *name,
@@ -5464,6 +5473,13 @@ inline cursor_managed txn::open_cursor(map_handle map) {
   MDBX_cursor *ptr;
   error::success_or_throw(::mdbx_cursor_open(handle_, map.dbi, &ptr));
   return cursor_managed(ptr);
+}
+
+inline size_t txn::release_all_cursors(bool unbind) const {
+  int err = ::mdbx_txn_release_all_cursors(handle_, unbind);
+  if (MDBX_UNLIKELY(err < 0))
+    MDBX_CXX20_UNLIKELY error::throw_exception(err);
+  return size_t(err);
 }
 
 inline ::mdbx::map_handle

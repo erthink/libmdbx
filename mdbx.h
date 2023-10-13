@@ -4803,6 +4803,27 @@ LIBMDBX_API int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi,
  *                     or \ref mdbx_cursor_create(). */
 LIBMDBX_API void mdbx_cursor_close(MDBX_cursor *cursor);
 
+/** \brief Unbind or closes all cursors of a given transaction.
+ * \ingroup c_cursors
+ *
+ * Unbinds either closes all cursors associated (opened or renewed) with
+ * a given transaction in a bulk with minimal overhead.
+ *
+ * \see mdbx_cursor_unbind()
+ * \see mdbx_cursor_close()
+ *
+ * \param [in] txn      A transaction handle returned by \ref mdbx_txn_begin().
+ * \param [in] unbind   If non-zero, unbinds cursors and leaves ones reusable.
+ *                      Otherwise close and dispose cursors.
+ *
+ * \returns A negative error value on failure or the number of closed cursors
+ *          on success, some possible errors are:
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
+ *                               by current thread.
+ * \retval MDBX_BAD_TXN          Given transaction is invalid or has
+ *                               a child/nested transaction transaction. */
+LIBMDBX_API int mdbx_txn_release_all_cursors(const MDBX_txn *txn, bool unbind);
+
 /** \brief Renew a cursor handle for use within the given transaction.
  * \ingroup c_cursors
  *
