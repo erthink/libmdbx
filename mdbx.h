@@ -1876,7 +1876,8 @@ enum MDBX_error_t {
   MDBX_BAD_RSLOT = -30783,
 
   /** Transaction is not valid for requested operation,
-   * e.g. had errored and be must aborted, has a child, or is invalid */
+   * e.g. had errored and be must aborted, has a child/nested transaction,
+   * or is invalid */
   MDBX_BAD_TXN = -30782,
 
   /** Invalid size or alignment of key or data for target database,
@@ -2699,11 +2700,12 @@ MDBX_DEPRECATED LIBMDBX_INLINE_API(int, mdbx_env_info,
  *     success. The \ref MDBX_RESULT_TRUE means no data pending for flush
  *     to disk, and 0 otherwise. Some possible errors are:
  *
- * \retval MDBX_EACCES   the environment is read-only.
- * \retval MDBX_BUSY     the environment is used by other thread
+ * \retval MDBX_EACCES   The environment is read-only.
+ * \retval MDBX_BUSY     The environment is used by other thread
  *                       and `nonblock=true`.
- * \retval MDBX_EINVAL   an invalid parameter was specified.
- * \retval MDBX_EIO      an error occurred during synchronization. */
+ * \retval MDBX_EINVAL   An invalid parameter was specified.
+ * \retval MDBX_EIO      An error occurred during the flushing/writing data
+ *                       to a storage medium/disk. */
 LIBMDBX_API int mdbx_env_sync_ex(MDBX_env *env, bool force, bool nonblock);
 
 /** \brief The shortcut to calling \ref mdbx_env_sync_ex() with
@@ -2878,7 +2880,8 @@ LIBMDBX_INLINE_API(int, mdbx_env_get_syncperiod,
  *                     is expected, i.e. \ref MDBX_env instance was freed in
  *                     proper manner.
  *
- * \retval MDBX_EIO    An error occurred during synchronization. */
+ * \retval MDBX_EIO    An error occurred during the flushing/writing data
+ *                     to a storage medium/disk. */
 LIBMDBX_API int mdbx_env_close_ex(MDBX_env *env, bool dont_sync);
 
 /** \brief The shortcut to calling \ref mdbx_env_close_ex() with
@@ -3918,7 +3921,8 @@ LIBMDBX_API int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency);
  *                               by current thread.
  * \retval MDBX_EINVAL           Transaction handle is NULL.
  * \retval MDBX_ENOSPC           No more disk space.
- * \retval MDBX_EIO              A system-level I/O error occurred.
+ * \retval MDBX_EIO              An error occurred during the flushing/writing
+ *                               data to a storage medium/disk.
  * \retval MDBX_ENOMEM           Out of memory. */
 LIBMDBX_INLINE_API(int, mdbx_txn_commit, (MDBX_txn * txn)) {
   return mdbx_txn_commit_ex(txn, NULL);
@@ -4084,9 +4088,9 @@ LIBMDBX_API int mdbx_canary_get(const MDBX_txn *txn, MDBX_canary *canary);
  * \see mdbx_get_datacmp \see mdbx_dcmp()
  *
  * \anchor avoid_custom_comparators
- * It is recommend not using custom comparison functions, but instead
- * converting the keys to one of the forms that are suitable for built-in
- * comparators (for instance take look to the \ref value2key).
+ * \deprecated It is recommend not using custom comparison functions, but
+ * instead converting the keys to one of the forms that are suitable for
+ * built-in comparators (for instance take look to the \ref value2key).
  * The reasons to not using custom comparators are:
  *   - The order of records could not be validated without your code.
  *     So `mdbx_chk` utility will reports "wrong order" errors
@@ -4316,7 +4320,7 @@ LIBMDBX_API int mdbx_dbi_dupsort_depthmask(MDBX_txn *txn, MDBX_dbi dbi,
 enum MDBX_dbi_state_t {
   /** DB was written in this txn */
   MDBX_DBI_DIRTY = 0x01,
-  /** Named-DB record is older than txnID */
+  /** Cached Named-DB record is older than txnID */
   MDBX_DBI_STALE = 0x02,
   /** Named-DB handle opened in this txn */
   MDBX_DBI_FRESH = 0x04,
@@ -4655,7 +4659,7 @@ LIBMDBX_API int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi,
 LIBMDBX_API int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
                          const MDBX_val *data);
 
-/** \brief Create a cursor handle but not bind it to transaction nor DBI handle.
+/** \brief Create a cursor handle but not bind it to transaction nor DBI-handle.
  * \ingroup c_cursors
  *
  * A cursor cannot be used when its database handle is closed. Nor when its
@@ -4679,7 +4683,7 @@ LIBMDBX_API int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
  * \returns Created cursor handle or NULL in case out of memory. */
 LIBMDBX_API MDBX_cursor *mdbx_cursor_create(void *context);
 
-/** \brief Set application information associated with the \ref MDBX_cursor.
+/** \brief Set application information associated with the cursor.
  * \ingroup c_cursors
  * \see mdbx_cursor_get_userctx()
  *
@@ -4702,11 +4706,11 @@ LIBMDBX_API int mdbx_cursor_set_userctx(MDBX_cursor *cursor, void *ctx);
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API void *
 mdbx_cursor_get_userctx(const MDBX_cursor *cursor);
 
-/** \brief Bind cursor to specified transaction and DBI handle.
+/** \brief Bind cursor to specified transaction and DBI-handle.
  * \ingroup c_cursors
  *
  * Using of the `mdbx_cursor_bind()` is equivalent to calling
- * \ref mdbx_cursor_renew() but with specifying an arbitrary dbi handle.
+ * \ref mdbx_cursor_renew() but with specifying an arbitrary DBI-handle.
  *
  * A cursor may be associated with a new transaction, and referencing a new or
  * the same database handle as it was created with. This may be done whether the
@@ -4720,7 +4724,7 @@ mdbx_cursor_get_userctx(const MDBX_cursor *cursor);
  *
  * \param [in] txn      A transaction handle returned by \ref mdbx_txn_begin().
  * \param [in] dbi      A database handle returned by \ref mdbx_dbi_open().
- * \param [out] cursor  A cursor handle returned by \ref mdbx_cursor_create().
+ * \param [in] cursor   A cursor handle returned by \ref mdbx_cursor_create().
  *
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
@@ -4779,15 +4783,14 @@ LIBMDBX_API int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi,
  *                     or \ref mdbx_cursor_create(). */
 LIBMDBX_API void mdbx_cursor_close(MDBX_cursor *cursor);
 
-/** \brief Renew a cursor handle.
+/** \brief Renew a cursor handle for use within the given transaction.
  * \ingroup c_cursors
  *
- * The cursor may be associated with a new transaction, and referencing a new or
- * the same database handle as it was created with. This may be done whether the
- * previous transaction is live or dead.
+ * A cursor may be associated with a new transaction whether the previous
+ * transaction is running or finished.
  *
  * Using of the `mdbx_cursor_renew()` is equivalent to calling
- * \ref mdbx_cursor_bind() with the DBI handle that previously
+ * \ref mdbx_cursor_bind() with the DBI-handle that previously
  * the cursor was used with.
  *
  * \note In contrast to LMDB, the MDBX allow any cursor to be re-used by using
@@ -4801,7 +4804,9 @@ LIBMDBX_API void mdbx_cursor_close(MDBX_cursor *cursor);
  *          some possible errors are:
  * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
  *                               by current thread.
- * \retval MDBX_EINVAL  An invalid parameter was specified. */
+ * \retval MDBX_EINVAL  An invalid parameter was specified.
+ * \retval MDBX_BAD_DBI The cursor was not bound to a DBI-handle
+ *                      or such a handle became invalid. */
 LIBMDBX_API int mdbx_cursor_renew(MDBX_txn *txn, MDBX_cursor *cursor);
 
 /** \brief Return the cursor's transaction handle.
