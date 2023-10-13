@@ -4732,6 +4732,28 @@ mdbx_cursor_get_userctx(const MDBX_cursor *cursor);
 LIBMDBX_API int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *cursor,
                                  MDBX_dbi dbi);
 
+/** \brief Unbind cursor from a transaction.
+ * \ingroup c_cursors
+ *
+ * Unbinded cursor is disassociated with any transactions but still holds
+ * the original DBI-handle internally. Thus it could be renewed with any running
+ * transaction or closed.
+ *
+ * \see mdbx_cursor_renew()
+ * \see mdbx_cursor_bind()
+ * \see mdbx_cursor_close()
+ *
+ * \note In contrast to LMDB, the MDBX required that any opened cursors can be
+ * reused and must be freed explicitly, regardless ones was opened in a
+ * read-only or write transaction. The REASON for this is eliminates ambiguity
+ * which helps to avoid errors such as: use-after-free, double-free, i.e.
+ * memory corruption and segfaults.
+ *
+ * \param [in] cursor   A cursor handle returned by \ref mdbx_cursor_open().
+ *
+ * \returns A non-zero error value on failure and 0 on success. */
+LIBMDBX_API int mdbx_cursor_unbind(MDBX_cursor *cursor);
+
 /** \brief Create a cursor handle for the specified transaction and DBI handle.
  * \ingroup c_cursors
  *

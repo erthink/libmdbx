@@ -18846,6 +18846,38 @@ void *mdbx_cursor_get_userctx(const MDBX_cursor *mc) {
   return couple->mc_userctx;
 }
 
+int mdbx_cursor_unbind(MDBX_cursor *mc) {
+  if (unlikely(!mc))
+    return MDBX_EINVAL;
+
+  if (unlikely(mc->mc_signature != MDBX_MC_LIVE))
+    return (mc->mc_signature == MDBX_MC_READY4CLOSE) ? MDBX_SUCCESS
+                                                     : MDBX_EBADSIGN;
+
+  if (unlikely(mc->mc_backup)) /* Cursor from parent transaction */
+    return MDBX_EINVAL;
+
+  eASSERT(nullptr, mc->mc_txn && mc->mc_txn->mt_signature == MDBX_MT_SIGNATURE);
+  cASSERT(mc, mc->mc_signature == MDBX_MC_LIVE);
+  cASSERT(mc, !mc->mc_backup);
+  if (unlikely(!mc->mc_txn || mc->mc_txn->mt_signature != MDBX_MT_SIGNATURE)) {
+    ERROR("Wrong cursor's transaction %p 0x%x",
+          __Wpedantic_format_voidptr(mc->mc_txn),
+          mc->mc_txn ? mc->mc_txn->mt_signature : 0);
+    return MDBX_PROBLEM;
+  }
+  if (mc->mc_flags & C_UNTRACK) {
+    MDBX_cursor **prev = &mc->mc_txn->mt_cursors[mc->mc_dbi];
+    while (*prev && *prev != mc)
+      prev = &(*prev)->mc_next;
+    cASSERT(mc, *prev == mc);
+    *prev = mc->mc_next;
+  }
+  mc->mc_signature = MDBX_MC_READY4CLOSE;
+  mc->mc_flags = 0;
+  return MDBX_SUCCESS;
+}
+
 int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
   if (unlikely(!mc))
     return MDBX_EINVAL;
@@ -18871,10 +18903,10 @@ int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
                  mc->mc_txn != txn))
       return MDBX_EINVAL;
 
-    assert(mc->mc_db == &txn->mt_dbs[dbi]);
-    assert(mc->mc_dbx == &txn->mt_dbxs[dbi]);
-    assert(mc->mc_dbi == dbi);
-    assert(mc->mc_dbistate == &txn->mt_dbistate[dbi]);
+    cASSERT(mc, mc->mc_db == &txn->mt_dbs[dbi]);
+    cASSERT(mc, mc->mc_dbx == &txn->mt_dbxs[dbi]);
+    cASSERT(mc, mc->mc_dbi == dbi);
+    cASSERT(mc, mc->mc_dbistate == &txn->mt_dbistate[dbi]);
     return likely(mc->mc_dbi == dbi &&
                   /* paranoia */ mc->mc_signature == MDBX_MC_LIVE &&
                   mc->mc_txn == txn)
@@ -18883,27 +18915,9 @@ int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
   }
 
   if (mc->mc_signature == MDBX_MC_LIVE) {
-    if (unlikely(!mc->mc_txn ||
-                 mc->mc_txn->mt_signature != MDBX_MT_SIGNATURE)) {
-      ERROR("Wrong cursor's transaction %p 0x%x",
-            __Wpedantic_format_voidptr(mc->mc_txn),
-            mc->mc_txn ? mc->mc_txn->mt_signature : 0);
-      return MDBX_PROBLEM;
-    }
-    if (mc->mc_flags & C_UNTRACK) {
-      MDBX_cursor **prev = &mc->mc_txn->mt_cursors[mc->mc_dbi];
-      while (*prev && *prev != mc)
-        prev = &(*prev)->mc_next;
-      cASSERT(mc, *prev == mc);
-      *prev = mc->mc_next;
-    }
-    mc->mc_signature = MDBX_MC_READY4CLOSE;
-    mc->mc_flags = 0;
-    mc->mc_dbi = UINT_MAX;
-    mc->mc_next = NULL;
-    mc->mc_db = NULL;
-    mc->mc_dbx = NULL;
-    mc->mc_dbistate = NULL;
+    rc = mdbx_cursor_unbind(mc);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
   }
   cASSERT(mc, !(mc->mc_flags & C_UNTRACK));
 

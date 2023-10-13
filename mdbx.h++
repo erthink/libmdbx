@@ -4223,6 +4223,9 @@ public:
   /// map handle.
   inline void bind(::mdbx::txn &txn, ::mdbx::map_handle map_handle);
 
+  /// \brief Unbind cursor from a transaction.
+  inline void unbind();
+
   /// \brief Returns the cursor's transaction.
   inline ::mdbx::txn txn() const;
   inline map_handle map() const;
@@ -6108,6 +6111,10 @@ inline void cursor::renew(::mdbx::txn &txn) {
 
 inline void cursor::bind(::mdbx::txn &txn, ::mdbx::map_handle map_handle) {
   error::success_or_throw(::mdbx_cursor_bind(txn, handle_, map_handle.dbi));
+}
+
+inline void cursor::unbind() {
+  error::success_or_throw(::mdbx_cursor_unbind(handle_));
 }
 
 inline txn cursor::txn() const {
