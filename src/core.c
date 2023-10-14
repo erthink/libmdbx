@@ -26151,8 +26151,11 @@ static void histogram_acc(const size_t n, struct MDBX_chk_histogram *p) {
         if (p->ranges[i].count) {
           assert(i < last);
           // раздвигаем
-          memmove(p->ranges + i + 1, p->ranges + i,
-                  (last - i) * sizeof(p->ranges[0]));
+#ifdef __COVERITY__
+          if (i < last) /* avoid Coverity false-positive issue */
+#endif                  /* __COVERITY__ */
+            memmove(p->ranges + i + 1, p->ranges + i,
+                    (last - i) * sizeof(p->ranges[0]));
         }
         p->ranges[i].begin = n;
         p->ranges[i].end = n + 1;
