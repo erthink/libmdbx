@@ -3386,7 +3386,7 @@ static int __must_check_result cursor_first(MDBX_cursor *mc, MDBX_val *key,
 static int __must_check_result cursor_last(MDBX_cursor *mc, MDBX_val *key,
                                            MDBX_val *data);
 
-static int __must_check_result cursor_init(MDBX_cursor *mc, MDBX_txn *txn,
+static int __must_check_result cursor_init(MDBX_cursor *mc, const MDBX_txn *txn,
                                            size_t dbi);
 static int __must_check_result cursor_xinit0(MDBX_cursor *mc);
 static int __must_check_result cursor_xinit1(MDBX_cursor *mc, MDBX_node *node,
@@ -9582,7 +9582,7 @@ int mdbx_txn_flags(const MDBX_txn *txn) {
 }
 
 /* Check for misused dbi handles */
-static __inline bool dbi_changed(MDBX_txn *txn, size_t dbi) {
+static __inline bool dbi_changed(const MDBX_txn *txn, size_t dbi) {
   if (txn->mt_dbiseqs == txn->mt_env->me_dbiseqs)
     return false;
   if (likely(
@@ -11171,7 +11171,7 @@ static int txn_write(MDBX_txn *txn, iov_ctx_t *ctx) {
 }
 
 /* Check txn and dbi arguments to a function */
-static __always_inline bool check_dbi(MDBX_txn *txn, MDBX_dbi dbi,
+static __always_inline bool check_dbi(const MDBX_txn *txn, MDBX_dbi dbi,
                                       unsigned validity) {
   if (likely(dbi < txn->mt_numdbs)) {
     if (likely(!dbi_changed(txn, dbi))) {
@@ -11182,7 +11182,7 @@ static __always_inline bool check_dbi(MDBX_txn *txn, MDBX_dbi dbi,
         return false;
     }
   }
-  return dbi_import(txn, dbi);
+  return dbi_import((MDBX_txn *)txn, dbi);
 }
 
 /* Merge child txn into parent */
@@ -16083,7 +16083,8 @@ static __always_inline int node_read(MDBX_cursor *mc, const MDBX_node *node,
   return node_read_bigdata(mc, node, data, mp);
 }
 
-int mdbx_get(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data) {
+int mdbx_get(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
+             MDBX_val *data) {
   DKBUF_DEBUG;
   DEBUG("===> get db %u key [%s]", dbi, DKEY_DEBUG(key));
 
@@ -16105,7 +16106,7 @@ int mdbx_get(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data) {
   return cursor_set(&cx.outer, (MDBX_val *)key, data, MDBX_SET).err;
 }
 
-int mdbx_get_equal_or_great(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
+int mdbx_get_equal_or_great(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
                             MDBX_val *data) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -16128,8 +16129,8 @@ int mdbx_get_equal_or_great(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
   return cursor_get(&cx.outer, key, data, MDBX_SET_LOWERBOUND);
 }
 
-int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
-                size_t *values_count) {
+int mdbx_get_ex(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
+                MDBX_val *data, size_t *values_count) {
   DKBUF_DEBUG;
   DEBUG("===> get db %u key [%s]", dbi, DKEY_DEBUG(key));
 
@@ -18759,13 +18760,13 @@ static int cursor_xinit2(MDBX_cursor *mc, MDBX_xcursor *src_mx,
 }
 
 static __inline int couple_init(MDBX_cursor_couple *couple, const size_t dbi,
-                                MDBX_txn *const txn, MDBX_db *const db,
+                                const MDBX_txn *const txn, MDBX_db *const db,
                                 MDBX_dbx *const dbx, uint8_t *const dbstate) {
   couple->outer.mc_signature = MDBX_MC_LIVE;
   couple->outer.mc_next = NULL;
   couple->outer.mc_backup = NULL;
   couple->outer.mc_dbi = (MDBX_dbi)dbi;
-  couple->outer.mc_txn = txn;
+  couple->outer.mc_txn = (MDBX_txn *)txn;
   couple->outer.mc_db = db;
   couple->outer.mc_dbx = dbx;
   couple->outer.mc_dbistate = dbstate;
@@ -18803,7 +18804,7 @@ static __inline int couple_init(MDBX_cursor_couple *couple, const size_t dbi,
 }
 
 /* Initialize a cursor for a given transaction and database. */
-static int cursor_init(MDBX_cursor *mc, MDBX_txn *txn, size_t dbi) {
+static int cursor_init(MDBX_cursor *mc, const MDBX_txn *txn, size_t dbi) {
   STATIC_ASSERT(offsetof(MDBX_cursor_couple, outer) == 0);
   return couple_init(container_of(mc, MDBX_cursor_couple, outer), dbi, txn,
                      &txn->mt_dbs[dbi], &txn->mt_dbxs[dbi],
@@ -18878,7 +18879,7 @@ int mdbx_cursor_unbind(MDBX_cursor *mc) {
   return MDBX_SUCCESS;
 }
 
-int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
+int mdbx_cursor_bind(const MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
   if (unlikely(!mc))
     return MDBX_EINVAL;
 
@@ -18932,7 +18933,7 @@ int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
   return MDBX_SUCCESS;
 }
 
-int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
+int mdbx_cursor_open(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
   if (unlikely(!ret))
     return MDBX_EINVAL;
   *ret = NULL;
@@ -18951,7 +18952,7 @@ int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
   return MDBX_SUCCESS;
 }
 
-int mdbx_cursor_renew(MDBX_txn *txn, MDBX_cursor *mc) {
+int mdbx_cursor_renew(const MDBX_txn *txn, MDBX_cursor *mc) {
   return likely(mc) ? mdbx_cursor_bind(txn, mc, mc->mc_dbi) : MDBX_EINVAL;
 }
 
@@ -22244,7 +22245,7 @@ __cold int mdbx_env_stat_ex(const MDBX_env *env, const MDBX_txn *txn,
   return rc;
 }
 
-__cold int mdbx_dbi_dupsort_depthmask(MDBX_txn *txn, MDBX_dbi dbi,
+__cold int mdbx_dbi_dupsort_depthmask(const MDBX_txn *txn, MDBX_dbi dbi,
                                       uint32_t *mask) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -22860,7 +22861,7 @@ int mdbx_dbi_open_ex2(MDBX_txn *txn, const MDBX_val *name,
   return dbi_open(txn, name, flags, dbi, keycmp, datacmp);
 }
 
-__cold int mdbx_dbi_stat(MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest,
+__cold int mdbx_dbi_stat(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest,
                          size_t bytes) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -22880,7 +22881,7 @@ __cold int mdbx_dbi_stat(MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest,
     return MDBX_BAD_TXN;
 
   if (unlikely(txn->mt_dbistate[dbi] & DBI_STALE)) {
-    rc = fetch_sdb(txn, dbi);
+    rc = fetch_sdb((MDBX_txn *)txn, dbi);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
@@ -22941,7 +22942,7 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
   return rc;
 }
 
-int mdbx_dbi_flags_ex(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
+int mdbx_dbi_flags_ex(const MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
                       unsigned *state) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -24113,7 +24114,7 @@ int mdbx_estimate_move(const MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data,
   return mdbx_estimate_distance(cursor, &next.outer, distance_items);
 }
 
-int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
+int mdbx_estimate_range(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
                         MDBX_val *begin_data, MDBX_val *end_key,
                         MDBX_val *end_data, ptrdiff_t *size_items) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
@@ -25455,7 +25456,8 @@ LIBMDBX_API __cold int mdbx_env_info(const MDBX_env *env, MDBX_envinfo *info,
   return __inline_mdbx_env_info(env, info, bytes);
 }
 
-LIBMDBX_API int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags) {
+LIBMDBX_API int mdbx_dbi_flags(const MDBX_txn *txn, MDBX_dbi dbi,
+                               unsigned *flags) {
   return __inline_mdbx_dbi_flags(txn, dbi, flags);
 }
 

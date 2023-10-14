@@ -4291,8 +4291,8 @@ mdbx_int64_from_key(const MDBX_val);
  * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
  *                               by current thread.
  * \retval MDBX_EINVAL   An invalid parameter was specified. */
-LIBMDBX_API int mdbx_dbi_stat(MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *stat,
-                              size_t bytes);
+LIBMDBX_API int mdbx_dbi_stat(const MDBX_txn *txn, MDBX_dbi dbi,
+                              MDBX_stat *stat, size_t bytes);
 
 /** \brief Retrieve depth (bitmask) information of nested dupsort (multi-value)
  * B+trees for given database.
@@ -4309,7 +4309,7 @@ LIBMDBX_API int mdbx_dbi_stat(MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *stat,
  *                               by current thread.
  * \retval MDBX_EINVAL       An invalid parameter was specified.
  * \retval MDBX_RESULT_TRUE  The dbi isn't a dupsort (multi-value) database. */
-LIBMDBX_API int mdbx_dbi_dupsort_depthmask(MDBX_txn *txn, MDBX_dbi dbi,
+LIBMDBX_API int mdbx_dbi_dupsort_depthmask(const MDBX_txn *txn, MDBX_dbi dbi,
                                            uint32_t *mask);
 
 /** \brief DBI state bits returted by \ref mdbx_dbi_flags_ex()
@@ -4341,13 +4341,13 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_dbi_state_t)
  * \param [out] state  Address where the state will be returned.
  *
  * \returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_dbi_flags_ex(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
-                                  unsigned *state);
+LIBMDBX_API int mdbx_dbi_flags_ex(const MDBX_txn *txn, MDBX_dbi dbi,
+                                  unsigned *flags, unsigned *state);
 /** \brief The shortcut to calling \ref mdbx_dbi_flags_ex() with `state=NULL`
  * for discarding it result.
  * \ingroup c_statinfo */
 LIBMDBX_INLINE_API(int, mdbx_dbi_flags,
-                   (MDBX_txn * txn, MDBX_dbi dbi, unsigned *flags)) {
+                   (const MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags)) {
   unsigned state;
   return mdbx_dbi_flags_ex(txn, dbi, flags, &state);
 }
@@ -4423,7 +4423,7 @@ LIBMDBX_API int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del);
  *                               by current thread.
  * \retval MDBX_NOTFOUND  The key was not in the database.
  * \retval MDBX_EINVAL    An invalid parameter was specified. */
-LIBMDBX_API int mdbx_get(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
+LIBMDBX_API int mdbx_get(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
                          MDBX_val *data);
 
 /** \brief Get items from a database
@@ -4456,7 +4456,7 @@ LIBMDBX_API int mdbx_get(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
  *                               by current thread.
  * \retval MDBX_NOTFOUND  The key was not in the database.
  * \retval MDBX_EINVAL    An invalid parameter was specified. */
-LIBMDBX_API int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
+LIBMDBX_API int mdbx_get_ex(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
                             MDBX_val *data, size_t *values_count);
 
 /** \brief Get equal or great item from a database.
@@ -4487,7 +4487,7 @@ LIBMDBX_API int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
  *                               by current thread.
  * \retval MDBX_NOTFOUND      The key was not in the database.
  * \retval MDBX_EINVAL        An invalid parameter was specified. */
-LIBMDBX_API int mdbx_get_equal_or_great(MDBX_txn *txn, MDBX_dbi dbi,
+LIBMDBX_API int mdbx_get_equal_or_great(const MDBX_txn *txn, MDBX_dbi dbi,
                                         MDBX_val *key, MDBX_val *data);
 
 /** \brief Store items into a database.
@@ -4729,7 +4729,7 @@ mdbx_cursor_get_userctx(const MDBX_cursor *cursor);
  * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
  *                               by current thread.
  * \retval MDBX_EINVAL  An invalid parameter was specified. */
-LIBMDBX_API int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *cursor,
+LIBMDBX_API int mdbx_cursor_bind(const MDBX_txn *txn, MDBX_cursor *cursor,
                                  MDBX_dbi dbi);
 
 /** \brief Unbind cursor from a transaction.
@@ -4784,7 +4784,7 @@ LIBMDBX_API int mdbx_cursor_unbind(MDBX_cursor *cursor);
  * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
  *                               by current thread.
  * \retval MDBX_EINVAL  An invalid parameter was specified. */
-LIBMDBX_API int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi,
+LIBMDBX_API int mdbx_cursor_open(const MDBX_txn *txn, MDBX_dbi dbi,
                                  MDBX_cursor **cursor);
 
 /** \brief Close a cursor handle.
@@ -4848,7 +4848,7 @@ LIBMDBX_API int mdbx_txn_release_all_cursors(const MDBX_txn *txn, bool unbind);
  * \retval MDBX_EINVAL  An invalid parameter was specified.
  * \retval MDBX_BAD_DBI The cursor was not bound to a DBI-handle
  *                      or such a handle became invalid. */
-LIBMDBX_API int mdbx_cursor_renew(MDBX_txn *txn, MDBX_cursor *cursor);
+LIBMDBX_API int mdbx_cursor_renew(const MDBX_txn *txn, MDBX_cursor *cursor);
 
 /** \brief Return the cursor's transaction handle.
  * \ingroup c_cursors
@@ -5227,7 +5227,7 @@ LIBMDBX_API int mdbx_estimate_move(const MDBX_cursor *cursor, MDBX_val *key,
  * \param [out] distance_items  A pointer to store range estimation result.
  *
  * \returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi,
+LIBMDBX_API int mdbx_estimate_range(const MDBX_txn *txn, MDBX_dbi dbi,
                                     MDBX_val *begin_key, MDBX_val *begin_data,
                                     MDBX_val *end_key, MDBX_val *end_data,
                                     ptrdiff_t *distance_items);
