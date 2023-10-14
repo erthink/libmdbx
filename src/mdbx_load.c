@@ -505,7 +505,7 @@ static int equal_or_greater(const MDBX_val *a, const MDBX_val *b) {
 }
 
 int main(int argc, char *argv[]) {
-  int i, rc;
+  int i, err;
   MDBX_env *env = nullptr;
   MDBX_txn *txn = nullptr;
   MDBX_cursor *mc = nullptr;
@@ -608,40 +608,45 @@ int main(int argc, char *argv[]) {
   dbuf.iov_len = 4096;
   dbuf.iov_base = osal_malloc(dbuf.iov_len);
   if (!dbuf.iov_base) {
-    rc = MDBX_ENOMEM;
-    error("value-buffer", rc);
-    goto env_close;
+    err = MDBX_ENOMEM;
+    error("value-buffer", err);
+    goto bailout;
   }
 
   /* read first header for mapsize= */
   if (!(mode & NOHDR)) {
-    rc = readhdr();
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      if (rc == EOF)
-        rc = MDBX_ENODATA;
-      error("readheader", rc);
-      goto env_close;
+    err = readhdr();
+    if (unlikely(err != MDBX_SUCCESS)) {
+      if (err == EOF)
+        err = MDBX_ENODATA;
+      error("readheader", err);
+      goto bailout;
     }
   }
 
-  rc = mdbx_env_create(&env);
-  if (unlikely(rc != MDBX_SUCCESS)) {
-    error("mdbx_env_create", rc);
-    return EXIT_FAILURE;
+  err = mdbx_env_create(&env);
+  if (unlikely(err != MDBX_SUCCESS)) {
+    error("mdbx_env_create", err);
+    goto bailout;
   }
 
-  mdbx_env_set_maxdbs(env, 2);
+  err = mdbx_env_set_maxdbs(env, 2);
+  if (unlikely(err != MDBX_SUCCESS)) {
+    error("mdbx_env_set_maxdbs", err);
+    goto bailout;
+  }
+
   if (envinfo.mi_maxreaders) {
-    rc = mdbx_env_set_maxreaders(env, envinfo.mi_maxreaders);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      error("mdbx_env_set_maxreaders", rc);
-      goto env_close;
+    err = mdbx_env_set_maxreaders(env, envinfo.mi_maxreaders);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      error("mdbx_env_set_maxreaders", err);
+      goto bailout;
     }
   }
 
   if (envinfo.mi_geo.current | envinfo.mi_mapsize) {
     if (envinfo.mi_geo.current) {
-      rc = mdbx_env_set_geometry(
+      err = mdbx_env_set_geometry(
           env, (intptr_t)envinfo.mi_geo.lower, (intptr_t)envinfo.mi_geo.current,
           (intptr_t)envinfo.mi_geo.upper, (intptr_t)envinfo.mi_geo.shrink,
           (intptr_t)envinfo.mi_geo.grow,
@@ -654,23 +659,23 @@ int main(int argc, char *argv[]) {
               "Database size is too large for current system (mapsize=%" PRIu64
               " is great than system-limit %zu)\n",
               envinfo.mi_mapsize, (size_t)MAX_MAPSIZE);
-        goto env_close;
+        goto bailout;
       }
-      rc = mdbx_env_set_geometry(
+      err = mdbx_env_set_geometry(
           env, (intptr_t)envinfo.mi_mapsize, (intptr_t)envinfo.mi_mapsize,
           (intptr_t)envinfo.mi_mapsize, 0, 0,
           envinfo.mi_dxb_pagesize ? (intptr_t)envinfo.mi_dxb_pagesize : -1);
     }
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      error("mdbx_env_set_geometry", rc);
-      goto env_close;
+    if (unlikely(err != MDBX_SUCCESS)) {
+      error("mdbx_env_set_geometry", err);
+      goto bailout;
     }
   }
 
-  rc = mdbx_env_open(env, envname, envflags, 0664);
-  if (unlikely(rc != MDBX_SUCCESS)) {
-    error("mdbx_env_open", rc);
-    goto env_close;
+  err = mdbx_env_open(env, envname, envflags, 0664);
+  if (unlikely(err != MDBX_SUCCESS)) {
+    error("mdbx_env_open", err);
+    goto bailout;
   }
 
   kbuf.iov_len = mdbx_env_get_maxvalsize_ex(env, 0) + (size_t)1;
@@ -678,54 +683,54 @@ int main(int argc, char *argv[]) {
     if (!quiet)
       fprintf(stderr, "mdbx_env_get_maxkeysize() failed, returns %zu\n",
               kbuf.iov_len);
-    goto env_close;
+    goto bailout;
   }
 
   kbuf.iov_base = malloc(kbuf.iov_len);
   if (!kbuf.iov_base) {
-    rc = MDBX_ENOMEM;
-    error("key-buffer", rc);
-    goto env_close;
+    err = MDBX_ENOMEM;
+    error("key-buffer", err);
+    goto bailout;
   }
 
-  while (rc == MDBX_SUCCESS) {
+  while (err == MDBX_SUCCESS) {
     if (user_break) {
-      rc = MDBX_EINTR;
+      err = MDBX_EINTR;
       break;
     }
 
-    rc = mdbx_txn_begin(env, nullptr, 0, &txn);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      error("mdbx_txn_begin", rc);
-      goto env_close;
+    err = mdbx_txn_begin(env, nullptr, 0, &txn);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      error("mdbx_txn_begin", err);
+      goto bailout;
     }
 
     if (mode & GLOBAL) {
       mode -= GLOBAL;
       if (canary.v | canary.x | canary.y | canary.z) {
-        rc = mdbx_canary_put(txn, &canary);
-        if (unlikely(rc != MDBX_SUCCESS)) {
-          error("mdbx_canary_put", rc);
-          goto txn_abort;
+        err = mdbx_canary_put(txn, &canary);
+        if (unlikely(err != MDBX_SUCCESS)) {
+          error("mdbx_canary_put", err);
+          goto bailout;
         }
       }
     }
 
     const char *const dbi_name = subname ? subname : "@MAIN";
-    rc =
+    err =
         mdbx_dbi_open_ex(txn, subname, dbi_flags | MDBX_CREATE, &dbi,
                          (putflags & MDBX_APPEND) ? equal_or_greater : nullptr,
                          (putflags & MDBX_APPEND) ? equal_or_greater : nullptr);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      error("mdbx_dbi_open_ex", rc);
-      goto txn_abort;
+    if (unlikely(err != MDBX_SUCCESS)) {
+      error("mdbx_dbi_open_ex", err);
+      goto bailout;
     }
 
     uint64_t present_sequence;
-    rc = mdbx_dbi_sequence(txn, dbi, &present_sequence, 0);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      error("mdbx_dbi_sequence", rc);
-      goto txn_abort;
+    err = mdbx_dbi_sequence(txn, dbi, &present_sequence, 0);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      error("mdbx_dbi_sequence", err);
+      goto bailout;
     }
     if (present_sequence > sequence) {
       if (!quiet)
@@ -733,22 +738,22 @@ int main(int argc, char *argv[]) {
                 "present sequence for '%s' value (%" PRIu64
                 ") is greater than loaded (%" PRIu64 ")\n",
                 dbi_name, present_sequence, sequence);
-      rc = MDBX_RESULT_TRUE;
-      goto txn_abort;
+      err = MDBX_RESULT_TRUE;
+      goto bailout;
     }
     if (present_sequence < sequence) {
-      rc = mdbx_dbi_sequence(txn, dbi, nullptr, sequence - present_sequence);
-      if (unlikely(rc != MDBX_SUCCESS)) {
-        error("mdbx_dbi_sequence", rc);
-        goto txn_abort;
+      err = mdbx_dbi_sequence(txn, dbi, nullptr, sequence - present_sequence);
+      if (unlikely(err != MDBX_SUCCESS)) {
+        error("mdbx_dbi_sequence", err);
+        goto bailout;
       }
     }
 
     if (purge) {
-      rc = mdbx_drop(txn, dbi, false);
-      if (unlikely(rc != MDBX_SUCCESS)) {
-        error("mdbx_drop", rc);
-        goto txn_abort;
+      err = mdbx_drop(txn, dbi, false);
+      if (unlikely(err != MDBX_SUCCESS)) {
+        error("mdbx_drop", err);
+        goto bailout;
       }
     }
 
@@ -756,85 +761,85 @@ int main(int argc, char *argv[]) {
       putflags = (dbi_flags & MDBX_DUPSORT) ? putflags | MDBX_APPENDDUP
                                             : putflags & ~MDBX_APPENDDUP;
 
-    rc = mdbx_cursor_open(txn, dbi, &mc);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      error("mdbx_cursor_open", rc);
-      goto txn_abort;
+    err = mdbx_cursor_open(txn, dbi, &mc);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      error("mdbx_cursor_open", err);
+      goto bailout;
     }
 
     int batch = 0;
-    while (rc == MDBX_SUCCESS) {
+    while (err == MDBX_SUCCESS) {
       MDBX_val key, data;
-      rc = readline(&key, &kbuf);
-      if (rc == EOF)
+      err = readline(&key, &kbuf);
+      if (err == EOF)
         break;
 
-      if (rc == MDBX_SUCCESS)
-        rc = readline(&data, &dbuf);
-      if (rc) {
+      if (err == MDBX_SUCCESS)
+        err = readline(&data, &dbuf);
+      if (err) {
         if (!quiet)
           fprintf(stderr, "%s: line %" PRIiSIZE ": failed to read key value\n",
                   prog, lineno);
-        goto txn_abort;
+        goto bailout;
       }
 
-      rc = mdbx_cursor_put(mc, &key, &data, putflags);
-      if (rc == MDBX_KEYEXIST && putflags)
+      err = mdbx_cursor_put(mc, &key, &data, putflags);
+      if (err == MDBX_KEYEXIST && putflags)
         continue;
-      if (rc == MDBX_BAD_VALSIZE && rescue) {
+      if (err == MDBX_BAD_VALSIZE && rescue) {
         if (!quiet)
           fprintf(stderr, "%s: skip line %" PRIiSIZE ": due %s\n", prog, lineno,
-                  mdbx_strerror(rc));
+                  mdbx_strerror(err));
         continue;
       }
-      if (unlikely(rc != MDBX_SUCCESS)) {
-        error("mdbx_cursor_put", rc);
-        goto txn_abort;
+      if (unlikely(err != MDBX_SUCCESS)) {
+        error("mdbx_cursor_put", err);
+        goto bailout;
       }
       batch++;
 
       MDBX_txn_info txn_info;
-      rc = mdbx_txn_info(txn, &txn_info, false);
-      if (unlikely(rc != MDBX_SUCCESS)) {
-        error("mdbx_txn_info", rc);
-        goto txn_abort;
+      err = mdbx_txn_info(txn, &txn_info, false);
+      if (unlikely(err != MDBX_SUCCESS)) {
+        error("mdbx_txn_info", err);
+        goto bailout;
       }
 
       if (batch == 10000 || txn_info.txn_space_dirty > MEGABYTE * 256) {
-        rc = mdbx_txn_commit(txn);
-        if (unlikely(rc != MDBX_SUCCESS)) {
-          error("mdbx_txn_commit", rc);
-          goto env_close;
+        err = mdbx_txn_commit(txn);
+        if (unlikely(err != MDBX_SUCCESS)) {
+          error("mdbx_txn_commit", err);
+          goto bailout;
         }
         batch = 0;
 
-        rc = mdbx_txn_begin(env, nullptr, 0, &txn);
-        if (unlikely(rc != MDBX_SUCCESS)) {
-          error("mdbx_txn_begin", rc);
-          goto env_close;
+        err = mdbx_txn_begin(env, nullptr, 0, &txn);
+        if (unlikely(err != MDBX_SUCCESS)) {
+          error("mdbx_txn_begin", err);
+          goto bailout;
         }
-        rc = mdbx_cursor_bind(txn, mc, dbi);
-        if (unlikely(rc != MDBX_SUCCESS)) {
-          error("mdbx_cursor_bind", rc);
-          goto txn_abort;
+        err = mdbx_cursor_bind(txn, mc, dbi);
+        if (unlikely(err != MDBX_SUCCESS)) {
+          error("mdbx_cursor_bind", err);
+          goto bailout;
         }
       }
     }
 
     mdbx_cursor_close(mc);
     mc = nullptr;
-    rc = mdbx_txn_commit(txn);
+    err = mdbx_txn_commit(txn);
     txn = nullptr;
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      error("mdbx_txn_commit", rc);
-      goto env_close;
+    if (unlikely(err != MDBX_SUCCESS)) {
+      error("mdbx_txn_commit", err);
+      goto bailout;
     }
     if (subname) {
       assert(dbi != MAIN_DBI);
-      rc = mdbx_dbi_close(env, dbi);
-      if (unlikely(rc != MDBX_SUCCESS)) {
-        error("mdbx_dbi_close", rc);
-        goto env_close;
+      err = mdbx_dbi_close(env, dbi);
+      if (unlikely(err != MDBX_SUCCESS)) {
+        error("mdbx_dbi_close", err);
+        goto bailout;
       }
     } else {
       assert(dbi == MAIN_DBI);
@@ -842,14 +847,14 @@ int main(int argc, char *argv[]) {
 
     /* try read next header */
     if (!(mode & NOHDR))
-      rc = readhdr();
+      err = readhdr();
     else if (ferror(stdin) || feof(stdin))
       break;
   }
 
-  switch (rc) {
+  switch (err) {
   case EOF:
-    rc = MDBX_SUCCESS;
+    err = MDBX_SUCCESS;
   case MDBX_SUCCESS:
     break;
   case MDBX_EINTR:
@@ -857,17 +862,19 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "Interrupted by signal/user\n");
     break;
   default:
-    if (unlikely(rc != MDBX_SUCCESS))
-      error("readline", rc);
+    if (unlikely(err != MDBX_SUCCESS))
+      error("readline", err);
   }
 
-txn_abort:
-  mdbx_cursor_close(mc);
-  mdbx_txn_abort(txn);
-env_close:
-  mdbx_env_close(env);
+bailout:
+  if (mc)
+    mdbx_cursor_close(mc);
+  if (txn)
+    mdbx_txn_abort(txn);
+  if (env)
+    mdbx_env_close(env);
   free(kbuf.iov_base);
   free(dbuf.iov_base);
 
-  return rc ? EXIT_FAILURE : EXIT_SUCCESS;
+  return err ? EXIT_FAILURE : EXIT_SUCCESS;
 }
