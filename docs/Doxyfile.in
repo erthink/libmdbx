@@ -2224,14 +2224,24 @@ INCLUDE_FILE_PATTERNS  =
 # recursively expanded use the := operator instead of the = operator.
 # This tag requires that the tag ENABLE_PREPROCESSING is set to YES.
 
-PREDEFINED             = DOXYGEN MDBX_DECLARE_EXCEPTION \
-	MDBX_NOTHROW_PURE_FUNCTION MDBX_PURE_FUNCTION \
-	MDBX_NOTHROW_CONST_FUNCTION \
-	MDBX_CXX01_CONSTEXPR MDBX_CXX01_CONSTEXPR_VAR \
-	MDBX_CXX11_CONSTEXPR MDBX_CXX11_CONSTEXPR_VAR \
-	MDBX_CXX14_CONSTEXPR MDBX_CXX14_CONSTEXPR_VAR \
-	MDBX_CXX17_CONSTEXPR MDBX_CXX20_CONSTEXPR \
-	MDBX_CXX17_NOEXCEPT
+
+PREDEFINED             = DOXYGEN \
+	MDBX_CXX20_CONCEPT(CONCEPT,NAME)="CONCEPT NAME" \
+	MDBX_STD_FILESYSTEM_PATH=::mdbx::filesystem::path \
+	MDBX_U128_TYPE=uint128_t MDBX_I128_TYPE=int128_t \
+	MDBX_DECLARE_EXCEPTION(NAME)="struct LIBMDBX_API_TYPE NAME : public exception{NAME(const ::mdbx::error &); virtual ~NAME() noexcept; }" \
+	MDBX_PURE_FUNCTION=[[gnu::pure]] \
+	MDBX_NOTHROW_PURE_FUNCTION="[[gnu::pure, gnu::nothrow]]" \
+	MDBX_CONST_FUNCTION=[[gnu::const]] \
+	MDBX_NOTHROW_CONST_FUNCTION="[[gnu::const, gnu::nothrow]]" \
+	MDBX_CXX01_CONSTEXPR=constexpr MDBX_CXX01_CONSTEXPR_VAR=constexpr \
+	MDBX_CXX11_CONSTEXPR=constexpr MDBX_CXX11_CONSTEXPR_VAR=constexpr \
+	MDBX_CXX14_CONSTEXPR=constexpr MDBX_CXX14_CONSTEXPR_VAR=constexpr \
+	MDBX_CXX17_CONSTEXPR=constexpr MDBX_CXX20_CONSTEXPR=constexpr \
+	MDBX_CXX17_NOEXCEPT=noexcept MDBX_IF_CONSTEXPR=constexpr \
+	MDBX_CXX20_LIKELY=[[likely]] MDBX_CXX20_UNLIKELY=[[unlikely]] \
+	MDBX_MAYBE_UNUSED=[[maybe_unused]] \
+	MDBX_DEPRECATED=[[deprecated]]
 
 # If the MACRO_EXPANSION and EXPAND_ONLY_PREDEF tags are set to YES then this
 # tag can be used to specify a list of macro names that should be expanded. The
