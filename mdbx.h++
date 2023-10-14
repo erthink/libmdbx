@@ -3839,7 +3839,7 @@ public:
   txn_managed start_nested();
 
   /// \brief Opens cursor for specified key-value map handle.
-  inline cursor_managed open_cursor(map_handle map);
+  inline cursor_managed open_cursor(map_handle map) const;
 
   /// \brief Open existing key-value map.
   inline map_handle open_map(
@@ -4217,11 +4217,11 @@ public:
 
   /// \brief Renew/bind a cursor with a new transaction and previously used
   /// key-value map handle.
-  inline void renew(::mdbx::txn &txn);
+  inline void renew(const ::mdbx::txn &txn);
 
   /// \brief Bind/renew a cursor with a new transaction and specified key-value
   /// map handle.
-  inline void bind(::mdbx::txn &txn, ::mdbx::map_handle map_handle);
+  inline void bind(const ::mdbx::txn &txn, ::mdbx::map_handle map_handle);
 
   /// \brief Returns the cursor's transaction.
   inline ::mdbx::txn txn() const;
@@ -5457,7 +5457,7 @@ inline txn::info txn::get_info(bool scan_reader_lock_table) const {
   return r;
 }
 
-inline cursor_managed txn::open_cursor(map_handle map) {
+inline cursor_managed txn::open_cursor(map_handle map) const {
   MDBX_cursor *ptr;
   error::success_or_throw(::mdbx_cursor_open(handle_, map.dbi, &ptr));
   return cursor_managed(ptr);
@@ -6102,11 +6102,12 @@ inline ptrdiff_t cursor::estimate(move_operation operation) const {
   return estimate(operation, &unused_key, nullptr);
 }
 
-inline void cursor::renew(::mdbx::txn &txn) {
+inline void cursor::renew(const ::mdbx::txn &txn) {
   error::success_or_throw(::mdbx_cursor_renew(txn, handle_));
 }
 
-inline void cursor::bind(::mdbx::txn &txn, ::mdbx::map_handle map_handle) {
+inline void cursor::bind(const ::mdbx::txn &txn,
+                         ::mdbx::map_handle map_handle) {
   error::success_or_throw(::mdbx_cursor_bind(txn, handle_, map_handle.dbi));
 }
 
