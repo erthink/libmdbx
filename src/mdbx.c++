@@ -285,7 +285,7 @@ DEFINE_EXCEPTION(something_busy)
 DEFINE_EXCEPTION(thread_mismatch)
 DEFINE_EXCEPTION(transaction_full)
 DEFINE_EXCEPTION(transaction_overlapping)
-
+DEFINE_EXCEPTION(duplicated_lck_file)
 #undef DEFINE_EXCEPTION
 
 __cold const char *error::what() const noexcept {
@@ -371,6 +371,7 @@ __cold void error::throw_exception() const {
     CASE_EXCEPTION(thread_mismatch, MDBX_THREAD_MISMATCH);
     CASE_EXCEPTION(transaction_full, MDBX_TXN_FULL);
     CASE_EXCEPTION(transaction_overlapping, MDBX_TXN_OVERLAPPING);
+    CASE_EXCEPTION(duplicated_lck_file, MDBX_DUPLICATED_CLK);
 #undef CASE_EXCEPTION
   default:
     if (is_mdbx_error())
