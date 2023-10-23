@@ -80,7 +80,8 @@
 
 #if defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L
 #include <filesystem>
-#elif __has_include(<experimental/filesystem>)
+#elif defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L &&    \
+    __has_include(<experimental/filesystem>)
 #include <experimental/filesystem>
 #endif
 
@@ -368,6 +369,7 @@ using string = ::std::basic_string<char, ::std::char_traits<char>, ALLOCATOR>;
 using filehandle = ::mdbx_filehandle_t;
 #if defined(DOXYGEN) ||                                                        \
     (defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L &&       \
+     defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L &&     \
      (!defined(__MAC_OS_X_VERSION_MIN_REQUIRED) ||                             \
       __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500) &&                            \
      (!defined(__IPHONE_OS_VERSION_MIN_REQUIRED) ||                            \
@@ -393,6 +395,16 @@ using path = ::std::wstring;
 #else
 using path = ::std::string;
 #endif /* mdbx::path */
+
+#if defined(__SIZEOF_INT128__) ||                                              \
+    (defined(_INTEGRAL_MAX_BITS) && _INTEGRAL_MAX_BITS >= 128)
+#ifndef MDBX_U128_TYPE
+#define MDBX_U128_TYPE __uint128_t
+#endif /* MDBX_U128_TYPE */
+#ifndef MDBX_I128_TYPE
+#define MDBX_I128_TYPE __int128_t
+#endif /* MDBX_I128_TYPE */
+#endif /* __SIZEOF_INT128__ || _INTEGRAL_MAX_BITS >= 128 */
 
 #if __cplusplus >= 201103L || defined(DOXYGEN)
 /// \brief Duration in 1/65536 units of second.
@@ -546,12 +558,14 @@ MDBX_DECLARE_EXCEPTION(something_busy);
 MDBX_DECLARE_EXCEPTION(thread_mismatch);
 MDBX_DECLARE_EXCEPTION(transaction_full);
 MDBX_DECLARE_EXCEPTION(transaction_overlapping);
+MDBX_DECLARE_EXCEPTION(duplicated_lck_file);
 #undef MDBX_DECLARE_EXCEPTION
 
 [[noreturn]] LIBMDBX_API void throw_too_small_target_buffer();
 [[noreturn]] LIBMDBX_API void throw_max_length_exceeded();
 [[noreturn]] LIBMDBX_API void throw_out_range();
 [[noreturn]] LIBMDBX_API void throw_allocators_mismatch();
+[[noreturn]] LIBMDBX_API void throw_bad_value_size();
 static MDBX_CXX14_CONSTEXPR size_t check_length(size_t bytes);
 static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom,
                                                 size_t payload);
@@ -1028,6 +1042,35 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   MDBX_CXX14_CONSTEXPR static slice invalid() noexcept {
     return slice(size_t(-1));
   }
+
+  template <typename POD> MDBX_CXX14_CONSTEXPR POD as_pod() const {
+    static_assert(::std::is_standard_layout<POD>::value &&
+                      !::std::is_pointer<POD>::value,
+                  "Must be a standard layout type!");
+    if (MDBX_LIKELY(size() == sizeof(POD)))
+      MDBX_CXX20_LIKELY {
+        POD r;
+        memcpy(&r, data(), sizeof(r));
+        return r;
+      }
+    throw_bad_value_size();
+  }
+
+#ifdef MDBX_U128_TYPE
+  MDBX_U128_TYPE as_uint128() const;
+#endif /* MDBX_U128_TYPE */
+  uint64_t as_uint64() const;
+  uint32_t as_uint32() const;
+  uint16_t as_uint16() const;
+  uint8_t as_uint8() const;
+
+#ifdef MDBX_I128_TYPE
+  MDBX_I128_TYPE as_int128() const;
+#endif /* MDBX_I128_TYPE */
+  int64_t as_int64() const;
+  int32_t as_int32() const;
+  int16_t as_int16() const;
+  int8_t as_int8() const;
 
 protected:
   MDBX_CXX11_CONSTEXPR slice(size_t invalid_length) noexcept
@@ -2290,6 +2333,10 @@ public:
   static buffer wrap(const POD &pod, bool make_reference = false,
                      const allocator_type &allocator = allocator_type()) {
     return buffer(::mdbx::slice::wrap(pod), make_reference, allocator);
+  }
+
+  template <typename POD> MDBX_CXX14_CONSTEXPR POD as_pod() const {
+    return slice_.as_pod<POD>();
   }
 
   /// \brief Reserves storage space.
@@ -3975,10 +4022,20 @@ public:
                       size_t values_count, put_mode mode,
                       bool allow_partial = false);
   template <typename VALUE>
+  size_t put_multiple(map_handle map, const slice &key,
+                      const VALUE *values_array, size_t values_count,
+                      put_mode mode, bool allow_partial = false) {
+    static_assert(::std::is_standard_layout<VALUE>::value &&
+                      !::std::is_pointer<VALUE>::value &&
+                      !::std::is_array<VALUE>::value,
+                  "Must be a standard layout type!");
+    return put_multiple(map, key, sizeof(VALUE), values_array, values_count,
+                        mode, allow_partial);
+  }
+  template <typename VALUE>
   void put_multiple(map_handle map, const slice &key,
                     const ::std::vector<VALUE> &vector, put_mode mode) {
-    put_multiple(map, key, sizeof(VALUE), vector.data(), vector.size(), mode,
-                 false);
+    put_multiple(map, key, vector.data(), vector.size(), mode);
   }
 
   inline ptrdiff_t estimate(map_handle map, pair from, pair to) const;

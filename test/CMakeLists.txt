@@ -80,6 +80,13 @@ if(UNIX AND NOT SUBPROJECT)
       set_target_properties(test_extra_maindb_ordinal PROPERTIES
         CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
     endif()
+    add_executable(test_extra_dupfixed_multiple extra/dupfixed_multiple.c++)
+    target_include_directories(test_extra_dupfixed_multiple PRIVATE "${PROJECT_SOURCE_DIR}")
+    target_link_libraries(test_extra_dupfixed_multiple ${TOOL_MDBX_LIB})
+    if(MDBX_CXX_STANDARD)
+      set_target_properties(test_extra_dupfixed_multiple PROPERTIES
+        CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
+    endif()
   endif()
 endif()
 
@@ -157,6 +164,14 @@ else()
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
       REQUIRED_FILES uniq_nested.db-copy)
+  endif()
+
+  if(UNIX AND NOT SUBPROJECT)
+    add_test(NAME extra_upsert_alldups COMMAND test_extra_upsert_alldups)
+    if(MDBX_BUILD_CXX)
+      add_test(NAME extra_maindb_ordinal COMMAND test_extra_maindb_ordinal)
+      add_test(NAME extra_dupfixed_multiple COMMAND test_extra_dupfixed_multiple)
+    endif()
   endif()
 
 endif()
