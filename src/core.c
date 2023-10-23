@@ -23066,30 +23066,6 @@ bailout:
   return rc;
 }
 
-int mdbx_set_compare(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cmp_func *cmp) {
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  if (unlikely(!check_dbi(txn, dbi, DBI_USRVALID)))
-    return MDBX_BAD_DBI;
-
-  txn->mt_dbxs[dbi].md_cmp = cmp;
-  return MDBX_SUCCESS;
-}
-
-int mdbx_set_dupsort(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cmp_func *cmp) {
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  if (unlikely(!check_dbi(txn, dbi, DBI_USRVALID)))
-    return MDBX_BAD_DBI;
-
-  txn->mt_dbxs[dbi].md_dcmp = cmp;
-  return MDBX_SUCCESS;
-}
-
 __cold int mdbx_reader_list(const MDBX_env *env, MDBX_reader_list_func *func,
                             void *ctx) {
   int rc = check_env(env, true);

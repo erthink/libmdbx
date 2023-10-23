@@ -5,13 +5,29 @@ English version [by Google](https://gitflic-ru.translate.goog/project/erthink/li
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
 
-## v0.12.8 "Владимир Уткин" (запланировано на 2023-10-17)
+## v0.12.8 (сопровождение и подготовка к релизу)
+
+Поддержка стабильной ветки.
+
+Мелочи:
+
+ - Удаление устаревших `mdbx_set_compare()` и `mdbx_set_dupsort()`.
+ - Корректировка определения `MDBX_LAST_ADDED_ERRCODE`.
+ - Добавление в C++ API забытого исключения `mdbx::duplicated_lck_file`.
+ - Обновление патча для старых версий buildroot.
+
+
+--------------------------------------------------------------------------------
+
+
+## v0.12.8 "Владимир Уткин" от 2023-10-17
 
 Стабилизирующий выпуск с исправлением обнаруженных ошибок и устранением недочетов,
 в день 100-летия со дня рождения выдающегося советского и российского ученого и конструктора [Влади́мира Фёдоровича У́ткина](https://ru.wikipedia.org/wiki/Уткин,_Владимир_Фёдорович).
 
 ```
-git diff' stat: 22 commits, 570 insertions(+), 58 deletions(-)
+git diff' stat: 24 commits, 18 files changed, 624 insertions(+), 94 deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 ```
 
 Благодарности:
@@ -34,7 +50,7 @@ git diff' stat: 22 commits, 570 insertions(+), 58 deletions(-)
  - Добавлена возможность использовать `mdbx_cursor_get(MDBX_GET_MULTIPLE)` без предварительной установки
    курсора, совмещая операцию пакетного получения данных с позиционированием курсора на передаваемый ключ.
 
- - Микрооптимизация и рефакториг `cursor_put_nochecklen()` в продолжение исправления
+ - Микрооптимизация и рефакторинг `cursor_put_nochecklen()` в продолжение исправления
    регресса/ошибки в пути обработки `put(MDBX_MULTIPLE)`.
 
  - Уточнение формулировок в описании API, в том числе пояснений о `SIGSEGV`
@@ -378,7 +394,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 
  - Добавлен явный выбор `tls_model("local-dynamic")` для обхода проблемы
    `relocation R_X86_64_TPOFF32 against FOO cannot be used with -shared`
-   из-за ошибки в CLANG приводящей к использованию неверного режима `ls_model`.
+   из-за ошибки в CLANG приводящей к использованию неверного режима `tls_model`.
 
  - Изменение тактики слияния страниц при удалении.
    Теперь слияние выполняется преимущественно с уже измененной/грязной страницей.
