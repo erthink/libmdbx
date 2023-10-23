@@ -5,6 +5,21 @@ English version [by Google](https://gitflic-ru.translate.goog/project/erthink/li
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
 
+## v0.12.8 (сопровождение и подготовка к релизу)
+
+Поддержка стабильной ветки.
+
+Мелочи:
+
+ - Удаление устаревших `mdbx_set_compare()` и `mdbx_set_dupsort()`.
+ - Корректировка определения `MDBX_LAST_ADDED_ERRCODE`.
+ - Добавление в C++ API забытого исключения `mdbx::duplicated_lck_file`.
+ - Обновление патча для старых версий buildroot.
+
+
+--------------------------------------------------------------------------------
+
+
 ## v0.12.8 "Владимир Уткин" от 2023-10-17
 
 Стабилизирующий выпуск с исправлением обнаруженных ошибок и устранением недочетов,
@@ -379,7 +394,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 
  - Добавлен явный выбор `tls_model("local-dynamic")` для обхода проблемы
    `relocation R_X86_64_TPOFF32 against FOO cannot be used with -shared`
-   из-за ошибки в CLANG приводящей к использованию неверного режима `ls_model`.
+   из-за ошибки в CLANG приводящей к использованию неверного режима `tls_model`.
 
  - Изменение тактики слияния страниц при удалении.
    Теперь слияние выполняется преимущественно с уже измененной/грязной страницей.
