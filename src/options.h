@@ -96,8 +96,7 @@
 /** Controls using Unix' mincore() to determine whether DB-pages
  * are resident in memory. */
 #ifndef MDBX_ENABLE_MINCORE
-#if MDBX_ENABLE_PREFAULT &&                                                    \
-    (defined(MINCORE_INCORE) || !(defined(_WIN32) || defined(_WIN64)))
+#if defined(MINCORE_INCORE) || !(defined(_WIN32) || defined(_WIN64))
 #define MDBX_ENABLE_MINCORE 1
 #else
 #define MDBX_ENABLE_MINCORE 0
