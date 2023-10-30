@@ -13,6 +13,7 @@ DB_UPTO_MB=17408
 PAGESIZE=min
 DONT_CHECK_RAM=no
 EXTRA=no
+TAILLOG=0
 
 while [ -n "$1" ]
 do
@@ -35,8 +36,12 @@ do
     echo "--pagesize NN          Use specified page size (256 is minimal and used by default)"
     echo "--dont-check-ram-size  Don't check available RAM"
     echo "--extra                Iterate extra modes/flags"
+    echo "--taillog              Dump tail of test log on failure"
     echo "--help                 Print this usage help and exit"
     exit -2
+  ;;
+  --taillog)
+    TAILLOG=999
   ;;
   --multi)
     LIST=basic
@@ -345,13 +350,37 @@ if which lz4 >/dev/null; then
   function logger {
     lz4 > ${TESTDB_DIR}/long.log.lz4
   }
+  function taillog {
+    if [ -s ${TESTDB_DIR}/long.log.lz4 ]; then
+      echo "=============================================== last ${TAILLOG} lines"
+      lz4 -d -c ${TESTDB_DIR}/long.log.lz4 | tail -n ${TAILLOG}
+    else
+      echo "=============================================== no test log"
+    fi
+  }
 elif which gzip >/dev/null; then
   function logger {
     gzip > ${TESTDB_DIR}/long.log.gz
   }
+  function taillog {
+    if [ -s ${TESTDB_DIR}/long.log.gz ]; then
+      echo "=============================================== last ${TAILLOG} lines"
+      gzip -d -c ${TESTDB_DIR}/long.log.gz | tail -n ${TAILLOG}
+    else
+      echo "=============================================== no test log"
+   fi
+  }
 else
   function logger {
     cat > ${TESTDB_DIR}/long.log
+  }
+  function taillog {
+    if [ -s ${TESTDB_DIR}/long.log ]; then
+      echo "=============================================== last ${TAILLOG} lines"
+      tail -n ${TAILLOG} ${TESTDB_DIR}/long.log
+    else
+      echo "=============================================== no test log"
+    fi
   }
 fi
 
@@ -375,6 +404,9 @@ function bits2options {
 
 function failed {
   echo "FAILED" >&2
+  if [ ${TAILLOG} -gt 0 ]; then
+    taillog
+  fi
   exit 1
 }
 
