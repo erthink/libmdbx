@@ -179,7 +179,6 @@ static int funlock(mdbx_filehandle_t fd, size_t offset, size_t bytes) {
 #define DXB_WHOLE 0, DXB_MAXLEN
 
 int osal_txn_lock(MDBX_env *env, bool dontwait) {
-  eASSERT(env, !env->me_txn0->mt_owner);
   if (dontwait) {
     if (!TryEnterCriticalSection(&env->me_windowsbug_lock))
       return MDBX_BUSY;
@@ -195,6 +194,7 @@ int osal_txn_lock(MDBX_env *env, bool dontwait) {
     }
   }
 
+  eASSERT(env, !env->me_txn0->mt_owner);
   if (env->me_flags & MDBX_EXCLUSIVE)
     goto done;
 

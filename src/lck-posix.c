@@ -956,11 +956,14 @@ MDBX_INTERNAL_FUNC void osal_rdt_unlock(MDBX_env *env) {
 
 int osal_txn_lock(MDBX_env *env, bool dont_wait) {
   TRACE("%swait %s", dont_wait ? "dont-" : "", ">>");
-  eASSERT(env, !env->me_txn0->mt_owner);
   jitter4testing(true);
   const int err = mdbx_ipclock_lock(env, &env->me_lck->mti_wlock, dont_wait);
   int rc = err;
   if (likely(!MDBX_IS_ERROR(err))) {
+    eASSERT(env, !env->me_txn0->mt_owner ||
+                     err == /* если другой поток в этом-же процессе завершился
+                               не освободив блокировку */
+                         MDBX_RESULT_TRUE);
     env->me_txn0->mt_owner = osal_thread_self();
     rc = MDBX_SUCCESS;
   }
