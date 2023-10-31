@@ -4225,6 +4225,11 @@ MDBX_DEPRECATED LIBMDBX_API int
 mdbx_dbi_open_ex2(MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags,
                   MDBX_dbi *dbi, MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp);
 
+/** FIXME */
+LIBMDBX_API int mdbx_dbi_rename(MDBX_txn *txn, MDBX_dbi dbi, const char *name);
+LIBMDBX_API int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi,
+                                 const MDBX_val *name);
+
 /** \defgroup value2key Value-to-Key functions
  * \brief Value-to-Key functions to
  * \ref avoid_custom_comparators "avoid using custom comparators"

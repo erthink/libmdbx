@@ -22993,6 +22993,12 @@ static int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags,
   return MDBX_SUCCESS;
 }
 
+static __inline size_t dbi_namelen(const MDBX_val name) {
+  return (name.iov_len > sizeof(struct mdbx_defer_free_item))
+             ? name.iov_len
+             : sizeof(struct mdbx_defer_free_item);
+}
+
 static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi,
                            MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp,
                            MDBX_val name) {
@@ -23117,9 +23123,7 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi,
   /* Done here so we cannot fail after creating a new DB */
   void *clone = nullptr;
   if (name.iov_len) {
-    clone = osal_malloc((name.iov_len > sizeof(struct mdbx_defer_free_item))
-                            ? name.iov_len
-                            : sizeof(struct mdbx_defer_free_item));
+    clone = osal_malloc(dbi_namelen(name));
     if (unlikely(!clone))
       return MDBX_ENOMEM;
     name.iov_base = memcpy(clone, name.iov_base, name.iov_len);
@@ -23343,6 +23347,105 @@ int mdbx_dbi_open_ex2(MDBX_txn *txn, const MDBX_val *name,
   return dbi_open(txn, name, flags, dbi, keycmp, datacmp);
 }
 
+__cold int mdbx_dbi_rename(MDBX_txn *txn, MDBX_dbi dbi, const char *name_cstr) {
+  MDBX_val thunk, *name;
+  if (name_cstr == MDBX_CHK_MAIN || name_cstr == MDBX_CHK_GC ||
+      name_cstr == MDBX_CHK_META)
+    name = (void *)name_cstr;
+  else {
+    thunk.iov_len = strlen(name_cstr);
+    thunk.iov_base = (void *)name_cstr;
+    name = &thunk;
+  }
+  return mdbx_dbi_rename2(txn, dbi, name);
+}
+
+struct dbi_rename_result {
+  struct mdbx_defer_free_item *defer;
+  int err;
+};
+
+__cold static struct dbi_rename_result
+dbi_rename_locked(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val new_name) {
+  struct dbi_rename_result pair;
+  pair.defer = nullptr;
+  pair.err = dbi_check(txn, dbi);
+  if (unlikely(pair.err != MDBX_SUCCESS))
+    return pair;
+
+  MDBX_env *const env = txn->mt_env;
+  MDBX_val old_name = env->me_dbxs[dbi].md_name;
+  if (env->me_dbxs[MAIN_DBI].md_cmp(&new_name, &old_name) == 0 &&
+      MDBX_DEBUG == 0)
+    return pair;
+
+  MDBX_cursor_couple cx;
+  pair.err = cursor_init(&cx.outer, txn, MAIN_DBI);
+  if (unlikely(pair.err != MDBX_SUCCESS))
+    return pair;
+  pair.err = cursor_set(&cx.outer, &new_name, nullptr, MDBX_SET).err;
+  if (unlikely(pair.err != MDBX_NOTFOUND)) {
+    pair.err = (pair.err == MDBX_SUCCESS) ? MDBX_KEYEXIST : pair.err;
+    return pair;
+  }
+
+  pair.defer = osal_malloc(dbi_namelen(new_name));
+  if (unlikely(!pair.defer)) {
+    pair.err = MDBX_ENOMEM;
+    return pair;
+  }
+  new_name.iov_base = memcpy(pair.defer, new_name.iov_base, new_name.iov_len);
+
+  cx.outer.mc_next = txn->mt_cursors[MAIN_DBI];
+  txn->mt_cursors[MAIN_DBI] = &cx.outer;
+
+  MDBX_val data = {&txn->mt_dbs[dbi], sizeof(MDBX_db)};
+  pair.err = cursor_put_checklen(&cx.outer, &new_name, &data,
+                                 F_SUBDATA | MDBX_NOOVERWRITE);
+  if (likely(pair.err == MDBX_SUCCESS)) {
+    pair.err = cursor_set(&cx.outer, &old_name, nullptr, MDBX_SET).err;
+    if (likely(pair.err == MDBX_SUCCESS))
+      pair.err = cursor_del(&cx.outer, F_SUBDATA);
+    if (likely(pair.err == MDBX_SUCCESS)) {
+      pair.defer = env->me_dbxs[dbi].md_name.iov_base;
+      env->me_dbxs[dbi].md_name = new_name;
+    } else
+      txn->mt_flags |= MDBX_TXN_ERROR;
+  }
+
+  txn->mt_cursors[MAIN_DBI] = cx.outer.mc_next;
+  return pair;
+}
+
+__cold int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi,
+                            const MDBX_val *new_name) {
+  int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(new_name == MDBX_CHK_MAIN ||
+               new_name->iov_base == MDBX_CHK_MAIN || new_name == MDBX_CHK_GC ||
+               new_name->iov_base == MDBX_CHK_GC || new_name == MDBX_CHK_META ||
+               new_name->iov_base == MDBX_CHK_META))
+    return MDBX_EINVAL;
+
+  if (unlikely(dbi < CORE_DBS))
+    return MDBX_EINVAL;
+  rc = dbi_check(txn, dbi);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  rc = osal_fastmutex_acquire(&txn->mt_env->me_dbi_lock);
+  if (likely(rc == MDBX_SUCCESS)) {
+    struct dbi_rename_result pair = dbi_rename_locked(txn, dbi, *new_name);
+    if (pair.defer)
+      pair.defer->next = nullptr;
+    env_defer_free_and_release(txn->mt_env, pair.defer);
+    rc = pair.err;
+  }
+  return rc;
+}
+
 __cold int mdbx_dbi_stat(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest,
                          size_t bytes) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
@@ -23540,7 +23643,7 @@ static int drop_tree(MDBX_cursor *mc, const bool may_have_subDBs) {
   return rc;
 }
 
-int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
+__cold int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
   int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -23565,7 +23668,7 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
       tASSERT(txn, txn->mt_dbi_state[MAIN_DBI] & DBI_DIRTY);
       tASSERT(txn, txn->mt_flags & MDBX_TXN_DIRTY);
       txn->mt_dbi_state[dbi] = DBI_LINDO | DBI_OLDEN;
-      MDBX_env *env = txn->mt_env;
+      MDBX_env *const env = txn->mt_env;
       rc = osal_fastmutex_acquire(&env->me_dbi_lock);
       if (likely(rc == MDBX_SUCCESS)) {
         rc = env_defer_free_and_release(env, dbi_close_locked(env, dbi));
