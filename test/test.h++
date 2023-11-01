@@ -265,7 +265,10 @@ protected:
                  MDBX_val expected_valued);
   unsigned txn_underutilization_x256(MDBX_txn *txn) const;
 
-  MDBX_dbi db_table_open(bool create);
+  using tablename_buf = char[32];
+  const char *db_tablename(tablename_buf &buffer,
+                           const char *suffix = "") const;
+  MDBX_dbi db_table_open(bool create, bool expect_failure = false);
   void db_table_drop(MDBX_dbi handle);
   void db_table_clear(MDBX_dbi handle, MDBX_txn *txn = nullptr);
   void db_table_close(MDBX_dbi handle);

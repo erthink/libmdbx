@@ -39,6 +39,12 @@ bool testcase_jitter::run() {
   if (upper_limit < 1)
     upper_limit = config.params.size_now * 2;
 
+  tablename_buf buffer;
+  const char *const tablename = db_tablename(buffer);
+  tablename_buf buffer_renamed;
+  const char *const tablename_renamed =
+      db_tablename(buffer_renamed, ".renamed");
+
   while (should_continue()) {
     jitter_delay();
     db_open();
@@ -48,6 +54,15 @@ bool testcase_jitter::run() {
       txn_begin(false);
       dbi = db_table_open(true);
       check_dbi_error(MDBX_SUCCESS, "created-uncommitted");
+
+      bool renamed = false;
+      if (flipcoin()) {
+        err = mdbx_dbi_rename(txn_guard.get(), dbi, tablename_renamed);
+        if (err != MDBX_SUCCESS)
+          failure_perror("jitter.rename-1", err);
+        renamed = true;
+      }
+
       // note: here and below the 4-byte length keys and value are used
       //       to be compatible with any Db-flags given from command line.
       MDBX_val k = {(void *)"k000", 4}, v = {(void *)"v001", 4};
@@ -75,7 +90,17 @@ bool testcase_jitter::run() {
         failure_perror("jitter.put-2", err);
       check_dbi_error(MDBX_BAD_DBI, "dropped-recreated-aborted");
       // restore DBI
-      dbi = db_table_open(false);
+      dbi = db_table_open(false, renamed);
+      if (renamed) {
+        err = mdbx_dbi_open(
+            txn_guard.get(), tablename_renamed,
+            flipcoin() ? MDBX_DB_ACCEDE : config.params.table_flags, &dbi);
+        if (unlikely(err != MDBX_SUCCESS))
+          failure_perror("open-renamed", err);
+        err = mdbx_dbi_rename(txn_guard.get(), dbi, tablename);
+        if (err != MDBX_SUCCESS)
+          failure_perror("jitter.rename-2", err);
+      }
       check_dbi_error(MDBX_SUCCESS, "dropped-recreated-aborted+reopened");
       v = {(void *)"v003", 4};
       err = mdbx_put(txn_guard.get(), dbi, &k, &v, MDBX_UPSERT);

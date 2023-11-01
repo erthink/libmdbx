@@ -537,29 +537,43 @@ int testcase::db_open__begin__table_create_open_clean(MDBX_dbi &handle) {
   return err;
 }
 
-MDBX_dbi testcase::db_table_open(bool create) {
-  log_trace(">> testcase::db_table_create");
-
-  char tablename_buf[16];
+const char *testcase::db_tablename(tablename_buf &buffer,
+                                   const char *suffix) const {
   const char *tablename = nullptr;
   if (config.space_id) {
-    int rc = snprintf(tablename_buf, sizeof(tablename_buf), "TBL%04u",
-                      config.space_id);
+    int rc =
+        snprintf(buffer, sizeof(buffer), "TBL%04u%s", config.space_id, suffix);
     if (rc < 4 || rc >= (int)sizeof(tablename_buf) - 1)
       failure("snprintf(tablename): %d", rc);
-    tablename = tablename_buf;
+    tablename = buffer;
   }
   log_debug("use %s table", tablename ? tablename : "MAINDB");
+  return tablename;
+}
+
+MDBX_dbi testcase::db_table_open(bool create, bool expect_failure) {
+  log_trace(">> testcase::db_table_%s%s", create ? "create" : "open",
+            expect_failure ? "(expect_failure)" : "");
+
+  tablename_buf buffer;
+  const char *tablename = db_tablename(buffer);
 
   MDBX_dbi handle = 0;
-  int rc = mdbx_dbi_open(txn_guard.get(), tablename,
-                         (create ? MDBX_CREATE : MDBX_DB_DEFAULTS) |
-                             config.params.table_flags,
-                         &handle);
-  if (unlikely(rc != MDBX_SUCCESS))
-    failure_perror("mdbx_dbi_open()", rc);
+  int rc = mdbx_dbi_open(
+      txn_guard.get(), tablename,
+      create ? (MDBX_CREATE | config.params.table_flags)
+             : (flipcoin() ? MDBX_DB_ACCEDE
+                           : MDBX_DB_DEFAULTS | config.params.table_flags),
+      &handle);
+  if (unlikely(expect_failure != (rc != MDBX_SUCCESS))) {
+    char act[64];
+    snprintf(act, sizeof(act), "mdbx_dbi_open(create=%s,expect_failure=%s)",
+             create ? "true" : "false", expect_failure ? "true" : "false");
+    failure_perror(act, rc);
+  }
 
-  log_trace("<< testcase::db_table_create, handle %u", handle);
+  log_trace("<< testcase::db_table_%s%s, handle %u", create ? "create" : "open",
+            expect_failure ? "(expect_failure)" : "", handle);
   return handle;
 }
 
