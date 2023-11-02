@@ -2265,7 +2265,7 @@ static void pnl_free(MDBX_PNL pl) {
 }
 
 /* Shrink the PNL to the default size if it has grown larger */
-static void pnl_shrink(MDBX_PNL *ppl) {
+static void pnl_shrink(MDBX_PNL __restrict *__restrict ppl) {
   assert(pnl_bytes2size(pnl_size2bytes(MDBX_PNL_INITIAL)) >= MDBX_PNL_INITIAL &&
          pnl_bytes2size(pnl_size2bytes(MDBX_PNL_INITIAL)) <
              MDBX_PNL_INITIAL * 3 / 2);
@@ -2288,7 +2288,8 @@ static void pnl_shrink(MDBX_PNL *ppl) {
 }
 
 /* Grow the PNL to the size growed to at least given size */
-static int pnl_reserve(MDBX_PNL *ppl, const size_t wanna) {
+static int pnl_reserve(MDBX_PNL __restrict *__restrict ppl,
+                       const size_t wanna) {
   const size_t allocated = MDBX_PNL_ALLOCLEN(*ppl);
   assert(MDBX_PNL_GETSIZE(*ppl) <= MDBX_PGL_LIMIT &&
          MDBX_PNL_ALLOCLEN(*ppl) >= MDBX_PNL_GETSIZE(*ppl));
@@ -2318,8 +2319,8 @@ static int pnl_reserve(MDBX_PNL *ppl, const size_t wanna) {
 }
 
 /* Make room for num additional elements in an PNL */
-static __always_inline int __must_check_result pnl_need(MDBX_PNL *ppl,
-                                                        size_t num) {
+static __always_inline int __must_check_result
+pnl_need(MDBX_PNL __restrict *__restrict ppl, size_t num) {
   assert(MDBX_PNL_GETSIZE(*ppl) <= MDBX_PGL_LIMIT &&
          MDBX_PNL_ALLOCLEN(*ppl) >= MDBX_PNL_GETSIZE(*ppl));
   assert(num <= MDBX_PGL_LIMIT);
@@ -2328,7 +2329,7 @@ static __always_inline int __must_check_result pnl_need(MDBX_PNL *ppl,
                                                   : pnl_reserve(ppl, wanna);
 }
 
-static __always_inline void pnl_xappend(MDBX_PNL pl, pgno_t pgno) {
+static __always_inline void pnl_xappend(__restrict MDBX_PNL pl, pgno_t pgno) {
   assert(MDBX_PNL_GETSIZE(pl) < MDBX_PNL_ALLOCLEN(pl));
   if (AUDIT_ENABLED()) {
     for (size_t i = MDBX_PNL_GETSIZE(pl); i > 0; --i)
@@ -2339,10 +2340,8 @@ static __always_inline void pnl_xappend(MDBX_PNL pl, pgno_t pgno) {
 }
 
 /* Append an pgno range onto an unsorted PNL */
-__always_inline static int __must_check_result pnl_append_range(bool spilled,
-                                                                MDBX_PNL *ppl,
-                                                                pgno_t pgno,
-                                                                size_t n) {
+__always_inline static int __must_check_result pnl_append_range(
+    bool spilled, __restrict MDBX_PNL *ppl, pgno_t pgno, size_t n) {
   assert(n > 0);
   int rc = pnl_need(ppl, n);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -2369,7 +2368,7 @@ __always_inline static int __must_check_result pnl_append_range(bool spilled,
 }
 
 /* Append an pgno range into the sorted PNL */
-__hot static int __must_check_result pnl_insert_range(MDBX_PNL *ppl,
+__hot static int __must_check_result pnl_insert_range(__restrict MDBX_PNL *ppl,
                                                       pgno_t pgno, size_t n) {
   assert(n > 0);
   int rc = pnl_need(ppl, n);
@@ -2673,7 +2672,8 @@ static void txl_free(MDBX_TXL tl) {
     osal_free(tl - 1);
 }
 
-static int txl_reserve(MDBX_TXL *ptl, const size_t wanna) {
+static int txl_reserve(MDBX_TXL __restrict *__restrict ptl,
+                       const size_t wanna) {
   const size_t allocated = (size_t)MDBX_PNL_ALLOCLEN(*ptl);
   assert(MDBX_PNL_GETSIZE(*ptl) <= MDBX_TXL_MAX &&
          MDBX_PNL_ALLOCLEN(*ptl) >= MDBX_PNL_GETSIZE(*ptl));
@@ -2702,8 +2702,8 @@ static int txl_reserve(MDBX_TXL *ptl, const size_t wanna) {
   return MDBX_ENOMEM;
 }
 
-static __always_inline int __must_check_result txl_need(MDBX_TXL *ptl,
-                                                        size_t num) {
+static __always_inline int __must_check_result
+txl_need(MDBX_TXL __restrict *__restrict ptl, size_t num) {
   assert(MDBX_PNL_GETSIZE(*ptl) <= MDBX_TXL_MAX &&
          MDBX_PNL_ALLOCLEN(*ptl) >= MDBX_PNL_GETSIZE(*ptl));
   assert(num <= MDBX_PGL_LIMIT);
@@ -2712,7 +2712,7 @@ static __always_inline int __must_check_result txl_need(MDBX_TXL *ptl,
                                                   : txl_reserve(ptl, wanna);
 }
 
-static __always_inline void txl_xappend(MDBX_TXL tl, txnid_t id) {
+static __always_inline void txl_xappend(MDBX_TXL __restrict tl, txnid_t id) {
   assert(MDBX_PNL_GETSIZE(tl) < MDBX_PNL_ALLOCLEN(tl));
   tl[0] += 1;
   MDBX_PNL_LAST(tl) = id;
@@ -2724,7 +2724,8 @@ static void txl_sort(MDBX_TXL tl) {
   txnid_sort(MDBX_PNL_BEGIN(tl), MDBX_PNL_END(tl));
 }
 
-static int __must_check_result txl_append(MDBX_TXL *ptl, txnid_t id) {
+static int __must_check_result txl_append(MDBX_TXL __restrict *ptl,
+                                          txnid_t id) {
   if (unlikely(MDBX_PNL_GETSIZE(*ptl) == MDBX_PNL_ALLOCLEN(*ptl))) {
     int rc = txl_need(ptl, MDBX_TXL_GRANULATE);
     if (unlikely(rc != MDBX_SUCCESS))
@@ -4582,7 +4583,8 @@ static void refund_loose(MDBX_txn *txn) {
 
       /* Filter-out loose chain & dispose refunded pages. */
     unlink_loose:
-      for (MDBX_page **link = &txn->tw.loose_pages; *link;) {
+      for (MDBX_page *__restrict *__restrict link = &txn->tw.loose_pages;
+           *link;) {
         MDBX_page *dp = *link;
         tASSERT(txn, dp->mp_flags == P_LOOSE);
         MDBX_ASAN_UNPOISON_MEMORY_REGION(&mp_next(dp), sizeof(MDBX_page *));

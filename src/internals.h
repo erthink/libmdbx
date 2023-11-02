@@ -93,6 +93,10 @@
         disable : 5105) /* winbase.h(9531): warning C5105: macro expansion     \
                            producing 'defined' has undefined behavior */
 #endif
+#if _MSC_VER < 1920
+/* avoid "error C2219: syntax error: type qualifier must be after '*'" */
+#define __restrict
+#endif
 #if _MSC_VER > 1930
 #pragma warning(disable : 6235) /* <expression> is always a constant */
 #pragma warning(disable : 6237) /* <expression> is never evaluated and might   \
@@ -1193,7 +1197,7 @@ struct MDBX_txn {
   MDBX_db *mt_dbs;
 
 #if MDBX_ENABLE_DBI_SPARSE
-  unsigned *mt_dbi_sparse;
+  unsigned *__restrict mt_dbi_sparse;
 #endif /* MDBX_ENABLE_DBI_SPARSE */
 
   /* Non-shared DBI state flags inside transaction */
@@ -1205,10 +1209,10 @@ struct MDBX_txn {
 #define DBI_OLDEN 0x40 /* Handle was closed/reopened outside txn */
 #define DBI_LINDO 0x80 /* Lazy initialization done for DBI-slot */
   /* Array of non-shared txn's flags of DBI */
-  uint8_t *mt_dbi_state;
+  uint8_t *__restrict mt_dbi_state;
 
   /* Array of sequence numbers for each DB handle. */
-  uint32_t *mt_dbi_seqs;
+  uint32_t *__restrict mt_dbi_seqs;
   MDBX_cursor **mt_cursors;
 
   MDBX_canary mt_canary;
@@ -1222,8 +1226,8 @@ struct MDBX_txn {
     struct {
       meta_troika_t troika;
       /* In write txns, array of cursors for each DB */
-      MDBX_PNL relist;        /* Reclaimed GC pages */
-      txnid_t last_reclaimed; /* ID of last used record */
+      MDBX_PNL __restrict relist; /* Reclaimed GC pages */
+      txnid_t last_reclaimed;     /* ID of last used record */
 #if MDBX_ENABLE_REFUND
       pgno_t loose_refund_wl /* FIXME: describe */;
 #endif /* MDBX_ENABLE_REFUND */
@@ -1235,14 +1239,14 @@ struct MDBX_txn {
        * dirtylist into mt_parent after freeing hidden mt_parent pages. */
       size_t dirtyroom;
       /* For write txns: Modified pages. Sorted when not MDBX_WRITEMAP. */
-      MDBX_dpl *dirtylist;
+      MDBX_dpl *__restrict dirtylist;
       /* The list of reclaimed txns from GC */
-      MDBX_TXL lifo_reclaimed;
+      MDBX_TXL __restrict lifo_reclaimed;
       /* The list of pages that became unused during this transaction. */
-      MDBX_PNL retired_pages;
+      MDBX_PNL __restrict retired_pages;
       /* The list of loose pages that became unused and may be reused
        * in this transaction, linked through `mp_next`. */
-      MDBX_page *loose_pages;
+      MDBX_page *__restrict loose_pages;
       /* Number of loose pages (tw.loose_pages) */
       size_t loose_count;
       union {
@@ -1251,7 +1255,7 @@ struct MDBX_txn {
           /* The sorted list of dirty pages we temporarily wrote to disk
            * because the dirty list was full. page numbers in here are
            * shifted left by 1, deleted slots have the LSB set. */
-          MDBX_PNL list;
+          MDBX_PNL __restrict list;
         } spilled;
         size_t writemap_dirty_npages;
         size_t writemap_spilled_npages;
@@ -1295,7 +1299,7 @@ struct MDBX_cursor {
   /* The database auxiliary record for this cursor */
   MDBX_dbx *mc_dbx;
   /* The mt_dbi_state[] for this DBI */
-  uint8_t *mc_dbi_state;
+  uint8_t *__restrict mc_dbi_state;
   uint8_t mc_snum; /* number of pushed pages */
   uint8_t mc_top;  /* index of top page, normally mc_snum-1 */
 
@@ -1401,7 +1405,7 @@ struct MDBX_env {
   MDBX_txn *me_txn0;          /* preallocated write transaction */
 
   MDBX_dbx *me_dbxs;                 /* array of static DB info */
-  uint16_t *me_db_flags;             /* array of flags from MDBX_db.md_flags */
+  uint16_t *__restrict me_db_flags;  /* array of flags from MDBX_db.md_flags */
   MDBX_atomic_uint32_t *me_dbi_seqs; /* array of dbi sequence numbers */
   unsigned
       me_maxgc_ov1page; /* Number of pgno_t fit in a single overflow page */
@@ -1468,10 +1472,10 @@ struct MDBX_env {
   unsigned me_numdbs; /* number of DBs opened */
 
   unsigned me_dp_reserve_len;
-  MDBX_page *me_dp_reserve; /* list of malloc'ed blocks for re-use */
+  MDBX_page *__restrict me_dp_reserve; /* list of malloc'ed blocks for re-use */
 
   /* PNL of pages that became unused in a write txn */
-  MDBX_PNL me_retired_pages;
+  MDBX_PNL __restrict me_retired_pages;
   osal_ioring_t me_ioring;
 
 #if defined(_WIN32) || defined(_WIN64)
