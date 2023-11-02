@@ -428,13 +428,13 @@ test-singleprocess: build-test
 	@echo '  RUNNING `test/long_stochastic.sh --single --loops 2`...'
 	$(QUIET)test/long_stochastic.sh --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
-test-valgrind: CFLAGS_EXTRA=-Ofast -DMDBX_USE_VALGRIND
+test-valgrind: CFLAGS_EXTRA=-Ofast -DENABLE_MEMCHECK
 test-valgrind: build-test
 	@echo '  RUNNING `test/long_stochastic.sh --with-valgrind --loops 2`...'
 	$(QUIET)test/long_stochastic.sh --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt
-memcheck: CFLAGS_EXTRA=-Ofast -DMDBX_USE_VALGRIND
+memcheck: CFLAGS_EXTRA=-Ofast -DENABLE_MEMCHECK
 memcheck: build-test
 	@echo "  SMOKE \`mdbx_test basic\` under Valgrind's memcheck..."
 	$(QUIET)rm -f valgrind-*.log $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; ( \

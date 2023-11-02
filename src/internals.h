@@ -1493,12 +1493,12 @@ struct MDBX_env {
 #if MDBX_DEBUG
   MDBX_assert_func *me_assert_func; /*  Callback for assertion failures */
 #endif
-#ifdef MDBX_USE_VALGRIND
+#ifdef ENABLE_MEMCHECK
   int me_valgrind_handle;
 #endif
-#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+#if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
   pgno_t me_poison_edge;
-#endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
+#endif /* ENABLE_MEMCHECK || __SANITIZE_ADDRESS__ */
 
 #ifndef xMDBX_DEBUG_SPILLING
 #define xMDBX_DEBUG_SPILLING 0

@@ -5,7 +5,7 @@
 /* clang-format off */
 
 #cmakedefine LTO_ENABLED
-#cmakedefine MDBX_USE_VALGRIND
+#cmakedefine ENABLE_MEMCHECK
 #cmakedefine ENABLE_GPROF
 #cmakedefine ENABLE_GCOV
 #cmakedefine ENABLE_ASAN

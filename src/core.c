@@ -4935,7 +4935,7 @@ status_done:
       return MDBX_SUCCESS;
     }
 
-#if !MDBX_DEBUG && !defined(MDBX_USE_VALGRIND) && !defined(__SANITIZE_ADDRESS__)
+#if !MDBX_DEBUG && !defined(ENABLE_MEMCHECK) && !defined(__SANITIZE_ADDRESS__)
     if (unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
 #endif
     {
@@ -4952,7 +4952,7 @@ status_done:
           goto skip_invalidate;
       }
 
-#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+#if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
       if (MDBX_DEBUG != 0 || unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
 #endif
         kill_page(txn, mp, pgno, npages);
@@ -6485,9 +6485,9 @@ __cold static int dxb_resize(MDBX_env *const env, const pgno_t used_pgno,
   }
   const size_t limit_bytes = pgno_align2os_bytes(env, limit_pgno);
   const size_t size_bytes = pgno_align2os_bytes(env, size_pgno);
-#if MDBX_ENABLE_MADVISE || defined(MDBX_USE_VALGRIND)
+#if MDBX_ENABLE_MADVISE || defined(ENABLE_MEMCHECK)
   const void *const prev_map = env->me_dxb_mmap.base;
-#endif /* MDBX_ENABLE_MADVISE || MDBX_USE_VALGRIND */
+#endif /* MDBX_ENABLE_MADVISE || ENABLE_MEMCHECK */
 
   VERBOSE("resize/%d datafile/mapping: "
           "present %" PRIuPTR " -> %" PRIuPTR ", "
@@ -6672,7 +6672,7 @@ bailout:
     env->me_dbgeo.now = env->me_dxb_mmap.current;
     env->me_dbgeo.upper = env->me_dxb_mmap.limit;
     adjust_defaults(env);
-#ifdef MDBX_USE_VALGRIND
+#ifdef ENABLE_MEMCHECK
     if (prev_limit != env->me_dxb_mmap.limit || prev_map != env->me_map) {
       VALGRIND_DISCARD(env->me_valgrind_handle);
       env->me_valgrind_handle = 0;
@@ -6680,7 +6680,7 @@ bailout:
         env->me_valgrind_handle =
             VALGRIND_CREATE_BLOCK(env->me_map, env->me_dxb_mmap.limit, "mdbx");
     }
-#endif /* MDBX_USE_VALGRIND */
+#endif /* ENABLE_MEMCHECK */
   } else {
     if (rc != MDBX_UNABLE_EXTEND_MAPSIZE && rc != MDBX_EPERM) {
       ERROR("failed resize datafile/mapping: "
@@ -6979,9 +6979,9 @@ scan4seq_sse2(pgno_t *range, const size_t len, const size_t seq) {
     do {
       mask = (uint8_t)diffcmp2mask_sse2(range - 3, offset, pattern);
       if (mask) {
-#ifndef __SANITIZE_ADDRESS__
+#if !defined(ENABLE_MEMCHECK) && !defined(__SANITIZE_ADDRESS__)
       found:
-#endif /* __SANITIZE_ADDRESS__ */
+#endif /* !ENABLE_MEMCHECK && !__SANITIZE_ADDRESS__ */
         return range + 28 - __builtin_clz(mask);
       }
       range -= 4;
@@ -6994,7 +6994,7 @@ scan4seq_sse2(pgno_t *range, const size_t len, const size_t seq) {
    * только за пределами региона выделенного под PNL, но и пересекать границу
    * страницы памяти. Что может приводить как к ошибкам ASAN, так и к падению.
    * Поэтому проверяем смещение на странице, а с ASAN всегда страхуемся. */
-#ifndef __SANITIZE_ADDRESS__
+#if !defined(ENABLE_MEMCHECK) && !defined(__SANITIZE_ADDRESS__)
   const unsigned on_page_safe_mask = 0xff0 /* enough for '-15' bytes offset */;
   if (likely(on_page_safe_mask & (uintptr_t)(range + offset)) &&
       !RUNNING_ON_VALGRIND) {
@@ -7006,7 +7006,7 @@ scan4seq_sse2(pgno_t *range, const size_t len, const size_t seq) {
       goto found;
     return nullptr;
   }
-#endif /* __SANITIZE_ADDRESS__ */
+#endif /* !ENABLE_MEMCHECK && !__SANITIZE_ADDRESS__ */
   do
     if (*range - range[offset] == target)
       return range;
@@ -7050,9 +7050,9 @@ scan4seq_avx2(pgno_t *range, const size_t len, const size_t seq) {
     do {
       mask = (uint8_t)diffcmp2mask_avx2(range - 7, offset, pattern);
       if (mask) {
-#ifndef __SANITIZE_ADDRESS__
+#if !defined(ENABLE_MEMCHECK) && !defined(__SANITIZE_ADDRESS__)
       found:
-#endif /* __SANITIZE_ADDRESS__ */
+#endif /* !ENABLE_MEMCHECK && !__SANITIZE_ADDRESS__ */
         return range + 24 - __builtin_clz(mask);
       }
       range -= 8;
@@ -7065,7 +7065,7 @@ scan4seq_avx2(pgno_t *range, const size_t len, const size_t seq) {
    * только за пределами региона выделенного под PNL, но и пересекать границу
    * страницы памяти. Что может приводить как к ошибкам ASAN, так и к падению.
    * Поэтому проверяем смещение на странице, а с ASAN всегда страхуемся. */
-#ifndef __SANITIZE_ADDRESS__
+#if !defined(ENABLE_MEMCHECK) && !defined(__SANITIZE_ADDRESS__)
   const unsigned on_page_safe_mask = 0xfe0 /* enough for '-31' bytes offset */;
   if (likely(on_page_safe_mask & (uintptr_t)(range + offset)) &&
       !RUNNING_ON_VALGRIND) {
@@ -7077,7 +7077,7 @@ scan4seq_avx2(pgno_t *range, const size_t len, const size_t seq) {
       goto found;
     return nullptr;
   }
-#endif /* __SANITIZE_ADDRESS__ */
+#endif /* !ENABLE_MEMCHECK && !__SANITIZE_ADDRESS__ */
   if (range - 3 > detent) {
     mask = diffcmp2mask_sse2avx(range - 3, offset, *(const __m128i *)&pattern);
     if (mask)
@@ -7118,9 +7118,9 @@ scan4seq_avx512bw(pgno_t *range, const size_t len, const size_t seq) {
     do {
       mask = diffcmp2mask_avx512bw(range - 15, offset, pattern);
       if (mask) {
-#ifndef __SANITIZE_ADDRESS__
+#if !defined(ENABLE_MEMCHECK) && !defined(__SANITIZE_ADDRESS__)
       found:
-#endif /* __SANITIZE_ADDRESS__ */
+#endif /* !ENABLE_MEMCHECK && !__SANITIZE_ADDRESS__ */
         return range + 16 - __builtin_clz(mask);
       }
       range -= 16;
@@ -7133,7 +7133,7 @@ scan4seq_avx512bw(pgno_t *range, const size_t len, const size_t seq) {
    * только за пределами региона выделенного под PNL, но и пересекать границу
    * страницы памяти. Что может приводить как к ошибкам ASAN, так и к падению.
    * Поэтому проверяем смещение на странице, а с ASAN всегда страхуемся. */
-#ifndef __SANITIZE_ADDRESS__
+#if !defined(ENABLE_MEMCHECK) && !defined(__SANITIZE_ADDRESS__)
   const unsigned on_page_safe_mask = 0xfc0 /* enough for '-63' bytes offset */;
   if (likely(on_page_safe_mask & (uintptr_t)(range + offset)) &&
       !RUNNING_ON_VALGRIND) {
@@ -7145,7 +7145,7 @@ scan4seq_avx512bw(pgno_t *range, const size_t len, const size_t seq) {
       goto found;
     return nullptr;
   }
-#endif /* __SANITIZE_ADDRESS__ */
+#endif /* !ENABLE_MEMCHECK && !__SANITIZE_ADDRESS__ */
   if (range - 7 > detent) {
     mask = diffcmp2mask_avx2(range - 7, offset, *(const __m256i *)&pattern);
     if (mask)
@@ -7198,9 +7198,9 @@ __hot static pgno_t *scan4seq_neon(pgno_t *range, const size_t len,
     do {
       mask = diffcmp2mask_neon(range - 3, offset, pattern);
       if (mask) {
-#ifndef __SANITIZE_ADDRESS__
+#if !defined(ENABLE_MEMCHECK) && !defined(__SANITIZE_ADDRESS__)
       found:
-#endif /* __SANITIZE_ADDRESS__ */
+#endif /* !ENABLE_MEMCHECK && !__SANITIZE_ADDRESS__ */
         return ptr_disp(range, -(__builtin_clzl(mask) >> sizeof(size_t) / 4));
       }
       range -= 4;
@@ -7213,7 +7213,7 @@ __hot static pgno_t *scan4seq_neon(pgno_t *range, const size_t len,
    * только за пределами региона выделенного под PNL, но и пересекать границу
    * страницы памяти. Что может приводить как к ошибкам ASAN, так и к падению.
    * Поэтому проверяем смещение на странице, а с ASAN всегда страхуемся. */
-#ifndef __SANITIZE_ADDRESS__
+#if !defined(ENABLE_MEMCHECK) && !defined(__SANITIZE_ADDRESS__)
   const unsigned on_page_safe_mask = 0xff0 /* enough for '-15' bytes offset */;
   if (likely(on_page_safe_mask & (uintptr_t)(range + offset)) &&
       !RUNNING_ON_VALGRIND) {
@@ -7225,7 +7225,7 @@ __hot static pgno_t *scan4seq_neon(pgno_t *range, const size_t len,
       goto found;
     return nullptr;
   }
-#endif /* __SANITIZE_ADDRESS__ */
+#endif /* !ENABLE_MEMCHECK && !__SANITIZE_ADDRESS__ */
   do
     if (*range - range[offset] == target)
       return range;
@@ -8712,7 +8712,7 @@ __cold int mdbx_env_sync_ex(MDBX_env *env, bool force, bool nonblock) {
   return env_sync(env, force, nonblock);
 }
 
-#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+#if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
 /* Find largest mvcc-snapshot still referenced by this process. */
 static pgno_t find_largest_this(MDBX_env *env, pgno_t largest) {
   MDBX_lockinfo *const lck = env->me_lck_mmap.lck;
@@ -8790,7 +8790,7 @@ static void txn_valgrind(MDBX_env *env, MDBX_txn *txn) {
       osal_txn_unlock(env);
   }
 }
-#endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
+#endif /* ENABLE_MEMCHECK || __SANITIZE_ADDRESS__ */
 
 typedef struct {
   int err;
@@ -9526,9 +9526,9 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
       if (rc != MDBX_SUCCESS)
         goto bailout;
     }
-#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+#if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
     txn_valgrind(env, txn);
-#endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
+#endif /* ENABLE_MEMCHECK || __SANITIZE_ADDRESS__ */
     return MDBX_SUCCESS;
   }
 bailout:
@@ -10112,9 +10112,9 @@ static int txn_end(MDBX_txn *txn, const unsigned mode) {
         eASSERT(env,
                 txn->mt_txnid == slot->mr_txnid.weak &&
                     slot->mr_txnid.weak >= env->me_lck->mti_oldest_reader.weak);
-#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+#if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
         txn_valgrind(env, nullptr);
-#endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
+#endif /* ENABLE_MEMCHECK || __SANITIZE_ADDRESS__ */
         atomic_store32(&slot->mr_snapshot_pages_used, 0, mo_Relaxed);
         safe64_reset(&slot->mr_txnid, false);
         atomic_store32(&env->me_lck->mti_readers_refresh_flag, true,
@@ -10140,10 +10140,10 @@ static int txn_end(MDBX_txn *txn, const unsigned mode) {
     ENSURE(env, txn->mt_txnid >=
                     /* paranoia is appropriate here */ env->me_lck
                         ->mti_oldest_reader.weak);
-#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+#if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
     if (txn == env->me_txn0)
       txn_valgrind(env, nullptr);
-#endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
+#endif /* ENABLE_MEMCHECK || __SANITIZE_ADDRESS__ */
 
     txn->mt_flags = MDBX_TXN_FINISHED;
     env->me_txn = txn->mt_parent;
@@ -10588,13 +10588,13 @@ static int gcu_prepare_backlog(MDBX_txn *txn, gcu_context_t *ctx) {
 }
 
 static __inline void gcu_clean_reserved(MDBX_env *env, MDBX_val pnl) {
-#if MDBX_DEBUG && (defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__))
+#if MDBX_DEBUG && (defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__))
   /* Для предотвращения предупреждения Valgrind из mdbx_dump_val()
    * вызванное через макрос DVAL_DEBUG() на выходе
    * из cursor_set(MDBX_SET_KEY), которая вызывается ниже внутри update_gc() в
    * цикле очистки и цикле заполнения зарезервированных элементов. */
   memset(pnl.iov_base, 0xBB, pnl.iov_len);
-#endif /* MDBX_DEBUG && (MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__) */
+#endif /* MDBX_DEBUG && (ENABLE_MEMCHECK || __SANITIZE_ADDRESS__) */
 
   /* PNL is initially empty, zero out at least the length */
   memset(pnl.iov_base, 0, sizeof(pgno_t));
@@ -10911,14 +10911,14 @@ retry:
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
 
-#if MDBX_DEBUG && (defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__))
+#if MDBX_DEBUG && (defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__))
           /* Для предотвращения предупреждения Valgrind из mdbx_dump_val()
            * вызванное через макрос DVAL_DEBUG() на выходе
            * из cursor_set(MDBX_SET_KEY), которая вызывается как выше в цикле
            * очистки, так и ниже в цикле заполнения зарезервированных элементов.
            */
           memset(data.iov_base, 0xBB, data.iov_len);
-#endif /* MDBX_DEBUG && (MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__) */
+#endif /* MDBX_DEBUG && (ENABLE_MEMCHECK || __SANITIZE_ADDRESS__) */
 
           if (retired_pages_before == MDBX_PNL_GETSIZE(txn->tw.retired_pages)) {
             const size_t at = (ctx->lifo == MDBX_PNL_ASCENDING)
@@ -10958,14 +10958,14 @@ retry:
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
 
-#if MDBX_DEBUG && (defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__))
+#if MDBX_DEBUG && (defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__))
         /* Для предотвращения предупреждения Valgrind из mdbx_dump_val()
          * вызванное через макрос DVAL_DEBUG() на выходе
          * из cursor_set(MDBX_SET_KEY), которая вызывается как выше в цикле
          * очистки, так и ниже в цикле заполнения зарезервированных элементов.
          */
         memset(data.iov_base, 0xBB, data.iov_len);
-#endif /* MDBX_DEBUG && (MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__) */
+#endif /* MDBX_DEBUG && (ENABLE_MEMCHECK || __SANITIZE_ADDRESS__) */
 
         /* Retry if tw.retired_pages[] grew during the Put() */
       } while (data.iov_len < MDBX_PNL_SIZEOF(txn->tw.retired_pages));
@@ -12967,7 +12967,7 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
                    : pending->mm_geo.next);
       eASSERT(env, largest_pgno >= NUM_METAS);
 
-#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+#if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
       const pgno_t edge = env->me_poison_edge;
       if (edge > largest_pgno) {
         env->me_poison_edge = largest_pgno;
@@ -12978,7 +12978,7 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
             ptr_disp(env->me_map, pgno2bytes(env, largest_pgno)),
             pgno2bytes(env, edge - largest_pgno));
       }
-#endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
+#endif /* ENABLE_MEMCHECK || __SANITIZE_ADDRESS__ */
 
 #if MDBX_ENABLE_MADVISE &&                                                     \
     (defined(MADV_DONTNEED) || defined(POSIX_MADV_DONTNEED))
@@ -14188,14 +14188,14 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
 #endif /* MADV_DODUMP */
 #endif /* MDBX_ENABLE_MADVISE */
 
-#ifdef MDBX_USE_VALGRIND
+#ifdef ENABLE_MEMCHECK
   env->me_valgrind_handle =
       VALGRIND_CREATE_BLOCK(env->me_map, env->me_dxb_mmap.limit, "mdbx");
-#endif /* MDBX_USE_VALGRIND */
+#endif /* ENABLE_MEMCHECK */
 
   eASSERT(env, used_bytes >= pgno2bytes(env, NUM_METAS) &&
                    used_bytes <= env->me_dxb_mmap.limit);
-#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+#if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
   if (env->me_dxb_mmap.filesize > used_bytes &&
       env->me_dxb_mmap.filesize < env->me_dxb_mmap.limit) {
     VALGRIND_MAKE_MEM_NOACCESS(ptr_disp(env->me_map, used_bytes),
@@ -14207,7 +14207,7 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
       bytes2pgno(env, (env->me_dxb_mmap.filesize < env->me_dxb_mmap.limit)
                           ? env->me_dxb_mmap.filesize
                           : env->me_dxb_mmap.limit);
-#endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
+#endif /* ENABLE_MEMCHECK || __SANITIZE_ADDRESS__ */
 
   meta_troika_t troika = meta_tap(env);
 #if MDBX_DEBUG
@@ -15681,9 +15681,9 @@ bailout:
     env->me_flags =
         saved_me_flags | ((rc != MDBX_PANIC) ? 0 : MDBX_FATAL_ERROR);
   } else {
-#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+#if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
     txn_valgrind(env, nullptr);
-#endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
+#endif /* ENABLE_MEMCHECK || __SANITIZE_ADDRESS__ */
   }
   osal_free(env_pathname.buffer_for_free);
   return rc;
@@ -15725,7 +15725,7 @@ __cold static int env_close(MDBX_env *env) {
 
   if (env->me_map) {
     osal_munmap(&env->me_dxb_mmap);
-#ifdef MDBX_USE_VALGRIND
+#ifdef ENABLE_MEMCHECK
     VALGRIND_DISCARD(env->me_valgrind_handle);
     env->me_valgrind_handle = -1;
 #endif
@@ -28392,9 +28392,9 @@ __dll_export
 #ifdef __SANITIZE_ADDRESS__
     " SANITIZE_ADDRESS=YES"
 #endif /* __SANITIZE_ADDRESS__ */
-#ifdef MDBX_USE_VALGRIND
-    " MDBX_USE_VALGRIND=YES"
-#endif /* MDBX_USE_VALGRIND */
+#ifdef ENABLE_MEMCHECK
+    " ENABLE_MEMCHECK=YES"
+#endif /* ENABLE_MEMCHECK */
 #if MDBX_FORCE_ASSERTIONS
     " MDBX_FORCE_ASSERTIONS=YES"
 #endif /* MDBX_FORCE_ASSERTIONS */

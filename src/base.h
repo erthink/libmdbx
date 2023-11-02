@@ -686,7 +686,7 @@ __extern_C key_t ftok(const char *, int);
 
 /*----------------------------------------------------------------------------*/
 
-#if defined(MDBX_USE_VALGRIND)
+#if defined(ENABLE_MEMCHECK)
 #include <valgrind/memcheck.h>
 #ifndef VALGRIND_DISABLE_ADDR_ERROR_REPORTING_IN_RANGE
 /* LY: available since Valgrind 3.10 */
@@ -708,7 +708,7 @@ __extern_C key_t ftok(const char *, int);
 #define VALGRIND_CHECK_MEM_IS_ADDRESSABLE(a, s) (0)
 #define VALGRIND_CHECK_MEM_IS_DEFINED(a, s) (0)
 #define RUNNING_ON_VALGRIND (0)
-#endif /* MDBX_USE_VALGRIND */
+#endif /* ENABLE_MEMCHECK */
 
 #ifdef __SANITIZE_ADDRESS__
 #include <sanitizer/asan_interface.h>

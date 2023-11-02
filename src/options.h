@@ -224,8 +224,8 @@
 
 /** If defined then enables integration with Valgrind,
  * a memory analyzing tool. */
-#ifndef MDBX_USE_VALGRIND
-#endif /* MDBX_USE_VALGRIND */
+#ifndef ENABLE_MEMCHECK
+#endif /* ENABLE_MEMCHECK */
 
 /** If defined then enables use C11 atomics,
  *  otherwise detects ones availability automatically. */
