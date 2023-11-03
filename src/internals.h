@@ -1189,8 +1189,6 @@ struct MDBX_txn {
   txnid_t mt_front;
 
   MDBX_env *mt_env; /* the DB environment */
-  /* Array of records for each DB known in the environment. */
-  MDBX_dbx *mt_dbxs;
   /* Array of MDBX_db records for each known DB */
   MDBX_db *mt_dbs;
 
