@@ -1170,6 +1170,8 @@ struct MDBX_txn {
 #error "Oops, some txn flags overlapped or wrong"
 #endif
   uint32_t mt_flags;
+  unsigned mt_numdbs;
+  size_t mt_owner; /* thread ID that owns this transaction */
 
   MDBX_txn *mt_parent; /* parent of a nested txn */
   /* Nested txn under this txn, set together with flag MDBX_TXN_HAS_CHILD */
@@ -1191,8 +1193,6 @@ struct MDBX_txn {
   MDBX_dbx *mt_dbxs;
   /* Array of MDBX_db records for each known DB */
   MDBX_db *mt_dbs;
-  /* Array of sequence numbers for each DB handle */
-  MDBX_atomic_uint32_t *mt_dbiseqs;
 
   /* Transaction DBI Flags */
 #define DBI_DIRTY MDBX_DBI_DIRTY /* DB was written in this txn */
@@ -1202,16 +1202,15 @@ struct MDBX_txn {
 #define DBI_VALID 0x10           /* DB handle is valid, see also DB_VALID */
 #define DBI_USRVALID 0x20        /* As DB_VALID, but not set for FREE_DBI */
 #define DBI_AUDITED 0x40         /* Internal flag for accounting during audit */
-  /* Array of flags for each DB */
+  /* Array of non-shared txn's flags of DBI */
   uint8_t *mt_dbistate;
-  /* Number of DB records in use, or 0 when the txn is finished.
-   * This number only ever increments until the txn finishes; we
-   * don't decrement it when individual DB handles are closed. */
-  MDBX_dbi mt_numdbs;
-  size_t mt_owner; /* thread ID that owns this transaction */
+
+  /* Array of sequence numbers for each DB handle. */
+  MDBX_atomic_uint32_t *mt_dbiseqs;
+  MDBX_cursor **mt_cursors;
+
   MDBX_canary mt_canary;
   void *mt_userctx; /* User-settable context */
-  MDBX_cursor **mt_cursors;
 
   union {
     struct {
@@ -1364,6 +1363,7 @@ struct MDBX_env {
 #define MDBX_DEPRECATED_COALESCE UINT32_C(0x2000000)
 #define ENV_INTERNAL_FLAGS (MDBX_FATAL_ERROR | MDBX_ENV_ACTIVE | MDBX_ENV_TXKEY)
   uint32_t me_flags;
+  unsigned me_psize;       /* DB page size, initialized from me_os_psize */
   osal_mmap_t me_dxb_mmap; /* The main data file */
 #define me_map me_dxb_mmap.base
 #define me_lazy_fd me_dxb_mmap.fd
@@ -1376,7 +1376,6 @@ struct MDBX_env {
 #define me_lfd me_lck_mmap.fd
   struct MDBX_lockinfo *me_lck;
 
-  unsigned me_psize;          /* DB page size, initialized from me_os_psize */
   unsigned me_leaf_nodemax;   /* max size of a leaf-node */
   unsigned me_branch_nodemax; /* max size of a branch-node */
   atomic_pgno_t me_mlocked_pgno;
@@ -1448,6 +1447,7 @@ struct MDBX_env {
   } me_sysv_ipc;
 #endif /* MDBX_LOCKING == MDBX_LOCKING_SYSV */
   bool me_incore;
+  bool me_prefault_write;
 
   MDBX_env *me_lcklist_next;
 
@@ -1455,11 +1455,11 @@ struct MDBX_env {
 
   MDBX_txn *me_txn; /* current write transaction */
   osal_fastmutex_t me_dbi_lock;
-  MDBX_dbi me_numdbs; /* number of DBs opened */
-  bool me_prefault_write;
+  unsigned me_numdbs; /* number of DBs opened */
 
-  MDBX_page *me_dp_reserve; /* list of malloc'ed blocks for re-use */
   unsigned me_dp_reserve_len;
+  MDBX_page *me_dp_reserve; /* list of malloc'ed blocks for re-use */
+
   /* PNL of pages that became unused in a write txn */
   MDBX_PNL me_retired_pages;
   osal_ioring_t me_ioring;
