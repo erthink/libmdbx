@@ -190,7 +190,7 @@ int osal_txn_lock(MDBX_env *env, bool dontwait) {
                  0xC0000194 /* STATUS_POSSIBLE_DEADLOCK / EXCEPTION_POSSIBLE_DEADLOCK */)
                     ? EXCEPTION_EXECUTE_HANDLER
                     : EXCEPTION_CONTINUE_SEARCH) {
-      return ERROR_POSSIBLE_DEADLOCK;
+      return MDBX_EDEADLK;
     }
   }
 

@@ -536,7 +536,7 @@ MDBX_INTERNAL_FUNC int osal_fastmutex_acquire(osal_fastmutex_t *fastmutex) {
        0xC0000194 /* STATUS_POSSIBLE_DEADLOCK / EXCEPTION_POSSIBLE_DEADLOCK */)
           ? EXCEPTION_EXECUTE_HANDLER
           : EXCEPTION_CONTINUE_SEARCH) {
-    return ERROR_POSSIBLE_DEADLOCK;
+    return MDBX_EDEADLK;
   }
   return MDBX_SUCCESS;
 #else
