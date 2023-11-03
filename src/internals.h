@@ -1194,19 +1194,19 @@ struct MDBX_txn {
   /* Array of MDBX_db records for each known DB */
   MDBX_db *mt_dbs;
 
-  /* Transaction DBI Flags */
-#define DBI_DIRTY MDBX_DBI_DIRTY /* DB was written in this txn */
-#define DBI_STALE MDBX_DBI_STALE /* Named-DB record is older than txnID */
-#define DBI_FRESH MDBX_DBI_FRESH /* Named-DB handle opened in this txn */
-#define DBI_CREAT MDBX_DBI_CREAT /* Named-DB handle created in this txn */
-#define DBI_VALID 0x10           /* DB handle is valid, see also DB_VALID */
-#define DBI_USRVALID 0x20        /* As DB_VALID, but not set for FREE_DBI */
-#define DBI_AUDITED 0x40         /* Internal flag for accounting during audit */
+  /* Non-shared DBI state flags inside transaction */
+#define DBI_DIRTY 0x01    /* DB was written in this txn */
+#define DBI_STALE 0x02    /* Named-DB record is older than txnID */
+#define DBI_FRESH 0x04    /* Named-DB handle opened in this txn */
+#define DBI_CREAT 0x08    /* Named-DB handle created in this txn */
+#define DBI_VALID 0x10    /* Handle is valid, see also DB_VALID */
+#define DBI_USRVALID 0x20 /* As DB_VALID, but not set for FREE_DBI */
+#define DBI_AUDIT 0x40    /* Internal flag for accounting during audit */
   /* Array of non-shared txn's flags of DBI */
-  uint8_t *mt_dbistate;
+  uint8_t *mt_dbi_state;
 
   /* Array of sequence numbers for each DB handle. */
-  MDBX_atomic_uint32_t *mt_dbiseqs;
+  MDBX_atomic_uint32_t *mt_dbi_seqs;
   MDBX_cursor **mt_cursors;
 
   MDBX_canary mt_canary;
@@ -1292,8 +1292,8 @@ struct MDBX_cursor {
   MDBX_db *mc_db;
   /* The database auxiliary record for this cursor */
   MDBX_dbx *mc_dbx;
-  /* The mt_dbistate for this database */
-  uint8_t *mc_dbistate;
+  /* The mt_dbi_state[] for this DBI */
+  uint8_t *mc_dbi_state;
   uint8_t mc_snum; /* number of pushed pages */
   uint8_t mc_top;  /* index of top page, normally mc_snum-1 */
 
@@ -1393,9 +1393,9 @@ struct MDBX_env {
   void *me_pbuf;              /* scratch area for DUPSORT put() */
   MDBX_txn *me_txn0;          /* preallocated write transaction */
 
-  MDBX_dbx *me_dbxs;                /* array of static DB info */
-  uint16_t *me_dbflags;             /* array of flags from MDBX_db.md_flags */
-  MDBX_atomic_uint32_t *me_dbiseqs; /* array of dbi sequence numbers */
+  MDBX_dbx *me_dbxs;                 /* array of static DB info */
+  uint16_t *me_db_flags;             /* array of flags from MDBX_db.md_flags */
+  MDBX_atomic_uint32_t *me_dbi_seqs; /* array of dbi sequence numbers */
   unsigned
       me_maxgc_ov1page; /* Number of pgno_t fit in a single overflow page */
   unsigned me_maxgc_per_branch;
@@ -1662,7 +1662,7 @@ typedef struct MDBX_node {
 /* mdbx_dbi_open() flags */
 #define DB_USABLE_FLAGS (DB_PERSISTENT_FLAGS | MDBX_CREATE | MDBX_DB_ACCEDE)
 
-#define DB_VALID 0x8000 /* DB handle is valid, for me_dbflags */
+#define DB_VALID 0x8000 /* DB handle is valid, for me_db_flags */
 #define DB_INTERNAL_FLAGS DB_VALID
 
 #if DB_INTERNAL_FLAGS & DB_USABLE_FLAGS
