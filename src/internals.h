@@ -1348,6 +1348,11 @@ typedef struct MDBX_cursor_couple {
   MDBX_xcursor inner;
 } MDBX_cursor_couple;
 
+struct mdbx_defer_free_item {
+  struct mdbx_defer_free_item *next;
+  uint64_t timestamp;
+};
+
 /* The database environment. */
 struct MDBX_env {
   /* ----------------------------------------------------- mostly static part */
@@ -1452,6 +1457,9 @@ struct MDBX_env {
   bool me_prefault_write;
 
   MDBX_env *me_lcklist_next;
+#if MDBX_ENABLE_DBI_LOCKFREE
+  struct mdbx_defer_free_item *me_defer_free;
+#endif /* MDBX_ENABLE_DBI_LOCKFREE */
 
   /* --------------------------------------------------- mostly volatile part */
 

@@ -34,6 +34,7 @@
 #cmakedefine01 MDBX_ENABLE_PGOP_STAT
 #cmakedefine01 MDBX_ENABLE_PROFGC
 #cmakedefine01 MDBX_ENABLE_DBI_SPARSE
+#cmakedefine01 MDBX_ENABLE_DBI_LOCKFREE
 
 /* Windows */
 #cmakedefine01 MDBX_WITHOUT_MSVC_CRT

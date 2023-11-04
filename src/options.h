@@ -170,6 +170,13 @@
 #error MDBX_ENABLE_DBI_SPARSE must be defined as 0 or 1
 #endif /* MDBX_ENABLE_DBI_SPARSE */
 
+/** FIXME */
+#ifndef MDBX_ENABLE_DBI_LOCKFREE
+#define MDBX_ENABLE_DBI_LOCKFREE 1
+#elif !(MDBX_ENABLE_DBI_LOCKFREE == 0 || MDBX_ENABLE_DBI_LOCKFREE == 1)
+#error MDBX_ENABLE_DBI_LOCKFREE must be defined as 0 or 1
+#endif /* MDBX_ENABLE_DBI_LOCKFREE */
+
 /** Controls sort order of internal page number lists.
  * This mostly experimental/advanced option with not for regular MDBX users.
  * \warning The database format depend on this option and libmdbx built with
