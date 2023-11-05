@@ -531,6 +531,7 @@ add_mdbx_option(MDBX_ENABLE_BIGFOOT "Chunking long list of retired pages during 
 add_mdbx_option(MDBX_ENABLE_PGOP_STAT "Gathering statistics for page operations" ON)
 add_mdbx_option(MDBX_ENABLE_PROFGC "Profiling of GC search and updates" OFF)
 mark_as_advanced(MDBX_ENABLE_PROFGC)
+add_mdbx_option(MDBX_ENABLE_DBI_SPARSE "FIXME" ON)
 
 if(NOT MDBX_AMALGAMATED_SOURCE)
   if(CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE_UPPERCASE STREQUAL "DEBUG")

@@ -1921,7 +1921,7 @@ enum MDBX_error_t {
   MDBX_TOO_LARGE = -30417,
 
   /** A thread has attempted to use a not owned object,
-   * e.g. a transaction that started by another thread. */
+   * e.g. a transaction that started by another thread */
   MDBX_THREAD_MISMATCH = -30416,
 
   /** Overlapping read and write transactions for the current thread */
@@ -1936,8 +1936,12 @@ enum MDBX_error_t {
   /** Alternative/Duplicate LCK-file is exists and should be removed manually */
   MDBX_DUPLICATED_CLK = -30413,
 
+  /** Some cursors and/or other resources should be closed before subDb or
+   *  corresponding DBI-handle could be (re)used */
+  MDBX_DANGLING_DBI = -30412,
+
   /* The last of MDBX-added error codes */
-  MDBX_LAST_ADDED_ERRCODE = MDBX_DUPLICATED_CLK,
+  MDBX_LAST_ADDED_ERRCODE = MDBX_DANGLING_DBI,
 
 #if defined(_WIN32) || defined(_WIN64)
   MDBX_ENODATA = ERROR_HANDLE_EOF,

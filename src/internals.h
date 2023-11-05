@@ -1192,19 +1192,23 @@ struct MDBX_txn {
   /* Array of MDBX_db records for each known DB */
   MDBX_db *mt_dbs;
 
+#if MDBX_ENABLE_DBI_SPARSE
+  unsigned *mt_dbi_sparse;
+#endif /* MDBX_ENABLE_DBI_SPARSE */
+
   /* Non-shared DBI state flags inside transaction */
-#define DBI_DIRTY 0x01    /* DB was written in this txn */
-#define DBI_STALE 0x02    /* Named-DB record is older than txnID */
-#define DBI_FRESH 0x04    /* Named-DB handle opened in this txn */
-#define DBI_CREAT 0x08    /* Named-DB handle created in this txn */
-#define DBI_VALID 0x10    /* Handle is valid, see also DB_VALID */
-#define DBI_USRVALID 0x20 /* As DB_VALID, but not set for FREE_DBI */
-#define DBI_AUDIT 0x40    /* Internal flag for accounting during audit */
+#define DBI_DIRTY 0x01 /* DB was written in this txn */
+#define DBI_STALE 0x02 /* Named-DB record is older than txnID */
+#define DBI_FRESH 0x04 /* Named-DB handle opened in this txn */
+#define DBI_CREAT 0x08 /* Named-DB handle created in this txn */
+#define DBI_VALID 0x10 /* Handle is valid, see also DB_VALID */
+#define DBI_OLDEN 0x40 /* Handle was closed/reopened outside txn */
+#define DBI_LINDO 0x80 /* Lazy initialization done for DBI-slot */
   /* Array of non-shared txn's flags of DBI */
   uint8_t *mt_dbi_state;
 
   /* Array of sequence numbers for each DB handle. */
-  MDBX_atomic_uint32_t *mt_dbi_seqs;
+  uint32_t *mt_dbi_seqs;
   MDBX_cursor **mt_cursors;
 
   MDBX_canary mt_canary;
@@ -1660,7 +1664,8 @@ typedef struct MDBX_node {
 /* mdbx_dbi_open() flags */
 #define DB_USABLE_FLAGS (DB_PERSISTENT_FLAGS | MDBX_CREATE | MDBX_DB_ACCEDE)
 
-#define DB_VALID 0x8000 /* DB handle is valid, for me_db_flags */
+#define DB_VALID 0x8000u  /* DB handle is valid, for me_db_flags */
+#define DB_POISON 0x7fffu /* update pending */
 #define DB_INTERNAL_FLAGS DB_VALID
 
 #if DB_INTERNAL_FLAGS & DB_USABLE_FLAGS

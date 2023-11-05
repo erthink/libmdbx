@@ -163,6 +163,13 @@
 #error MDBX_AVOID_MSYNC must be defined as 0 or 1
 #endif /* MDBX_AVOID_MSYNC */
 
+/** FIXME */
+#ifndef MDBX_ENABLE_DBI_SPARSE
+#define MDBX_ENABLE_DBI_SPARSE 1
+#elif !(MDBX_ENABLE_DBI_SPARSE == 0 || MDBX_ENABLE_DBI_SPARSE == 1)
+#error MDBX_ENABLE_DBI_SPARSE must be defined as 0 or 1
+#endif /* MDBX_ENABLE_DBI_SPARSE */
+
 /** Controls sort order of internal page number lists.
  * This mostly experimental/advanced option with not for regular MDBX users.
  * \warning The database format depend on this option and libmdbx built with

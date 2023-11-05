@@ -33,6 +33,7 @@
 #cmakedefine01 MDBX_ENABLE_BIGFOOT
 #cmakedefine01 MDBX_ENABLE_PGOP_STAT
 #cmakedefine01 MDBX_ENABLE_PROFGC
+#cmakedefine01 MDBX_ENABLE_DBI_SPARSE
 
 /* Windows */
 #cmakedefine01 MDBX_WITHOUT_MSVC_CRT
