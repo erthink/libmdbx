@@ -3956,6 +3956,23 @@ static void cursors_eot(MDBX_txn *txn, const bool merge) {
 
 static __noinline int dbi_import(MDBX_txn *txn, const size_t dbi);
 
+static __inline bool db_check_flags(uint16_t db_flags) {
+  switch (db_flags & ~(DB_VALID | MDBX_REVERSEKEY | MDBX_INTEGERKEY)) {
+  default:
+    NOTICE("invalid db-flags 0x%x", db_flags);
+    return false;
+  case MDBX_DUPSORT:
+  case MDBX_DUPSORT | MDBX_REVERSEDUP:
+  case MDBX_DUPSORT | MDBX_DUPFIXED:
+  case MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_REVERSEDUP:
+  case MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP:
+  case MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP | MDBX_REVERSEDUP:
+  case MDBX_DB_DEFAULTS:
+    return (db_flags & (MDBX_REVERSEKEY | MDBX_INTEGERKEY)) !=
+           (MDBX_REVERSEKEY | MDBX_INTEGERKEY);
+  }
+}
+
 static __inline uint8_t dbi_state(const MDBX_txn *txn, const size_t dbi) {
   STATIC_ASSERT(DBI_DIRTY == MDBX_DBI_DIRTY && DBI_STALE == MDBX_DBI_STALE &&
                 DBI_FRESH == MDBX_DBI_FRESH && DBI_CREAT == MDBX_DBI_CREAT);
@@ -8992,6 +9009,9 @@ __hot static int coherency_check_head(MDBX_txn *txn, const meta_ptr_t head,
   if (unlikely(!coherency_check(txn->mt_env, head.txnid, txn->mt_dbs,
                                 head.ptr_v, *timestamp == 0)))
     return coherency_timeout(timestamp, -1, txn->mt_env);
+
+  tASSERT(txn, txn->mt_dbs[FREE_DBI].md_flags == MDBX_INTEGERKEY);
+  tASSERT(txn, db_check_flags(txn->mt_dbs[MAIN_DBI].md_flags));
   return MDBX_SUCCESS;
 }
 
@@ -9015,6 +9035,9 @@ static int coherency_check_written(const MDBX_env *env, const txnid_t txnid,
   }
   if (unlikely(!coherency_check(env, head_txnid, meta->mm_dbs, meta, report)))
     return coherency_timeout(timestamp, pgno, env);
+
+  eASSERT(env, meta->mm_dbs[FREE_DBI].md_flags == MDBX_INTEGERKEY);
+  eASSERT(env, db_check_flags(meta->mm_dbs[MAIN_DBI].md_flags));
   return MDBX_SUCCESS;
 }
 
@@ -9177,6 +9200,8 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
     ENSURE(env, txn->mt_txnid >=
                     /* paranoia is appropriate here */ env->me_lck
                         ->mti_oldest_reader.weak);
+    tASSERT(txn, txn->mt_dbs[FREE_DBI].md_flags == MDBX_INTEGERKEY);
+    tASSERT(txn, db_check_flags(txn->mt_dbs[MAIN_DBI].md_flags));
   } else {
     eASSERT(env, (flags & ~(MDBX_TXN_RW_BEGIN_FLAGS | MDBX_TXN_SPILLS |
                             MDBX_WRITEMAP)) == 0);
@@ -9234,6 +9259,8 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
       goto bailout;
     }
 
+    tASSERT(txn, txn->mt_dbs[FREE_DBI].md_flags == MDBX_INTEGERKEY);
+    tASSERT(txn, db_check_flags(txn->mt_dbs[MAIN_DBI].md_flags));
     txn->mt_flags = flags;
     txn->mt_child = NULL;
     txn->tw.loose_pages = NULL;
@@ -9269,6 +9296,8 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
       txn->mt_txnid + ((flags & (MDBX_WRITEMAP | MDBX_RDONLY)) == 0);
 
   /* Setup db info */
+  tASSERT(txn, txn->mt_dbs[FREE_DBI].md_flags == MDBX_INTEGERKEY);
+  tASSERT(txn, db_check_flags(txn->mt_dbs[MAIN_DBI].md_flags));
   VALGRIND_MAKE_MEM_UNDEFINED(txn->mt_dbi_state, env->me_maxdbs);
 #if MDBX_ENABLE_DBI_SPARSE
   txn->mt_numdbs = CORE_DBS;
@@ -9287,25 +9316,74 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
   txn->mt_cursors[FREE_DBI] = nullptr;
   txn->mt_cursors[MAIN_DBI] = nullptr;
   txn->mt_dbi_seqs[FREE_DBI] = 0;
-  struct dbi_snap_result main_snap = dbi_snap(env, MAIN_DBI);
-  if (unlikely(main_snap.flags !=
+  txn->mt_dbi_seqs[MAIN_DBI] =
+      atomic_load32(&env->me_dbi_seqs[MAIN_DBI], mo_AcquireRelease);
+
+  if (unlikely(env->me_db_flags[MAIN_DBI] !=
                (DB_VALID | txn->mt_dbs[MAIN_DBI].md_flags))) {
-    if (main_snap.flags & DB_VALID) {
-      rc = MDBX_INCOMPATIBLE;
-      goto bailout;
+    const bool need_txn_lock = env->me_txn0 && env->me_txn0->mt_owner != tid;
+    bool should_unlock = false;
+    if (need_txn_lock) {
+      rc = osal_txn_lock(env, true);
+      if (rc == MDBX_SUCCESS)
+        should_unlock = true;
+      else if (rc != MDBX_BUSY && rc != MDBX_EDEADLK)
+        goto bailout;
     }
-    env->me_db_flags[MAIN_DBI] = DB_VALID | txn->mt_dbs[MAIN_DBI].md_flags;
-    main_snap.sequence =
-        atomic_store32(&env->me_dbi_seqs[MAIN_DBI], dbi_seq_next(env, MAIN_DBI),
-                       mo_AcquireRelease);
+    rc = osal_fastmutex_acquire(&env->me_dbi_lock);
+    if (likely(rc == MDBX_SUCCESS)) {
+      uint32_t seq = dbi_seq_next(env, MAIN_DBI);
+      /* проверяем повторно после захвата блокировки */
+      if (env->me_db_flags[MAIN_DBI] !=
+          (DB_VALID | txn->mt_dbs[MAIN_DBI].md_flags)) {
+        if (!need_txn_lock || should_unlock ||
+            /* если нет активной пишущей транзакции,
+             * то следующая будет ждать на me_dbi_lock */
+            !env->me_txn) {
+          if (env->me_db_flags[MAIN_DBI] != 0 || MDBX_DEBUG)
+            NOTICE("renew MainDB for %s-txn %" PRIaTXN
+                   " since db-flags changes 0x%x -> 0x%x",
+                   (txn->mt_flags & MDBX_TXN_RDONLY) ? "ro" : "rw",
+                   txn->mt_txnid, env->me_db_flags[MAIN_DBI] & ~DB_VALID,
+                   txn->mt_dbs[MAIN_DBI].md_flags);
+          env->me_db_flags[MAIN_DBI] = DB_POISON;
+          atomic_store32(&env->me_dbi_seqs[MAIN_DBI], seq, mo_AcquireRelease);
+          rc = setup_dbx(&env->me_dbxs[MAIN_DBI], &txn->mt_dbs[MAIN_DBI],
+                         env->me_psize);
+          if (likely(rc == MDBX_SUCCESS)) {
+            seq = dbi_seq_next(env, MAIN_DBI);
+            env->me_db_flags[MAIN_DBI] =
+                DB_VALID | txn->mt_dbs[MAIN_DBI].md_flags;
+            txn->mt_dbi_seqs[MAIN_DBI] = atomic_store32(
+                &env->me_dbi_seqs[MAIN_DBI], seq, mo_AcquireRelease);
+          }
+        } else {
+          ERROR("MainDB db-flags changes 0x%x -> 0x%x ahead of read-txn "
+                "%" PRIaTXN,
+                txn->mt_dbs[MAIN_DBI].md_flags,
+                env->me_db_flags[MAIN_DBI] & ~DB_VALID, txn->mt_txnid);
+          rc = MDBX_INCOMPATIBLE;
+        }
+      }
+      ENSURE(env, osal_fastmutex_release(&env->me_dbi_lock) == MDBX_SUCCESS);
+    } else {
+      DEBUG("me_dbi_lock failed, err %d", rc);
+    }
+    if (should_unlock)
+      osal_txn_unlock(env);
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto bailout;
   }
-  txn->mt_dbi_seqs[MAIN_DBI] = main_snap.sequence;
 
-  rc =
-      setup_dbx(&env->me_dbxs[MAIN_DBI], &txn->mt_dbs[MAIN_DBI], env->me_psize);
-  if (unlikely(rc != MDBX_SUCCESS))
+  if (unlikely(txn->mt_dbs[FREE_DBI].md_flags != MDBX_INTEGERKEY)) {
+    ERROR("unexpected/invalid db-flags 0x%u for GC/FreeDB",
+          txn->mt_dbs[FREE_DBI].md_flags);
+    rc = MDBX_INCOMPATIBLE;
     goto bailout;
+  }
 
+  tASSERT(txn, txn->mt_dbs[FREE_DBI].md_flags == MDBX_INTEGERKEY);
+  tASSERT(txn, db_check_flags(txn->mt_dbs[MAIN_DBI].md_flags));
   if (unlikely(env->me_flags & MDBX_FATAL_ERROR)) {
     WARNING("%s", "environment had fatal error, must shutdown!");
     rc = MDBX_PANIC;
@@ -9390,13 +9468,6 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
       }
 #endif /* Windows */
     } else {
-      if (unlikely(txn->mt_dbs[FREE_DBI].md_flags != MDBX_INTEGERKEY)) {
-        ERROR("unexpected/invalid db-flags 0x%u for GC/FreeDB",
-              txn->mt_dbs[FREE_DBI].md_flags);
-        rc = MDBX_INCOMPATIBLE;
-        goto bailout;
-      }
-
       tASSERT(txn, txn == env->me_txn0);
       MDBX_cursor *const gc = ptr_disp(txn, sizeof(MDBX_txn));
       rc = cursor_init(gc, txn, FREE_DBI);
@@ -12404,6 +12475,17 @@ static int validate_meta(MDBX_env *env, MDBX_meta *const meta,
     return MDBX_RESULT_TRUE;
   }
 
+  if (unlikely(meta->mm_dbs[FREE_DBI].md_flags != MDBX_INTEGERKEY)) {
+    WARNING("meta[%u] has invalid %s flags 0x%u, skip it", meta_number,
+            "GC/FreeDB", meta->mm_dbs[FREE_DBI].md_flags);
+    return MDBX_INCOMPATIBLE;
+  }
+  if (unlikely(!db_check_flags(meta->mm_dbs[MAIN_DBI].md_flags))) {
+    WARNING("meta[%u] has invalid %s flags 0x%u, skip it", meta_number,
+            "MainDB", meta->mm_dbs[MAIN_DBI].md_flags);
+    return MDBX_INCOMPATIBLE;
+  }
+
   DEBUG("checking meta%" PRIaPGNO " = root %" PRIaPGNO "/%" PRIaPGNO
         ", geo %" PRIaPGNO "/%" PRIaPGNO "-%" PRIaPGNO "/%" PRIaPGNO
         " +%u -%u, txn_id %" PRIaTXN ", %s",
@@ -12788,6 +12870,8 @@ __cold static MDBX_meta *init_metas(const MDBX_env *env, void *buffer) {
 static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
                        meta_troika_t *const troika) {
   eASSERT(env, ((env->me_flags ^ flags) & MDBX_WRITEMAP) == 0);
+  eASSERT(env, pending->mm_dbs[FREE_DBI].md_flags == MDBX_INTEGERKEY);
+  eASSERT(env, db_check_flags(pending->mm_dbs[MAIN_DBI].md_flags));
   const MDBX_meta *const meta0 = METAPAGE(env, 0);
   const MDBX_meta *const meta1 = METAPAGE(env, 1);
   const MDBX_meta *const meta2 = METAPAGE(env, 2);
@@ -13086,6 +13170,8 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
       target->mm_geo = pending->mm_geo;
       target->mm_dbs[FREE_DBI] = pending->mm_dbs[FREE_DBI];
       target->mm_dbs[MAIN_DBI] = pending->mm_dbs[MAIN_DBI];
+      eASSERT(env, target->mm_dbs[FREE_DBI].md_flags == MDBX_INTEGERKEY);
+      eASSERT(env, db_check_flags(target->mm_dbs[MAIN_DBI].md_flags));
       target->mm_canary = pending->mm_canary;
       memcpy(target->mm_pages_retired, pending->mm_pages_retired, 8);
       jitter4testing(true);
@@ -13140,6 +13226,8 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
     env->me_lck->mti_pgop_stat.wops.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
     const MDBX_meta undo_meta = *target;
+    eASSERT(env, pending->mm_dbs[FREE_DBI].md_flags == MDBX_INTEGERKEY);
+    eASSERT(env, db_check_flags(pending->mm_dbs[MAIN_DBI].md_flags));
     rc = osal_pwrite(env->me_fd4meta, pending, sizeof(MDBX_meta),
                      ptr_dist(target, env->me_map));
     if (unlikely(rc != MDBX_SUCCESS)) {
@@ -13878,6 +13966,19 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
           header.mm_geo.upper, pv2pages(header.mm_geo.grow_pv),
           pv2pages(header.mm_geo.shrink_pv),
           unaligned_peek_u64(4, header.mm_txnid_a), durable_caption(&header));
+
+  if (unlikely(header.mm_dbs[FREE_DBI].md_flags != MDBX_INTEGERKEY)) {
+    ERROR("unexpected/invalid db-flags 0x%u for GC/FreeDB",
+          header.mm_dbs[FREE_DBI].md_flags);
+    return MDBX_INCOMPATIBLE;
+  }
+  env->me_db_flags[FREE_DBI] = DB_VALID | MDBX_INTEGERKEY;
+  env->me_dbxs[FREE_DBI].md_cmp = cmp_int_align4; /* aligned MDBX_INTEGERKEY */
+  env->me_dbxs[FREE_DBI].md_dcmp = cmp_lenfast;
+  env->me_dbxs[FREE_DBI].md_klen_max = env->me_dbxs[FREE_DBI].md_klen_min = 8;
+  env->me_dbxs[FREE_DBI].md_vlen_min = 4;
+  env->me_dbxs[FREE_DBI].md_vlen_max =
+      mdbx_env_get_maxvalsize_ex(env, MDBX_INTEGERKEY);
 
   if (env->me_psize != header.mm_psize)
     setup_pagesize(env, header.mm_psize);
@@ -14631,7 +14732,7 @@ __cold static int __must_check_result override_meta(MDBX_env *env,
   if (shape) {
     if (txnid && unlikely(!check_meta_coherency(env, shape, false))) {
       ERROR("bailout overriding meta-%zu since model failed "
-            "freedb/maindb %s-check for txnid #%" PRIaTXN,
+            "FreeDB/MainDB %s-check for txnid #%" PRIaTXN,
             target, "pre", constmeta_txnid(shape));
       return MDBX_PROBLEM;
     }
@@ -14655,7 +14756,7 @@ __cold static int __must_check_result override_meta(MDBX_env *env,
                sizeof(model->mm_magic_and_version));
       if (unlikely(!check_meta_coherency(env, model, false))) {
         ERROR("bailout overriding meta-%zu since model failed "
-              "freedb/maindb %s-check for txnid #%" PRIaTXN,
+              "FreeDB/MainDB %s-check for txnid #%" PRIaTXN,
               target, "post", txnid);
         return MDBX_PROBLEM;
       }
@@ -15119,13 +15220,6 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
   }
   memcpy(env->me_pathname, env_pathname.dxb,
          env_pathname.ent_len * sizeof(pathchar_t));
-  env->me_db_flags[FREE_DBI] = DB_VALID | MDBX_INTEGERKEY;
-  env->me_dbxs[FREE_DBI].md_cmp = cmp_int_align4; /* aligned MDBX_INTEGERKEY */
-  env->me_dbxs[FREE_DBI].md_dcmp = cmp_lenfast;
-  env->me_dbxs[FREE_DBI].md_klen_max = env->me_dbxs[FREE_DBI].md_klen_min = 8;
-  env->me_dbxs[FREE_DBI].md_vlen_min = 4;
-  env->me_dbxs[FREE_DBI].md_vlen_max =
-      mdbx_env_get_maxvalsize_ex(env, MDBX_INTEGERKEY);
 
   /* Использование O_DSYNC или FILE_FLAG_WRITE_THROUGH:
    *
@@ -16059,6 +16153,10 @@ __hot __noinline static int page_search_root(MDBX_cursor *mc,
 
 static int setup_dbx(MDBX_dbx *const dbx, const MDBX_db *const db,
                      const unsigned pagesize) {
+  if (unlikely(!db_check_flags(db->md_flags))) {
+    ERROR("incompatible or invalid db.md_flags (%u) ", db->md_flags);
+    return MDBX_INCOMPATIBLE;
+  }
   if (unlikely(!dbx->md_cmp)) {
     dbx->md_cmp = get_default_keycmp(db->md_flags);
     dbx->md_dcmp = get_default_datacmp(db->md_flags);
@@ -22742,7 +22840,7 @@ static int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags,
     eASSERT(env, !(txn->mt_dbi_state[dbi] & DBI_VALID) ||
                      (txn->mt_dbs[dbi].md_flags | DB_VALID) ==
                          env->me_db_flags[dbi]);
-    eASSERT(env, env->me_dbxs[dbi].md_name.iov_base);
+    eASSERT(env, env->me_dbxs[dbi].md_name.iov_base || dbi < CORE_DBS);
   }
 
   /* Если dbi уже использовался, то корректными считаем четыре варианта:
@@ -23055,6 +23153,7 @@ static int dbi_open(MDBX_txn *txn, const MDBX_val *const name,
   case MDBX_DB_DEFAULTS:
     break;
   }
+  tASSERT(txn, db_check_flags((uint16_t)user_flags));
 
   /* main table? */
   if (unlikely(name == MDBX_CHK_MAIN || name->iov_base == MDBX_CHK_MAIN)) {
