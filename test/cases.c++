@@ -105,6 +105,10 @@ void testcase_setup(const char *casename, const actor_params &params,
     configure_actor(last_space_id, ac_try, nullptr, params);
     configure_actor(last_space_id, ac_jitter, nullptr, params);
     configure_actor(last_space_id, ac_try, nullptr, params);
+#if !defined(_WIN32) && !defined(_WIN64)
+    configure_actor(last_space_id, ac_forkread, nullptr, params);
+    configure_actor(last_space_id, ac_forkwrite, nullptr, params);
+#endif /* Windows */
     log_notice("<<< testcase_setup(%s): done", casename);
   } else {
     failure("unknown testcase `%s`", casename);

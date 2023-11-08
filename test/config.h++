@@ -25,6 +25,10 @@ enum actor_testcase {
   ac_hill,
   ac_deadread,
   ac_deadwrite,
+#if !defined(_WIN32) && !defined(_WIN64)
+  ac_forkread,
+  ac_forkwrite,
+#endif /* Windows */
   ac_jitter,
   ac_try,
   ac_copy,

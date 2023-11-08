@@ -28,6 +28,7 @@ set(LIBMDBX_TEST_SOURCES
   append.c++
   ttl.c++
   nested.c++
+  fork.c++
   )
 
 if(NOT MDBX_BUILD_CXX)

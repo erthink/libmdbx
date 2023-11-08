@@ -108,8 +108,7 @@ bool output(const loglevel priority, const char *format, ...) {
   return true;
 }
 
-void output_nocheckloglevel_ap(const logging::loglevel priority,
-                               const char *format, va_list ap) {
+bool ln() {
   if (last) {
     putc('\n', last);
     fflush(last);
@@ -118,8 +117,14 @@ void output_nocheckloglevel_ap(const logging::loglevel priority,
       fflush(stdout);
     }
     last = nullptr;
+    return true;
   }
+  return false;
+}
 
+void output_nocheckloglevel_ap(const logging::loglevel priority,
+                               const char *format, va_list ap) {
+  ln();
   chrono::time now = chrono::now_realtime();
   struct tm tm;
 #ifdef _MSC_VER

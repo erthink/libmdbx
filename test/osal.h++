@@ -46,3 +46,7 @@ std::string osal_tempdir(void);
 #define STDERR_FILENO _fileno(stderr)
 #endif
 #endif /* _MSC_VER */
+
+#if !defined(_WIN32) && !defined(_WIN64)
+const char *signal_name(const int sig);
+#endif /* Windows */

@@ -60,6 +60,10 @@ MDBX_NORETURN void usage(void) {
       "  --append                      Append-mode insertions\n"
       "  --dead.reader                 Dead-reader simulator\n"
       "  --dead.writer                 Dead-writer simulator\n"
+#if !defined(_WIN32) && !defined(_WIN64)
+      "  --fork.reader                 After-fork reader\n"
+      "  --fork.writer                 After-fork writer\n"
+#endif /* Windows */
       "Actor options:\n"
       "  --batch.read=N                Read-operations batch size\n"
       "  --batch.write=N               Write-operations batch size\n"
@@ -591,6 +595,18 @@ int main(int argc, char *const argv[]) {
       configure_actor(last_space_id, ac_nested, value, params);
       continue;
     }
+#if !defined(_WIN32) && !defined(_WIN64)
+    if (config::parse_option(argc, argv, narg, "fork.reader", nullptr)) {
+      fixup4qemu(params);
+      configure_actor(last_space_id, ac_forkread, value, params);
+      continue;
+    }
+    if (config::parse_option(argc, argv, narg, "fork.writer", nullptr)) {
+      fixup4qemu(params);
+      configure_actor(last_space_id, ac_forkwrite, value, params);
+      continue;
+    }
+#endif /* Windows */
 
     if (*argv[narg] != '-') {
       fixup4qemu(params);

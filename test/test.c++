@@ -39,6 +39,12 @@ const char *testcase2str(const actor_testcase testcase) {
     return "ttl";
   case ac_nested:
     return "nested";
+#if !defined(_WIN32) && !defined(_WIN64)
+  case ac_forkread:
+    return "forkread";
+  case ac_forkwrite:
+    return "forkwrite";
+#endif /* Windows */
   }
 }
 
