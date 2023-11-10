@@ -294,7 +294,7 @@ MDBX_INTERNAL_FUNC int osal_rpid_check(MDBX_env *env, uint32_t pid) {
 /*---------------------------------------------------------------------------*/
 
 #if MDBX_LOCKING > MDBX_LOCKING_SYSV
-MDBX_INTERNAL_FUNC int osal_ipclock_stub(osal_ipclock_t *ipc) {
+MDBX_INTERNAL_FUNC int osal_ipclock_stubinit(osal_ipclock_t *ipc) {
 #if MDBX_LOCKING == MDBX_LOCKING_POSIX1988
   return sem_init(ipc, false, 1) ? errno : 0;
 #elif MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                \
@@ -796,7 +796,7 @@ bailout:
 #endif /* MDBX_LOCKING > 0 */
 }
 
-__cold static int mdbx_ipclock_failed(MDBX_env *env, osal_ipclock_t *ipc,
+__cold static int osal_ipclock_failed(MDBX_env *env, osal_ipclock_t *ipc,
                                       const int err) {
   int rc = err;
 #if MDBX_LOCKING == MDBX_LOCKING_POSIX2008 || MDBX_LOCKING == MDBX_LOCKING_SYSV
@@ -918,29 +918,42 @@ static int osal_ipclock_lock(MDBX_env *env, osal_ipclock_t *ipc,
 #endif /* MDBX_LOCKING */
 
   if (unlikely(rc != MDBX_SUCCESS && rc != MDBX_BUSY))
-    rc = mdbx_ipclock_failed(env, ipc, rc);
+    rc = osal_ipclock_failed(env, ipc, rc);
   return rc;
 }
 
 int osal_ipclock_unlock(MDBX_env *env, osal_ipclock_t *ipc) {
+  int err = MDBX_ENOSYS;
 #if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                  \
     MDBX_LOCKING == MDBX_LOCKING_POSIX2008
-  int rc = pthread_mutex_unlock(ipc);
-  (void)env;
+  err = pthread_mutex_unlock(ipc);
 #elif MDBX_LOCKING == MDBX_LOCKING_POSIX1988
-  int rc = sem_post(ipc) ? errno : MDBX_SUCCESS;
-  (void)env;
+  err = sem_post(ipc) ? errno : MDBX_SUCCESS;
 #elif MDBX_LOCKING == MDBX_LOCKING_SYSV
   if (unlikely(*ipc != (pid_t)env->me_pid))
-    return EPERM;
-  *ipc = 0;
-  struct sembuf op = {.sem_num = (ipc != &env->me_lck->mti_wlock),
-                      .sem_op = 1,
-                      .sem_flg = SEM_UNDO};
-  int rc = semop(env->me_sysv_ipc.semid, &op, 1) ? errno : MDBX_SUCCESS;
+    err = EPERM;
+  else {
+    *ipc = 0;
+    struct sembuf op = {.sem_num = (ipc != &env->me_lck->mti_wlock),
+                        .sem_op = 1,
+                        .sem_flg = SEM_UNDO};
+    err = semop(env->me_sysv_ipc.semid, &op, 1) ? errno : MDBX_SUCCESS;
+  }
 #else
 #error "FIXME"
 #endif /* MDBX_LOCKING */
+  int rc = err;
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    const uint32_t current_pid = osal_getpid();
+    if (current_pid == env->me_pid || LOG_ENABLED(MDBX_LOG_NOTICE))
+      debug_log((current_pid == env->me_pid)
+                    ? MDBX_LOG_FATAL
+                    : (rc = MDBX_SUCCESS, MDBX_LOG_NOTICE),
+                "ipc-unlock()", __LINE__, "failed: env %p, lck-%s %p, err %d\n",
+                __Wpedantic_format_voidptr(env),
+                (env->me_lck == env->me_lck_mmap.lck) ? "mmap" : "stub",
+                __Wpedantic_format_voidptr(env->me_lck), err);
+  }
   return rc;
 }
 
@@ -954,10 +967,10 @@ MDBX_INTERNAL_FUNC int osal_rdt_lock(MDBX_env *env) {
 
 MDBX_INTERNAL_FUNC void osal_rdt_unlock(MDBX_env *env) {
   TRACE("%s", ">>");
-  int rc = osal_ipclock_unlock(env, &env->me_lck->mti_rlock);
-  TRACE("<< rc %d", rc);
-  if (unlikely(rc != MDBX_SUCCESS))
-    mdbx_panic("%s() failed: err %d\n", __func__, rc);
+  int err = osal_ipclock_unlock(env, &env->me_lck->mti_rlock);
+  TRACE("<< err %d", err);
+  if (unlikely(err != MDBX_SUCCESS))
+    mdbx_panic("%s() failed: err %d\n", __func__, err);
   jitter4testing(true);
 }
 
@@ -974,7 +987,7 @@ int osal_txn_lock(MDBX_env *env, bool dont_wait) {
     env->me_txn0->mt_owner = osal_thread_self();
     rc = MDBX_SUCCESS;
   }
-  TRACE("<< rc %d", err);
+  TRACE("<< err %d, rc %d", err, rc);
   return rc;
 }
 

@@ -817,7 +817,7 @@ typedef sem_t osal_ipclock_t;
 #endif /* MDBX_LOCKING */
 
 #if MDBX_LOCKING > MDBX_LOCKING_SYSV && !defined(__cplusplus)
-MDBX_INTERNAL_FUNC int osal_ipclock_stub(osal_ipclock_t *ipc);
+MDBX_INTERNAL_FUNC int osal_ipclock_stubinit(osal_ipclock_t *ipc);
 MDBX_INTERNAL_FUNC int osal_ipclock_destroy(osal_ipclock_t *ipc);
 #endif /* MDBX_LOCKING */
 

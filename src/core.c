@@ -13552,7 +13552,7 @@ __cold int mdbx_env_create(MDBX_env **penv) {
 
 #if MDBX_LOCKING > MDBX_LOCKING_SYSV
   MDBX_lockinfo *const stub = lckless_stub(env);
-  rc = osal_ipclock_stub(&stub->mti_wlock);
+  rc = osal_ipclock_stubinit(&stub->mti_wlock);
 #endif /* MDBX_LOCKING */
   if (unlikely(rc != MDBX_SUCCESS)) {
     osal_fastmutex_destroy(&env->me_remap_guard);
