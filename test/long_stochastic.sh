@@ -41,7 +41,7 @@ do
     exit -2
   ;;
   --taillog)
-    TAILLOG=999
+    TAILLOG=3333
   ;;
   --multi)
     LIST=basic
