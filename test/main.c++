@@ -267,8 +267,19 @@ static void fixup4qemu(actor_params &params) {
   (void)params;
 }
 
-int main(int argc, char *const argv[]) {
+static void set_linebuf_append(FILE *out) {
+  setvbuf(out, NULL, _IOLBF, 65536);
+#if !defined(_WIN32) && !defined(_WIN64)
+  int fd = fileno(out);
+  int flags = fcntl(fd, F_GETFD);
+  if (flags != -1)
+    (void)fcntl(fd, F_SETFD, O_APPEND | flags);
+#endif /* !Windows */
+}
 
+int main(int argc, char *const argv[]) {
+  set_linebuf_append(stdout);
+  set_linebuf_append(stderr);
 #ifdef _DEBUG
   log_trace("#argc = %d", argc);
   for (int i = 0; i < argc; ++i)

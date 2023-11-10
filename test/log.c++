@@ -56,7 +56,7 @@ namespace logging {
 static std::string prefix;
 static std::string suffix;
 static loglevel level;
-static FILE *last;
+static FILE *flow;
 
 void setlevel(loglevel priority) {
   level = priority;
@@ -67,12 +67,12 @@ void setlevel(loglevel priority) {
   log_trace("set mdbx debug-opts: 0x%02x", rc);
 }
 
+void setup(const std::string &_prefix) { prefix = _prefix; }
+
 void setup(loglevel priority, const std::string &_prefix) {
   setlevel(priority);
-  prefix = _prefix;
+  setup(_prefix);
 }
-
-void setup(const std::string &_prefix) { prefix = _prefix; }
 
 const char *level2str(const loglevel alevel) {
   switch (alevel) {
@@ -108,18 +108,13 @@ bool output(const loglevel priority, const char *format, ...) {
   return true;
 }
 
-bool ln() {
-  if (last) {
-    putc('\n', last);
-    fflush(last);
-    if (last == stderr) {
+void ln() {
+  if (flow) {
+    putc('\n', flow);
+    if (flow != stdout)
       putc('\n', stdout);
-      fflush(stdout);
-    }
-    last = nullptr;
-    return true;
+    flow = nullptr;
   }
-  return false;
 }
 
 void output_nocheckloglevel_ap(const logging::loglevel priority,
@@ -139,8 +134,7 @@ void output_nocheckloglevel_ap(const logging::loglevel priority,
   if (rc != MDBX_SUCCESS)
     failure_perror("localtime_r()", rc);
 
-  last = stdout;
-  fprintf(last,
+  fprintf(stdout,
           "[ %02d%02d%02d-%02d:%02d:%02d.%06d_%05lu %-10s %.4s ] %s" /* TODO */,
           tm.tm_year - 100, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min,
           tm.tm_sec, chrono::fractional2us(now.fractional), (long)osal_getpid(),
@@ -150,19 +144,17 @@ void output_nocheckloglevel_ap(const logging::loglevel priority,
   memset(&ones, 0, sizeof(ones)) /* zap MSVC and other goofy compilers */;
   if (same_or_higher(priority, error))
     va_copy(ones, ap);
-  vfprintf(last, format, ap);
+  vfprintf(stdout, format, ap);
 
   size_t len = strlen(format);
   char end = len ? format[len - 1] : '\0';
 
   switch (end) {
   default:
-    putc('\n', last);
-    MDBX_CXX17_FALLTHROUGH; // fall through
+    putc('\n', stdout);
+    break;
   case '\n':
-    fflush(last);
-    last = nullptr;
-    MDBX_CXX17_FALLTHROUGH; // fall through
+    break;
   case ' ':
   case '_':
   case ':':
@@ -172,46 +164,39 @@ void output_nocheckloglevel_ap(const logging::loglevel priority,
   case '\b':
   case '\r':
   case '\0':
+    flow = stdout;
     break;
   }
 
   if (same_or_higher(priority, error)) {
-    if (last != stderr) {
-      fprintf(stderr, "[ %05lu %-10s %.4s ] %s", (long)osal_getpid(),
-              prefix.c_str(), level2str(priority), suffix.c_str());
-      vfprintf(stderr, format, ones);
-      if (end == '\n')
-        fflush(stderr);
-      else
-        last = stderr;
-    }
+    if (flow)
+      flow = stderr;
+    fprintf(stderr, "[ %05lu %-10s %.4s ] %s", (long)osal_getpid(),
+            prefix.c_str(), level2str(priority), suffix.c_str());
+    vfprintf(stderr, format, ones);
     va_end(ones);
   }
 }
 
 bool feed_ap(const char *format, va_list ap) {
-  if (!last)
+  if (!flow)
     return false;
 
-  if (last == stderr) {
+  if (flow == stderr) {
     va_list ones;
     va_copy(ones, ap);
     vfprintf(stdout, format, ones);
     va_end(ones);
   }
-  vfprintf(last, format, ap);
+  vfprintf(flow, format, ap);
   size_t len = strlen(format);
-  if (len && format[len - 1] == '\n') {
-    fflush(last);
-    if (last == stderr)
-      fflush(stdout);
-    last = nullptr;
-  }
+  if (len && format[len - 1] == '\n')
+    flow = nullptr;
   return true;
 }
 
 bool feed(const char *format, ...) {
-  if (!last)
+  if (!flow)
     return false;
 
   va_list ap;
@@ -299,73 +284,73 @@ void progress_canary(bool active) {
 } // namespace logging
 
 void log_extra(const char *msg, ...) {
+  logging::ln();
   if (logging::same_or_higher(logging::extra, logging::level)) {
     va_list ap;
     va_start(ap, msg);
     logging::output_nocheckloglevel_ap(logging::extra, msg, ap);
     va_end(ap);
-  } else
-    logging::last = nullptr;
+  }
 }
 
 void log_trace(const char *msg, ...) {
+  logging::ln();
   if (logging::same_or_higher(logging::trace, logging::level)) {
     va_list ap;
     va_start(ap, msg);
     logging::output_nocheckloglevel_ap(logging::trace, msg, ap);
     va_end(ap);
-  } else
-    logging::last = nullptr;
+  }
 }
 
 void log_debug(const char *msg, ...) {
+  logging::ln();
   if (logging::same_or_higher(logging::debug, logging::level)) {
     va_list ap;
     va_start(ap, msg);
     logging::output_nocheckloglevel_ap(logging::debug, msg, ap);
     va_end(ap);
-  } else
-    logging::last = nullptr;
+  }
 }
 
 void log_verbose(const char *msg, ...) {
+  logging::ln();
   if (logging::same_or_higher(logging::verbose, logging::level)) {
     va_list ap;
     va_start(ap, msg);
     logging::output_nocheckloglevel_ap(logging::verbose, msg, ap);
     va_end(ap);
-  } else
-    logging::last = nullptr;
+  }
 }
 
 void log_notice(const char *msg, ...) {
+  logging::ln();
   if (logging::same_or_higher(logging::notice, logging::level)) {
     va_list ap;
     va_start(ap, msg);
     logging::output_nocheckloglevel_ap(logging::notice, msg, ap);
     va_end(ap);
-  } else
-    logging::last = nullptr;
+  }
 }
 
 void log_warning(const char *msg, ...) {
+  logging::ln();
   if (logging::same_or_higher(logging::warning, logging::level)) {
     va_list ap;
     va_start(ap, msg);
     logging::output_nocheckloglevel_ap(logging::warning, msg, ap);
     va_end(ap);
-  } else
-    logging::last = nullptr;
+  }
 }
 
 void log_error(const char *msg, ...) {
+  logging::ln();
   if (logging::same_or_higher(logging::error, logging::level)) {
     va_list ap;
     va_start(ap, msg);
     logging::output_nocheckloglevel_ap(logging::error, msg, ap);
     va_end(ap);
-  } else
-    logging::last = nullptr;
+  }
 }
 
 void log_trouble(const char *where, const char *what, int errnum) {
@@ -376,4 +361,7 @@ bool log_enabled(const logging::loglevel priority) {
   return logging::same_or_higher(priority, logging::level);
 }
 
-void log_flush(void) { fflushall(); }
+void log_flush(void) {
+  logging::ln();
+  fflushall();
+}
