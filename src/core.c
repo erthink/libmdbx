@@ -8939,20 +8939,45 @@ static bool coherency_check(const MDBX_env *env, const txnid_t txnid,
                             const volatile MDBX_meta *meta, bool report) {
   const txnid_t freedb_mod_txnid = dbs[FREE_DBI].md_mod_txnid;
   const txnid_t maindb_mod_txnid = dbs[MAIN_DBI].md_mod_txnid;
+  const pgno_t last_pgno = meta->mm_geo.now;
 
   const pgno_t freedb_root_pgno = dbs[FREE_DBI].md_root;
-  const MDBX_page *freedb_root = (env->me_map && freedb_root_pgno != P_INVALID)
+  const MDBX_page *freedb_root = (env->me_map && freedb_root_pgno < last_pgno)
                                      ? pgno2page(env, freedb_root_pgno)
                                      : nullptr;
 
   const pgno_t maindb_root_pgno = dbs[MAIN_DBI].md_root;
-  const MDBX_page *maindb_root = (env->me_map && maindb_root_pgno != P_INVALID)
+  const MDBX_page *maindb_root = (env->me_map && maindb_root_pgno < last_pgno)
                                      ? pgno2page(env, maindb_root_pgno)
                                      : nullptr;
   const uint64_t magic_and_version =
       unaligned_peek_u64_volatile(4, &meta->mm_magic_and_version);
 
   bool ok = true;
+  if (freedb_root_pgno != P_INVALID &&
+      unlikely(freedb_root_pgno >= last_pgno)) {
+    if (report)
+      WARNING(
+          "catch invalid %sdb root %" PRIaPGNO " for meta_txnid %" PRIaTXN
+          " %s",
+          "free", freedb_root_pgno, txnid,
+          (env->me_stuck_meta < 0)
+              ? "(workaround for incoherent flaw of unified page/buffer cache)"
+              : "(wagering meta)");
+    ok = false;
+  }
+  if (maindb_root_pgno != P_INVALID &&
+      unlikely(maindb_root_pgno >= last_pgno)) {
+    if (report)
+      WARNING(
+          "catch invalid %sdb root %" PRIaPGNO " for meta_txnid %" PRIaTXN
+          " %s",
+          "main", maindb_root_pgno, txnid,
+          (env->me_stuck_meta < 0)
+              ? "(workaround for incoherent flaw of unified page/buffer cache)"
+              : "(wagering meta)");
+    ok = false;
+  }
   if (unlikely(txnid < freedb_mod_txnid ||
                (!freedb_mod_txnid && freedb_root &&
                 likely(magic_and_version == MDBX_DATA_MAGIC)))) {
