@@ -13512,7 +13512,6 @@ __cold int mdbx_env_create(MDBX_env **penv) {
   env->me_maxdbs = env->me_numdbs = CORE_DBS;
   env->me_lazy_fd = env->me_dsync_fd = env->me_fd4meta = env->me_lfd =
       INVALID_HANDLE_VALUE;
-  env->me_pid = osal_getpid();
   env->me_stuck_meta = -1;
 
   env->me_options.rp_augment_limit = MDBX_PNL_INITIAL;
@@ -13946,7 +13945,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
       }
-#endif
+#endif /* Windows */
 
       if (new_geo.now != current_geo->now ||
           new_geo.upper != current_geo->upper) {
@@ -13995,6 +13994,7 @@ __cold static int alloc_page_buf(MDBX_env *env) {
 __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
                             const mdbx_mode_t mode_bits) {
   MDBX_meta header;
+  eASSERT(env, !(env->me_flags & MDBX_ENV_ACTIVE));
   int rc = MDBX_RESULT_FALSE;
   int err = read_header(env, &header, lck_rc, mode_bits);
   if (unlikely(err != MDBX_SUCCESS)) {
@@ -14239,7 +14239,6 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
 #if MDBX_DEBUG
   meta_troika_dump(env, &troika);
 #endif
-  eASSERT(env, !env->me_txn && !env->me_txn0);
   //-------------------------------- validate/rollback head & steady meta-pages
   if (unlikely(env->me_stuck_meta >= 0)) {
     /* recovery mode */
@@ -15197,78 +15196,7 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname,
   return (err == MDBX_SUCCESS) ? rc : err;
 }
 
-__cold int mdbx_env_open(MDBX_env *env, const char *pathname,
-                         MDBX_env_flags_t flags, mdbx_mode_t mode) {
-#if defined(_WIN32) || defined(_WIN64)
-  wchar_t *pathnameW = nullptr;
-  int rc = osal_mb2w(pathname, &pathnameW);
-  if (likely(rc == MDBX_SUCCESS)) {
-    rc = mdbx_env_openW(env, pathnameW, flags, mode);
-    osal_free(pathnameW);
-    if (rc == MDBX_SUCCESS)
-      /* force to make cache of the multi-byte pathname representation */
-      mdbx_env_get_path(env, &pathname);
-  }
-  return rc;
-}
-
-__cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
-                          MDBX_env_flags_t flags, mdbx_mode_t mode) {
-#endif /* Windows */
-
-  int rc = check_env(env, false);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  if (unlikely(flags & ~ENV_USABLE_FLAGS))
-    return MDBX_EINVAL;
-
-  if (unlikely(env->me_lazy_fd != INVALID_HANDLE_VALUE ||
-               (env->me_flags & MDBX_ENV_ACTIVE) != 0 || env->me_map))
-    return MDBX_EPERM;
-
-  /* Pickup previously mdbx_env_set_flags(),
-   * but avoid MDBX_UTTERLY_NOSYNC by disjunction */
-  const uint32_t saved_me_flags = env->me_flags;
-  flags = merge_sync_flags(flags | MDBX_DEPRECATED_COALESCE, env->me_flags);
-
-  if (flags & MDBX_RDONLY) {
-    /* Silently ignore irrelevant flags when we're only getting read access */
-    flags &= ~(MDBX_WRITEMAP | MDBX_DEPRECATED_MAPASYNC | MDBX_SAFE_NOSYNC |
-               MDBX_NOMETASYNC | MDBX_DEPRECATED_COALESCE | MDBX_LIFORECLAIM |
-               MDBX_NOMEMINIT | MDBX_ACCEDE);
-    mode = 0;
-  } else {
-#if MDBX_MMAP_INCOHERENT_FILE_WRITE
-    /* Temporary `workaround` for OpenBSD kernel's flaw.
-     * See https://libmdbx.dqdkfa.ru/dead-github/issues/67 */
-    if ((flags & MDBX_WRITEMAP) == 0) {
-      if (flags & MDBX_ACCEDE)
-        flags |= MDBX_WRITEMAP;
-      else {
-        debug_log(MDBX_LOG_ERROR, __func__, __LINE__,
-                  "System (i.e. OpenBSD) requires MDBX_WRITEMAP because "
-                  "of an internal flaw(s) in a file/buffer/page cache.\n");
-        return 42 /* ENOPROTOOPT */;
-      }
-    }
-#endif /* MDBX_MMAP_INCOHERENT_FILE_WRITE */
-  }
-
-  env->me_flags = (flags & ~MDBX_FATAL_ERROR);
-  rc = env_handle_pathname(env, pathname, mode);
-  if (unlikely(rc != MDBX_SUCCESS))
-    goto bailout;
-
-  env->me_flags = (flags & ~MDBX_FATAL_ERROR) | MDBX_ENV_ACTIVE;
-  env->me_dbxs = osal_calloc(env->me_maxdbs, sizeof(env->me_dbxs[0]));
-  env->me_db_flags = osal_calloc(env->me_maxdbs, sizeof(env->me_db_flags[0]));
-  env->me_dbi_seqs = osal_calloc(env->me_maxdbs, sizeof(env->me_dbi_seqs[0]));
-  if (!(env->me_dbxs && env->me_db_flags && env->me_dbi_seqs)) {
-    rc = MDBX_ENOMEM;
-    goto bailout;
-  }
-
+__cold static int env_open(MDBX_env *env, mdbx_mode_t mode) {
   /* Использование O_DSYNC или FILE_FLAG_WRITE_THROUGH:
    *
    *   0) Если размер страниц БД меньше системной страницы ОЗУ, то ядру ОС
@@ -15357,18 +15285,16 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
    */
 
   env->me_pid = osal_getpid();
-  rc = osal_openfile((env->me_flags & MDBX_RDONLY) ? MDBX_OPEN_DXB_READ
-                                                   : MDBX_OPEN_DXB_LAZY,
-                     env, env->me_pathname.dxb, &env->me_lazy_fd, mode);
+  int rc = osal_openfile((env->me_flags & MDBX_RDONLY) ? MDBX_OPEN_DXB_READ
+                                                       : MDBX_OPEN_DXB_LAZY,
+                         env, env->me_pathname.dxb, &env->me_lazy_fd, mode);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
   env->me_sysv_ipc.key = ftok(env->me_pathname.dxb, 42);
-  if (env->me_sysv_ipc.key == -1) {
-    rc = errno;
-    goto bailout;
-  }
+  if (unlikely(env->me_sysv_ipc.key == -1))
+    return errno;
 #endif /* MDBX_LOCKING */
 
   /* Set the position in files outside of the data to avoid corruption
@@ -15380,9 +15306,9 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
 #if defined(_WIN32) || defined(_WIN64)
   eASSERT(env, env->me_overlapped_fd == 0);
   bool ior_direct = false;
-  if (!(flags &
+  if (!(env->me_flags &
         (MDBX_RDONLY | MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC | MDBX_EXCLUSIVE))) {
-    if (MDBX_AVOID_MSYNC && (flags & MDBX_WRITEMAP)) {
+    if (MDBX_AVOID_MSYNC && (env->me_flags & MDBX_WRITEMAP)) {
       /* Запрошен режим MDBX_SYNC_DURABLE | MDBX_WRITEMAP при активной опции
        * MDBX_AVOID_MSYNC.
        *
@@ -15420,23 +15346,19 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
     rc = osal_openfile(ior_direct ? MDBX_OPEN_DXB_OVERLAPPED_DIRECT
                                   : MDBX_OPEN_DXB_OVERLAPPED,
                        env, env->me_pathname.dxb, &env->me_overlapped_fd, 0);
-    if (rc != MDBX_SUCCESS)
-      goto bailout;
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
     env->me_data_lock_event = CreateEventW(nullptr, true, false, nullptr);
-    if (!env->me_data_lock_event) {
-      rc = (int)GetLastError();
-      goto bailout;
-    }
+    if (unlikely(!env->me_data_lock_event))
+      return (int)GetLastError();
     osal_fseek(env->me_overlapped_fd, safe_parking_lot_offset);
   }
 #else
   if (mode == 0) {
     /* pickup mode for lck-file */
     struct stat st;
-    if (fstat(env->me_lazy_fd, &st)) {
-      rc = errno;
-      goto bailout;
-    }
+    if (unlikely(fstat(env->me_lazy_fd, &st)))
+      return errno;
     mode = st.st_mode;
   }
   mode = (/* inherit read permissions for group and others */ mode &
@@ -15446,24 +15368,24 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
          ((mode & S_IROTH) ? /* +write if readable by others */ S_IWOTH : 0);
 #endif /* !Windows */
   const int lck_rc = setup_lck(env, mode);
-  if (MDBX_IS_ERROR(lck_rc)) {
-    rc = lck_rc;
-    goto bailout;
-  }
-  osal_fseek(env->me_lfd, safe_parking_lot_offset);
+  if (unlikely(MDBX_IS_ERROR(lck_rc)))
+    return lck_rc;
+  if (env->me_lfd != INVALID_HANDLE_VALUE)
+    osal_fseek(env->me_lfd, safe_parking_lot_offset);
 
   eASSERT(env, env->me_dsync_fd == INVALID_HANDLE_VALUE);
-  if (!(flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | MDBX_DEPRECATED_MAPASYNC
+  if (!(env->me_flags &
+        (MDBX_RDONLY | MDBX_SAFE_NOSYNC | MDBX_DEPRECATED_MAPASYNC
 #if defined(_WIN32) || defined(_WIN64)
-                 | MDBX_EXCLUSIVE
+         | MDBX_EXCLUSIVE
 #endif /* !Windows */
-                 ))) {
+         ))) {
     rc = osal_openfile(MDBX_OPEN_DXB_DSYNC, env, env->me_pathname.dxb,
                        &env->me_dsync_fd, 0);
-    if (MDBX_IS_ERROR(rc))
-      goto bailout;
+    if (unlikely(MDBX_IS_ERROR(rc)))
+      return rc;
     if (env->me_dsync_fd != INVALID_HANDLE_VALUE) {
-      if ((flags & MDBX_NOMETASYNC) == 0)
+      if ((env->me_flags & MDBX_NOMETASYNC) == 0)
         env->me_fd4meta = env->me_dsync_fd;
       osal_fseek(env->me_dsync_fd, safe_parking_lot_offset);
     }
@@ -15538,17 +15460,14 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
       ERROR("current mode/flags 0x%X incompatible with requested 0x%X, "
             "rigorous diff 0x%X",
             env->me_flags, snap_flags, rigorous_diff);
-      rc = MDBX_INCOMPATIBLE;
-      goto bailout;
+      return MDBX_INCOMPATIBLE;
     }
   }
 
   mincore_clean_cache(env);
   const int dxb_rc = setup_dxb(env, lck_rc, mode);
-  if (MDBX_IS_ERROR(dxb_rc)) {
-    rc = dxb_rc;
-    goto bailout;
-  }
+  if (MDBX_IS_ERROR(dxb_rc))
+    return dxb_rc;
 
   rc = osal_check_fs_incore(env->me_lazy_fd);
   env->me_incore = false;
@@ -15557,18 +15476,18 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
     NOTICE("%s", "in-core database");
   } else if (unlikely(rc != MDBX_SUCCESS)) {
     ERROR("check_fs_incore(), err %d", rc);
-    goto bailout;
+    return rc;
   }
 
   if (unlikely(/* recovery mode */ env->me_stuck_meta >= 0) &&
       (lck_rc != /* exclusive */ MDBX_RESULT_TRUE ||
-       (flags & MDBX_EXCLUSIVE) == 0)) {
+       (env->me_flags & MDBX_EXCLUSIVE) == 0)) {
     ERROR("%s", "recovery requires exclusive mode");
-    rc = MDBX_BUSY;
-    goto bailout;
+    return MDBX_BUSY;
   }
 
   DEBUG("opened dbenv %p", (void *)env);
+  env->me_flags |= MDBX_ENV_ACTIVE;
   if (!lck || lck_rc == MDBX_RESULT_TRUE) {
     env->me_lck->mti_envmode.weak = env->me_flags & mode_flags;
     env->me_lck->mti_meta_sync_txnid.weak =
@@ -15581,12 +15500,94 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
       DEBUG("lck-downgrade-%s: rc %i",
             (env->me_flags & MDBX_EXCLUSIVE) ? "partial" : "full", rc);
       if (rc != MDBX_SUCCESS)
-        goto bailout;
+        return rc;
     } else {
       rc = cleanup_dead_readers(env, false, NULL);
       if (MDBX_IS_ERROR(rc))
-        goto bailout;
+        return rc;
     }
+  }
+
+  rc = (env->me_flags & MDBX_RDONLY)
+           ? MDBX_SUCCESS
+           : osal_ioring_create(&env->me_ioring
+#if defined(_WIN32) || defined(_WIN64)
+                                ,
+                                ior_direct, env->me_overlapped_fd
+#endif /* Windows */
+             );
+  return rc;
+}
+
+__cold int mdbx_env_open(MDBX_env *env, const char *pathname,
+                         MDBX_env_flags_t flags, mdbx_mode_t mode) {
+#if defined(_WIN32) || defined(_WIN64)
+  wchar_t *pathnameW = nullptr;
+  int rc = osal_mb2w(pathname, &pathnameW);
+  if (likely(rc == MDBX_SUCCESS)) {
+    rc = mdbx_env_openW(env, pathnameW, flags, mode);
+    osal_free(pathnameW);
+    if (rc == MDBX_SUCCESS)
+      /* force to make cache of the multi-byte pathname representation */
+      mdbx_env_get_path(env, &pathname);
+  }
+  return rc;
+}
+
+__cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
+                          MDBX_env_flags_t flags, mdbx_mode_t mode) {
+#endif /* Windows */
+
+  int rc = check_env(env, false);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(flags & ~ENV_USABLE_FLAGS))
+    return MDBX_EINVAL;
+
+  if (unlikely(env->me_lazy_fd != INVALID_HANDLE_VALUE ||
+               (env->me_flags & MDBX_ENV_ACTIVE) != 0 || env->me_map))
+    return MDBX_EPERM;
+
+  /* Pickup previously mdbx_env_set_flags(),
+   * but avoid MDBX_UTTERLY_NOSYNC by disjunction */
+  const uint32_t saved_me_flags = env->me_flags;
+  flags = merge_sync_flags(flags | MDBX_DEPRECATED_COALESCE, env->me_flags);
+
+  if (flags & MDBX_RDONLY) {
+    /* Silently ignore irrelevant flags when we're only getting read access */
+    flags &= ~(MDBX_WRITEMAP | MDBX_DEPRECATED_MAPASYNC | MDBX_SAFE_NOSYNC |
+               MDBX_NOMETASYNC | MDBX_DEPRECATED_COALESCE | MDBX_LIFORECLAIM |
+               MDBX_NOMEMINIT | MDBX_ACCEDE);
+    mode = 0;
+  } else {
+#if MDBX_MMAP_INCOHERENT_FILE_WRITE
+    /* Temporary `workaround` for OpenBSD kernel's flaw.
+     * See https://libmdbx.dqdkfa.ru/dead-github/issues/67 */
+    if ((flags & MDBX_WRITEMAP) == 0) {
+      if (flags & MDBX_ACCEDE)
+        flags |= MDBX_WRITEMAP;
+      else {
+        debug_log(MDBX_LOG_ERROR, __func__, __LINE__,
+                  "System (i.e. OpenBSD) requires MDBX_WRITEMAP because "
+                  "of an internal flaw(s) in a file/buffer/page cache.\n");
+        return 42 /* ENOPROTOOPT */;
+      }
+    }
+#endif /* MDBX_MMAP_INCOHERENT_FILE_WRITE */
+  }
+
+  env->me_flags = (flags & ~MDBX_FATAL_ERROR);
+  rc = env_handle_pathname(env, pathname, mode);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
+
+  env->me_dbxs = osal_calloc(env->me_maxdbs, sizeof(env->me_dbxs[0]));
+  env->me_db_flags = osal_calloc(env->me_maxdbs, sizeof(env->me_db_flags[0]));
+  env->me_dbi_seqs = osal_calloc(env->me_maxdbs, sizeof(env->me_dbi_seqs[0]));
+  if (unlikely(!(env->me_dbxs && env->me_db_flags && env->me_dbi_seqs))) {
+    rc = MDBX_ENOMEM;
+    goto bailout;
   }
 
   if ((flags & MDBX_RDONLY) == 0) {
@@ -15606,73 +15607,73 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
             (sizeof(txn->mt_dbs[0]) + sizeof(txn->mt_cursors[0]) +
              sizeof(txn->mt_dbi_seqs[0]) + sizeof(txn->mt_dbi_state[0]));
     rc = alloc_page_buf(env);
-    if (rc == MDBX_SUCCESS) {
-      memset(env->me_pbuf, -1, env->me_psize * (size_t)2);
-      memset(ptr_disp(env->me_pbuf, env->me_psize * (size_t)2), 0,
-             env->me_psize);
-      txn = osal_calloc(1, size);
-      if (txn) {
-        txn->mt_dbs = ptr_disp(txn, base);
-        txn->mt_cursors =
-            ptr_disp(txn->mt_dbs, env->me_maxdbs * sizeof(txn->mt_dbs[0]));
-        txn->mt_dbi_seqs = ptr_disp(
-            txn->mt_cursors, env->me_maxdbs * sizeof(txn->mt_cursors[0]));
-        txn->mt_dbi_state =
-            ptr_disp(txn, size - env->me_maxdbs * sizeof(txn->mt_dbi_state[0]));
-#if MDBX_ENABLE_DBI_SPARSE
-        txn->mt_dbi_sparse = ptr_disp(txn->mt_dbi_state, -bitmap_bytes);
-#endif /* MDBX_ENABLE_DBI_SPARSE */
-        txn->mt_env = env;
-        txn->mt_flags = MDBX_TXN_FINISHED;
-        env->me_txn0 = txn;
-        txn->tw.retired_pages = pnl_alloc(MDBX_PNL_INITIAL);
-        txn->tw.relist = pnl_alloc(MDBX_PNL_INITIAL);
-        if (unlikely(!txn->tw.retired_pages || !txn->tw.relist))
-          rc = MDBX_ENOMEM;
-      } else
-        rc = MDBX_ENOMEM;
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto bailout;
+
+    memset(env->me_pbuf, -1, env->me_psize * (size_t)2);
+    memset(ptr_disp(env->me_pbuf, env->me_psize * (size_t)2), 0, env->me_psize);
+    txn = osal_calloc(1, size);
+    if (unlikely(!txn)) {
+      rc = MDBX_ENOMEM;
+      goto bailout;
     }
-    if (rc == MDBX_SUCCESS)
-      rc = osal_ioring_create(&env->me_ioring
-#if defined(_WIN32) || defined(_WIN64)
-                              ,
-                              ior_direct, env->me_overlapped_fd
-#endif /* Windows */
-      );
-    if (rc == MDBX_SUCCESS)
-      adjust_defaults(env);
+    txn->mt_dbs = ptr_disp(txn, base);
+    txn->mt_cursors =
+        ptr_disp(txn->mt_dbs, env->me_maxdbs * sizeof(txn->mt_dbs[0]));
+    txn->mt_dbi_seqs =
+        ptr_disp(txn->mt_cursors, env->me_maxdbs * sizeof(txn->mt_cursors[0]));
+    txn->mt_dbi_state =
+        ptr_disp(txn, size - env->me_maxdbs * sizeof(txn->mt_dbi_state[0]));
+#if MDBX_ENABLE_DBI_SPARSE
+    txn->mt_dbi_sparse = ptr_disp(txn->mt_dbi_state, -bitmap_bytes);
+#endif /* MDBX_ENABLE_DBI_SPARSE */
+    txn->mt_env = env;
+    txn->mt_flags = MDBX_TXN_FINISHED;
+    env->me_txn0 = txn;
+    txn->tw.retired_pages = pnl_alloc(MDBX_PNL_INITIAL);
+    txn->tw.relist = pnl_alloc(MDBX_PNL_INITIAL);
+    if (unlikely(!txn->tw.retired_pages || !txn->tw.relist)) {
+      rc = MDBX_ENOMEM;
+      goto bailout;
+    }
+    adjust_defaults(env);
   }
+
+  rc = env_open(env, mode);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
 
 #if MDBX_DEBUG
-  if (rc == MDBX_SUCCESS) {
-    const meta_troika_t troika = meta_tap(env);
-    const meta_ptr_t head = meta_recent(env, &troika);
-    const MDBX_db *db = &head.ptr_c->mm_dbs[MAIN_DBI];
+  const meta_troika_t troika = meta_tap(env);
+  const meta_ptr_t head = meta_recent(env, &troika);
+  const MDBX_db *db = &head.ptr_c->mm_dbs[MAIN_DBI];
 
-    DEBUG("opened database version %u, pagesize %u",
-          (uint8_t)unaligned_peek_u64(4, head.ptr_c->mm_magic_and_version),
-          env->me_psize);
-    DEBUG("using meta page %" PRIaPGNO ", txn %" PRIaTXN,
-          data_page(head.ptr_c)->mp_pgno, head.txnid);
-    DEBUG("depth: %u", db->md_depth);
-    DEBUG("entries: %" PRIu64, db->md_entries);
-    DEBUG("branch pages: %" PRIaPGNO, db->md_branch_pages);
-    DEBUG("leaf pages: %" PRIaPGNO, db->md_leaf_pages);
-    DEBUG("large/overflow pages: %" PRIaPGNO, db->md_overflow_pages);
-    DEBUG("root: %" PRIaPGNO, db->md_root);
-    DEBUG("schema_altered: %" PRIaTXN, db->md_mod_txnid);
-  }
-#endif
+  DEBUG("opened database version %u, pagesize %u",
+        (uint8_t)unaligned_peek_u64(4, head.ptr_c->mm_magic_and_version),
+        env->me_psize);
+  DEBUG("using meta page %" PRIaPGNO ", txn %" PRIaTXN,
+        data_page(head.ptr_c)->mp_pgno, head.txnid);
+  DEBUG("depth: %u", db->md_depth);
+  DEBUG("entries: %" PRIu64, db->md_entries);
+  DEBUG("branch pages: %" PRIaPGNO, db->md_branch_pages);
+  DEBUG("leaf pages: %" PRIaPGNO, db->md_leaf_pages);
+  DEBUG("large/overflow pages: %" PRIaPGNO, db->md_overflow_pages);
+  DEBUG("root: %" PRIaPGNO, db->md_root);
+  DEBUG("schema_altered: %" PRIaTXN, db->md_mod_txnid);
+#endif /* MDBX_DEBUG */
 
-bailout:
-  if (rc != MDBX_SUCCESS) {
-    rc = env_close(env) ? MDBX_PANIC : rc;
-    env->me_flags =
-        saved_me_flags | ((rc != MDBX_PANIC) ? 0 : MDBX_FATAL_ERROR);
-  } else {
+  if (likely(rc == MDBX_SUCCESS)) {
 #if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
     txn_valgrind(env, nullptr);
 #endif /* ENABLE_MEMCHECK || __SANITIZE_ADDRESS__ */
+  } else {
+  bailout:
+    if (likely(env_close(env) == MDBX_SUCCESS)) {
+      env->me_flags = saved_me_flags;
+    } else {
+      rc = MDBX_PANIC;
+      env->me_flags = saved_me_flags | MDBX_FATAL_ERROR;
+    }
   }
   return rc;
 }
@@ -15713,7 +15714,7 @@ __cold static int env_close(MDBX_env *env) {
 #ifdef ENABLE_MEMCHECK
     VALGRIND_DISCARD(env->me_valgrind_handle);
     env->me_valgrind_handle = -1;
-#endif
+#endif /* ENABLE_MEMCHECK */
   }
 
 #if defined(_WIN32) || defined(_WIN64)
