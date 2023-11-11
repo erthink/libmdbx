@@ -1462,7 +1462,6 @@ struct MDBX_env {
   bool me_incore;
   bool me_prefault_write;
 
-  MDBX_env *me_lcklist_next;
 #if MDBX_ENABLE_DBI_LOCKFREE
   struct mdbx_defer_free_item *me_defer_free;
 #endif /* MDBX_ENABLE_DBI_LOCKFREE */
@@ -1560,10 +1559,6 @@ osal_flush_incoherent_mmap(const void *addr, size_t nbytes,
 
 MDBX_INTERNAL_FUNC int cleanup_dead_readers(MDBX_env *env, int rlocked,
                                             int *dead);
-MDBX_INTERNAL_FUNC int rthc_alloc(osal_thread_key_t *key, MDBX_reader *begin,
-                                  MDBX_reader *end);
-MDBX_INTERNAL_FUNC void rthc_remove(const osal_thread_key_t key);
-
 MDBX_INTERNAL_FUNC void global_ctor(void);
 MDBX_INTERNAL_FUNC void osal_ctor(void);
 MDBX_INTERNAL_FUNC void global_dtor(void);
