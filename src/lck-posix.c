@@ -875,7 +875,7 @@ MDBX_INTERNAL_FUNC int osal_check_tid4bionic(void) {
 }
 #endif /* __ANDROID_API__ || ANDROID) || BIONIC */
 
-static int mdbx_ipclock_lock(MDBX_env *env, osal_ipclock_t *ipc,
+static int osal_ipclock_lock(MDBX_env *env, osal_ipclock_t *ipc,
                              const bool dont_wait) {
 #if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                  \
     MDBX_LOCKING == MDBX_LOCKING_POSIX2008
@@ -915,7 +915,7 @@ static int mdbx_ipclock_lock(MDBX_env *env, osal_ipclock_t *ipc,
   return rc;
 }
 
-static int mdbx_ipclock_unlock(MDBX_env *env, osal_ipclock_t *ipc) {
+int osal_ipclock_unlock(MDBX_env *env, osal_ipclock_t *ipc) {
 #if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                  \
     MDBX_LOCKING == MDBX_LOCKING_POSIX2008
   int rc = pthread_mutex_unlock(ipc);
@@ -940,14 +940,14 @@ static int mdbx_ipclock_unlock(MDBX_env *env, osal_ipclock_t *ipc) {
 MDBX_INTERNAL_FUNC int osal_rdt_lock(MDBX_env *env) {
   TRACE("%s", ">>");
   jitter4testing(true);
-  int rc = mdbx_ipclock_lock(env, &env->me_lck->mti_rlock, false);
+  int rc = osal_ipclock_lock(env, &env->me_lck->mti_rlock, false);
   TRACE("<< rc %d", rc);
   return rc;
 }
 
 MDBX_INTERNAL_FUNC void osal_rdt_unlock(MDBX_env *env) {
   TRACE("%s", ">>");
-  int rc = mdbx_ipclock_unlock(env, &env->me_lck->mti_rlock);
+  int rc = osal_ipclock_unlock(env, &env->me_lck->mti_rlock);
   TRACE("<< rc %d", rc);
   if (unlikely(rc != MDBX_SUCCESS))
     mdbx_panic("%s() failed: err %d\n", __func__, rc);
@@ -957,7 +957,7 @@ MDBX_INTERNAL_FUNC void osal_rdt_unlock(MDBX_env *env) {
 int osal_txn_lock(MDBX_env *env, bool dont_wait) {
   TRACE("%swait %s", dont_wait ? "dont-" : "", ">>");
   jitter4testing(true);
-  const int err = mdbx_ipclock_lock(env, &env->me_lck->mti_wlock, dont_wait);
+  const int err = osal_ipclock_lock(env, &env->me_lck->mti_wlock, dont_wait);
   int rc = err;
   if (likely(!MDBX_IS_ERROR(err))) {
     eASSERT(env, !env->me_txn0->mt_owner ||
@@ -975,7 +975,7 @@ void osal_txn_unlock(MDBX_env *env) {
   TRACE("%s", ">>");
   eASSERT(env, env->me_txn0->mt_owner == osal_thread_self());
   env->me_txn0->mt_owner = 0;
-  int err = mdbx_ipclock_unlock(env, &env->me_lck->mti_wlock);
+  int err = osal_ipclock_unlock(env, &env->me_lck->mti_wlock);
   TRACE("<< err %d", err);
   if (unlikely(err != MDBX_SUCCESS))
     mdbx_panic("%s() failed: err %d\n", __func__, err);
