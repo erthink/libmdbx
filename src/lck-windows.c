@@ -682,7 +682,9 @@ MDBX_INTERNAL_FUNC int osal_lck_init(MDBX_env *env,
 }
 
 MDBX_INTERNAL_FUNC int osal_lck_destroy(MDBX_env *env,
-                                        MDBX_env *inprocess_neighbor) {
+                                        MDBX_env *inprocess_neighbor,
+                                        const uint32_t current_pid) {
+  (void)current_pid;
   /* LY: should unmap before releasing the locks to avoid race condition and
    * STATUS_USER_MAPPED_FILE/ERROR_USER_MAPPED_FILE */
   if (env->me_map)

@@ -556,14 +556,13 @@ MDBX_INTERNAL_FUNC int osal_lck_upgrade(MDBX_env *env, bool dont_wait) {
 }
 
 __cold MDBX_INTERNAL_FUNC int osal_lck_destroy(MDBX_env *env,
-                                               MDBX_env *inprocess_neighbor) {
-  if (unlikely(osal_getpid() != env->me_pid))
-    return MDBX_PANIC;
-
+                                               MDBX_env *inprocess_neighbor,
+                                               const uint32_t current_pid) {
+  eASSERT(env, osal_getpid() == current_pid);
   int rc = MDBX_SUCCESS;
   struct stat lck_info;
-  MDBX_lockinfo *lck = env->me_lck_mmap.lck;
-  if (env->me_lfd != INVALID_HANDLE_VALUE && !inprocess_neighbor && lck &&
+  MDBX_lockinfo *lck = env->me_lck;
+  if (lck && lck == env->me_lck_mmap.lck && !inprocess_neighbor &&
       /* try get exclusive access */
       lck_op(env->me_lfd, op_setlk, F_WRLCK, 0, OFF_T_MAX) == 0 &&
       /* if LCK was not removed */
@@ -572,7 +571,8 @@ __cold MDBX_INTERNAL_FUNC int osal_lck_destroy(MDBX_env *env,
              (env->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0,
              OFF_T_MAX) == 0) {
 
-    VERBOSE("%p got exclusive, drown locks", (void *)env);
+    VERBOSE("%p got exclusive, drown ipc-locks", (void *)env);
+    eASSERT(env, current_pid == env->me_pid);
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
     if (env->me_sysv_ipc.semid != -1)
       rc = semctl(env->me_sysv_ipc.semid, 2, IPC_RMID) ? errno : 0;
@@ -586,11 +586,18 @@ __cold MDBX_INTERNAL_FUNC int osal_lck_destroy(MDBX_env *env,
     if (rc == 0) {
       const bool synced = lck->mti_unsynced_pages.weak == 0;
       osal_munmap(&env->me_lck_mmap);
-      if (synced)
+      if (synced && env->me_lfd != INVALID_HANDLE_VALUE)
         rc = ftruncate(env->me_lfd, 0) ? errno : 0;
     }
 
     jitter4testing(false);
+  }
+
+  if (current_pid != env->me_pid) {
+    eASSERT(env, !inprocess_neighbor);
+    NOTICE("drown env %p after-fork pid %d -> %d",
+           __Wpedantic_format_voidptr(env), env->me_pid, current_pid);
+    inprocess_neighbor = nullptr;
   }
 
   /* 1) POSIX's fcntl() locks (i.e. when op_setlk == F_SETLK) should be restored

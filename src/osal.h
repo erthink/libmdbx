@@ -690,7 +690,8 @@ MDBX_INTERNAL_FUNC int osal_lck_init(MDBX_env *env,
 ///     restore POSIX-fcntl locks after the closing of file descriptors.
 /// \return Error code (MDBX_PANIC) or zero on success.
 MDBX_INTERNAL_FUNC int osal_lck_destroy(MDBX_env *env,
-                                        MDBX_env *inprocess_neighbor);
+                                        MDBX_env *inprocess_neighbor,
+                                        const uint32_t current_pid);
 
 /// \brief Connects to shared interprocess locking objects and tries to acquire
 ///   the maximum lock level (shared if exclusive is not available)
