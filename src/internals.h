@@ -1400,10 +1400,12 @@ struct MDBX_env {
   MDBX_dbi me_maxdbs;         /* size of the DB table */
   uint32_t me_pid;            /* process ID of this env */
   osal_thread_key_t me_txkey; /* thread-key for readers */
-  pathchar_t *me_pathname;    /* path to the DB files */
-  void *me_pbuf;              /* scratch area for DUPSORT put() */
-  MDBX_txn *me_txn0;          /* preallocated write transaction */
-
+  struct {                    /* path to the DB files */
+    pathchar_t *lck, *dxb, *specified;
+    void *buffer;
+  } me_pathname;
+  void *me_pbuf;                     /* scratch area for DUPSORT put() */
+  MDBX_txn *me_txn0;                 /* preallocated write transaction */
   MDBX_dbx *me_dbxs;                 /* array of static DB info */
   uint16_t *__restrict me_db_flags;  /* array of flags from MDBX_db.md_flags */
   MDBX_atomic_uint32_t *me_dbi_seqs; /* array of dbi sequence numbers */

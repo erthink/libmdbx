@@ -14535,12 +14535,12 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
 /******************************************************************************/
 
 /* Open and/or initialize the lock region for the environment. */
-__cold static int setup_lck(MDBX_env *env, pathchar_t *lck_pathname,
-                            mdbx_mode_t mode) {
+__cold static int setup_lck(MDBX_env *env, mdbx_mode_t mode) {
   eASSERT(env, env->me_lazy_fd != INVALID_HANDLE_VALUE);
   eASSERT(env, env->me_lfd == INVALID_HANDLE_VALUE);
 
-  int err = osal_openfile(MDBX_OPEN_LCK, env, lck_pathname, &env->me_lfd, mode);
+  int err = osal_openfile(MDBX_OPEN_LCK, env, env->me_pathname.lck,
+                          &env->me_lfd, mode);
   if (err != MDBX_SUCCESS) {
     switch (err) {
     default:
@@ -14559,7 +14559,7 @@ __cold static int setup_lck(MDBX_env *env, pathchar_t *lck_pathname,
 
     if (err != MDBX_ENOFILE) {
       /* ENSURE the file system is read-only */
-      err = osal_check_fs_rdonly(env->me_lazy_fd, lck_pathname, err);
+      err = osal_check_fs_rdonly(env->me_lazy_fd, env->me_pathname.lck, err);
       if (err != MDBX_SUCCESS &&
           /* ignore ERROR_NOT_SUPPORTED for exclusive mode */
           !(err == MDBX_ENOSYS && (env->me_flags & MDBX_EXCLUSIVE)))
@@ -14965,12 +14965,6 @@ __cold int mdbx_env_open_for_recoveryW(MDBX_env *env, const wchar_t *pathname,
        0);
 }
 
-typedef struct {
-  void *buffer_for_free;
-  pathchar_t *lck, *dxb;
-  size_t ent_len;
-} MDBX_handle_env_pathname;
-
 __cold static int check_alternative_lck_absent(const pathchar_t *lck_pathname) {
   int err = osal_fileexists(lck_pathname);
   if (unlikely(err != MDBX_RESULT_FALSE)) {
@@ -14982,11 +14976,9 @@ __cold static int check_alternative_lck_absent(const pathchar_t *lck_pathname) {
   return err;
 }
 
-__cold static int handle_env_pathname(MDBX_handle_env_pathname *ctx,
-                                      const pathchar_t *pathname,
-                                      MDBX_env_flags_t *flags,
+__cold static int env_handle_pathname(MDBX_env *env, const pathchar_t *pathname,
                                       const mdbx_mode_t mode) {
-  memset(ctx, 0, sizeof(*ctx));
+  memset(&env->me_pathname, 0, sizeof(env->me_pathname));
   if (unlikely(!pathname || !*pathname))
     return MDBX_EINVAL;
 
@@ -14997,21 +14989,22 @@ __cold static int handle_env_pathname(MDBX_handle_env_pathname *ctx,
     rc = GetLastError();
     if (rc != MDBX_ENOFILE)
       return rc;
-    if (mode == 0 || (*flags & MDBX_RDONLY) != 0)
+    if (mode == 0 || (env->me_flags & MDBX_RDONLY) != 0)
       /* can't open existing */
       return rc;
 
     /* auto-create directory if requested */
-    if ((*flags & MDBX_NOSUBDIR) == 0 && !CreateDirectoryW(pathname, nullptr)) {
+    if ((env->me_flags & MDBX_NOSUBDIR) == 0 &&
+        !CreateDirectoryW(pathname, nullptr)) {
       rc = GetLastError();
       if (rc != ERROR_ALREADY_EXISTS)
         return rc;
     }
   } else {
     /* ignore passed MDBX_NOSUBDIR flag and set it automatically */
-    *flags |= MDBX_NOSUBDIR;
+    env->me_flags |= MDBX_NOSUBDIR;
     if (dwAttrib & FILE_ATTRIBUTE_DIRECTORY)
-      *flags -= MDBX_NOSUBDIR;
+      env->me_flags -= MDBX_NOSUBDIR;
   }
 #else
   struct stat st;
@@ -15019,7 +15012,7 @@ __cold static int handle_env_pathname(MDBX_handle_env_pathname *ctx,
     rc = errno;
     if (rc != MDBX_ENOFILE)
       return rc;
-    if (mode == 0 || (*flags & MDBX_RDONLY) != 0)
+    if (mode == 0 || (env->me_flags & MDBX_RDONLY) != 0)
       /* can't open non-existing */
       return rc /* MDBX_ENOFILE */;
 
@@ -15030,16 +15023,16 @@ __cold static int handle_env_pathname(MDBX_handle_env_pathname *ctx,
         /* always add read/write/search for owner */ S_IRWXU |
         ((mode & S_IRGRP) ? /* +search if readable by group */ S_IXGRP : 0) |
         ((mode & S_IROTH) ? /* +search if readable by others */ S_IXOTH : 0);
-    if ((*flags & MDBX_NOSUBDIR) == 0 && mkdir(pathname, dir_mode)) {
+    if ((env->me_flags & MDBX_NOSUBDIR) == 0 && mkdir(pathname, dir_mode)) {
       rc = errno;
       if (rc != EEXIST)
         return rc;
     }
   } else {
     /* ignore passed MDBX_NOSUBDIR flag and set it automatically */
-    *flags |= MDBX_NOSUBDIR;
+    env->me_flags |= MDBX_NOSUBDIR;
     if (S_ISDIR(st.st_mode))
-      *flags -= MDBX_NOSUBDIR;
+      env->me_flags -= MDBX_NOSUBDIR;
   }
 #endif
 
@@ -15055,41 +15048,42 @@ __cold static int handle_env_pathname(MDBX_handle_env_pathname *ctx,
   const size_t pathname_len = strlen(pathname);
 #endif
   assert(!osal_isdirsep(lock_suffix[0]));
-  ctx->ent_len = pathname_len;
+  size_t base_len = pathname_len;
   static const size_t dxb_name_len = ARRAY_LENGTH(dxb_name) - 1;
-  if (*flags & MDBX_NOSUBDIR) {
-    if (ctx->ent_len > dxb_name_len &&
-        osal_pathequal(pathname + ctx->ent_len - dxb_name_len, dxb_name,
+  if (env->me_flags & MDBX_NOSUBDIR) {
+    if (base_len > dxb_name_len &&
+        osal_pathequal(pathname + base_len - dxb_name_len, dxb_name,
                        dxb_name_len)) {
-      *flags -= MDBX_NOSUBDIR;
-      ctx->ent_len -= dxb_name_len;
-    } else if (ctx->ent_len == dxb_name_len - 1 && osal_isdirsep(dxb_name[0]) &&
+      env->me_flags -= MDBX_NOSUBDIR;
+      base_len -= dxb_name_len;
+    } else if (base_len == dxb_name_len - 1 && osal_isdirsep(dxb_name[0]) &&
                osal_isdirsep(lck_name[0]) &&
-               osal_pathequal(pathname + ctx->ent_len - dxb_name_len + 1,
+               osal_pathequal(pathname + base_len - dxb_name_len + 1,
                               dxb_name + 1, dxb_name_len - 1)) {
-      *flags -= MDBX_NOSUBDIR;
-      ctx->ent_len -= dxb_name_len - 1;
+      env->me_flags -= MDBX_NOSUBDIR;
+      base_len -= dxb_name_len - 1;
     }
   }
 
   const size_t suflen_with_NOSUBDIR = sizeof(lock_suffix) + sizeof(pathchar_t);
   const size_t suflen_without_NOSUBDIR = sizeof(lck_name) + sizeof(dxb_name);
-  const size_t enogh4any = (suflen_with_NOSUBDIR > suflen_without_NOSUBDIR)
-                               ? suflen_with_NOSUBDIR
-                               : suflen_without_NOSUBDIR;
-  const size_t bytes_needed = sizeof(pathchar_t) * ctx->ent_len * 2 + enogh4any;
-  ctx->buffer_for_free = osal_malloc(bytes_needed);
-  if (!ctx->buffer_for_free)
+  const size_t enough4any = (suflen_with_NOSUBDIR > suflen_without_NOSUBDIR)
+                                ? suflen_with_NOSUBDIR
+                                : suflen_without_NOSUBDIR;
+  const size_t bytes_needed =
+      sizeof(pathchar_t) * (base_len * 2 + pathname_len + 1) + enough4any;
+  env->me_pathname.buffer = osal_malloc(bytes_needed);
+  if (!env->me_pathname.buffer)
     return MDBX_ENOMEM;
 
-  ctx->dxb = ctx->buffer_for_free;
-  ctx->lck = ctx->dxb + ctx->ent_len + dxb_name_len + 1;
-  pathchar_t *const buf = ctx->buffer_for_free;
+  env->me_pathname.specified = env->me_pathname.buffer;
+  env->me_pathname.dxb = env->me_pathname.specified + pathname_len + 1;
+  env->me_pathname.lck = env->me_pathname.dxb + base_len + dxb_name_len + 1;
   rc = MDBX_SUCCESS;
-  if (ctx->ent_len) {
-    memcpy(buf + /* shutting up goofy MSVC static analyzer */ 0, pathname,
-           sizeof(pathchar_t) * pathname_len);
-    if (*flags & MDBX_NOSUBDIR) {
+  pathchar_t *const buf = env->me_pathname.buffer;
+  if (base_len) {
+    memcpy(buf, pathname, sizeof(pathchar_t) * pathname_len);
+    if (env->me_flags & MDBX_NOSUBDIR) {
       const pathchar_t *const lck_ext =
           osal_fileext(lck_name, ARRAY_LENGTH(lck_name));
       if (lck_ext) {
@@ -15099,32 +15093,33 @@ __cold static int handle_env_pathname(MDBX_handle_env_pathname *ctx,
         rc = check_alternative_lck_absent(buf);
       }
     } else {
-      memcpy(buf + ctx->ent_len, dxb_name, sizeof(dxb_name));
-      memcpy(buf + ctx->ent_len + dxb_name_len, lock_suffix,
-             sizeof(lock_suffix));
+      memcpy(buf + base_len, dxb_name, sizeof(dxb_name));
+      memcpy(buf + base_len + dxb_name_len, lock_suffix, sizeof(lock_suffix));
       rc = check_alternative_lck_absent(buf);
     }
 
-    memcpy(ctx->dxb + /* shutting up goofy MSVC static analyzer */ 0, pathname,
-           sizeof(pathchar_t) * (ctx->ent_len + 1));
-    memcpy(ctx->lck, pathname, sizeof(pathchar_t) * ctx->ent_len);
-    if (*flags & MDBX_NOSUBDIR) {
-      memcpy(ctx->lck + ctx->ent_len, lock_suffix, sizeof(lock_suffix));
+    memcpy(env->me_pathname.dxb, pathname, sizeof(pathchar_t) * (base_len + 1));
+    memcpy(env->me_pathname.lck, pathname, sizeof(pathchar_t) * base_len);
+    if (env->me_flags & MDBX_NOSUBDIR) {
+      memcpy(env->me_pathname.lck + base_len, lock_suffix, sizeof(lock_suffix));
     } else {
-      memcpy(ctx->dxb + ctx->ent_len, dxb_name, sizeof(dxb_name));
-      memcpy(ctx->lck + ctx->ent_len, lck_name, sizeof(lck_name));
+      memcpy(env->me_pathname.dxb + base_len, dxb_name, sizeof(dxb_name));
+      memcpy(env->me_pathname.lck + base_len, lck_name, sizeof(lck_name));
     }
   } else {
-    assert(!(*flags & MDBX_NOSUBDIR));
-    memcpy(buf + /* shutting up goofy MSVC static analyzer */ 0, dxb_name + 1,
-           sizeof(dxb_name) - sizeof(pathchar_t));
+    assert(!(env->me_flags & MDBX_NOSUBDIR));
+    memcpy(buf, dxb_name + 1, sizeof(dxb_name) - sizeof(pathchar_t));
     memcpy(buf + dxb_name_len - 1, lock_suffix, sizeof(lock_suffix));
     rc = check_alternative_lck_absent(buf);
 
-    memcpy(ctx->dxb + /* shutting up goofy MSVC static analyzer */ 0,
-           dxb_name + 1, sizeof(dxb_name) - sizeof(pathchar_t));
-    memcpy(ctx->lck, lck_name + 1, sizeof(lck_name) - sizeof(pathchar_t));
+    memcpy(env->me_pathname.dxb, dxb_name + 1,
+           sizeof(dxb_name) - sizeof(pathchar_t));
+    memcpy(env->me_pathname.lck, lck_name + 1,
+           sizeof(lck_name) - sizeof(pathchar_t));
   }
+
+  memcpy(env->me_pathname.specified, pathname,
+         sizeof(pathchar_t) * (pathname_len + 1));
   return rc;
 }
 
@@ -15162,23 +15157,19 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname,
       (mode == MDBX_ENV_ENSURE_UNUSED) ? MDBX_EXCLUSIVE : MDBX_ENV_DEFAULTS;
   dummy_env->me_os_psize = (unsigned)osal_syspagesize();
   dummy_env->me_psize = (unsigned)mdbx_default_pagesize();
-  dummy_env->me_pathname = (pathchar_t *)pathname;
 
-  MDBX_handle_env_pathname env_pathname;
   STATIC_ASSERT(sizeof(dummy_env->me_flags) == sizeof(MDBX_env_flags_t));
-  int rc = MDBX_RESULT_TRUE,
-      err = handle_env_pathname(&env_pathname, pathname,
-                                (MDBX_env_flags_t *)&dummy_env->me_flags, 0);
+  int rc = MDBX_RESULT_TRUE, err = env_handle_pathname(dummy_env, pathname, 0);
   if (likely(err == MDBX_SUCCESS)) {
     mdbx_filehandle_t clk_handle = INVALID_HANDLE_VALUE,
                       dxb_handle = INVALID_HANDLE_VALUE;
     if (mode > MDBX_ENV_JUST_DELETE) {
-      err = osal_openfile(MDBX_OPEN_DELETE, dummy_env, env_pathname.dxb,
-                          &dxb_handle, 0);
+      err = osal_openfile(MDBX_OPEN_DELETE, dummy_env,
+                          dummy_env->me_pathname.dxb, &dxb_handle, 0);
       err = (err == MDBX_ENOFILE) ? MDBX_SUCCESS : err;
       if (err == MDBX_SUCCESS) {
-        err = osal_openfile(MDBX_OPEN_DELETE, dummy_env, env_pathname.lck,
-                            &clk_handle, 0);
+        err = osal_openfile(MDBX_OPEN_DELETE, dummy_env,
+                            dummy_env->me_pathname.lck, &clk_handle, 0);
         err = (err == MDBX_ENOFILE) ? MDBX_SUCCESS : err;
       }
       if (err == MDBX_SUCCESS && clk_handle != INVALID_HANDLE_VALUE)
@@ -15188,7 +15179,7 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname,
     }
 
     if (err == MDBX_SUCCESS) {
-      err = osal_removefile(env_pathname.dxb);
+      err = osal_removefile(dummy_env->me_pathname.dxb);
       if (err == MDBX_SUCCESS)
         rc = MDBX_SUCCESS;
       else if (err == MDBX_ENOFILE)
@@ -15196,7 +15187,7 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname,
     }
 
     if (err == MDBX_SUCCESS) {
-      err = osal_removefile(env_pathname.lck);
+      err = osal_removefile(dummy_env->me_pathname.lck);
       if (err == MDBX_SUCCESS)
         rc = MDBX_SUCCESS;
       else if (err == MDBX_ENOFILE)
@@ -15218,7 +15209,7 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname,
   } else if (err == MDBX_ENOFILE)
     err = MDBX_SUCCESS;
 
-  osal_free(env_pathname.buffer_for_free);
+  osal_free(dummy_env->me_pathname.buffer);
   return (err == MDBX_SUCCESS) ? rc : err;
 }
 
@@ -15280,23 +15271,19 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
 #endif /* MDBX_MMAP_INCOHERENT_FILE_WRITE */
   }
 
-  MDBX_handle_env_pathname env_pathname;
-  rc = handle_env_pathname(&env_pathname, pathname, &flags, mode);
+  env->me_flags = (flags & ~MDBX_FATAL_ERROR);
+  rc = env_handle_pathname(env, pathname, mode);
   if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
 
   env->me_flags = (flags & ~MDBX_FATAL_ERROR) | MDBX_ENV_ACTIVE;
-  env->me_pathname = osal_calloc(env_pathname.ent_len + 1, sizeof(pathchar_t));
   env->me_dbxs = osal_calloc(env->me_maxdbs, sizeof(env->me_dbxs[0]));
   env->me_db_flags = osal_calloc(env->me_maxdbs, sizeof(env->me_db_flags[0]));
   env->me_dbi_seqs = osal_calloc(env->me_maxdbs, sizeof(env->me_dbi_seqs[0]));
-  if (!(env->me_dbxs && env->me_pathname && env->me_db_flags &&
-        env->me_dbi_seqs)) {
+  if (!(env->me_dbxs && env->me_db_flags && env->me_dbi_seqs)) {
     rc = MDBX_ENOMEM;
     goto bailout;
   }
-  memcpy(env->me_pathname, env_pathname.dxb,
-         env_pathname.ent_len * sizeof(pathchar_t));
 
   /* Использование O_DSYNC или FILE_FLAG_WRITE_THROUGH:
    *
@@ -15385,14 +15372,15 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
    * при этом для записи мета требуется отдельный не-overlapped дескриптор.
    */
 
-  rc = osal_openfile((flags & MDBX_RDONLY) ? MDBX_OPEN_DXB_READ
-                                           : MDBX_OPEN_DXB_LAZY,
-                     env, env_pathname.dxb, &env->me_lazy_fd, mode);
-  if (rc != MDBX_SUCCESS)
-    goto bailout;
+  env->me_pid = osal_getpid();
+  rc = osal_openfile((env->me_flags & MDBX_RDONLY) ? MDBX_OPEN_DXB_READ
+                                                   : MDBX_OPEN_DXB_LAZY,
+                     env, env->me_pathname.dxb, &env->me_lazy_fd, mode);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
-  env->me_sysv_ipc.key = ftok(env_pathname.dxb, 42);
+  env->me_sysv_ipc.key = ftok(env->me_pathname.dxb, 42);
   if (env->me_sysv_ipc.key == -1) {
     rc = errno;
     goto bailout;
@@ -15447,7 +15435,7 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
 
     rc = osal_openfile(ior_direct ? MDBX_OPEN_DXB_OVERLAPPED_DIRECT
                                   : MDBX_OPEN_DXB_OVERLAPPED,
-                       env, env_pathname.dxb, &env->me_overlapped_fd, 0);
+                       env, env->me_pathname.dxb, &env->me_overlapped_fd, 0);
     if (rc != MDBX_SUCCESS)
       goto bailout;
     env->me_data_lock_event = CreateEventW(nullptr, true, false, nullptr);
@@ -15473,7 +15461,7 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
          ((mode & S_IRGRP) ? /* +write if readable by group */ S_IWGRP : 0) |
          ((mode & S_IROTH) ? /* +write if readable by others */ S_IWOTH : 0);
 #endif /* !Windows */
-  const int lck_rc = setup_lck(env, env_pathname.lck, mode);
+  const int lck_rc = setup_lck(env, mode);
   if (MDBX_IS_ERROR(lck_rc)) {
     rc = lck_rc;
     goto bailout;
@@ -15486,7 +15474,7 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
                  | MDBX_EXCLUSIVE
 #endif /* !Windows */
                  ))) {
-    rc = osal_openfile(MDBX_OPEN_DXB_DSYNC, env, env_pathname.dxb,
+    rc = osal_openfile(MDBX_OPEN_DXB_DSYNC, env, env->me_pathname.dxb,
                        &env->me_dsync_fd, 0);
     if (MDBX_IS_ERROR(rc))
       goto bailout;
@@ -15710,7 +15698,6 @@ bailout:
     txn_valgrind(env, nullptr);
 #endif /* ENABLE_MEMCHECK || __SANITIZE_ADDRESS__ */
   }
-  osal_free(env_pathname.buffer_for_free);
   return rc;
 }
 
@@ -15763,6 +15750,10 @@ __cold static int env_close(MDBX_env *env) {
     CloseHandle(env->me_data_lock_event);
     env->me_data_lock_event = INVALID_HANDLE_VALUE;
   }
+  if (env->me_pathname_char) {
+    osal_free(env->me_pathname_char);
+    env->me_pathname_char = nullptr;
+  }
 #endif /* Windows */
 
   if (env->me_dsync_fd != INVALID_HANDLE_VALUE) {
@@ -15800,16 +15791,10 @@ __cold static int env_close(MDBX_env *env) {
     osal_free(env->me_db_flags);
     env->me_db_flags = nullptr;
   }
-  if (env->me_pathname) {
-    osal_free(env->me_pathname);
-    env->me_pathname = nullptr;
+  if (env->me_pathname.buffer) {
+    osal_free(env->me_pathname.buffer);
+    env->me_pathname.buffer = nullptr;
   }
-#if defined(_WIN32) || defined(_WIN64)
-  if (env->me_pathname_char) {
-    osal_free(env->me_pathname_char);
-    env->me_pathname_char = nullptr;
-  }
-#endif /* Windows */
   if (env->me_txn0) {
     dpl_free(env->me_txn0);
     txl_free(env->me_txn0->tw.lifo_reclaimed);
@@ -22459,7 +22444,7 @@ __cold int mdbx_env_get_pathW(const MDBX_env *env, const wchar_t **arg) {
   if (unlikely(!arg))
     return MDBX_EINVAL;
 
-  *arg = env->me_pathname;
+  *arg = env->me_pathname.specified;
   return MDBX_SUCCESS;
 }
 #endif /* Windows */
@@ -22476,12 +22461,14 @@ __cold int mdbx_env_get_path(const MDBX_env *env, const char **arg) {
   if (!env->me_pathname_char) {
     *arg = nullptr;
     DWORD flags = /* WC_ERR_INVALID_CHARS */ 0x80;
-    size_t mb_len = WideCharToMultiByte(CP_THREAD_ACP, flags, env->me_pathname,
-                                        -1, nullptr, 0, nullptr, nullptr);
+    size_t mb_len =
+        WideCharToMultiByte(CP_THREAD_ACP, flags, env->me_pathname.specified,
+                            -1, nullptr, 0, nullptr, nullptr);
     rc = mb_len ? MDBX_SUCCESS : (int)GetLastError();
     if (rc == ERROR_INVALID_FLAGS) {
-      mb_len = WideCharToMultiByte(CP_THREAD_ACP, flags = 0, env->me_pathname,
-                                   -1, nullptr, 0, nullptr, nullptr);
+      mb_len = WideCharToMultiByte(CP_THREAD_ACP, flags = 0,
+                                   env->me_pathname.specified, -1, nullptr, 0,
+                                   nullptr, nullptr);
       rc = mb_len ? MDBX_SUCCESS : (int)GetLastError();
     }
     if (unlikely(rc != MDBX_SUCCESS))
@@ -22490,9 +22477,9 @@ __cold int mdbx_env_get_path(const MDBX_env *env, const char **arg) {
     char *const mb_pathname = osal_malloc(mb_len);
     if (!mb_pathname)
       return MDBX_ENOMEM;
-    if (mb_len != (size_t)WideCharToMultiByte(CP_THREAD_ACP, flags,
-                                              env->me_pathname, -1, mb_pathname,
-                                              (int)mb_len, nullptr, nullptr)) {
+    if (mb_len != (size_t)WideCharToMultiByte(
+                      CP_THREAD_ACP, flags, env->me_pathname.specified, -1,
+                      mb_pathname, (int)mb_len, nullptr, nullptr)) {
       rc = (int)GetLastError();
       osal_free(mb_pathname);
       return rc;
@@ -22504,7 +22491,7 @@ __cold int mdbx_env_get_path(const MDBX_env *env, const char **arg) {
   }
   *arg = env->me_pathname_char;
 #else
-  *arg = env->me_pathname;
+  *arg = env->me_pathname.specified;
 #endif /* Windows */
   return MDBX_SUCCESS;
 }
