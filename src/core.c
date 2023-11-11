@@ -3317,7 +3317,7 @@ static int __must_check_result read_header(MDBX_env *env, MDBX_meta *meta,
 static int __must_check_result sync_locked(MDBX_env *env, unsigned flags,
                                            MDBX_meta *const pending,
                                            meta_troika_t *const troika);
-static int env_close(MDBX_env *env);
+static int env_close(MDBX_env *env, bool resurrect_after_fork);
 
 struct node_result {
   MDBX_node *node;
@@ -15668,7 +15668,7 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
 #endif /* ENABLE_MEMCHECK || __SANITIZE_ADDRESS__ */
   } else {
   bailout:
-    if (likely(env_close(env) == MDBX_SUCCESS)) {
+    if (likely(env_close(env, false) == MDBX_SUCCESS)) {
       env->me_flags = saved_me_flags;
     } else {
       rc = MDBX_PANIC;
@@ -15679,7 +15679,7 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
 }
 
 /* Destroy resources from mdbx_env_open(), clear our readers & DBIs */
-__cold static int env_close(MDBX_env *env) {
+__cold static int env_close(MDBX_env *env, bool resurrect_after_fork) {
   const unsigned flags = env->me_flags;
   env->me_flags &= ~ENV_INTERNAL_FLAGS;
   if (flags & MDBX_ENV_TXKEY) {
@@ -15724,6 +15724,7 @@ __cold static int env_close(MDBX_env *env) {
     CloseHandle(env->me_data_lock_event);
     env->me_data_lock_event = INVALID_HANDLE_VALUE;
   }
+  eASSERT(env, !resurrect_after_fork);
   if (env->me_pathname_char) {
     osal_free(env->me_pathname_char);
     env->me_pathname_char = nullptr;
@@ -15745,42 +15746,78 @@ __cold static int env_close(MDBX_env *env) {
     env->me_lfd = INVALID_HANDLE_VALUE;
   }
 
-  if (env->me_dbxs) {
-    for (size_t i = CORE_DBS; i < env->me_numdbs; ++i)
-      if (env->me_dbxs[i].md_name.iov_len)
-        osal_free(env->me_dbxs[i].md_name.iov_base);
-    osal_free(env->me_dbxs);
-    env->me_numdbs = CORE_DBS;
-    env->me_dbxs = nullptr;
-  }
-  if (env->me_pbuf) {
-    osal_memalign_free(env->me_pbuf);
-    env->me_pbuf = nullptr;
-  }
-  if (env->me_dbi_seqs) {
-    osal_free(env->me_dbi_seqs);
-    env->me_dbi_seqs = nullptr;
-  }
-  if (env->me_db_flags) {
-    osal_free(env->me_db_flags);
-    env->me_db_flags = nullptr;
-  }
-  if (env->me_pathname.buffer) {
-    osal_free(env->me_pathname.buffer);
-    env->me_pathname.buffer = nullptr;
-  }
-  if (env->me_txn0) {
-    dpl_free(env->me_txn0);
-    txl_free(env->me_txn0->tw.lifo_reclaimed);
-    pnl_free(env->me_txn0->tw.retired_pages);
-    pnl_free(env->me_txn0->tw.spilled.list);
-    pnl_free(env->me_txn0->tw.relist);
-    osal_free(env->me_txn0);
-    env->me_txn0 = nullptr;
+  if (!resurrect_after_fork) {
+    if (env->me_dbxs) {
+      for (size_t i = CORE_DBS; i < env->me_numdbs; ++i)
+        if (env->me_dbxs[i].md_name.iov_len)
+          osal_free(env->me_dbxs[i].md_name.iov_base);
+      osal_free(env->me_dbxs);
+      env->me_numdbs = CORE_DBS;
+      env->me_dbxs = nullptr;
+    }
+    if (env->me_pbuf) {
+      osal_memalign_free(env->me_pbuf);
+      env->me_pbuf = nullptr;
+    }
+    if (env->me_dbi_seqs) {
+      osal_free(env->me_dbi_seqs);
+      env->me_dbi_seqs = nullptr;
+    }
+    if (env->me_db_flags) {
+      osal_free(env->me_db_flags);
+      env->me_db_flags = nullptr;
+    }
+    if (env->me_pathname.buffer) {
+      osal_free(env->me_pathname.buffer);
+      env->me_pathname.buffer = nullptr;
+    }
+    if (env->me_txn0) {
+      dpl_free(env->me_txn0);
+      txl_free(env->me_txn0->tw.lifo_reclaimed);
+      pnl_free(env->me_txn0->tw.retired_pages);
+      pnl_free(env->me_txn0->tw.spilled.list);
+      pnl_free(env->me_txn0->tw.relist);
+      osal_free(env->me_txn0);
+      env->me_txn0 = nullptr;
+    }
   }
   env->me_stuck_meta = -1;
   return rc;
 }
+
+#if !(defined(_WIN32) || defined(_WIN64))
+__cold int mdbx_env_resurrect_after_fork(MDBX_env *env) {
+  if (unlikely(!env))
+    return MDBX_EINVAL;
+
+  if (unlikely(env->me_signature.weak != MDBX_ME_SIGNATURE))
+    return MDBX_EBADSIGN;
+
+  if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
+    return MDBX_PANIC;
+
+  const uint32_t new_pid = osal_getpid();
+  if (unlikely(env->me_pid == new_pid))
+    return MDBX_SUCCESS;
+
+  if (!atomic_cas32(&env->me_signature, MDBX_ME_SIGNATURE, ~MDBX_ME_SIGNATURE))
+    return MDBX_EBADSIGN;
+
+  if (env->me_txn)
+    txn_abort(env->me_txn0);
+  env->me_live_reader = 0;
+  int rc = env_close(env, true);
+  env->me_signature.weak = MDBX_ME_SIGNATURE;
+  if (likely(rc == MDBX_SUCCESS)) {
+    rc = env_open(env, 0);
+    if (unlikely(rc != MDBX_SUCCESS && env_close(env, false) != MDBX_SUCCESS)) {
+      rc = MDBX_PANIC;
+      env->me_flags |= MDBX_FATAL_ERROR;
+    }
+  }
+  return rc;
+}
+#endif /* Windows */
 
 __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
   MDBX_page *dp;
@@ -15834,7 +15871,7 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
   }
 
   eASSERT(env, env->me_signature.weak == 0);
-  rc = env_close(env) ? MDBX_PANIC : rc;
+  rc = env_close(env, false) ? MDBX_PANIC : rc;
   ENSURE(env, osal_fastmutex_destroy(&env->me_dbi_lock) == MDBX_SUCCESS);
 #if defined(_WIN32) || defined(_WIN64)
   /* me_remap_guard don't have destructor (Slim Reader/Writer Lock) */

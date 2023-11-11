@@ -2895,6 +2895,11 @@ LIBMDBX_INLINE_API(int, mdbx_env_close, (MDBX_env * env)) {
   return mdbx_env_close_ex(env, false);
 }
 
+#if !(defined(_WIN32) || defined(_WIN64))
+/** FIXME */
+LIBMDBX_API int mdbx_env_resurrect_after_fork(MDBX_env *env);
+#endif /* Windows */
+
 /** \brief Warming up options
  * \ingroup c_settings
  * \anchor warmup_flags
