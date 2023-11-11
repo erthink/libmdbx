@@ -25910,6 +25910,26 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn,
   return rc;
 }
 
+#if !defined(_WIN32) && !defined(_WIN64)
+__cold static void rthc_afterfork(void) {
+  NOTICE("drown %d rthc entries", rthc_count);
+  for (size_t i = 0; i < rthc_count; ++i) {
+    MDBX_env *const env = rthc_table[i].env;
+    NOTICE("drown env %p", __Wpedantic_format_voidptr(env));
+    env->me_dxb_mmap.base = nullptr;
+    env->me_lck_mmap.base = nullptr;
+    env->me_lck = lckless_stub(env);
+    rthc_drown(env);
+  }
+  if (rthc_table != rthc_table_static)
+    osal_free(rthc_table);
+  rthc_count = 0;
+  rthc_table = rthc_table_static;
+  rthc_limit = RTHC_INITIAL_LIMIT;
+  rthc_pending.weak = 0;
+}
+#endif /* ! Windows */
+
 __cold void global_ctor(void) {
   osal_ctor();
   rthc_limit = RTHC_INITIAL_LIMIT;
@@ -25917,6 +25937,7 @@ __cold void global_ctor(void) {
 #if defined(_WIN32) || defined(_WIN64)
   InitializeCriticalSection(&rthc_critical_section);
 #else
+  ENSURE(nullptr, pthread_atfork(nullptr, nullptr, rthc_afterfork) == 0);
   ENSURE(nullptr, pthread_key_create(&rthc_key, thread_dtor) == 0);
   TRACE("pid %d, &mdbx_rthc_key = %p, value 0x%x", osal_getpid(),
         __Wpedantic_format_voidptr(&rthc_key), (unsigned)rthc_key);
