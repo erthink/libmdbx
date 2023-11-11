@@ -53,8 +53,16 @@ static void mdbx_logger(MDBX_log_level_t priority, const char *function,
 
 namespace logging {
 
-static std::string prefix;
-static std::string suffix;
+/* логирование может быть вызвано после деструкторов */
+static char prefix_buf[64];
+static size_t prefix_len;
+static std::string suffix_buf;
+static const char *suffix_ptr = "~~~";
+struct suffix_cleaner {
+  suffix_cleaner() { suffix_ptr = ""; }
+  ~suffix_cleaner() { suffix_ptr = "~~~"; }
+} static anchor;
+
 static loglevel level;
 static FILE *flow;
 
@@ -67,11 +75,14 @@ void setlevel(loglevel priority) {
   log_trace("set mdbx debug-opts: 0x%02x", rc);
 }
 
-void setup(const std::string &_prefix) { prefix = _prefix; }
+void setup(const std::string &prefix) {
+  prefix_len = std::min(prefix.size(), sizeof(prefix_buf) - 1);
+  memcpy(prefix_buf, prefix.data(), prefix_len);
+}
 
-void setup(loglevel priority, const std::string &_prefix) {
+void setup(loglevel priority, const std::string &prefix) {
   setlevel(priority);
-  setup(_prefix);
+  setup(prefix);
 }
 
 const char *level2str(const loglevel alevel) {
@@ -138,7 +149,7 @@ void output_nocheckloglevel_ap(const logging::loglevel priority,
           "[ %02d%02d%02d-%02d:%02d:%02d.%06d_%05lu %-10s %.4s ] %s" /* TODO */,
           tm.tm_year - 100, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min,
           tm.tm_sec, chrono::fractional2us(now.fractional), (long)osal_getpid(),
-          prefix.c_str(), level2str(priority), suffix.c_str());
+          prefix_buf, level2str(priority), suffix_ptr);
 
   va_list ones;
   memset(&ones, 0, sizeof(ones)) /* zap MSVC and other goofy compilers */;
@@ -171,8 +182,8 @@ void output_nocheckloglevel_ap(const logging::loglevel priority,
   if (same_or_higher(priority, error)) {
     if (flow)
       flow = stderr;
-    fprintf(stderr, "[ %05lu %-10s %.4s ] %s", (long)osal_getpid(),
-            prefix.c_str(), level2str(priority), suffix.c_str());
+    fprintf(stderr, "[ %05lu %-10s %.4s ] %s", (long)osal_getpid(), prefix_buf,
+            level2str(priority), suffix_ptr);
     vfprintf(stderr, format, ones);
     va_end(ones);
   }
@@ -207,29 +218,36 @@ bool feed(const char *format, ...) {
 }
 
 local_suffix::local_suffix(const char *c_str)
-    : trim_pos(suffix.size()), indent(0) {
-  suffix.append(c_str);
+    : trim_pos(suffix_buf.size()), indent(0) {
+  suffix_buf.append(c_str);
+  suffix_ptr = suffix_buf.c_str();
 }
 
 local_suffix::local_suffix(const std::string &str)
-    : trim_pos(suffix.size()), indent(0) {
-  suffix.append(str);
+    : trim_pos(suffix_buf.size()), indent(0) {
+  suffix_buf.append(str);
+  suffix_ptr = suffix_buf.c_str();
 }
 
 void local_suffix::push() {
   indent += 1;
-  suffix.push_back('\t');
+  suffix_buf.push_back('\t');
+  suffix_ptr = suffix_buf.c_str();
 }
 
 void local_suffix::pop() {
   assert(indent > 0);
   if (indent > 0) {
     indent -= 1;
-    suffix.pop_back();
+    suffix_buf.pop_back();
+    suffix_ptr = suffix_buf.c_str();
   }
 }
 
-local_suffix::~local_suffix() { suffix.erase(trim_pos); }
+local_suffix::~local_suffix() {
+  suffix_buf.erase(trim_pos);
+  suffix_ptr = suffix_buf.c_str();
+}
 
 void progress_canary(bool active) {
   static chrono::time progress_timestamp;
