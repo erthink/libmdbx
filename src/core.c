@@ -10108,13 +10108,6 @@ static int txn_end(MDBX_txn *txn, const unsigned mode) {
   MDBX_env *env = txn->mt_env;
   static const char *const names[] = TXN_END_NAMES;
 
-#if MDBX_ENV_CHECKPID
-  if (unlikely(txn->mt_env->me_pid != osal_getpid())) {
-    env->me_flags |= MDBX_FATAL_ERROR;
-    return MDBX_PANIC;
-  }
-#endif /* MDBX_ENV_CHECKPID */
-
   DEBUG("%s txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO
         "/%" PRIaPGNO,
         names[mode & TXN_END_OPMASK], txn->mt_txnid,
@@ -10288,11 +10281,7 @@ int mdbx_txn_break(MDBX_txn *txn) {
   return MDBX_SUCCESS;
 }
 
-int mdbx_txn_abort(MDBX_txn *txn) {
-  int rc = check_txn(txn, 0);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
+static int txn_abort(MDBX_txn *txn) {
   if (txn->mt_flags & MDBX_TXN_RDONLY)
     /* LY: don't close DBI-handles */
     return txn_end(txn, TXN_END_ABORT | TXN_END_UPDATE | TXN_END_SLOT |
@@ -10302,10 +10291,22 @@ int mdbx_txn_abort(MDBX_txn *txn) {
     return MDBX_BAD_TXN;
 
   if (txn->mt_child)
-    mdbx_txn_abort(txn->mt_child);
+    txn_abort(txn->mt_child);
 
   tASSERT(txn, (txn->mt_flags & MDBX_TXN_ERROR) || dirtylist_check(txn));
   return txn_end(txn, TXN_END_ABORT | TXN_END_SLOT | TXN_END_FREE);
+}
+
+int mdbx_txn_abort(MDBX_txn *txn) {
+  int rc = check_txn(txn, 0);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  rc = check_env(txn->mt_env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  return txn_abort(txn);
 }
 
 __cold static MDBX_db *audit_db_dig(const MDBX_txn *txn, const size_t dbi,
