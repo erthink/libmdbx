@@ -8685,17 +8685,16 @@ static __inline int check_env(const MDBX_env *env, const bool wanna_active) {
   if (unlikely(env->me_signature.weak != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-#if MDBX_ENV_CHECKPID
-  if (unlikely(env->me_pid != osal_getpid())) {
-    ((MDBX_env *)env)->me_flags |= MDBX_FATAL_ERROR;
-    return MDBX_PANIC;
-  }
-#endif /* MDBX_ENV_CHECKPID */
-
   if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
     return MDBX_PANIC;
 
   if (wanna_active) {
+#if MDBX_ENV_CHECKPID
+    if (unlikely(env->me_pid != osal_getpid())) {
+      ((MDBX_env *)env)->me_flags |= MDBX_FATAL_ERROR;
+      return MDBX_PANIC;
+    }
+#endif /* MDBX_ENV_CHECKPID */
     if (unlikely((env->me_flags & MDBX_ENV_ACTIVE) == 0))
       return MDBX_EPERM;
     eASSERT(env, env->me_map != nullptr);
