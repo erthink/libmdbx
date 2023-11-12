@@ -5,7 +5,7 @@ English version [by Google](https://gitflic-ru.translate.goog/project/erthink/li
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
 
-## v0.12.8 (сопровождение и подготовка к релизу)
+## v0.12.9 (сопровождение и подготовка к релизу)
 
 Поддержка стабильной ветки.
 
@@ -16,12 +16,26 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
    к не-активации соответствующего улучшения и не-достижению  декларируемого уровня
    производительности в сценариях использования в режиме `MDBX_WRITEMAP`.
 
+ - Исправление авто-установки `MDBX_ENV_CHECKPID` при отключении использования
+   функционала `madvise()` посредством опции сборки `MDBX_ENABLE_MADVISE=0`.
+   Из-за чего при поддержке системой `madvise(MADV_DONTFORK)` не включался контроль pid.
+
+ - Добавлена проверка переданного ключа на `NULL` при обработке `MDBX_GET_MULTIPLE`.
+
+ - Добавлена проверка номеров корневых страниц в `coherency_check()`.
+
+ - Обеспечение `const` для начала и конца диапазона в аргументах `mdbx_estimate_range()`.
+
+ - В C++ API добавлен тип `mdbx::cursor::estimation_result` и поведение методов
+   `mdbx::cursor::estimate()` унифицировано с `mdbx::cursor::move()`.
+
 Мелочи:
 
  - Удаление устаревших `mdbx_set_compare()` и `mdbx_set_dupsort()`.
  - Корректировка определения `MDBX_LAST_ADDED_ERRCODE`.
  - Добавление в C++ API забытого исключения `mdbx::duplicated_lck_file`.
  - Обновление патча для старых версий buildroot.
+ - Использование в API `const MDBX_txn` где это возможно.
 
 
 --------------------------------------------------------------------------------
