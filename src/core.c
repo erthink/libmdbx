@@ -24100,9 +24100,10 @@ int mdbx_estimate_move(const MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data,
   return mdbx_estimate_distance(cursor, &next.outer, distance_items);
 }
 
-int mdbx_estimate_range(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
-                        MDBX_val *begin_data, MDBX_val *end_key,
-                        MDBX_val *end_data, ptrdiff_t *size_items) {
+int mdbx_estimate_range(const MDBX_txn *txn, MDBX_dbi dbi,
+                        const MDBX_val *begin_key, const MDBX_val *begin_data,
+                        const MDBX_val *end_key, const MDBX_val *end_data,
+                        ptrdiff_t *size_items) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -24133,13 +24134,13 @@ int mdbx_estimate_range(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
     return MDBX_SUCCESS;
   }
 
+  MDBX_val stub;
   if (!begin_key) {
     if (unlikely(!end_key)) {
       /* LY: FIRST..LAST case */
       *size_items = (ptrdiff_t)begin.outer.mc_db->md_entries;
       return MDBX_SUCCESS;
     }
-    MDBX_val stub = {0, 0};
     rc = cursor_first(&begin.outer, &stub, &stub);
     if (unlikely(end_key == MDBX_EPSILON)) {
       /* LY: FIRST..+epsilon case */
@@ -24151,7 +24152,6 @@ int mdbx_estimate_range(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
     if (unlikely(begin_key == MDBX_EPSILON)) {
       if (end_key == NULL) {
         /* LY: -epsilon..LAST case */
-        MDBX_val stub = {0, 0};
         rc = cursor_last(&begin.outer, &stub, &stub);
         return (rc == MDBX_SUCCESS)
                    ? mdbx_cursor_count(&begin.outer, (size_t *)size_items)
@@ -24169,7 +24169,7 @@ int mdbx_estimate_range(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
         (begin_key == end_key ||
          begin.outer.mc_dbx->md_cmp(begin_key, end_key) == 0)) {
       /* LY: single key case */
-      rc = cursor_set(&begin.outer, begin_key, NULL, MDBX_SET).err;
+      rc = cursor_set(&begin.outer, (MDBX_val *)begin_key, NULL, MDBX_SET).err;
       if (unlikely(rc != MDBX_SUCCESS)) {
         *size_items = 0;
         return (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
@@ -24190,10 +24190,14 @@ int mdbx_estimate_range(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
         }
       }
       return MDBX_SUCCESS;
-    } else {
-      rc = cursor_set(&begin.outer, begin_key, begin_data,
-                      begin_data ? MDBX_GET_BOTH_RANGE : MDBX_SET_RANGE)
+    } else if (begin_data) {
+      stub = *begin_data;
+      rc = cursor_set(&begin.outer, (MDBX_val *)begin_key, &stub,
+                      MDBX_GET_BOTH_RANGE)
                .err;
+    } else {
+      stub = *begin_key;
+      rc = cursor_set(&begin.outer, &stub, nullptr, MDBX_SET_RANGE).err;
     }
   }
 
@@ -24206,13 +24210,15 @@ int mdbx_estimate_range(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
   rc = cursor_init(&end.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
-  if (!end_key) {
-    MDBX_val stub = {0, 0};
+  if (!end_key)
     rc = cursor_last(&end.outer, &stub, &stub);
-  } else {
-    rc = cursor_set(&end.outer, end_key, end_data,
-                    end_data ? MDBX_GET_BOTH_RANGE : MDBX_SET_RANGE)
+  else if (end_data) {
+    stub = *end_data;
+    rc = cursor_set(&end.outer, (MDBX_val *)end_key, &stub, MDBX_GET_BOTH_RANGE)
              .err;
+  } else {
+    stub = *end_key;
+    rc = cursor_set(&end.outer, &stub, nullptr, MDBX_SET_RANGE).err;
   }
   if (unlikely(rc != MDBX_SUCCESS)) {
     if (rc != MDBX_NOTFOUND || !(end.outer.mc_flags & C_INITIALIZED))
