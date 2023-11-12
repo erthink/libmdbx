@@ -5244,8 +5244,10 @@ LIBMDBX_API int mdbx_estimate_move(const MDBX_cursor *cursor, MDBX_val *key,
  *
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_estimate_range(const MDBX_txn *txn, MDBX_dbi dbi,
-                                    MDBX_val *begin_key, MDBX_val *begin_data,
-                                    MDBX_val *end_key, MDBX_val *end_data,
+                                    const MDBX_val *begin_key,
+                                    const MDBX_val *begin_data,
+                                    const MDBX_val *end_key,
+                                    const MDBX_val *end_data,
                                     ptrdiff_t *distance_items);
 
 /** \brief The EPSILON value for mdbx_estimate_range()
