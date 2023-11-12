@@ -4038,10 +4038,12 @@ public:
     put_multiple(map, key, vector.data(), vector.size(), mode);
   }
 
-  inline ptrdiff_t estimate(map_handle map, pair from, pair to) const;
-  inline ptrdiff_t estimate(map_handle map, slice from, slice to) const;
-  inline ptrdiff_t estimate_from_first(map_handle map, slice to) const;
-  inline ptrdiff_t estimate_to_last(map_handle map, slice from) const;
+  inline ptrdiff_t estimate(map_handle map, const pair &from,
+                            const pair &to) const;
+  inline ptrdiff_t estimate(map_handle map, const slice &from,
+                            const slice &to) const;
+  inline ptrdiff_t estimate_from_first(map_handle map, const slice &to) const;
+  inline ptrdiff_t estimate_to_last(map_handle map, const slice &from) const;
 };
 
 /// \brief Managed database transaction.
@@ -4154,15 +4156,29 @@ public:
 
   struct move_result : public pair_result {
     inline move_result(const cursor &cursor, bool throw_notfound);
-    inline move_result(cursor &cursor, move_operation operation,
-                       bool throw_notfound);
-    inline move_result(cursor &cursor, move_operation operation,
-                       const slice &key, bool throw_notfound);
+    move_result(cursor &cursor, move_operation operation, bool throw_notfound)
+        : move_result(cursor, operation, slice(), slice(), throw_notfound) {}
+    move_result(cursor &cursor, move_operation operation, const slice &key,
+                bool throw_notfound)
+        : move_result(cursor, operation, key, slice(), throw_notfound) {}
     inline move_result(cursor &cursor, move_operation operation,
                        const slice &key, const slice &value,
                        bool throw_notfound);
     move_result(const move_result &) noexcept = default;
     move_result &operator=(const move_result &) noexcept = default;
+  };
+
+  struct estimate_result : public pair {
+    ptrdiff_t approximate_quantity;
+    estimate_result(const cursor &cursor, move_operation operation)
+        : estimate_result(cursor, operation, slice(), slice()) {}
+    estimate_result(const cursor &cursor, move_operation operation,
+                    const slice &key)
+        : estimate_result(cursor, operation, key, slice()) {}
+    inline estimate_result(const cursor &cursor, move_operation operation,
+                           const slice &key, const slice &value);
+    estimate_result(const estimate_result &) noexcept = default;
+    estimate_result &operator=(const estimate_result &) noexcept = default;
   };
 
 protected:
@@ -4209,9 +4225,10 @@ public:
   inline bool eof() const;
   inline bool on_first() const;
   inline bool on_last() const;
-  inline ptrdiff_t estimate(slice key, slice value) const;
-  inline ptrdiff_t estimate(slice key) const;
-  inline ptrdiff_t estimate(move_operation operation) const;
+  inline estimate_result estimate(const slice &key, const slice &value) const;
+  inline estimate_result estimate(const slice &key) const;
+  inline estimate_result estimate(move_operation operation) const;
+  inline estimate_result estimate(move_operation operation, slice &key) const;
 
   //----------------------------------------------------------------------------
 
@@ -5855,28 +5872,32 @@ inline size_t txn::put_multiple(map_handle map, const slice &key,
   return args[1].iov_len /* done item count */;
 }
 
-inline ptrdiff_t txn::estimate(map_handle map, pair from, pair to) const {
+inline ptrdiff_t txn::estimate(map_handle map, const pair &from,
+                               const pair &to) const {
   ptrdiff_t result;
   error::success_or_throw(mdbx_estimate_range(
       handle_, map.dbi, &from.key, &from.value, &to.key, &to.value, &result));
   return result;
 }
 
-inline ptrdiff_t txn::estimate(map_handle map, slice from, slice to) const {
+inline ptrdiff_t txn::estimate(map_handle map, const slice &from,
+                               const slice &to) const {
   ptrdiff_t result;
   error::success_or_throw(mdbx_estimate_range(handle_, map.dbi, &from, nullptr,
                                               &to, nullptr, &result));
   return result;
 }
 
-inline ptrdiff_t txn::estimate_from_first(map_handle map, slice to) const {
+inline ptrdiff_t txn::estimate_from_first(map_handle map,
+                                          const slice &to) const {
   ptrdiff_t result;
   error::success_or_throw(mdbx_estimate_range(handle_, map.dbi, nullptr,
                                               nullptr, &to, nullptr, &result));
   return result;
 }
 
-inline ptrdiff_t txn::estimate_to_last(map_handle map, slice from) const {
+inline ptrdiff_t txn::estimate_to_last(map_handle map,
+                                       const slice &from) const {
   ptrdiff_t result;
   error::success_or_throw(mdbx_estimate_range(handle_, map.dbi, &from, nullptr,
                                               nullptr, nullptr, &result));
@@ -5925,22 +5946,8 @@ MDBX_CXX11_CONSTEXPR bool operator!=(const cursor &a,
 
 inline cursor::move_result::move_result(const cursor &cursor,
                                         bool throw_notfound)
-    : pair_result(key, value, false) {
-  done = cursor.move(get_current, &key, &value, throw_notfound);
-}
-
-inline cursor::move_result::move_result(cursor &cursor,
-                                        move_operation operation,
-                                        bool throw_notfound)
-    : pair_result(key, value, false) {
-  done = cursor.move(operation, &key, &value, throw_notfound);
-}
-
-inline cursor::move_result::move_result(cursor &cursor,
-                                        move_operation operation,
-                                        const slice &key, bool throw_notfound)
-    : pair_result(key, slice(), false) {
-  this->done = cursor.move(operation, &this->key, &this->value, throw_notfound);
+    : pair_result(slice(), slice(), false) {
+  done = cursor.move(get_current, &this->key, &this->value, throw_notfound);
 }
 
 inline cursor::move_result::move_result(cursor &cursor,
@@ -5965,6 +5972,14 @@ inline bool cursor::move(move_operation operation, MDBX_val *key,
   default:
     MDBX_CXX20_UNLIKELY error::throw_exception(err);
   }
+}
+
+inline cursor::estimate_result::estimate_result(const cursor &cursor,
+                                                move_operation operation,
+                                                const slice &key,
+                                                const slice &value)
+    : pair(key, value), approximate_quantity(PTRDIFF_MIN) {
+  approximate_quantity = cursor.estimate(operation, &this->key, &this->value);
 }
 
 inline ptrdiff_t cursor::estimate(move_operation operation, MDBX_val *key,
@@ -6089,17 +6104,18 @@ inline bool cursor::on_last() const {
   return error::boolean_or_throw(::mdbx_cursor_on_last(*this));
 }
 
-inline ptrdiff_t cursor::estimate(slice key, slice value) const {
-  return estimate(multi_exactkey_lowerboundvalue, &key, &value);
+inline cursor::estimate_result cursor::estimate(const slice &key,
+                                                const slice &value) const {
+  return estimate_result(*this, multi_exactkey_lowerboundvalue, key, value);
 }
 
-inline ptrdiff_t cursor::estimate(slice key) const {
-  return estimate(key_lowerbound, &key, nullptr);
+inline cursor::estimate_result cursor::estimate(const slice &key) const {
+  return estimate_result(*this, key_lowerbound, key);
 }
 
-inline ptrdiff_t cursor::estimate(move_operation operation) const {
-  slice unused_key;
-  return estimate(operation, &unused_key, nullptr);
+inline cursor::estimate_result
+cursor::estimate(move_operation operation) const {
+  return estimate_result(*this, operation);
 }
 
 inline void cursor::renew(const ::mdbx::txn &txn) {
