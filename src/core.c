@@ -17268,24 +17268,30 @@ static __hot int cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       return MDBX_EINVAL;
     if (unlikely((mc->mc_db->md_flags & MDBX_DUPFIXED) == 0))
       return MDBX_INCOMPATIBLE;
-    rc = (mc->mc_flags & C_INITIALIZED)
-             ? MDBX_SUCCESS
-             : cursor_set(mc, key, data, MDBX_SET).err;
-    if ((mc->mc_xcursor->mx_cursor.mc_flags & (C_INITIALIZED | C_EOF)) !=
-        C_INITIALIZED)
+    if ((mc->mc_flags & C_INITIALIZED) == 0) {
+      if (unlikely(!key))
+        return MDBX_EINVAL;
+      rc = cursor_set(mc, key, data, MDBX_SET).err;
+      if (unlikely(rc != MDBX_SUCCESS))
+        break;
+    }
+    rc = MDBX_SUCCESS;
+    if (unlikely(C_INITIALIZED != (mc->mc_xcursor->mx_cursor.mc_flags &
+                                   (C_INITIALIZED | C_EOF)))) {
+      rc = MDBX_NOTFOUND;
       break;
-    goto fetchm;
+    }
+    goto fetch_multiple;
   case MDBX_NEXT_MULTIPLE:
-    if (unlikely(data == NULL))
+    if (unlikely(!data))
       return MDBX_EINVAL;
     if (unlikely(!(mc->mc_db->md_flags & MDBX_DUPFIXED)))
       return MDBX_INCOMPATIBLE;
     rc = cursor_next(mc, key, data, MDBX_NEXT_DUP);
     if (rc == MDBX_SUCCESS) {
       if (mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) {
-        MDBX_cursor *mx;
-      fetchm:
-        mx = &mc->mc_xcursor->mx_cursor;
+      fetch_multiple:;
+        MDBX_cursor *mx = &mc->mc_xcursor->mx_cursor;
         data->iov_len =
             page_numkeys(mx->mc_pg[mx->mc_top]) * mx->mc_db->md_xsize;
         data->iov_base = page_data(mx->mc_pg[mx->mc_top]);
@@ -17296,21 +17302,20 @@ static __hot int cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     }
     break;
   case MDBX_PREV_MULTIPLE:
-    if (data == NULL)
+    if (unlikely(!data))
       return MDBX_EINVAL;
     if (!(mc->mc_db->md_flags & MDBX_DUPFIXED))
       return MDBX_INCOMPATIBLE;
     rc = MDBX_SUCCESS;
-    if (!(mc->mc_flags & C_INITIALIZED))
+    if ((mc->mc_flags & C_INITIALIZED) == 0)
       rc = cursor_last(mc, key, data);
     if (rc == MDBX_SUCCESS) {
       MDBX_cursor *mx = &mc->mc_xcursor->mx_cursor;
+      rc = MDBX_NOTFOUND;
       if (mx->mc_flags & C_INITIALIZED) {
         rc = cursor_sibling(mx, SIBLING_LEFT);
         if (rc == MDBX_SUCCESS)
-          goto fetchm;
-      } else {
-        rc = MDBX_NOTFOUND;
+          goto fetch_multiple;
       }
     }
     break;
