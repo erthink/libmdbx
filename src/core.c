@@ -16818,7 +16818,7 @@ cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cursor_op op) {
   }
 
   MDBX_val aligned_key = *key;
-  uint64_t aligned_keybytes;
+  uint64_t aligned_key_buf;
   if (mc->mc_db->md_flags & MDBX_INTEGERKEY) {
     switch (aligned_key.iov_len) {
     default:
@@ -16829,13 +16829,13 @@ cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cursor_op op) {
       if (unlikely(3 & (uintptr_t)aligned_key.iov_base))
         /* copy instead of return error to avoid break compatibility */
         aligned_key.iov_base =
-            memcpy(&aligned_keybytes, aligned_key.iov_base, 4);
+            memcpy(&aligned_key_buf, aligned_key.iov_base, 4);
       break;
     case 8:
       if (unlikely(7 & (uintptr_t)aligned_key.iov_base))
         /* copy instead of return error to avoid break compatibility */
         aligned_key.iov_base =
-            memcpy(&aligned_keybytes, aligned_key.iov_base, 8);
+            memcpy(&aligned_key_buf, aligned_key.iov_base, 8);
       break;
     }
   }
@@ -16874,7 +16874,7 @@ cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cursor_op op) {
     }
     if (cmp > 0) {
       const size_t nkeys = page_numkeys(mp);
-      if (nkeys > 1) {
+      if (likely(nkeys > 1)) {
         if (IS_LEAF2(mp)) {
           nodekey.iov_base = page_leaf2key(mp, nkeys - 1, nodekey.iov_len);
         } else {
@@ -16918,23 +16918,22 @@ cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cursor_op op) {
       }
       /* If any parents have right-sibs, search.
        * Otherwise, there's nothing further. */
-      size_t i;
-      for (i = 0; i < mc->mc_top; i++)
+      for (size_t i = 0; i < mc->mc_top; i++)
         if (mc->mc_ki[i] < page_numkeys(mc->mc_pg[i]) - 1)
-          break;
-      if (i == mc->mc_top) {
-        /* There are no other pages */
-        cASSERT(mc, nkeys <= UINT16_MAX);
-        mc->mc_ki[mc->mc_top] = (uint16_t)nkeys;
-        mc->mc_flags |= C_EOF;
-        ret.err = MDBX_NOTFOUND;
-        return ret;
-      }
+          goto continue_other_pages;
+
+      /* There are no other pages */
+      cASSERT(mc, nkeys <= UINT16_MAX);
+      mc->mc_ki[mc->mc_top] = (uint16_t)nkeys;
+      mc->mc_flags |= C_EOF;
+      ret.err = MDBX_NOTFOUND;
+      return ret;
     }
+  continue_other_pages:
     if (!mc->mc_top) {
       /* There are no other pages */
       mc->mc_ki[mc->mc_top] = 0;
-      if (op == MDBX_SET_RANGE)
+      if (op >= MDBX_SET_RANGE)
         goto got_node;
 
       cASSERT(mc, mc->mc_ki[mc->mc_top] < page_numkeys(mc->mc_pg[mc->mc_top]) ||
@@ -16996,7 +16995,7 @@ got_node:
   }
 
   if (IS_LEAF2(mp)) {
-    if (op == MDBX_SET_RANGE || op == MDBX_SET_KEY) {
+    if (op >= MDBX_SET_KEY) {
       key->iov_len = mc->mc_db->md_xsize;
       key->iov_base = page_leaf2key(mp, mc->mc_ki[mc->mc_top], key->iov_len);
     }
@@ -17076,7 +17075,7 @@ got_node:
   }
 
   /* The key already matches in all other cases */
-  if (op == MDBX_SET_RANGE || op == MDBX_SET_KEY)
+  if (op >= MDBX_SET_KEY)
     get_key_optional(node, key);
 
   DEBUG("==> cursor placed on key [%s], data [%s]", DKEY_DEBUG(key),
