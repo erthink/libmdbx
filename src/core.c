@@ -16961,7 +16961,7 @@ search_node:;
   node = nsr.node;
   ret.exact = nsr.exact;
   if (!ret.exact) {
-    if (op != MDBX_SET_RANGE) {
+    if (op < MDBX_SET_RANGE) {
       /* MDBX_SET specified and not an exact match. */
       if (unlikely(mc->mc_ki[mc->mc_top] >=
                    page_numkeys(mc->mc_pg[mc->mc_top])))
@@ -17010,7 +17010,7 @@ got_node:
     ret.err = cursor_xinit1(mc, node, mp);
     if (unlikely(ret.err != MDBX_SUCCESS))
       return ret;
-    if (op == MDBX_SET || op == MDBX_SET_KEY || op == MDBX_SET_RANGE) {
+    if (op >= MDBX_SET) {
       MDBX_ANALYSIS_ASSUME(mc->mc_xcursor != nullptr);
       ret.err = cursor_first(&mc->mc_xcursor->mx_cursor, data, NULL);
       if (unlikely(ret.err != MDBX_SUCCESS))
@@ -17026,7 +17026,7 @@ got_node:
       }
     }
   } else if (likely(data)) {
-    if (op == MDBX_GET_BOTH || op == MDBX_GET_BOTH_RANGE) {
+    if (op <= MDBX_GET_BOTH_RANGE) {
       if (unlikely(data->iov_len < mc->mc_dbx->md_vlen_min ||
                    data->iov_len > mc->mc_dbx->md_vlen_max)) {
         cASSERT(mc, !"Invalid data-size");
@@ -17365,6 +17365,7 @@ static __hot int cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   case MDBX_LAST_DUP:
     mfunc = cursor_last;
     goto move;
+
   case MDBX_SET_UPPERBOUND: /* mostly same as MDBX_SET_LOWERBOUND */
   case MDBX_SET_LOWERBOUND: {
     if (unlikely(key == NULL || data == NULL))
@@ -17406,6 +17407,153 @@ static __hot int cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
         /* exactly match, going next */
         rc = cursor_next(mc, key, data, MDBX_NEXT);
     }
+    break;
+  }
+
+  /* Doubtless API to positioning of the cursor at a specified key. */
+  case MDBX_TO_KEY_LESSER_THAN:
+  case MDBX_TO_KEY_LESSER_OR_EQUAL:
+  case MDBX_TO_KEY_EQUAL:
+  case MDBX_TO_KEY_GREATER_OR_EQUAL:
+  case MDBX_TO_KEY_GREATER_THAN: {
+    if (unlikely(key == NULL))
+      return MDBX_EINVAL;
+    struct cursor_set_result csr = cursor_set(mc, key, data, MDBX_SET_RANGE);
+    rc = csr.err;
+    if (csr.exact) {
+      cASSERT(mc, csr.err == MDBX_SUCCESS);
+      if (op == MDBX_TO_KEY_LESSER_THAN)
+        rc = cursor_prev(mc, key, data, MDBX_PREV_NODUP);
+      else if (op == MDBX_TO_KEY_GREATER_THAN)
+        rc = cursor_next(mc, key, data, MDBX_NEXT_NODUP);
+    } else if (op < MDBX_TO_KEY_EQUAL &&
+               (rc == MDBX_NOTFOUND || rc == MDBX_SUCCESS))
+      rc = cursor_prev(mc, key, data, MDBX_PREV_NODUP);
+    else if (op == MDBX_TO_KEY_EQUAL && rc == MDBX_SUCCESS)
+      rc = MDBX_NOTFOUND;
+    break;
+  }
+
+  /* Doubtless API to positioning of the cursor at a specified key-value pair
+   * for multi-value hives. */
+  case MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN:
+  case MDBX_TO_EXACT_KEY_VALUE_LESSER_OR_EQUAL:
+  case MDBX_TO_EXACT_KEY_VALUE_EQUAL:
+  case MDBX_TO_EXACT_KEY_VALUE_GREATER_OR_EQUAL:
+  case MDBX_TO_EXACT_KEY_VALUE_GREATER_THAN: {
+    if (unlikely(key == NULL || data == NULL))
+      return MDBX_EINVAL;
+    MDBX_val save_data = *data;
+    struct cursor_set_result csr = cursor_set(mc, key, data, MDBX_SET_KEY);
+    rc = csr.err;
+    if (rc == MDBX_SUCCESS) {
+      cASSERT(mc, csr.exact);
+      MDBX_cursor *const mx =
+          (mc->mc_xcursor &&
+           (mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED))
+              ? &mc->mc_xcursor->mx_cursor
+              : nullptr;
+      if (mx) {
+        csr = cursor_set(mx, &save_data, NULL, MDBX_SET_RANGE);
+        rc = csr.err;
+        if (csr.exact) {
+          cASSERT(mc, csr.err == MDBX_SUCCESS);
+          if (op == MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN)
+            rc = cursor_prev(mx, data, NULL, MDBX_PREV);
+          else if (op == MDBX_TO_EXACT_KEY_VALUE_GREATER_THAN)
+            rc = cursor_next(mx, data, NULL, MDBX_NEXT);
+        } else if (op < MDBX_TO_EXACT_KEY_VALUE_EQUAL &&
+                   (rc == MDBX_NOTFOUND || rc == MDBX_SUCCESS))
+          rc = cursor_prev(mx, data, NULL, MDBX_PREV);
+        else if (op == MDBX_TO_EXACT_KEY_VALUE_EQUAL && rc == MDBX_SUCCESS)
+          rc = MDBX_NOTFOUND;
+      } else {
+        int cmp = mc->mc_dbx->md_dcmp(data, &save_data);
+        switch (op) {
+        default:
+          __unreachable();
+        case MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN:
+          rc = (cmp < 0) ? MDBX_SUCCESS : MDBX_NOTFOUND;
+          break;
+        case MDBX_TO_EXACT_KEY_VALUE_LESSER_OR_EQUAL:
+          rc = (cmp <= 0) ? MDBX_SUCCESS : MDBX_NOTFOUND;
+          break;
+        case MDBX_TO_EXACT_KEY_VALUE_EQUAL:
+          rc = (cmp == 0) ? MDBX_SUCCESS : MDBX_NOTFOUND;
+          break;
+        case MDBX_TO_EXACT_KEY_VALUE_GREATER_OR_EQUAL:
+          rc = (cmp >= 0) ? MDBX_SUCCESS : MDBX_NOTFOUND;
+          break;
+        case MDBX_TO_EXACT_KEY_VALUE_GREATER_THAN:
+          rc = (cmp > 0) ? MDBX_SUCCESS : MDBX_NOTFOUND;
+          break;
+        }
+      }
+    }
+    break;
+  }
+  case MDBX_TO_PAIR_LESSER_THAN:
+  case MDBX_TO_PAIR_LESSER_OR_EQUAL:
+  case MDBX_TO_PAIR_EQUAL:
+  case MDBX_TO_PAIR_GREATER_OR_EQUAL:
+  case MDBX_TO_PAIR_GREATER_THAN: {
+    if (unlikely(key == NULL || data == NULL))
+      return MDBX_EINVAL;
+    MDBX_val save_data = *data;
+    struct cursor_set_result csr = cursor_set(mc, key, data, MDBX_SET_RANGE);
+    rc = csr.err;
+    if (csr.exact) {
+      cASSERT(mc, csr.err == MDBX_SUCCESS);
+      MDBX_cursor *const mx =
+          (mc->mc_xcursor &&
+           (mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED))
+              ? &mc->mc_xcursor->mx_cursor
+              : nullptr;
+      if (mx) {
+        csr = cursor_set(mx, &save_data, NULL, MDBX_SET_RANGE);
+        rc = csr.err;
+        if (csr.exact) {
+          cASSERT(mc, csr.err == MDBX_SUCCESS);
+          if (op == MDBX_TO_PAIR_LESSER_THAN)
+            rc = cursor_prev(mc, key, data, MDBX_PREV);
+          else if (op == MDBX_TO_PAIR_GREATER_THAN)
+            rc = cursor_next(mc, key, data, MDBX_NEXT);
+        } else if (op < MDBX_TO_PAIR_EQUAL &&
+                   (rc == MDBX_NOTFOUND || rc == MDBX_SUCCESS))
+          rc = cursor_prev(mc, key, data, MDBX_PREV);
+        else if (op == MDBX_TO_PAIR_EQUAL && rc == MDBX_SUCCESS)
+          rc = MDBX_NOTFOUND;
+        else if (op > MDBX_TO_PAIR_EQUAL && rc == MDBX_NOTFOUND)
+          rc = cursor_next(mc, key, data, MDBX_NEXT);
+      } else {
+        int cmp = mc->mc_dbx->md_dcmp(data, &save_data);
+        switch (op) {
+        default:
+          __unreachable();
+        case MDBX_TO_PAIR_LESSER_THAN:
+          rc = (cmp < 0) ? MDBX_SUCCESS : cursor_prev(mc, key, data, MDBX_PREV);
+          break;
+        case MDBX_TO_PAIR_LESSER_OR_EQUAL:
+          rc =
+              (cmp <= 0) ? MDBX_SUCCESS : cursor_prev(mc, key, data, MDBX_PREV);
+          break;
+        case MDBX_TO_PAIR_EQUAL:
+          rc = (cmp == 0) ? MDBX_SUCCESS : MDBX_NOTFOUND;
+          break;
+        case MDBX_TO_PAIR_GREATER_OR_EQUAL:
+          rc =
+              (cmp >= 0) ? MDBX_SUCCESS : cursor_next(mc, key, data, MDBX_NEXT);
+          break;
+        case MDBX_TO_PAIR_GREATER_THAN:
+          rc = (cmp > 0) ? MDBX_SUCCESS : cursor_next(mc, key, data, MDBX_NEXT);
+          break;
+        }
+      }
+    } else if (op < MDBX_TO_PAIR_EQUAL &&
+               (rc == MDBX_NOTFOUND || rc == MDBX_SUCCESS))
+      rc = cursor_prev(mc, key, data, MDBX_PREV_NODUP);
+    else if (op == MDBX_TO_PAIR_EQUAL && rc == MDBX_SUCCESS)
+      rc = MDBX_NOTFOUND;
     break;
   }
   default:

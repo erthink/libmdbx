@@ -1778,7 +1778,7 @@ enum MDBX_cursor_op {
    * return both key and data, and the return code depends on whether a
    * upper-bound was found.
    *
-   * For non DUPSORT-ed collections this work the same to \ref MDBX_SET_RANGE,
+   * For non DUPSORT-ed collections this work like \ref MDBX_SET_RANGE,
    * but returns \ref MDBX_SUCCESS if the greater key was found or
    * \ref MDBX_NOTFOUND otherwise.
    *
@@ -1786,7 +1786,28 @@ enum MDBX_cursor_op {
    * i.e. for a pairs/tuples of a key and an each data value of duplicates.
    * Returns \ref MDBX_SUCCESS if the greater pair was returned or
    * \ref MDBX_NOTFOUND otherwise. */
-  MDBX_SET_UPPERBOUND
+  MDBX_SET_UPPERBOUND,
+
+  /* Doubtless cursor positioning at a specified key. */
+  MDBX_TO_KEY_LESSER_THAN,
+  MDBX_TO_KEY_LESSER_OR_EQUAL,
+  MDBX_TO_KEY_EQUAL,
+  MDBX_TO_KEY_GREATER_OR_EQUAL,
+  MDBX_TO_KEY_GREATER_THAN,
+
+  /* Doubtless cursor positioning at a specified key-value pair
+   * for dupsort/multi-value hives. */
+  MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN,
+  MDBX_TO_EXACT_KEY_VALUE_LESSER_OR_EQUAL,
+  MDBX_TO_EXACT_KEY_VALUE_EQUAL,
+  MDBX_TO_EXACT_KEY_VALUE_GREATER_OR_EQUAL,
+  MDBX_TO_EXACT_KEY_VALUE_GREATER_THAN,
+
+  MDBX_TO_PAIR_LESSER_THAN,
+  MDBX_TO_PAIR_LESSER_OR_EQUAL,
+  MDBX_TO_PAIR_EQUAL,
+  MDBX_TO_PAIR_GREATER_OR_EQUAL,
+  MDBX_TO_PAIR_GREATER_THAN
 };
 #ifndef __cplusplus
 /** \ingroup c_cursors */

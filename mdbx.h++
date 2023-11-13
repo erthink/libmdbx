@@ -4391,9 +4391,33 @@ public:
     multi_find_pair = MDBX_GET_BOTH,
     multi_exactkey_lowerboundvalue = MDBX_GET_BOTH_RANGE,
 
-    find_key = MDBX_SET,
+    seek_key = MDBX_SET,
     key_exact = MDBX_SET_KEY,
-    key_lowerbound = MDBX_SET_RANGE
+    key_lowerbound = MDBX_SET_RANGE,
+
+    /* Doubtless cursor positioning at a specified key. */
+    key_lesser_than = MDBX_TO_KEY_LESSER_THAN,
+    key_lesser_or_equal = MDBX_TO_KEY_LESSER_OR_EQUAL,
+    key_equal = MDBX_TO_KEY_EQUAL,
+    key_greater_or_equal = MDBX_TO_KEY_GREATER_OR_EQUAL,
+    key_greater_than = MDBX_TO_KEY_GREATER_THAN,
+
+    /* Doubtless cursor positioning at a specified key-value pair
+     * for dupsort/multi-value hives. */
+    multi_exactkey_value_lesser_than = MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN,
+    multi_exactkey_value_lesser_or_equal =
+        MDBX_TO_EXACT_KEY_VALUE_LESSER_OR_EQUAL,
+    multi_exactkey_value_equal = MDBX_TO_EXACT_KEY_VALUE_EQUAL,
+    multi_exactkey_value_greater_or_equal =
+        MDBX_TO_EXACT_KEY_VALUE_GREATER_OR_EQUAL,
+    multi_exactkey_value_greater = MDBX_TO_EXACT_KEY_VALUE_GREATER_THAN,
+
+    pair_lesser_than = MDBX_TO_PAIR_LESSER_THAN,
+    pair_lesser_or_equal = MDBX_TO_PAIR_LESSER_OR_EQUAL,
+    pair_equal = MDBX_TO_PAIR_EQUAL,
+    pair_exact = pair_equal,
+    pair_greater_or_equal = MDBX_TO_PAIR_GREATER_OR_EQUAL,
+    pair_greater_than = MDBX_TO_PAIR_GREATER_THAN,
   };
 
   struct move_result : public pair_result {
@@ -4424,45 +4448,154 @@ public:
   };
 
 protected:
+  /* fake const, i.e. for some move/get operations */
   inline bool move(move_operation operation, MDBX_val *key, MDBX_val *value,
-                   bool throw_notfound) const
-      /* fake const, i.e. for some operations */;
+                   bool throw_notfound) const;
+
   inline ptrdiff_t estimate(move_operation operation, MDBX_val *key,
                             MDBX_val *value) const;
 
 public:
-  inline move_result move(move_operation operation, bool throw_notfound);
-  inline move_result to_first(bool throw_notfound = true);
-  inline move_result to_previous(bool throw_notfound = true);
-  inline move_result to_previous_last_multi(bool throw_notfound = true);
-  inline move_result to_current_first_multi(bool throw_notfound = true);
-  inline move_result to_current_prev_multi(bool throw_notfound = true);
-  inline move_result current(bool throw_notfound = true) const;
-  inline move_result to_current_next_multi(bool throw_notfound = true);
-  inline move_result to_current_last_multi(bool throw_notfound = true);
-  inline move_result to_next_first_multi(bool throw_notfound = true);
-  inline move_result to_next(bool throw_notfound = true);
-  inline move_result to_last(bool throw_notfound = true);
+  move_result move(move_operation operation, bool throw_notfound) {
+    return move_result(*this, operation, throw_notfound);
+  }
+  move_result move(move_operation operation, const slice &key,
+                   bool throw_notfound) {
+    return move_result(*this, operation, key, throw_notfound);
+  }
+  move_result move(move_operation operation, const slice &key,
+                   const slice &value, bool throw_notfound) {
+    return move_result(*this, operation, key, value, throw_notfound);
+  }
+  bool move(move_operation operation, slice &key, slice &value,
+            bool throw_notfound) {
+    return move(operation, &key, &value, throw_notfound);
+  }
 
-  inline move_result move(move_operation operation, const slice &key,
-                          bool throw_notfound);
+  move_result to_first(bool throw_notfound = true) {
+    return move(first, throw_notfound);
+  }
+  move_result to_previous(bool throw_notfound = true) {
+    return move(previous, throw_notfound);
+  }
+  move_result to_previous_last_multi(bool throw_notfound = true) {
+    return move(multi_prevkey_lastvalue, throw_notfound);
+  }
+  move_result to_current_first_multi(bool throw_notfound = true) {
+    return move(multi_currentkey_firstvalue, throw_notfound);
+  }
+  move_result to_current_prev_multi(bool throw_notfound = true) {
+    return move(multi_currentkey_prevvalue, throw_notfound);
+  }
+  move_result current(bool throw_notfound = true) const {
+    return move_result(*this, throw_notfound);
+  }
+  move_result to_current_next_multi(bool throw_notfound = true) {
+    return move(multi_currentkey_nextvalue, throw_notfound);
+  }
+  move_result to_current_last_multi(bool throw_notfound = true) {
+    return move(multi_currentkey_lastvalue, throw_notfound);
+  }
+  move_result to_next_first_multi(bool throw_notfound = true) {
+    return move(multi_nextkey_firstvalue, throw_notfound);
+  }
+  move_result to_next(bool throw_notfound = true) {
+    return move(next, throw_notfound);
+  }
+  move_result to_last(bool throw_notfound = true) {
+    return move(last, throw_notfound);
+  }
+
+  move_result to_key_lesser_than(const slice &key, bool throw_notfound = true) {
+    return move(key_lesser_than, key, throw_notfound);
+  }
+  move_result to_key_lesser_or_equal(const slice &key,
+                                     bool throw_notfound = true) {
+    return move(key_lesser_or_equal, key, throw_notfound);
+  }
+  move_result to_key_equal(const slice &key, bool throw_notfound = true) {
+    return move(key_equal, key, throw_notfound);
+  }
+  move_result to_key_exact(const slice &key, bool throw_notfound = true) {
+    return move(key_exact, key, throw_notfound);
+  }
+  move_result to_key_greater_or_equal(const slice &key,
+                                      bool throw_notfound = true) {
+    return move(key_greater_or_equal, key, throw_notfound);
+  }
+  move_result to_key_greater_than(const slice &key,
+                                  bool throw_notfound = true) {
+    return move(key_greater_than, key, throw_notfound);
+  }
+
+  move_result to_exact_key_value_lesser_than(const slice &key,
+                                             const slice &value,
+                                             bool throw_notfound = true) {
+    return move(multi_exactkey_value_lesser_than, key, value, throw_notfound);
+  }
+  move_result to_exact_key_value_lesser_or_equal(const slice &key,
+                                                 const slice &value,
+                                                 bool throw_notfound = true) {
+    return move(multi_exactkey_value_lesser_or_equal, key, value,
+                throw_notfound);
+  }
+  move_result to_exact_key_value_equal(const slice &key, const slice &value,
+                                       bool throw_notfound = true) {
+    return move(multi_exactkey_value_equal, key, value, throw_notfound);
+  }
+  move_result to_exact_key_value_greater_or_equal(const slice &key,
+                                                  const slice &value,
+                                                  bool throw_notfound = true) {
+    return move(multi_exactkey_value_greater_or_equal, key, value,
+                throw_notfound);
+  }
+  move_result to_exact_key_value_greater_than(const slice &key,
+                                              const slice &value,
+                                              bool throw_notfound = true) {
+    return move(multi_exactkey_value_greater, key, value, throw_notfound);
+  }
+
+  move_result to_pair_lesser_than(const slice &key, const slice &value,
+                                  bool throw_notfound = true) {
+    return move(pair_lesser_than, key, value, throw_notfound);
+  }
+  move_result to_pair_lesser_or_equal(const slice &key, const slice &value,
+                                      bool throw_notfound = true) {
+    return move(pair_lesser_or_equal, key, value, throw_notfound);
+  }
+  move_result to_pair_equal(const slice &key, const slice &value,
+                            bool throw_notfound = true) {
+    return move(pair_equal, key, value, throw_notfound);
+  }
+  move_result to_pair_exact(const slice &key, const slice &value,
+                            bool throw_notfound = true) {
+    return move(pair_exact, key, value, throw_notfound);
+  }
+  move_result to_pair_greater_or_equal(const slice &key, const slice &value,
+                                       bool throw_notfound = true) {
+    return move(pair_greater_or_equal, key, value, throw_notfound);
+  }
+  move_result to_pair_greater_than(const slice &key, const slice &value,
+                                   bool throw_notfound = true) {
+    return move(pair_greater_than, key, value, throw_notfound);
+  }
+
+  inline bool seek(const slice &key);
   inline move_result find(const slice &key, bool throw_notfound = true);
-  inline move_result lower_bound(const slice &key, bool throw_notfound = true);
+  inline move_result lower_bound(const slice &key, bool throw_notfound = false);
+  inline move_result upper_bound(const slice &key, bool throw_notfound = false);
 
-  inline move_result move(move_operation operation, const slice &key,
-                          const slice &value, bool throw_notfound);
+  /// \brief Return count of duplicates for current key.
+  inline size_t count_multivalue() const;
+
   inline move_result find_multivalue(const slice &key, const slice &value,
                                      bool throw_notfound = true);
   inline move_result lower_bound_multivalue(const slice &key,
                                             const slice &value,
                                             bool throw_notfound = false);
-
-  inline bool seek(const slice &key);
-  inline bool move(move_operation operation, slice &key, slice &value,
-                   bool throw_notfound);
-
-  /// \brief Return count of duplicates for current key.
-  inline size_t count_multivalue() const;
+  inline move_result upper_bound_multivalue(const slice &key,
+                                            const slice &value,
+                                            bool throw_notfound = false);
 
   inline bool eof() const;
   inline bool on_first() const;
@@ -6290,60 +6423,6 @@ inline ptrdiff_t estimate(const cursor &from, const cursor &to) {
   return result;
 }
 
-inline cursor::move_result cursor::move(move_operation operation,
-                                        bool throw_notfound) {
-  return move_result(*this, operation, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_first(bool throw_notfound) {
-  return move(first, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_previous(bool throw_notfound) {
-  return move(previous, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_previous_last_multi(bool throw_notfound) {
-  return move(multi_prevkey_lastvalue, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_current_first_multi(bool throw_notfound) {
-  return move(multi_currentkey_firstvalue, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_current_prev_multi(bool throw_notfound) {
-  return move(multi_currentkey_prevvalue, throw_notfound);
-}
-
-inline cursor::move_result cursor::current(bool throw_notfound) const {
-  return move_result(*this, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_current_next_multi(bool throw_notfound) {
-  return move(multi_currentkey_nextvalue, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_current_last_multi(bool throw_notfound) {
-  return move(multi_currentkey_lastvalue, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_next_first_multi(bool throw_notfound) {
-  return move(multi_nextkey_firstvalue, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_next(bool throw_notfound) {
-  return move(next, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_last(bool throw_notfound) {
-  return move(last, throw_notfound);
-}
-
-inline cursor::move_result cursor::move(move_operation operation,
-                                        const slice &key, bool throw_notfound) {
-  return move_result(*this, operation, key, throw_notfound);
-}
-
 inline cursor::move_result cursor::find(const slice &key, bool throw_notfound) {
   return move(key_exact, key, throw_notfound);
 }
@@ -6351,12 +6430,6 @@ inline cursor::move_result cursor::find(const slice &key, bool throw_notfound) {
 inline cursor::move_result cursor::lower_bound(const slice &key,
                                                bool throw_notfound) {
   return move(key_lowerbound, key, throw_notfound);
-}
-
-inline cursor::move_result cursor::move(move_operation operation,
-                                        const slice &key, const slice &value,
-                                        bool throw_notfound) {
-  return move_result(*this, operation, key, value, throw_notfound);
 }
 
 inline cursor::move_result cursor::find_multivalue(const slice &key,
@@ -6372,12 +6445,7 @@ inline cursor::move_result cursor::lower_bound_multivalue(const slice &key,
 }
 
 inline bool cursor::seek(const slice &key) {
-  return move(find_key, const_cast<slice *>(&key), nullptr, false);
-}
-
-inline bool cursor::move(move_operation operation, slice &key, slice &value,
-                         bool throw_notfound) {
-  return move(operation, &key, &value, throw_notfound);
+  return move(seek_key, const_cast<slice *>(&key), nullptr, false);
 }
 
 inline size_t cursor::count_multivalue() const {
