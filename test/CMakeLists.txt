@@ -95,6 +95,13 @@ if(UNIX AND NOT SUBPROJECT)
       set_target_properties(test_extra_hex_base64_base58 PROPERTIES
         CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
     endif()
+    add_executable(test_extra_doubtless_positioning extra/doubtless_positioning.c++)
+    target_include_directories(test_extra_doubtless_positioning PRIVATE "${PROJECT_SOURCE_DIR}")
+    target_link_libraries(test_extra_doubtless_positioning ${TOOL_MDBX_LIB})
+    if(MDBX_CXX_STANDARD)
+      set_target_properties(test_extra_doubtless_positioning PROPERTIES
+        CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
+    endif()
   endif()
 endif()
 
@@ -180,6 +187,7 @@ else()
       add_test(NAME extra_maindb_ordinal COMMAND test_extra_maindb_ordinal)
       add_test(NAME extra_dupfixed_multiple COMMAND test_extra_dupfixed_multiple)
       add_test(NAME extra_hex_base64_base58 COMMAND test_extra_hex_base64_base58)
+      add_test(NAME extra_doubtless_positioning COMMAND test_extra_doubtless_positioning)
     endif()
   endif()
 
