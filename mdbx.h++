@@ -3079,6 +3079,14 @@ struct LIBMDBX_API_TYPE map_handle {
   };
 };
 
+using comparator = ::MDBX_cmp_func *;
+inline comparator default_comparator(key_mode mode) noexcept {
+  return ::mdbx_get_keycmp(static_cast<MDBX_db_flags_t>(mode));
+}
+inline comparator default_comparator(value_mode mode) noexcept {
+  return ::mdbx_get_keycmp(static_cast<MDBX_db_flags_t>(mode));
+}
+
 /// \brief Key-value pairs put mode.
 enum put_mode {
   insert_unique = MDBX_NOOVERWRITE, ///< Insert only unique keys.
