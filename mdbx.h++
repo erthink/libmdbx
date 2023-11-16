@@ -2410,6 +2410,55 @@ public:
         wrap_width, allocator);
   }
 
+  /// \brief Decodes hexadecimal dump from the slice content to returned buffer.
+  static buffer hex_decode(const ::mdbx::slice &source,
+                           bool ignore_spaces = false,
+                           const allocator_type &allocator = allocator_type()) {
+    return source.template hex_decode<ALLOCATOR, CAPACITY_POLICY>(ignore_spaces,
+                                                                  allocator);
+  }
+
+  /// \brief Decodes [Base58](https://en.wikipedia.org/wiki/Base58) dump
+  /// from the slice content to returned buffer.
+  static buffer
+  base58_decode(const ::mdbx::slice &source, bool ignore_spaces = false,
+                const allocator_type &allocator = allocator_type()) {
+    return source.template base58_decode<ALLOCATOR, CAPACITY_POLICY>(
+        ignore_spaces, allocator);
+  }
+
+  /// \brief Decodes [Base64](https://en.wikipedia.org/wiki/Base64) dump
+  /// from the slice content to returned buffer.
+  static buffer
+  base64_decode(const ::mdbx::slice &source, bool ignore_spaces = false,
+                const allocator_type &allocator = allocator_type()) {
+    return source.template base64_decode<ALLOCATOR, CAPACITY_POLICY>(
+        ignore_spaces, allocator);
+  }
+
+  /// \brief Decodes hexadecimal dump
+  /// from the buffer content to new returned buffer.
+  buffer hex_decode(bool ignore_spaces = false,
+                    const allocator_type &allocator = allocator_type()) const {
+    return hex_decode(slice(), ignore_spaces, allocator);
+  }
+
+  /// \brief Decodes [Base58](https://en.wikipedia.org/wiki/Base58) dump
+  /// from the buffer content to new returned buffer.
+  buffer
+  base58_decode(bool ignore_spaces = false,
+                const allocator_type &allocator = allocator_type()) const {
+    return base58_decode(slice(), ignore_spaces, allocator);
+  }
+
+  /// \brief Decodes [Base64](https://en.wikipedia.org/wiki/Base64) dump
+  /// from the buffer content to new returned buffer.
+  buffer
+  base64_decode(bool ignore_spaces = false,
+                const allocator_type &allocator = allocator_type()) const {
+    return base64_decode(slice(), ignore_spaces, allocator);
+  }
+
   /// \brief Reserves storage space.
   void reserve(size_t wanna_headroom, size_t wanna_tailroom) {
     wanna_headroom = ::std::min(::std::max(headroom(), wanna_headroom),
