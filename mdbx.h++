@@ -2339,6 +2339,77 @@ public:
     return slice_.as_pod<POD>();
   }
 
+  /// \brief Returns a new buffer with a hexadecimal dump of the slice content.
+  static buffer hex(const ::mdbx::slice &source, bool uppercase = false,
+                    unsigned wrap_width = 0,
+                    const allocator_type &allocator = allocator_type()) {
+    return source.template encode_hex<ALLOCATOR, CAPACITY_POLICY>(
+        uppercase, wrap_width, allocator);
+  }
+
+  /// \brief Returns a new buffer with a
+  /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of the slice content.
+  static buffer base58(const ::mdbx::slice &source, unsigned wrap_width = 0,
+                       const allocator_type &allocator = allocator_type()) {
+    return source.template encode_base58<ALLOCATOR, CAPACITY_POLICY>(wrap_width,
+                                                                     allocator);
+  }
+  /// \brief Returns a new buffer with a
+  /// [Base64](https://en.wikipedia.org/wiki/Base64) dump of the slice content.
+  static buffer base64(const ::mdbx::slice &source, unsigned wrap_width = 0,
+                       const allocator_type &allocator = allocator_type()) {
+    return source.template encode_base64<ALLOCATOR, CAPACITY_POLICY>(wrap_width,
+                                                                     allocator);
+  }
+
+  /// \brief Returns a new buffer with a hexadecimal dump of the given pod.
+  template <typename POD>
+  static buffer hex(const POD &pod, bool uppercase = false,
+                    unsigned wrap_width = 0,
+                    const allocator_type &allocator = allocator_type()) {
+    return hex(mdbx::slice::wrap(pod), uppercase, wrap_width, allocator);
+  }
+
+  /// \brief Returns a new buffer with a
+  /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of the given pod.
+  template <typename POD>
+  static buffer base58(const POD &pod, unsigned wrap_width = 0,
+                       const allocator_type &allocator = allocator_type()) {
+    return base58(mdbx::slice::wrap(pod), wrap_width, allocator);
+  }
+
+  /// \brief Returns a new buffer with a
+  /// [Base64](https://en.wikipedia.org/wiki/Base64) dump of the given pod.
+  template <typename POD>
+  static buffer base64(const POD &pod, unsigned wrap_width = 0,
+                       const allocator_type &allocator = allocator_type()) {
+    return base64(mdbx::slice::wrap(pod), wrap_width, allocator);
+  }
+
+  /// \brief Returns a new buffer with a hexadecimal dump of the slice content.
+  buffer encode_hex(bool uppercase = false, unsigned wrap_width = 0,
+                    const allocator_type &allocator = allocator_type()) const {
+    return slice().template encode_hex<ALLOCATOR, CAPACITY_POLICY>(
+        uppercase, wrap_width, allocator);
+  }
+
+  /// \brief Returns a new buffer with a
+  /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of the slice content.
+  buffer
+  encode_base58(unsigned wrap_width = 0,
+                const allocator_type &allocator = allocator_type()) const {
+    return slice().template encode_base58<ALLOCATOR, CAPACITY_POLICY>(
+        wrap_width, allocator);
+  }
+  /// \brief Returns a new buffer with a
+  /// [Base64](https://en.wikipedia.org/wiki/Base64) dump of the slice content.
+  buffer
+  encode_base64(unsigned wrap_width = 0,
+                const allocator_type &allocator = allocator_type()) const {
+    return slice().template encode_base64<ALLOCATOR, CAPACITY_POLICY>(
+        wrap_width, allocator);
+  }
+
   /// \brief Reserves storage space.
   void reserve(size_t wanna_headroom, size_t wanna_tailroom) {
     wanna_headroom = ::std::min(::std::max(headroom(), wanna_headroom),
