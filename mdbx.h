@@ -2352,7 +2352,6 @@ LIBMDBX_API int mdbx_env_get_option(const MDBX_env *env,
  *                            doesn't exist.
  * \retval MDBX_EACCES        The user didn't have permission to access
  *                            the environment files.
- * \retval MDBX_EAGAIN        The environment was locked by another process.
  * \retval MDBX_BUSY          The \ref MDBX_EXCLUSIVE flag was specified and the
  *                            environment is in use by another process,
  *                            or the current process tries to open environment

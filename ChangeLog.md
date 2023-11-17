@@ -36,6 +36,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
  - Добавление в C++ API забытого исключения `mdbx::duplicated_lck_file`.
  - Обновление патча для старых версий buildroot.
  - Использование в API `const MDBX_txn` где это возможно.
+ - Удаление устаревшего упоминания `MDBX_EAGAIN`.
 
 
 --------------------------------------------------------------------------------
