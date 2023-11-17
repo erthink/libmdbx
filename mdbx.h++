@@ -3573,7 +3573,7 @@ public:
   inline void *get_context() const noexcept;
 
   /// \brief Sets the application context associated with the environment.
-  inline env &set_context(void *);
+  inline env &set_context(void *your_context);
 
   /// \brief Sets threshold to force flush the data buffers to disk, for
   /// non-sync durability modes.
@@ -3931,6 +3931,12 @@ public:
   /// \brief Return the transaction's ID.
   inline uint64_t id() const;
 
+  /// \brief Returns the application context associated with the transaction.
+  inline void *get_context() const noexcept;
+
+  /// \brief Sets the application context associated with the transaction.
+  inline txn &set_context(void *your_context);
+
   /// \brief Checks whether the given data is on a dirty page.
   inline bool is_dirty(const void *ptr) const;
 
@@ -4260,6 +4266,12 @@ public:
                                               const cursor &b) noexcept;
   friend MDBX_CXX11_CONSTEXPR bool operator!=(const cursor &a,
                                               const cursor &b) noexcept;
+
+  /// \brief Returns the application context associated with the cursor.
+  inline void *get_context() const noexcept;
+
+  /// \brief Sets the application context associated with the cursor.
+  inline cursor &set_context(void *your_context);
 
   enum move_operation {
     first = MDBX_FIRST,
@@ -5564,6 +5576,15 @@ MDBX_CXX11_CONSTEXPR bool operator!=(const txn &a, const txn &b) noexcept {
   return a.handle_ != b.handle_;
 }
 
+inline void *txn::get_context() const noexcept {
+  return mdbx_txn_get_userctx(handle_);
+}
+
+inline txn &txn::set_context(void *ptr) {
+  error::success_or_throw(::mdbx_txn_set_userctx(handle_, ptr));
+  return *this;
+}
+
 inline bool txn::is_dirty(const void *ptr) const {
   int err = ::mdbx_is_dirty(handle_, ptr);
   switch (err) {
@@ -6042,6 +6063,15 @@ inline cursor_managed cursor::clone(void *your_context) const {
   cursor_managed clone(your_context);
   error::success_or_throw(::mdbx_cursor_copy(handle_, clone.handle_));
   return clone;
+}
+
+inline void *cursor::get_context() const noexcept {
+  return mdbx_cursor_get_userctx(handle_);
+}
+
+inline cursor &cursor::set_context(void *ptr) {
+  error::success_or_throw(::mdbx_cursor_set_userctx(handle_, ptr));
+  return *this;
 }
 
 inline cursor &cursor::operator=(cursor &&other) noexcept {
