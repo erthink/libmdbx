@@ -567,6 +567,7 @@ MDBX_DECLARE_EXCEPTION(dangling_map_id);
 [[noreturn]] LIBMDBX_API void throw_out_range();
 [[noreturn]] LIBMDBX_API void throw_allocators_mismatch();
 [[noreturn]] LIBMDBX_API void throw_bad_value_size();
+[[noreturn]] LIBMDBX_API void throw_incomparable_cursors();
 static MDBX_CXX14_CONSTEXPR size_t check_length(size_t bytes);
 static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom,
                                                 size_t payload);
@@ -4339,6 +4340,34 @@ public:
   friend MDBX_CXX11_CONSTEXPR bool operator!=(const cursor &a,
                                               const cursor &b) noexcept;
 
+  friend inline int compare_position_nothrow(const cursor &left,
+                                             const cursor &right,
+                                             bool ignore_nested) noexcept;
+  friend inline int compare_position(const cursor &left, const cursor &right,
+                                     bool ignore_nested);
+
+  bool is_before_than(const cursor &other, bool ignore_nested = false) const {
+    return compare_position(*this, other, ignore_nested) < 0;
+  }
+
+  bool is_same_or_before_than(const cursor &other,
+                              bool ignore_nested = false) const {
+    return compare_position(*this, other, ignore_nested) <= 0;
+  }
+
+  bool is_same_position(const cursor &other, bool ignore_nested = false) const {
+    return compare_position(*this, other, ignore_nested) == 0;
+  }
+
+  bool is_after_than(const cursor &other, bool ignore_nested = false) const {
+    return compare_position(*this, other, ignore_nested) > 0;
+  }
+
+  bool is_same_or_after_than(const cursor &other,
+                             bool ignore_nested = false) const {
+    return compare_position(*this, other, ignore_nested) >= 0;
+  }
+
   /// \brief Returns the application context associated with the cursor.
   inline void *get_context() const noexcept;
 
@@ -6190,6 +6219,21 @@ MDBX_CXX11_CONSTEXPR bool operator==(const cursor &a,
 MDBX_CXX11_CONSTEXPR bool operator!=(const cursor &a,
                                      const cursor &b) noexcept {
   return a.handle_ != b.handle_;
+}
+
+inline int compare_position_nothrow(const cursor &left, const cursor &right,
+                                    bool ignore_nested = false) noexcept {
+  return mdbx_cursor_compare(left.handle_, right.handle_, ignore_nested);
+}
+
+inline int compare_position(const cursor &left, const cursor &right,
+                            bool ignore_nested = false) {
+  const auto diff = compare_position_nothrow(left, right, ignore_nested);
+  assert(compare_position_nothrow(right, left, ignore_nested) == -diff);
+  if (MDBX_LIKELY(int16_t(diff) == diff))
+    MDBX_CXX20_LIKELY
+  return int(diff);
+  throw_incomparable_cursors();
 }
 
 inline cursor::move_result::move_result(const cursor &cursor,

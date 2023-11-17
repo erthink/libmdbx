@@ -233,6 +233,11 @@ namespace mdbx {
       "into an incompatible memory allocation scheme.");
 }
 
+[[noreturn]] __cold void throw_incomparable_cursors() {
+  throw std::logic_error(
+      "mdbx:: incomparable and/or invalid cursors to compare positions.");
+}
+
 [[noreturn]] __cold void throw_bad_value_size() {
   throw bad_value_size(MDBX_BAD_VALSIZE);
 }
