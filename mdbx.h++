@@ -2340,6 +2340,22 @@ public:
     return slice_.as_pod<POD>();
   }
 
+#ifdef MDBX_U128_TYPE
+  MDBX_U128_TYPE as_uint128() const { return slice().as_uint128(); }
+#endif /* MDBX_U128_TYPE */
+  uint64_t as_uint64() const { return slice().as_uint64(); }
+  uint32_t as_uint32() const { return slice().as_uint32(); }
+  uint16_t as_uint16() const { return slice().as_uint16(); }
+  uint8_t as_uint8() const { return slice().as_uint8(); }
+
+#ifdef MDBX_I128_TYPE
+  MDBX_I128_TYPE as_int128() const { return slice().as_int128(); }
+#endif /* MDBX_I128_TYPE */
+  int64_t as_int64() const { return slice().as_int64(); }
+  int32_t as_int32() const { return slice().as_int32(); }
+  int16_t as_int16() const { return slice().as_int16(); }
+  int8_t as_int8() const { return slice().as_int8(); }
+
   /// \brief Returns a new buffer with a hexadecimal dump of the slice content.
   static buffer hex(const ::mdbx::slice &source, bool uppercase = false,
                     unsigned wrap_width = 0,
