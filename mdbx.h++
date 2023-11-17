@@ -1058,20 +1058,40 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   }
 
 #ifdef MDBX_U128_TYPE
-  MDBX_U128_TYPE as_uint128() const;
+  MDBX_CXX14_CONSTEXPR MDBX_U128_TYPE as_uint128() const {
+    return as_pod<MDBX_U128_TYPE>();
+  }
 #endif /* MDBX_U128_TYPE */
-  uint64_t as_uint64() const;
-  uint32_t as_uint32() const;
-  uint16_t as_uint16() const;
-  uint8_t as_uint8() const;
+  MDBX_CXX14_CONSTEXPR uint64_t as_uint64() const { return as_pod<uint64_t>(); }
+  MDBX_CXX14_CONSTEXPR uint32_t as_uint32() const { return as_pod<uint32_t>(); }
+  MDBX_CXX14_CONSTEXPR uint16_t as_uint16() const { return as_pod<uint16_t>(); }
+  MDBX_CXX14_CONSTEXPR uint8_t as_uint8() const { return as_pod<uint8_t>(); }
 
 #ifdef MDBX_I128_TYPE
-  MDBX_I128_TYPE as_int128() const;
+  MDBX_CXX14_CONSTEXPR MDBX_I128_TYPE as_int128() const {
+    return as_pod<MDBX_I128_TYPE>();
+  }
 #endif /* MDBX_I128_TYPE */
-  int64_t as_int64() const;
-  int32_t as_int32() const;
-  int16_t as_int16() const;
-  int8_t as_int8() const;
+  MDBX_CXX14_CONSTEXPR int64_t as_int64() const { return as_pod<int64_t>(); }
+  MDBX_CXX14_CONSTEXPR int32_t as_int32() const { return as_pod<int32_t>(); }
+  MDBX_CXX14_CONSTEXPR int16_t as_int16() const { return as_pod<int16_t>(); }
+  MDBX_CXX14_CONSTEXPR int8_t as_int8() const { return as_pod<int8_t>(); }
+
+#ifdef MDBX_U128_TYPE
+  MDBX_U128_TYPE as_uint128_adapt() const;
+#endif /* MDBX_U128_TYPE */
+  uint64_t as_uint64_adapt() const;
+  uint32_t as_uint32_adapt() const;
+  uint16_t as_uint16_adapt() const;
+  uint8_t as_uint8_adapt() const;
+
+#ifdef MDBX_I128_TYPE
+  MDBX_I128_TYPE as_int128_adapt() const;
+#endif /* MDBX_I128_TYPE */
+  int64_t as_int64_adapt() const;
+  int32_t as_int32_adapt() const;
+  int16_t as_int16_adapt() const;
+  int8_t as_int8_adapt() const;
 
 protected:
   MDBX_CXX11_CONSTEXPR slice(size_t invalid_length) noexcept
@@ -2341,20 +2361,46 @@ public:
   }
 
 #ifdef MDBX_U128_TYPE
-  MDBX_U128_TYPE as_uint128() const { return slice().as_uint128(); }
+  MDBX_CXX14_CONSTEXPR MDBX_U128_TYPE as_uint128() const {
+    return slice().as_uint128();
+  }
 #endif /* MDBX_U128_TYPE */
-  uint64_t as_uint64() const { return slice().as_uint64(); }
-  uint32_t as_uint32() const { return slice().as_uint32(); }
-  uint16_t as_uint16() const { return slice().as_uint16(); }
-  uint8_t as_uint8() const { return slice().as_uint8(); }
+  MDBX_CXX14_CONSTEXPR uint64_t as_uint64() const {
+    return slice().as_uint64();
+  }
+  MDBX_CXX14_CONSTEXPR uint32_t as_uint32() const {
+    return slice().as_uint32();
+  }
+  MDBX_CXX14_CONSTEXPR uint16_t as_uint16() const {
+    return slice().as_uint16();
+  }
+  MDBX_CXX14_CONSTEXPR uint8_t as_uint8() const { return slice().as_uint8(); }
 
 #ifdef MDBX_I128_TYPE
-  MDBX_I128_TYPE as_int128() const { return slice().as_int128(); }
+  MDBX_CXX14_CONSTEXPR MDBX_I128_TYPE as_int128() const {
+    return slice().as_int128();
+  }
 #endif /* MDBX_I128_TYPE */
-  int64_t as_int64() const { return slice().as_int64(); }
-  int32_t as_int32() const { return slice().as_int32(); }
-  int16_t as_int16() const { return slice().as_int16(); }
-  int8_t as_int8() const { return slice().as_int8(); }
+  MDBX_CXX14_CONSTEXPR int64_t as_int64() const { return slice().as_int64(); }
+  MDBX_CXX14_CONSTEXPR int32_t as_int32() const { return slice().as_int32(); }
+  MDBX_CXX14_CONSTEXPR int16_t as_int16() const { return slice().as_int16(); }
+  MDBX_CXX14_CONSTEXPR int8_t as_int8() const { return slice().as_int8(); }
+
+#ifdef MDBX_U128_TYPE
+  MDBX_U128_TYPE as_uint128_adapt() const { return slice().as_uint128_adapt(); }
+#endif /* MDBX_U128_TYPE */
+  uint64_t as_uint64_adapt() const { return slice().as_uint64_adapt(); }
+  uint32_t as_uint32_adapt() const { return slice().as_uint32_adapt(); }
+  uint16_t as_uint16_adapt() const { return slice().as_uint16_adapt(); }
+  uint8_t as_uint8_adapt() const { return slice().as_uint8_adapt(); }
+
+#ifdef MDBX_I128_TYPE
+  MDBX_I128_TYPE as_int128_adapt() const { return slice().as_int128_adapt(); }
+#endif /* MDBX_I128_TYPE */
+  int64_t as_int64_adapt() const { return slice().as_int64_adapt(); }
+  int32_t as_int32_adapt() const { return slice().as_int32_adapt(); }
+  int16_t as_int16_adapt() const { return slice().as_int16_adapt(); }
+  int8_t as_int8_adapt() const { return slice().as_int8_adapt(); }
 
   /// \brief Returns a new buffer with a hexadecimal dump of the slice content.
   static buffer hex(const ::mdbx::slice &source, bool uppercase = false,
