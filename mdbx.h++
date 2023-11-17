@@ -4467,6 +4467,8 @@ public:
   inline bool eof() const;
   inline bool on_first() const;
   inline bool on_last() const;
+  inline bool on_first_multival() const;
+  inline bool on_last_multival() const;
   inline estimate_result estimate(const slice &key, const slice &value) const;
   inline estimate_result estimate(const slice &key) const;
   inline estimate_result estimate(move_operation operation) const;
@@ -6394,6 +6396,14 @@ inline bool cursor::on_first() const {
 
 inline bool cursor::on_last() const {
   return error::boolean_or_throw(::mdbx_cursor_on_last(*this));
+}
+
+inline bool cursor::on_first_multival() const {
+  return error::boolean_or_throw(::mdbx_cursor_on_first_dup(*this));
+}
+
+inline bool cursor::on_last_multival() const {
+  return error::boolean_or_throw(::mdbx_cursor_on_last_dup(*this));
 }
 
 inline cursor::estimate_result cursor::estimate(const slice &key,

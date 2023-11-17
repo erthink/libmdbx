@@ -5138,6 +5138,10 @@ mdbx_cursor_eof(const MDBX_cursor *cursor);
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_cursor_on_first(const MDBX_cursor *cursor);
 
+/** FIXME */
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
+mdbx_cursor_on_first_dup(const MDBX_cursor *cursor);
+
 /** \brief Determines whether the cursor is pointed to the last key-value pair
  * or not.
  * \ingroup c_cursors
@@ -5151,6 +5155,10 @@ mdbx_cursor_on_first(const MDBX_cursor *cursor);
  * \retval Otherwise the error code */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_cursor_on_last(const MDBX_cursor *cursor);
+
+/** FIXME */
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
+mdbx_cursor_on_last_dup(const MDBX_cursor *cursor);
 
 /** \addtogroup c_rqest
  * \details \note The estimation result varies greatly depending on the filling

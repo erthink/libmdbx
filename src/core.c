@@ -24533,6 +24533,29 @@ int mdbx_cursor_on_first(const MDBX_cursor *mc) {
   return MDBX_RESULT_TRUE;
 }
 
+int mdbx_cursor_on_first_dup(const MDBX_cursor *mc) {
+  if (unlikely(mc == NULL))
+    return MDBX_EINVAL;
+
+  if (unlikely(mc->mc_signature != MDBX_MC_LIVE))
+    return (mc->mc_signature == MDBX_MC_READY4CLOSE) ? MDBX_EINVAL
+                                                     : MDBX_EBADSIGN;
+
+  if (!(mc->mc_flags & C_INITIALIZED))
+    return mc->mc_db->md_entries ? MDBX_RESULT_FALSE : MDBX_RESULT_TRUE;
+
+  if (!mc->mc_xcursor)
+    return MDBX_RESULT_TRUE;
+
+  mc = &mc->mc_xcursor->mx_cursor;
+  for (size_t i = 0; i < mc->mc_snum; ++i) {
+    if (mc->mc_ki[i])
+      return MDBX_RESULT_FALSE;
+  }
+
+  return MDBX_RESULT_TRUE;
+}
+
 int mdbx_cursor_on_last(const MDBX_cursor *mc) {
   if (unlikely(mc == NULL))
     return MDBX_EINVAL;
@@ -24544,6 +24567,30 @@ int mdbx_cursor_on_last(const MDBX_cursor *mc) {
   if (!(mc->mc_flags & C_INITIALIZED))
     return mc->mc_db->md_entries ? MDBX_RESULT_FALSE : MDBX_RESULT_TRUE;
 
+  for (size_t i = 0; i < mc->mc_snum; ++i) {
+    size_t nkeys = page_numkeys(mc->mc_pg[i]);
+    if (mc->mc_ki[i] < nkeys - 1)
+      return MDBX_RESULT_FALSE;
+  }
+
+  return MDBX_RESULT_TRUE;
+}
+
+int mdbx_cursor_on_last_dup(const MDBX_cursor *mc) {
+  if (unlikely(mc == NULL))
+    return MDBX_EINVAL;
+
+  if (unlikely(mc->mc_signature != MDBX_MC_LIVE))
+    return (mc->mc_signature == MDBX_MC_READY4CLOSE) ? MDBX_EINVAL
+                                                     : MDBX_EBADSIGN;
+
+  if (!(mc->mc_flags & C_INITIALIZED))
+    return mc->mc_db->md_entries ? MDBX_RESULT_FALSE : MDBX_RESULT_TRUE;
+
+  if (!mc->mc_xcursor)
+    return MDBX_RESULT_TRUE;
+
+  mc = &mc->mc_xcursor->mx_cursor;
   for (size_t i = 0; i < mc->mc_snum; ++i) {
     size_t nkeys = page_numkeys(mc->mc_pg[i]);
     if (mc->mc_ki[i] < nkeys - 1)
