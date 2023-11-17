@@ -4252,6 +4252,7 @@ public:
   inline cursor &operator=(cursor &&other) noexcept;
   inline cursor(cursor &&other) noexcept;
   inline ~cursor() noexcept;
+  inline cursor_managed clone(void *your_context = nullptr) const;
   MDBX_CXX14_CONSTEXPR operator bool() const noexcept;
   MDBX_CXX14_CONSTEXPR operator const MDBX_cursor *() const;
   MDBX_CXX14_CONSTEXPR operator MDBX_cursor *();
@@ -4420,7 +4421,8 @@ class LIBMDBX_API_TYPE cursor_managed : public cursor {
 
 public:
   /// \brief Creates a new managed cursor with underlying object.
-  cursor_managed() : cursor_managed(::mdbx_cursor_create(nullptr)) {
+  cursor_managed(void *your_context = nullptr)
+      : cursor_managed(::mdbx_cursor_create(your_context)) {
     if (MDBX_UNLIKELY(!handle_))
       MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_ENOMEM);
   }
@@ -6035,6 +6037,12 @@ inline ptrdiff_t txn::estimate_to_last(map_handle map,
 //------------------------------------------------------------------------------
 
 MDBX_CXX11_CONSTEXPR cursor::cursor(MDBX_cursor *ptr) noexcept : handle_(ptr) {}
+
+inline cursor_managed cursor::clone(void *your_context) const {
+  cursor_managed clone(your_context);
+  error::success_or_throw(::mdbx_cursor_copy(handle_, clone.handle_));
+  return clone;
+}
 
 inline cursor &cursor::operator=(cursor &&other) noexcept {
   handle_ = other.handle_;
