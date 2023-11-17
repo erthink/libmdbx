@@ -4891,6 +4891,11 @@ LIBMDBX_API MDBX_dbi mdbx_cursor_dbi(const MDBX_cursor *cursor);
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_cursor_copy(const MDBX_cursor *src, MDBX_cursor *dest);
 
+/** FIXME */
+LIBMDBX_API int mdbx_cursor_compare(const MDBX_cursor *left,
+                                    const MDBX_cursor *right,
+                                    bool ignore_nested);
+
 /** \brief Retrieve by cursor.
  * \ingroup c_crud
  *

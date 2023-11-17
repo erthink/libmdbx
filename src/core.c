@@ -19355,6 +19355,83 @@ int mdbx_cursor_renew(const MDBX_txn *txn, MDBX_cursor *mc) {
   return likely(mc) ? mdbx_cursor_bind(txn, mc, mc->mc_dbi) : MDBX_EINVAL;
 }
 
+int mdbx_cursor_compare(const MDBX_cursor *l, const MDBX_cursor *r,
+                        bool ignore_nested) {
+  const int incomparable = INT16_MAX + 1;
+  if (unlikely(!l))
+    return r ? -incomparable * 9 : 0;
+  if (unlikely(!r))
+    return l ? incomparable * 9 : 0;
+
+  if (unlikely(l->mc_signature != MDBX_MC_LIVE))
+    return (r->mc_signature == MDBX_MC_LIVE) ? -incomparable * 8 : 0;
+  if (unlikely(r->mc_signature != MDBX_MC_LIVE))
+    return (l->mc_signature == MDBX_MC_LIVE) ? incomparable * 8 : 0;
+
+  if (unlikely(l->mc_dbx != r->mc_dbx)) {
+    if (l->mc_txn->mt_env != r->mc_txn->mt_env)
+      return (l->mc_txn->mt_env > r->mc_txn->mt_env) ? incomparable * 7
+                                                     : -incomparable * 7;
+    if (l->mc_txn->mt_txnid != r->mc_txn->mt_txnid)
+      return (l->mc_txn->mt_txnid > r->mc_txn->mt_txnid) ? incomparable * 6
+                                                         : -incomparable * 6;
+    return (l->mc_dbx > r->mc_dbx) ? incomparable * 5 : -incomparable * 5;
+  }
+  assert(l->mc_dbi == r->mc_dbi);
+
+  int diff = (l->mc_flags & C_INITIALIZED) - (l->mc_flags & C_INITIALIZED);
+  if (unlikely(diff))
+    return (diff > 0) ? incomparable * 4 : -incomparable * 4;
+  if (unlikely((l->mc_flags & C_INITIALIZED) == 0))
+    return 0;
+
+  size_t detent = (l->mc_snum <= r->mc_snum) ? l->mc_snum : r->mc_snum;
+  for (size_t i = 0; i < detent; ++i) {
+    diff = l->mc_ki[i] - r->mc_ki[i];
+    if (diff)
+      return diff;
+  }
+  if (unlikely(l->mc_snum != r->mc_snum))
+    return (l->mc_snum > r->mc_snum) ? incomparable * 3 : -incomparable * 3;
+
+  assert((l->mc_xcursor != nullptr) == (r->mc_xcursor != nullptr));
+  if (unlikely((l->mc_xcursor != nullptr) != (r->mc_xcursor != nullptr)))
+    return l->mc_xcursor ? incomparable * 2 : -incomparable * 2;
+  if (ignore_nested || !l->mc_xcursor)
+    return 0;
+
+#if MDBX_DEBUG
+  if (l->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) {
+    const MDBX_page *mp = l->mc_pg[l->mc_top];
+    const MDBX_node *node = page_node(mp, l->mc_ki[l->mc_top]);
+    assert(node_flags(node) & F_DUPDATA);
+  }
+  if (l->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) {
+    const MDBX_page *mp = r->mc_pg[r->mc_top];
+    const MDBX_node *node = page_node(mp, r->mc_ki[r->mc_top]);
+    assert(node_flags(node) & F_DUPDATA);
+  }
+#endif /* MDBX_DEBUG */
+
+  l = &l->mc_xcursor->mx_cursor;
+  r = &r->mc_xcursor->mx_cursor;
+  diff = (l->mc_flags & C_INITIALIZED) - (l->mc_flags & C_INITIALIZED);
+  if (unlikely(diff))
+    return (diff > 0) ? incomparable * 2 : -incomparable * 2;
+  if (unlikely((l->mc_flags & C_INITIALIZED) == 0))
+    return 0;
+
+  detent = (l->mc_snum <= r->mc_snum) ? l->mc_snum : r->mc_snum;
+  for (size_t i = 0; i < detent; ++i) {
+    diff = l->mc_ki[i] - r->mc_ki[i];
+    if (diff)
+      return diff;
+  }
+  if (unlikely(l->mc_snum != r->mc_snum))
+    return (l->mc_snum > r->mc_snum) ? incomparable : -incomparable;
+  return 0;
+}
+
 int mdbx_cursor_copy(const MDBX_cursor *src, MDBX_cursor *dest) {
   if (unlikely(!src))
     return MDBX_EINVAL;
