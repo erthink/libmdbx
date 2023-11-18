@@ -4929,6 +4929,14 @@ LIBMDBX_API int mdbx_cursor_compare(const MDBX_cursor *left,
  * \retval MDBX_EINVAL    An invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_get(MDBX_cursor *cursor, MDBX_val *key,
                                 MDBX_val *data, MDBX_cursor_op op);
+/** FIXME */
+typedef int(MDBX_predicate_func)(void *context, MDBX_val *key, MDBX_val *value,
+                                 void *arg) MDBX_CXX17_NOEXCEPT;
+/** FIXME */
+LIBMDBX_API int mdbx_cursor_scan(MDBX_cursor *cursor,
+                                 MDBX_predicate_func *predicate, void *context,
+                                 MDBX_cursor_op start_op,
+                                 MDBX_cursor_op turn_op, void *arg);
 
 /** \brief Retrieve multiple non-dupsort key/value pairs by cursor.
  * \ingroup c_crud
