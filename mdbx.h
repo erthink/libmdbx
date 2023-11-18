@@ -4938,6 +4938,13 @@ LIBMDBX_API int mdbx_cursor_scan(MDBX_cursor *cursor,
                                  MDBX_cursor_op start_op,
                                  MDBX_cursor_op turn_op, void *arg);
 
+/** FIXME */
+LIBMDBX_API int mdbx_cursor_scan_from(MDBX_cursor *cursor,
+                                      MDBX_predicate_func *predicate,
+                                      void *context, MDBX_cursor_op from_op,
+                                      MDBX_val *from_key, MDBX_val *from_value,
+                                      MDBX_cursor_op turn_op, void *arg);
+
 /** \brief Retrieve multiple non-dupsort key/value pairs by cursor.
  * \ingroup c_crud
  *

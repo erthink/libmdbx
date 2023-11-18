@@ -17466,6 +17466,50 @@ int mdbx_cursor_scan(MDBX_cursor *mc, MDBX_predicate_func *predicate,
   }
 }
 
+int mdbx_cursor_scan_from(MDBX_cursor *mc, MDBX_predicate_func *predicate,
+                          void *context, MDBX_cursor_op from_op, MDBX_val *key,
+                          MDBX_val *value, MDBX_cursor_op turn_op, void *arg) {
+  if (unlikely(!predicate))
+    return MDBX_EINVAL;
+
+  const unsigned valid_start_mask =
+      1 << MDBX_GET_BOTH | 1 << MDBX_GET_BOTH_RANGE | 1 << MDBX_SET_KEY |
+      1 << MDBX_GET_MULTIPLE | 1 << MDBX_SET_LOWERBOUND |
+      1 << MDBX_SET_UPPERBOUND;
+  ;
+  if (unlikely(from_op < MDBX_TO_KEY_LESSER_THAN &&
+               ((1 << from_op) & valid_start_mask) == 0))
+    return MDBX_EINVAL;
+
+  const unsigned valid_turn_mask =
+      1 << MDBX_NEXT | 1 << MDBX_NEXT_DUP | 1 << MDBX_NEXT_NODUP |
+      1 << MDBX_PREV | 1 << MDBX_PREV_DUP | 1 << MDBX_PREV_NODUP |
+      1 << MDBX_NEXT_MULTIPLE | 1 << MDBX_PREV_MULTIPLE;
+  if (unlikely(turn_op > 30 || ((1 << turn_op) & valid_turn_mask) == 0))
+    return MDBX_EINVAL;
+
+  int rc = mdbx_cursor_get(mc, key, value, from_op);
+  if (unlikely(MDBX_IS_ERROR(rc)))
+    return rc;
+
+  cASSERT(mc, key != nullptr);
+  MDBX_val stub;
+  if (!value) {
+    value = &stub;
+    rc = cursor_get(mc, key, value, MDBX_GET_CURRENT);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+  }
+  for (;;) {
+    rc = predicate(context, key, value, arg);
+    if (rc != MDBX_RESULT_FALSE)
+      return rc;
+    rc = cursor_get(mc, key, value, turn_op);
+    if (rc != MDBX_SUCCESS)
+      return (rc == MDBX_NOTFOUND) ? MDBX_RESULT_FALSE : rc;
+  }
+}
+
 static int cursor_first_batch(MDBX_cursor *mc) {
   if (!(mc->mc_flags & C_INITIALIZED) || mc->mc_top) {
     int err = page_search(mc, NULL, MDBX_PS_FIRST);
