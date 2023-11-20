@@ -3044,6 +3044,26 @@ struct pair {
     assert(bool(key) == bool(value));
     return key;
   }
+
+  /// \brief Three-way fast non-lexicographically length-based comparison.
+  MDBX_NOTHROW_PURE_FUNCTION static MDBX_CXX14_CONSTEXPR intptr_t
+  compare_fast(const pair &a, const pair &b) noexcept;
+
+  /// \brief Three-way lexicographically comparison.
+  MDBX_NOTHROW_PURE_FUNCTION static MDBX_CXX14_CONSTEXPR intptr_t
+  compare_lexicographically(const pair &a, const pair &b) noexcept;
+  friend MDBX_CXX14_CONSTEXPR bool operator==(const pair &a,
+                                              const pair &b) noexcept;
+  friend MDBX_CXX14_CONSTEXPR bool operator<(const pair &a,
+                                             const pair &b) noexcept;
+  friend MDBX_CXX14_CONSTEXPR bool operator>(const pair &a,
+                                             const pair &b) noexcept;
+  friend MDBX_CXX14_CONSTEXPR bool operator<=(const pair &a,
+                                              const pair &b) noexcept;
+  friend MDBX_CXX14_CONSTEXPR bool operator>=(const pair &a,
+                                              const pair &b) noexcept;
+  friend MDBX_CXX14_CONSTEXPR bool operator!=(const pair &a,
+                                              const pair &b) noexcept;
 };
 
 /// \brief Combines pair of slices for key and value with boolean flag to
@@ -5406,6 +5426,56 @@ slice::is_base58(bool ignore_spaces) const noexcept {
 inline MDBX_NOTHROW_PURE_FUNCTION bool
 slice::is_base64(bool ignore_spaces) const noexcept {
   return !from_base64(*this, ignore_spaces).is_erroneous();
+}
+
+//------------------------------------------------------------------------------
+
+MDBX_CXX14_CONSTEXPR intptr_t pair::compare_fast(const pair &a,
+                                                 const pair &b) noexcept {
+  const auto diff = slice::compare_fast(a.key, b.key);
+  return diff ? diff : slice::compare_fast(a.value, b.value);
+}
+
+MDBX_CXX14_CONSTEXPR intptr_t
+pair::compare_lexicographically(const pair &a, const pair &b) noexcept {
+  const auto diff = slice::compare_lexicographically(a.key, b.key);
+  return diff ? diff : slice::compare_lexicographically(a.value, b.value);
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR bool
+operator==(const pair &a, const pair &b) noexcept {
+  return a.key.length() == b.key.length() &&
+         a.value.length() == b.value.length() &&
+         memcmp(a.key.data(), b.key.data(), a.key.length()) == 0 &&
+         memcmp(a.value.data(), b.value.data(), a.value.length()) == 0;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR bool
+operator<(const pair &a, const pair &b) noexcept {
+  return pair::compare_lexicographically(a, b) < 0;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR bool
+operator>(const pair &a, const pair &b) noexcept {
+  return pair::compare_lexicographically(a, b) > 0;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR bool
+operator<=(const pair &a, const pair &b) noexcept {
+  return pair::compare_lexicographically(a, b) <= 0;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR bool
+operator>=(const pair &a, const pair &b) noexcept {
+  return pair::compare_lexicographically(a, b) >= 0;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR bool
+operator!=(const pair &a, const pair &b) noexcept {
+  return a.key.length() != b.key.length() ||
+         a.value.length() != b.value.length() ||
+         memcmp(a.key.data(), b.key.data(), a.key.length()) != 0 ||
+         memcmp(a.value.data(), b.value.data(), a.value.length()) != 0;
 }
 
 //------------------------------------------------------------------------------
