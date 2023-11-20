@@ -4457,6 +4457,89 @@ protected:
                             MDBX_val *value) const;
 
 public:
+  template <typename CALLABLE_PREDICATE>
+  bool scan(CALLABLE_PREDICATE predicate, move_operation start = first,
+            move_operation turn = next) {
+    struct wrapper : public exception_thunk {
+      static int probe(void *context, MDBX_val *key, MDBX_val *value,
+                       void *arg) noexcept {
+        auto thunk = static_cast<wrapper *>(context);
+        assert(thunk->is_clean());
+        auto &predicate = *static_cast<CALLABLE_PREDICATE *>(arg);
+        try {
+          return predicate(pair(*key, *value)) ? MDBX_RESULT_TRUE
+                                               : MDBX_RESULT_FALSE;
+        } catch (... /* capture any exception to rethrow it over C code */) {
+          thunk->capture();
+          return MDBX_RESULT_TRUE;
+        }
+      }
+    } thunk;
+    return error::boolean_or_throw(
+        ::mdbx_cursor_scan(handle_, wrapper::probe, &thunk,
+                           MDBX_cursor_op(start), MDBX_cursor_op(turn),
+                           &predicate),
+        thunk);
+  }
+
+  template <typename CALLABLE_PREDICATE>
+  bool fullscan(CALLABLE_PREDICATE predicate, bool backward = false) {
+    return scan(std::move(predicate), backward ? last : first,
+                backward ? previous : next);
+  }
+
+  template <typename CALLABLE_PREDICATE>
+  bool scan_from(CALLABLE_PREDICATE predicate, slice &from,
+                 move_operation start = key_greater_or_equal,
+                 move_operation turn = next) {
+    struct wrapper : public exception_thunk {
+      static int probe(void *context, MDBX_val *key, MDBX_val *value,
+                       void *arg) noexcept {
+        auto thunk = static_cast<wrapper *>(context);
+        assert(thunk->is_clean());
+        auto &predicate = *static_cast<CALLABLE_PREDICATE *>(arg);
+        try {
+          return predicate(pair(*key, *value)) ? MDBX_RESULT_TRUE
+                                               : MDBX_RESULT_FALSE;
+        } catch (... /* capture any exception to rethrow it over C code */) {
+          thunk->capture();
+          return MDBX_RESULT_TRUE;
+        }
+      }
+    } thunk;
+    return error::boolean_or_throw(
+        ::mdbx_cursor_scan_from(handle_, wrapper::probe, &thunk,
+                                MDBX_cursor_op(start), &from, nullptr,
+                                MDBX_cursor_op(turn), &predicate),
+        thunk);
+  }
+
+  template <typename CALLABLE_PREDICATE>
+  bool scan_from(CALLABLE_PREDICATE predicate, pair &from,
+                 move_operation start = pair_greater_or_equal,
+                 move_operation turn = next) {
+    struct wrapper : public exception_thunk {
+      static int probe(void *context, MDBX_val *key, MDBX_val *value,
+                       void *arg) noexcept {
+        auto thunk = static_cast<wrapper *>(context);
+        assert(thunk->is_clean());
+        auto &predicate = *static_cast<CALLABLE_PREDICATE *>(arg);
+        try {
+          return predicate(pair(*key, *value)) ? MDBX_RESULT_TRUE
+                                               : MDBX_RESULT_FALSE;
+        } catch (... /* capture any exception to rethrow it over C code */) {
+          thunk->capture();
+          return MDBX_RESULT_TRUE;
+        }
+      }
+    } thunk;
+    return error::boolean_or_throw(
+        ::mdbx_cursor_scan_from(handle_, wrapper::probe, &thunk,
+                                MDBX_cursor_op(start), &from.key, &from.value,
+                                MDBX_cursor_op(turn), &predicate),
+        thunk);
+  }
+
   move_result move(move_operation operation, bool throw_notfound) {
     return move_result(*this, operation, throw_notfound);
   }
