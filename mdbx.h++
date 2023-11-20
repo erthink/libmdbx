@@ -485,6 +485,7 @@ public:
   static inline void throw_on_failure(int error_code);
   static inline bool boolean_or_throw(int error_code);
   static inline void success_or_throw(int error_code, const exception_thunk &);
+  static inline bool boolean_or_throw(int error_code, const exception_thunk &);
   static inline void panic_on_failure(int error_code, const char *context_where,
                                       const char *func_who) noexcept;
   static inline void success_or_panic(int error_code, const char *context_where,
@@ -4883,7 +4884,8 @@ inline void error::success_or_throw() const {
 inline void error::success_or_throw(const exception_thunk &thunk) const {
   assert(thunk.is_clean() || code() != MDBX_SUCCESS);
   if (MDBX_UNLIKELY(!is_success())) {
-    MDBX_CXX20_UNLIKELY if (!thunk.is_clean()) thunk.rethrow_captured();
+    MDBX_CXX20_UNLIKELY if (MDBX_UNLIKELY(!thunk.is_clean()))
+        thunk.rethrow_captured();
     else throw_exception();
   }
 }
@@ -4942,6 +4944,13 @@ inline void error::success_or_panic(int error_code, const char *context_where,
                                     const char *func_who) noexcept {
   error rc(static_cast<MDBX_error_t>(error_code));
   rc.success_or_panic(context_where, func_who);
+}
+
+inline bool error::boolean_or_throw(int error_code,
+                                    const exception_thunk &thunk) {
+  if (MDBX_UNLIKELY(!thunk.is_clean()))
+    MDBX_CXX20_UNLIKELY thunk.rethrow_captured();
+  return boolean_or_throw(error_code);
 }
 
 //------------------------------------------------------------------------------
@@ -6392,6 +6401,8 @@ inline bool cursor::move(move_operation operation, MDBX_val *key,
   switch (err) {
   case MDBX_SUCCESS:
     MDBX_CXX20_LIKELY return true;
+  case MDBX_RESULT_TRUE:
+    return false;
   case MDBX_NOTFOUND:
     if (!throw_notfound)
       return false;
