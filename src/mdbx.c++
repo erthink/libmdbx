@@ -1555,6 +1555,13 @@ void txn_managed::commit(commit_latency *latency) {
     MDBX_CXX20_UNLIKELY err.throw_exception();
 }
 
+void txn_managed::commit_embark_read() {
+  auto env = this->env();
+  commit();
+  error::success_or_throw(
+      ::mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &handle_));
+}
+
 //------------------------------------------------------------------------------
 
 bool txn::drop_map(const char *name, bool throw_if_absent) {

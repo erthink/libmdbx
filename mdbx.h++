@@ -4318,6 +4318,10 @@ public:
   /// \brief Commit all the operations of a transaction into the database.
   void commit();
 
+  /// \brief Commit all the operations of a transaction into the database
+  /// and then start read transaction.
+  void commit_embark_read();
+
   using commit_latency = MDBX_commit_latency;
 
   /// \brief Commit all the operations of a transaction into the database
