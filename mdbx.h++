@@ -6593,9 +6593,9 @@ inline int compare_position(const cursor &left, const cursor &right,
   const auto diff = compare_position_nothrow(left, right, ignore_nested);
   assert(compare_position_nothrow(right, left, ignore_nested) == -diff);
   if (MDBX_LIKELY(int16_t(diff) == diff))
-    MDBX_CXX20_LIKELY
-  return int(diff);
-  throw_incomparable_cursors();
+    MDBX_CXX20_LIKELY return int(diff);
+  else
+    throw_incomparable_cursors();
 }
 
 inline cursor::move_result::move_result(const cursor &cursor,
