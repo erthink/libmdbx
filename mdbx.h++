@@ -3049,14 +3049,23 @@ struct value_result {
 /// \brief Combines pair of slices for key and value to represent result of
 /// certain operations.
 struct pair {
+  using stl_pair = std::pair<slice, slice>;
   slice key, value;
-  pair(const slice &key, const slice &value) noexcept
+  MDBX_CXX11_CONSTEXPR pair(const slice &key, const slice &value) noexcept
       : key(key), value(value) {}
+  MDBX_CXX11_CONSTEXPR pair(const stl_pair &couple) noexcept
+      : key(couple.first), value(couple.second) {}
+  MDBX_CXX11_CONSTEXPR operator stl_pair() const noexcept {
+    return stl_pair(key, value);
+  }
   pair(const pair &) noexcept = default;
   pair &operator=(const pair &) noexcept = default;
   MDBX_CXX14_CONSTEXPR operator bool() const noexcept {
     assert(bool(key) == bool(value));
     return key;
+  }
+  MDBX_CXX14_CONSTEXPR static pair invalid() noexcept {
+    return pair(slice::invalid(), slice::invalid());
   }
 
   /// \brief Three-way fast non-lexicographically length-based comparison.
@@ -3084,7 +3093,10 @@ struct pair {
 /// represent result of certain operations.
 struct pair_result : public pair {
   bool done;
-  pair_result(const slice &key, const slice &value, bool done) noexcept
+  MDBX_CXX11_CONSTEXPR pair_result() noexcept
+      : pair(pair::invalid()), done(false) {}
+  MDBX_CXX11_CONSTEXPR pair_result(const slice &key, const slice &value,
+                                   bool done) noexcept
       : pair(key, value), done(done) {}
   pair_result(const pair_result &) noexcept = default;
   pair_result &operator=(const pair_result &) noexcept = default;
@@ -6585,7 +6597,7 @@ inline int compare_position(const cursor &left, const cursor &right,
 
 inline cursor::move_result::move_result(const cursor &cursor,
                                         bool throw_notfound)
-    : pair_result(slice(), slice(), false) {
+    : pair_result() {
   done = cursor.move(get_current, &this->key, &this->value, throw_notfound);
 }
 
