@@ -362,8 +362,11 @@ using default_allocator = polymorphic_allocator;
 using default_allocator = legacy_allocator;
 #endif /* __cpp_lib_memory_resource >= 201603L */
 
+/// \brief Default buffer.
+using default_buffer = buffer<default_allocator, default_capacity_policy>;
+
 /// \brief Default single-byte string.
-template <class ALLOCATOR = legacy_allocator>
+template <class ALLOCATOR = default_allocator>
 using string = ::std::basic_string<char, ::std::char_traits<char>, ALLOCATOR>;
 
 using filehandle = ::mdbx_filehandle_t;
