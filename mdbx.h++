@@ -3119,6 +3119,26 @@ enum class key_mode {
                ///< \note Not yet implemented and PRs are welcome.
 };
 
+MDBX_CXX01_CONSTEXPR_ENUM bool is_usual(key_mode mode) noexcept {
+  return (MDBX_db_flags_t(mode) & (MDBX_REVERSEKEY | MDBX_INTEGERKEY)) == 0;
+}
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_ordinal(key_mode mode) noexcept {
+  return (MDBX_db_flags_t(mode) & MDBX_INTEGERKEY) != 0;
+}
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_samelength(key_mode mode) noexcept {
+  return (MDBX_db_flags_t(mode) & MDBX_INTEGERKEY) != 0;
+}
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_reverse(key_mode mode) noexcept {
+  return (MDBX_db_flags_t(mode) & MDBX_REVERSEKEY) != 0;
+}
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_msgpack(key_mode mode) noexcept {
+  return mode == key_mode::msgpack;
+}
+
 /// \brief Kind of the values and sorted multi-values with corresponding
 /// comparison.
 enum class value_mode {
@@ -3171,6 +3191,15 @@ enum class value_mode {
                      ///< end of the keys to the beginning. In terms of keys,
                      ///< they are not unique, i.e. has duplicates which are
                      ///< sorted by associated data values.
+#else
+  multi_reverse = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_REVERSEDUP),
+  multi_samelength = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_DUPFIXED),
+  multi_ordinal = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_DUPFIXED) |
+                  uint32_t(MDBX_INTEGERDUP),
+  multi_reverse_samelength = uint32_t(MDBX_DUPSORT) |
+                             uint32_t(MDBX_REVERSEDUP) |
+                             uint32_t(MDBX_DUPFIXED),
+#endif
   msgpack = -1 ///< A more than one data value could be associated with each
                ///< key. Values are in [MessagePack](https://msgpack.org/)
                ///< format with appropriate comparison. Internally each key is
@@ -3178,15 +3207,32 @@ enum class value_mode {
                ///< In terms of keys, they are not unique, i.e. has duplicates
                ///< which are sorted by associated data values.
                ///< \note Not yet implemented and PRs are welcome.
-#else
-  multi_reverse = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_REVERSEDUP),
-  multi_samelength = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_DUPFIXED),
-  multi_ordinal = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_DUPFIXED) |
-                  uint32_t(MDBX_INTEGERDUP),
-  multi_reverse_samelength = uint32_t(MDBX_DUPSORT) |
-                             uint32_t(MDBX_REVERSEDUP) | uint32_t(MDBX_DUPFIXED)
-#endif
 };
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_usual(value_mode mode) noexcept {
+  return (MDBX_db_flags_t(mode) & (MDBX_DUPSORT | MDBX_INTEGERDUP |
+                                   MDBX_DUPFIXED | MDBX_REVERSEDUP)) == 0;
+}
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_multi(value_mode mode) noexcept {
+  return (MDBX_db_flags_t(mode) & MDBX_DUPSORT) != 0;
+}
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_ordinal(value_mode mode) noexcept {
+  return (MDBX_db_flags_t(mode) & MDBX_INTEGERDUP) != 0;
+}
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_samelength(value_mode mode) noexcept {
+  return (MDBX_db_flags_t(mode) & MDBX_DUPFIXED) != 0;
+}
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_reverse(value_mode mode) noexcept {
+  return (MDBX_db_flags_t(mode) & MDBX_REVERSEDUP) != 0;
+}
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_msgpack(value_mode mode) noexcept {
+  return mode == value_mode::msgpack;
+}
 
 /// \brief A handle for an individual database (key-value spaces) in the
 /// environment.
