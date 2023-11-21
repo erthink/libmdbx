@@ -4301,10 +4301,12 @@ public:
   struct move_result : public pair_result {
     inline move_result(const cursor &cursor, bool throw_notfound);
     move_result(cursor &cursor, move_operation operation, bool throw_notfound)
-        : move_result(cursor, operation, slice(), slice(), throw_notfound) {}
+        : move_result(cursor, operation, slice::invalid(), slice::invalid(),
+                      throw_notfound) {}
     move_result(cursor &cursor, move_operation operation, const slice &key,
                 bool throw_notfound)
-        : move_result(cursor, operation, key, slice(), throw_notfound) {}
+        : move_result(cursor, operation, key, slice::invalid(),
+                      throw_notfound) {}
     inline move_result(cursor &cursor, move_operation operation,
                        const slice &key, const slice &value,
                        bool throw_notfound);
@@ -4315,10 +4317,11 @@ public:
   struct estimate_result : public pair {
     ptrdiff_t approximate_quantity;
     estimate_result(const cursor &cursor, move_operation operation)
-        : estimate_result(cursor, operation, slice(), slice()) {}
+        : estimate_result(cursor, operation, slice::invalid(),
+                          slice::invalid()) {}
     estimate_result(const cursor &cursor, move_operation operation,
                     const slice &key)
-        : estimate_result(cursor, operation, key, slice()) {}
+        : estimate_result(cursor, operation, key, slice::invalid()) {}
     inline estimate_result(const cursor &cursor, move_operation operation,
                            const slice &key, const slice &value);
     estimate_result(const estimate_result &) noexcept = default;
