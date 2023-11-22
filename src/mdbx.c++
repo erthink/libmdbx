@@ -607,7 +607,7 @@ char *to_hex::write_bytes(char *__restrict const dest, size_t dest_size) const {
 
   auto ptr = dest;
   auto src = source.byte_ptr();
-  const char alphabase = (uppercase ? 'A' : 'a') - 10;
+  const char alpha_shift = (uppercase ? 'A' : 'a') - '9' - 1;
   auto line = ptr;
   for (const auto end = source.end_byte_ptr(); src != end; ++src) {
     if (wrap_width && size_t(ptr - line) >= wrap_width) {
@@ -616,8 +616,8 @@ char *to_hex::write_bytes(char *__restrict const dest, size_t dest_size) const {
     }
     const int8_t hi = *src >> 4;
     const int8_t lo = *src & 15;
-    ptr[0] = char(alphabase + hi + (((hi - 10) >> 7) & -7));
-    ptr[1] = char(alphabase + lo + (((lo - 10) >> 7) & -7));
+    ptr[0] = char('0' + hi + (((9 - hi) >> 7) & alpha_shift));
+    ptr[1] = char('0' + lo + (((9 - lo) >> 7) & alpha_shift));
     ptr += 2;
     assert(ptr <= dest + dest_size);
   }
@@ -629,7 +629,7 @@ char *to_hex::write_bytes(char *__restrict const dest, size_t dest_size) const {
     MDBX_CXX20_LIKELY {
       ::std::ostream::sentry sentry(out);
       auto src = source.byte_ptr();
-      const char alphabase = (uppercase ? 'A' : 'a') - 10;
+      const char alpha_shift = (uppercase ? 'A' : 'a') - '9' - 1;
       unsigned width = 0;
       for (const auto end = source.end_byte_ptr(); src != end; ++src) {
         if (wrap_width && width >= wrap_width) {
@@ -638,8 +638,8 @@ char *to_hex::write_bytes(char *__restrict const dest, size_t dest_size) const {
         }
         const int8_t hi = *src >> 4;
         const int8_t lo = *src & 15;
-        out.put(char(alphabase + hi + (((hi - 10) >> 7) & -7)));
-        out.put(char(alphabase + lo + (((lo - 10) >> 7) & -7)));
+        out.put(char('0' + hi + (((9 - hi) >> 7) & alpha_shift)));
+        out.put(char('0' + lo + (((9 - lo) >> 7) & alpha_shift)));
         width += 2;
       }
     }
@@ -670,11 +670,11 @@ char *from_hex::write_bytes(char *__restrict const dest,
 
     int8_t hi = src[0];
     hi = (hi | 0x20) - 'a';
-    hi += 10 + ((hi >> 7) & 7);
+    hi += 10 + ((hi >> 7) & 39);
 
     int8_t lo = src[1];
     lo = (lo | 0x20) - 'a';
-    lo += 10 + ((lo >> 7) & 7);
+    lo += 10 + ((lo >> 7) & 39);
 
     *ptr++ = hi << 4 | lo;
     src += 2;
