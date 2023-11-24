@@ -85,6 +85,10 @@
 #include <experimental/filesystem>
 #endif
 
+#if defined(__cpp_lib_span) && __cpp_lib_span >= 202002L
+#include <span>
+#endif
+
 #if __cplusplus >= 201103L
 #include <chrono>
 #include <ratio>
@@ -698,6 +702,47 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   MDBX_CXX11_CONSTEXPR slice(const slice &) noexcept = default;
   MDBX_CXX14_CONSTEXPR slice(MDBX_val &&src);
   MDBX_CXX14_CONSTEXPR slice(slice &&src) noexcept;
+
+#if defined(DOXYGEN) || (defined(__cpp_lib_span) && __cpp_lib_span >= 202002L)
+  template <typename POD>
+  MDBX_CXX14_CONSTEXPR slice(const ::std::span<POD> &span)
+      : slice(span.begin(), span.end()) {
+    static_assert(::std::is_standard_layout<POD>::value &&
+                      !::std::is_pointer<POD>::value,
+                  "Must be a standard layout type!");
+  }
+
+  template <typename POD>
+  MDBX_CXX14_CONSTEXPR ::std::span<const POD> as_span() const {
+    static_assert(::std::is_standard_layout<POD>::value &&
+                      !::std::is_pointer<POD>::value,
+                  "Must be a standard layout type!");
+    if (MDBX_LIKELY(size() % sizeof(POD) == 0))
+      MDBX_CXX20_LIKELY
+    return ::std::span<const POD>(static_cast<const POD *>(data()),
+                                  size() / sizeof(POD));
+    throw_bad_value_size();
+  }
+
+  template <typename POD> MDBX_CXX14_CONSTEXPR ::std::span<POD> as_span() {
+    static_assert(::std::is_standard_layout<POD>::value &&
+                      !::std::is_pointer<POD>::value,
+                  "Must be a standard layout type!");
+    if (MDBX_LIKELY(size() % sizeof(POD) == 0))
+      MDBX_CXX20_LIKELY
+    return ::std::span<POD>(static_cast<POD *>(data()), size() / sizeof(POD));
+    throw_bad_value_size();
+  }
+
+  MDBX_CXX14_CONSTEXPR ::std::span<const byte> bytes() const {
+    return as_span<const byte>();
+  }
+  MDBX_CXX14_CONSTEXPR ::std::span<byte> bytes() { return as_span<byte>(); }
+  MDBX_CXX14_CONSTEXPR ::std::span<const char> chars() const {
+    return as_span<const char>();
+  }
+  MDBX_CXX14_CONSTEXPR ::std::span<char> chars() { return as_span<char>(); }
+#endif /* __cpp_lib_span >= 202002L */
 
 #if defined(DOXYGEN) ||                                                        \
     (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
@@ -2367,6 +2412,33 @@ public:
   MDBX_CXX11_CONSTEXPR operator const struct slice &() const noexcept {
     return slice_;
   }
+
+#if defined(DOXYGEN) || (defined(__cpp_lib_span) && __cpp_lib_span >= 202002L)
+  template <typename POD>
+  MDBX_CXX14_CONSTEXPR buffer(const ::std::span<POD> &span)
+      : buffer(span.begin(), span.end()) {
+    static_assert(::std::is_standard_layout<POD>::value &&
+                      !::std::is_pointer<POD>::value,
+                  "Must be a standard layout type!");
+  }
+
+  template <typename POD>
+  MDBX_CXX14_CONSTEXPR ::std::span<const POD> as_span() const {
+    return slice_.template as_span<const POD>();
+  }
+  template <typename POD> MDBX_CXX14_CONSTEXPR ::std::span<POD> as_span() {
+    return slice_.template as_span<POD>();
+  }
+
+  MDBX_CXX14_CONSTEXPR ::std::span<const byte> bytes() const {
+    return as_span<const byte>();
+  }
+  MDBX_CXX14_CONSTEXPR ::std::span<byte> bytes() { return as_span<byte>(); }
+  MDBX_CXX14_CONSTEXPR ::std::span<const char> chars() const {
+    return as_span<const char>();
+  }
+  MDBX_CXX14_CONSTEXPR ::std::span<char> chars() { return as_span<char>(); }
+#endif /* __cpp_lib_span >= 202002L */
 
   template <typename POD>
   static buffer wrap(const POD &pod, bool make_reference = false,
