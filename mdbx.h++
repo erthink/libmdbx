@@ -1325,8 +1325,7 @@ struct LIBMDBX_API to_base58 {
   /// \brief Returns the buffer size in bytes needed for
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of passed slice.
   MDBX_CXX11_CONSTEXPR size_t envisage_result_length() const noexcept {
-    const size_t bytes =
-        source.length() / 8 * 11 + (source.length() % 8 * 43 + 31) / 32;
+    const size_t bytes = (source.length() * 11 + 7) / 8;
     return wrap_width ? bytes + bytes / wrap_width : bytes;
   }
 
@@ -1491,7 +1490,7 @@ struct LIBMDBX_API from_base58 {
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump from a passed slice to
   /// decoded data.
   MDBX_CXX11_CONSTEXPR size_t envisage_result_length() const noexcept {
-    return source.length() / 11 * 8 + source.length() % 11 * 32 / 43;
+    return source.length() /* могут быть все нули кодируемые один-к-одному */;
   }
 
   /// \brief Fills the destination with data decoded from
