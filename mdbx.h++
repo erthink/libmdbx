@@ -736,6 +736,8 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   slice &operator=(const slice &) noexcept = default;
   inline slice &operator=(slice &&src) noexcept;
   inline slice &operator=(::MDBX_val &&src);
+  operator MDBX_val *() noexcept { return this; }
+  operator const MDBX_val *() const noexcept { return this; }
 
 #if defined(DOXYGEN) ||                                                        \
     (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
@@ -3106,6 +3108,7 @@ struct LIBMDBX_API_TYPE map_handle {
   map_handle(const map_handle &) noexcept = default;
   map_handle &operator=(const map_handle &) noexcept = default;
   operator bool() const noexcept { return dbi != 0; }
+  operator MDBX_dbi() const { return dbi; }
 
   using flags = ::MDBX_db_flags_t;
   using state = ::MDBX_dbi_state_t;
