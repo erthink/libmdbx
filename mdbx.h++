@@ -3180,6 +3180,92 @@ struct pair_result : public pair {
   }
 };
 
+template <typename ALLOCATOR, typename CAPACITY_POLICY>
+struct buffer_pair_spec {
+  using buffer_type = buffer<ALLOCATOR, CAPACITY_POLICY>;
+  using allocator_type = typename buffer_type::allocator_type;
+  using allocator_traits = typename buffer_type::allocator_traits;
+  using reservation_policy = CAPACITY_POLICY;
+  using stl_pair = ::std::pair<buffer_type, buffer_type>;
+  buffer_type key, value;
+
+  MDBX_CXX20_CONSTEXPR buffer_pair_spec() noexcept = default;
+  MDBX_CXX20_CONSTEXPR
+  buffer_pair_spec(const allocator_type &allocator) noexcept
+      : key(allocator), value(allocator) {}
+
+  buffer_pair_spec(const buffer_type &key, const buffer_type &value,
+                   const allocator_type &allocator = allocator_type())
+      : key(key, allocator), value(value, allocator) {}
+  buffer_pair_spec(const buffer_type &key, const buffer_type &value,
+                   bool make_reference,
+                   const allocator_type &allocator = allocator_type())
+      : key(key, make_reference, allocator),
+        value(value, make_reference, allocator) {}
+
+  buffer_pair_spec(const stl_pair &pair,
+                   const allocator_type &allocator = allocator_type())
+      : buffer_pair_spec(pair.first, pair.second, allocator) {}
+  buffer_pair_spec(const stl_pair &pair, bool make_reference,
+                   const allocator_type &allocator = allocator_type())
+      : buffer_pair_spec(pair.first, pair.second, make_reference, allocator) {}
+
+  buffer_pair_spec(const slice &key, const slice &value,
+                   const allocator_type &allocator = allocator_type())
+      : key(key, allocator), value(value, allocator) {}
+  buffer_pair_spec(const slice &key, const slice &value, bool make_reference,
+                   const allocator_type &allocator = allocator_type())
+      : key(key, make_reference, allocator),
+        value(value, make_reference, allocator) {}
+
+  buffer_pair_spec(const pair &pair,
+                   const allocator_type &allocator = allocator_type())
+      : buffer_pair_spec(pair.key, pair.value, allocator) {}
+  buffer_pair_spec(const pair &pair, bool make_reference,
+                   const allocator_type &allocator = allocator_type())
+      : buffer_pair_spec(pair.key, pair.value, make_reference, allocator) {}
+
+  buffer_pair_spec(const txn &txn, const slice &key, const slice &value,
+                   const allocator_type &allocator = allocator_type())
+      : key(txn, key, allocator), value(txn, value, allocator) {}
+  buffer_pair_spec(const txn &txn, const pair &pair,
+                   const allocator_type &allocator = allocator_type())
+      : buffer_pair_spec(txn, pair.key, pair.value, allocator) {}
+
+  buffer_pair_spec(buffer_type &&key, buffer_type &&value) noexcept(
+      buffer_type::move_assign_alloc::is_nothrow())
+      : key(::std::move(key)), value(::std::move(value)) {}
+  buffer_pair_spec(buffer_pair_spec &&pair) noexcept(
+      buffer_type::move_assign_alloc::is_nothrow())
+      : buffer_pair_spec(::std::move(pair.key), ::std::move(pair.value)) {}
+
+  /// \brief Checks whether data chunk stored inside the buffers both, otherwise
+  /// at least one of buffers just refers to data located outside.
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR bool
+  is_freestanding() const noexcept {
+    return key.is_freestanding() && value.is_freestanding();
+  }
+  /// \brief Checks whether one of the buffers just refers to data located
+  /// outside the buffer, rather than stores it.
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR bool
+  is_reference() const noexcept {
+    return key.is_reference() || value.is_reference();
+  }
+  /// \brief Makes buffers owning the data.
+  /// \details If buffer refers to an external data, then makes it the owner
+  /// of clone by allocating storage and copying the data.
+  void make_freestanding() {
+    key.make_freestanding();
+    value.make_freestanding();
+  }
+
+  operator pair() const noexcept { return pair(key, value); }
+};
+
+template <typename BUFFER>
+using buffer_pair = buffer_pair_spec<typename BUFFER::allocator_type,
+                                     typename BUFFER::reservation_policy>;
+
 /// end of cxx_data @}
 
 //------------------------------------------------------------------------------
