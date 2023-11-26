@@ -1578,10 +1578,6 @@ public:
 private:
   friend class txn;
   struct silo;
-  using move_assign_alloc =
-      allocation_aware_details::move_assign_alloc<silo, allocator_type>;
-  using copy_assign_alloc =
-      allocation_aware_details::copy_assign_alloc<silo, allocator_type>;
   using swap_alloc = allocation_aware_details::swap_alloc<silo, allocator_type>;
   struct silo /* Empty Base Class Optimization */ : public allocator_type {
     MDBX_CXX20_CONSTEXPR const allocator_type &get_allocator() const noexcept {
@@ -2072,6 +2068,11 @@ public:
   /// \todo buffer& operator<<(buffer&, ...) for writing
   /// \todo buffer& operator>>(buffer&, ...) for reading (delegated to slice)
   /// \todo template<class X> key(X) for encoding keys while writing
+
+  using move_assign_alloc =
+      allocation_aware_details::move_assign_alloc<silo, allocator_type>;
+  using copy_assign_alloc =
+      allocation_aware_details::copy_assign_alloc<silo, allocator_type>;
 
   /// \brief Returns the associated allocator.
   MDBX_CXX20_CONSTEXPR allocator_type get_allocator() const {
