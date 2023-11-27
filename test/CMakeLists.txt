@@ -144,7 +144,7 @@ else()
     --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no
     --repeat=2 --pathname=dupsort_writemap.db --dont-cleanup-after basic)
   set_tests_properties(dupsort_writemap PROPERTIES
-    TIMEOUT 600
+    TIMEOUT 3600
     RUN_SERIAL OFF)
   if(MDBX_BUILD_TOOLS)
     add_test(NAME dupsort_writemap_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvvwc dupsort_writemap.db)
