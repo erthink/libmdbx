@@ -8761,7 +8761,10 @@ static void txn_valgrind(MDBX_env *env, MDBX_txn *txn) {
   } else { /* transaction end */
     bool should_unlock = false;
     pgno_t last = MAX_PAGENO + 1;
-    if (env->me_txn0 && env->me_txn0->mt_owner == osal_thread_self()) {
+    if (env->me_pid != osal_getpid()) {
+      /* resurrect after fork */
+      return;
+    } else if (env->me_txn0 && env->me_txn0->mt_owner == osal_thread_self()) {
       /* inside write-txn */
       last = meta_recent(env, &env->me_txn0->tw.troika).ptr_v->mm_geo.next;
     } else if (env->me_flags & MDBX_RDONLY) {
