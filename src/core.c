@@ -26320,8 +26320,15 @@ __cold static void rthc_afterfork(void) {
   for (size_t i = 0; i < rthc_count; ++i) {
     MDBX_env *const env = rthc_table[i].env;
     NOTICE("drown env %p", __Wpedantic_format_voidptr(env));
-    env->me_dxb_mmap.base = nullptr;
-    env->me_lck_mmap.base = nullptr;
+    if (env->me_lck_mmap.lck)
+      osal_munmap(&env->me_lck_mmap);
+    if (env->me_map) {
+      osal_munmap(&env->me_dxb_mmap);
+#ifdef ENABLE_MEMCHECK
+      VALGRIND_DISCARD(env->me_valgrind_handle);
+      env->me_valgrind_handle = -1;
+#endif /* ENABLE_MEMCHECK */
+    }
     env->me_lck = lckless_stub(env);
     rthc_drown(env);
   }
