@@ -2133,6 +2133,7 @@ enum MDBX_option_t {
   /** \brief Controls the in-process limit to grow a list of reclaimed/recycled
    * page's numbers for finding a sequence of contiguous pages for large data
    * items.
+   * \see MDBX_opt_gc_time_limit
    *
    * \details A long values requires allocation of contiguous database pages.
    * To find such sequences, it may be necessary to accumulate very large lists,
@@ -2293,6 +2294,33 @@ enum MDBX_option_t {
    * in the \ref MDBX_WRITEMAP mode by clearing ones through file handle before
    * touching. */
   MDBX_opt_prefault_write_enable,
+
+  /** \brief Controls the in-process spending time limit of searching
+   *  consecutive pages inside GC.
+   * \see MDBX_opt_rp_augment_limit
+   *
+   * \details Задаёт ограничение времени в 1/65536 долях секунды, которое может
+   * быть потрачено в ходе пишущей транзакции на поиск последовательностей
+   * страниц внутри GC/freelist после достижения ограничения задаваемого опцией
+   * \ref MDBX_opt_rp_augment_limit. Контроль по времени не выполняется при
+   * поиске/выделении одиночных страниц и выделении страниц под нужды GC (при
+   * обновлении GC в ходе фиксации транзакции).
+   *
+   * Задаваемый лимит времени исчисляется по "настенным часам" и контролируется
+   * в рамках транзакции, наследуется для вложенных транзакций и с
+   * аккумулированием в родительской при их фиксации. Контроль по времени
+   * производится только при достижении ограничения задаваемого опцией \ref
+   * MDBX_opt_rp_augment_limit. Это позволяет гибко управлять поведением
+   * используя обе опции.
+   *
+   * По умолчанию ограничение устанавливается в 0, что приводит к
+   * незамедлительной остановке поиска в GC при достижении \ref
+   * MDBX_opt_rp_augment_limit во внутреннем состоянии транзакции и
+   * соответствует поведению до появления опции `MDBX_opt_gc_time_limit`.
+   * С другой стороны, при минимальном значении (включая 0)
+   * `MDBX_opt_rp_augment_limit` переработка GC будет ограничиваться
+   * преимущественно затраченным временем. */
+  MDBX_opt_gc_time_limit
 };
 #ifndef __cplusplus
 /** \ingroup c_settings */

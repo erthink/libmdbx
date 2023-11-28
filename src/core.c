@@ -7674,12 +7674,24 @@ bailout:
   return ret;
 }
 
+struct monotime_cache {
+  uint64_t value;
+  int expire_countdown;
+};
+
+static __inline uint64_t monotime_since_cached(uint64_t begin_timestamp,
+                                               struct monotime_cache *cache) {
+  if (cache->expire_countdown)
+    cache->expire_countdown -= 1;
+  else {
+    cache->value = osal_monotime();
+    cache->expire_countdown = 42 / 3;
+  }
+  return cache->value - begin_timestamp;
+}
+
 static pgr_t page_alloc_slowpath(const MDBX_cursor *const mc, const size_t num,
                                  uint8_t flags) {
-#if MDBX_ENABLE_PROFGC
-  const uint64_t monotime_before = osal_monotime();
-#endif /* MDBX_ENABLE_PROFGC */
-
   pgr_t ret;
   MDBX_txn *const txn = mc->mc_txn;
   MDBX_env *const env = txn->mt_env;
@@ -7694,8 +7706,19 @@ static pgr_t page_alloc_slowpath(const MDBX_cursor *const mc, const size_t num,
   eASSERT(env, pnl_check_allocated(txn->tw.relist,
                                    txn->mt_next_pgno - MDBX_ENABLE_REFUND));
 
-  pgno_t pgno = 0;
   size_t newnext;
+  const uint64_t monotime_begin =
+      (MDBX_ENABLE_PROFGC || (num > 1 && env->me_options.gc_time_limit))
+          ? osal_monotime()
+          : 0;
+  struct monotime_cache now_cache;
+  now_cache.expire_countdown =
+      1 /* старт с 1 позволяет избавиться как от лишних системных вызовов когда
+           лимит времени задан нулевой или уже исчерпан, так и от подсчета
+           времени при не-достижении rp_augment_limit */
+      ;
+  now_cache.value = monotime_begin;
+  pgno_t pgno = 0;
   if (num > 1) {
 #if MDBX_ENABLE_PROFGC
     prof->xpages += 1;
@@ -7871,7 +7894,10 @@ next_gc:;
                      txn->tw.relist) >= env->me_options.rp_augment_limit) &&
         ((/* not a slot-request from gc-update */ num &&
           /* have enough unallocated space */ txn->mt_geo.upper >=
-              txn->mt_next_pgno + num) ||
+              txn->mt_next_pgno + num &&
+          monotime_since_cached(monotime_begin, &now_cache) +
+                  txn->tw.gc_time_acc >=
+              env->me_options.gc_time_limit) ||
          gc_len + MDBX_PNL_GETSIZE(txn->tw.relist) >= MDBX_PGL_LIMIT)) {
       /* Stop reclaiming to avoid large/overflow the page list. This is a rare
        * case while search for a continuously multi-page region in a
@@ -8173,6 +8199,8 @@ done:
                   (size_t)txn->mt_dbs[FREE_DBI].md_entries);
       ret.page = NULL;
     }
+    if (num > 1)
+      txn->tw.gc_time_acc += monotime_since_cached(monotime_begin, &now_cache);
   } else {
   early_exit:
     DEBUG("return NULL for %zu pages for ALLOC_%s, rc %d", num,
@@ -8181,7 +8209,7 @@ done:
   }
 
 #if MDBX_ENABLE_PROFGC
-  prof->rtime_monotonic += osal_monotime() - monotime_before;
+  prof->rtime_monotonic += osal_monotime() - monotime_begin;
 #endif /* MDBX_ENABLE_PROFGC */
   return ret;
 }
@@ -9352,6 +9380,7 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
     MDBX_PNL_SETSIZE(txn->tw.retired_pages, 0);
     txn->tw.spilled.list = NULL;
     txn->tw.spilled.least_removed = 0;
+    txn->tw.gc_time_acc = 0;
     txn->tw.last_reclaimed = 0;
     if (txn->tw.lifo_reclaimed)
       MDBX_PNL_SETSIZE(txn->tw.lifo_reclaimed, 0);
@@ -9800,6 +9829,7 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
                       = parent->mt_next_pgno) -
                          MDBX_ENABLE_REFUND));
 
+    txn->tw.gc_time_acc = parent->tw.gc_time_acc;
     txn->tw.last_reclaimed = parent->tw.last_reclaimed;
     if (parent->tw.lifo_reclaimed) {
       txn->tw.lifo_reclaimed = parent->tw.lifo_reclaimed;
@@ -12037,6 +12067,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     pnl_free(parent->tw.relist);
     parent->tw.relist = txn->tw.relist;
     txn->tw.relist = NULL;
+    parent->tw.gc_time_acc = txn->tw.gc_time_acc;
     parent->tw.last_reclaimed = txn->tw.last_reclaimed;
 
     parent->mt_geo = txn->mt_geo;
@@ -25875,6 +25906,21 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     }
     break;
 
+  case MDBX_opt_gc_time_limit:
+    if (value == /* default */ UINT64_MAX)
+      value = 0;
+    if (unlikely(value > UINT32_MAX))
+      return MDBX_EINVAL;
+    if (unlikely(env->me_flags & MDBX_RDONLY))
+      return MDBX_EACCESS;
+    value = osal_16dot16_to_monotime((uint32_t)value);
+    if (value != env->me_options.gc_time_limit) {
+      if (env->me_txn && env->me_txn0->mt_owner != osal_thread_self())
+        return MDBX_EPERM;
+      env->me_options.gc_time_limit = value;
+    }
+    break;
+
   case MDBX_opt_txn_dp_limit:
   case MDBX_opt_txn_dp_initial:
     if (value == /* default */ UINT64_MAX)
@@ -26025,6 +26071,10 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
 
   case MDBX_opt_rp_augment_limit:
     *pvalue = env->me_options.rp_augment_limit;
+    break;
+
+  case MDBX_opt_gc_time_limit:
+    *pvalue = osal_monotime_to_16dot16(env->me_options.gc_time_limit);
     break;
 
   case MDBX_opt_txn_dp_limit:
