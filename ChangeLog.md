@@ -46,6 +46,8 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 
  - Переработка/исправление `to_hex()` и `from_hex()`.
 
+ - Уменьшение `MDBX_opt_rp_augment_limit` по умолчанию до 1/3 от текущего количества страниц в БД.
+
 Мелочи:
 
  - Удаление устаревших `mdbx_set_compare()` и `mdbx_set_dupsort()`.
@@ -55,7 +57,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
  - Использование в API `const MDBX_txn` где это возможно.
  - Удаление устаревшего упоминания `MDBX_EAGAIN`.
  - Проверка pid процесса только в функциях API требующих активной среды/env.
- - Исправление опечатки в doxygen-описании.
+ - Исправление опечаток в комментариях, в том числе  в doxygen-описании.
  - В тестах для совместимости с проблемными версиями glibc и glibc++
    устранено использование `std::stoull()`.
 
