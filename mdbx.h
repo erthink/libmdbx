@@ -2146,7 +2146,8 @@ enum MDBX_option_t {
    * growth, or/and to the inability of put long values.
    *
    * The `MDBX_opt_rp_augment_limit` controls described limit for the current
-   * process. Default is 262144, it is usually enough for most cases. */
+   * process. By default this limit adjusted dynamically to 1/3 of current
+   * quantity of DB pages, which is usually enough for most cases. */
   MDBX_opt_rp_augment_limit,
 
   /** \brief Controls the in-process limit to grow a cache of dirty

@@ -6423,8 +6423,8 @@ __cold static void munlock_all(const MDBX_env *env) {
 }
 
 __cold static unsigned default_rp_augment_limit(const MDBX_env *env) {
-  /* default rp_augment_limit = ceil(npages / gold_ratio) */
-  const size_t augment = (env->me_dbgeo.now >> (env->me_psize2log + 10)) * 633u;
+  /* default rp_augment_limit = npages / 3 */
+  const size_t augment = env->me_dbgeo.now / 3 >> env->me_psize2log;
   eASSERT(env, augment < MDBX_PGL_LIMIT);
   return pnl_bytes2size(pnl_size2bytes(
       (augment > MDBX_PNL_INITIAL) ? augment : MDBX_PNL_INITIAL));
