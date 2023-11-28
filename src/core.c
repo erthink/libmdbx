@@ -7315,7 +7315,7 @@ static pgr_t page_alloc_slowpath(const MDBX_cursor *const mc, const size_t num,
      * простейших случаях (тривиальный бенчмарк) интегральная производительность
      * становится вдвое меньше. А на платформах без mincore() и с проблемной
      * подсистемой виртуальной памяти ситуация может быть многократно хуже.
-     * Поэтому избегаем затрат в ситуациях когда prefaukt-write скорее всего не
+     * Поэтому избегаем затрат в ситуациях когда prefault-write скорее всего не
      * нужна. */
     const bool readahead_enabled = env->me_lck->mti_readahead_anchor & 1;
     const pgno_t readahead_edge = env->me_lck->mti_readahead_anchor >> 1;
