@@ -6423,11 +6423,21 @@ __cold static void munlock_all(const MDBX_env *env) {
 }
 
 __cold static unsigned default_rp_augment_limit(const MDBX_env *env) {
-  /* default rp_augment_limit = npages / 3 */
-  const size_t augment = env->me_dbgeo.now / 3 >> env->me_psize2log;
-  eASSERT(env, augment < MDBX_PGL_LIMIT);
-  return pnl_bytes2size(pnl_size2bytes(
-      (augment > MDBX_PNL_INITIAL) ? augment : MDBX_PNL_INITIAL));
+  const size_t timeframe = 16 << 16;
+  const size_t remain_1sec =
+      (env->me_options.gc_time_limit < timeframe)
+          ? timeframe - (size_t)env->me_options.gc_time_limit
+          : 0;
+  const size_t minimum = (env->me_maxgc_ov1page * 2 > MDBX_PNL_INITIAL)
+                             ? env->me_maxgc_ov1page * 2
+                             : MDBX_PNL_INITIAL;
+  const size_t one_third = env->me_dbgeo.now / 3 >> env->me_psize2log;
+  const size_t augment_limit =
+      (one_third > minimum)
+          ? minimum + (one_third - minimum) / timeframe * remain_1sec
+          : minimum;
+  eASSERT(env, augment_limit < MDBX_PGL_LIMIT);
+  return pnl_bytes2size(pnl_size2bytes(augment_limit));
 }
 
 static bool default_prefault_write(const MDBX_env *env) {
@@ -25918,6 +25928,8 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
       if (env->me_txn && env->me_txn0->mt_owner != osal_thread_self())
         return MDBX_EPERM;
       env->me_options.gc_time_limit = value;
+      if (!env->me_options.flags.non_auto.rp_augment_limit)
+        env->me_options.rp_augment_limit = default_rp_augment_limit(env);
     }
     break;
 
