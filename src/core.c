@@ -8581,7 +8581,8 @@ retry:;
     goto bailout;
   }
 
-  const bool inside_txn = (env->me_txn0->mt_owner == osal_thread_self());
+  const bool inside_txn =
+      (!locked && env->me_txn0->mt_owner == osal_thread_self());
   const meta_troika_t troika =
       (inside_txn | locked) ? env->me_txn0->tw.troika : meta_tap(env);
   const meta_ptr_t head = meta_recent(env, &troika);
@@ -8594,7 +8595,7 @@ retry:;
       goto bailout;
   }
 
-  if (!inside_txn && locked && (env->me_flags & MDBX_WRITEMAP) &&
+  if (locked && (env->me_flags & MDBX_WRITEMAP) &&
       unlikely(head.ptr_c->mm_geo.next >
                bytes2pgno(env, env->me_dxb_mmap.current))) {
 
@@ -8934,7 +8935,7 @@ __cold int mdbx_thread_register(const MDBX_env *env) {
   }
 
   const uintptr_t tid = osal_thread_self();
-  if (env->me_txn0 && unlikely(env->me_txn0->mt_owner == tid))
+  if (env->me_txn0 && unlikely(env->me_txn0->mt_owner == tid) && env->me_txn)
     return MDBX_TXN_OVERLAPPING;
   return bind_rslot((MDBX_env *)env, tid).err;
 }
@@ -9726,7 +9727,7 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
     flags |= parent->mt_flags & (MDBX_TXN_RW_BEGIN_FLAGS | MDBX_TXN_SPILLS);
   } else if (flags & MDBX_TXN_RDONLY) {
     if (env->me_txn0 &&
-        unlikely(env->me_txn0->mt_owner == osal_thread_self()) &&
+        unlikely(env->me_txn0->mt_owner == osal_thread_self()) && env->me_txn &&
         (runtime_flags & MDBX_DBG_LEGACY_OVERLAP) == 0)
       return MDBX_TXN_OVERLAPPING;
   } else {
@@ -13140,9 +13141,7 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
               const txnid_t txnid = safe64_txnid_next(pending->unsafe_txnid);
               NOTICE("force-forward pending-txn %" PRIaTXN " -> %" PRIaTXN,
                      pending->unsafe_txnid, txnid);
-              ENSURE(env, !env->me_txn0 ||
-                              (env->me_txn0->mt_owner != osal_thread_self() &&
-                               !env->me_txn));
+              ENSURE(env, !env->me_txn0 || !env->me_txn);
               if (unlikely(txnid > MAX_TXNID)) {
                 rc = MDBX_TXN_FULL;
                 ERROR("txnid overflow, raise %d", rc);
@@ -13654,8 +13653,9 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  const bool inside_txn =
-      (env->me_txn0 && env->me_txn0->mt_owner == osal_thread_self());
+  const bool need_lock =
+      !env->me_txn0 || env->me_txn0->mt_owner != osal_thread_self();
+  const bool inside_txn = !need_lock && env->me_txn;
 
 #if MDBX_DEBUG
   if (growth_step < 0) {
@@ -13666,17 +13666,17 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
 #endif /* MDBX_DEBUG */
 
   intptr_t reasonable_maxsize = 0;
-  bool need_unlock = false;
+  bool should_unlock = false;
   if (env->me_map) {
     /* env already mapped */
     if (unlikely(env->me_flags & MDBX_RDONLY))
       return MDBX_EACCESS;
 
-    if (!inside_txn) {
+    if (need_lock) {
       int err = osal_txn_lock(env, false);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
-      need_unlock = true;
+      should_unlock = true;
       env->me_txn0->tw.troika = meta_tap(env);
       eASSERT(env, !env->me_txn && !env->me_txn0->mt_child);
       env->me_txn0->mt_txnid =
@@ -13902,7 +13902,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
     MDBX_meta meta;
     memset(&meta, 0, sizeof(meta));
     if (!inside_txn) {
-      eASSERT(env, need_unlock);
+      eASSERT(env, should_unlock);
       const meta_ptr_t head = meta_recent(env, &env->me_txn0->tw.troika);
 
       uint64_t timestamp = 0;
@@ -14023,7 +14023,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
   }
 
 bailout:
-  if (need_unlock)
+  if (should_unlock)
     osal_txn_unlock(env);
   return rc;
 }
@@ -22737,10 +22737,6 @@ __cold int mdbx_env_set_flags(MDBX_env *env, MDBX_env_flags_t flags,
   if (unlikely(env->me_flags & MDBX_RDONLY))
     return MDBX_EACCESS;
 
-  if ((env->me_flags & MDBX_ENV_ACTIVE) &&
-      unlikely(env->me_txn0->mt_owner == osal_thread_self()))
-    return MDBX_BUSY;
-
   const bool lock_needed = (env->me_flags & MDBX_ENV_ACTIVE) &&
                            env->me_txn0->mt_owner != osal_thread_self();
   bool should_unlock = false;
@@ -22974,7 +22970,8 @@ __cold int mdbx_env_stat_ex(const MDBX_env *env, const MDBX_txn *txn,
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
-  if (env->me_txn0 && env->me_txn0->mt_owner == osal_thread_self())
+  if (env->me_txn0 && env->me_txn0->mt_owner == osal_thread_self() &&
+      env->me_txn)
     /* inside write-txn */
     return stat_acc(env->me_txn, dest, bytes);
 
