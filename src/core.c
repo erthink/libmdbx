@@ -14579,6 +14579,150 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
 
 /******************************************************************************/
 
+__cold static int setup_lck_locked(MDBX_env *env) {
+  int err = rthc_register(env);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
+  int lck_seize_rc = osal_lck_seize(env);
+  if (unlikely(MDBX_IS_ERROR(lck_seize_rc)))
+    return lck_seize_rc;
+
+  if (env->me_lfd == INVALID_HANDLE_VALUE) {
+    env->me_lck = lckless_stub(env);
+    env->me_maxreaders = UINT_MAX;
+    DEBUG("lck-setup:%s%s%s", " lck-less",
+          (env->me_flags & MDBX_RDONLY) ? " readonly" : "",
+          (lck_seize_rc == MDBX_RESULT_TRUE) ? " exclusive" : " cooperative");
+    return lck_seize_rc;
+  }
+
+  DEBUG("lck-setup:%s%s%s", " with-lck",
+        (env->me_flags & MDBX_RDONLY) ? " readonly" : "",
+        (lck_seize_rc == MDBX_RESULT_TRUE) ? " exclusive" : " cooperative");
+
+  MDBX_env *inprocess_neighbor = nullptr;
+  err = rthc_uniq_check(&env->me_lck_mmap, &inprocess_neighbor);
+  if (unlikely(MDBX_IS_ERROR(err)))
+    return err;
+  if (inprocess_neighbor) {
+    if ((runtime_flags & MDBX_DBG_LEGACY_MULTIOPEN) == 0 ||
+        (inprocess_neighbor->me_flags & MDBX_EXCLUSIVE) != 0)
+      return MDBX_BUSY;
+    if (lck_seize_rc == MDBX_RESULT_TRUE) {
+      err = osal_lck_downgrade(env);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+      lck_seize_rc = MDBX_RESULT_FALSE;
+    }
+  }
+
+  uint64_t size = 0;
+  err = osal_filesize(env->me_lfd, &size);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
+  if (lck_seize_rc == MDBX_RESULT_TRUE) {
+    size = ceil_powerof2(env->me_maxreaders * sizeof(MDBX_reader) +
+                             sizeof(MDBX_lockinfo),
+                         env->me_os_psize);
+    jitter4testing(false);
+  } else {
+    if (env->me_flags & MDBX_EXCLUSIVE)
+      return MDBX_BUSY;
+    if (size > INT_MAX || (size & (env->me_os_psize - 1)) != 0 ||
+        size < env->me_os_psize) {
+      ERROR("lck-file has invalid size %" PRIu64 " bytes", size);
+      return MDBX_PROBLEM;
+    }
+  }
+
+  const size_t maxreaders =
+      ((size_t)size - sizeof(MDBX_lockinfo)) / sizeof(MDBX_reader);
+  if (maxreaders < 4) {
+    ERROR("lck-size too small (up to %" PRIuPTR " readers)", maxreaders);
+    return MDBX_PROBLEM;
+  }
+  env->me_maxreaders = (maxreaders <= MDBX_READERS_LIMIT)
+                           ? (unsigned)maxreaders
+                           : (unsigned)MDBX_READERS_LIMIT;
+
+  err = osal_mmap((env->me_flags & MDBX_EXCLUSIVE) | MDBX_WRITEMAP,
+                  &env->me_lck_mmap, (size_t)size, (size_t)size,
+                  lck_seize_rc ? MMAP_OPTION_TRUNCATE | MMAP_OPTION_SEMAPHORE
+                               : MMAP_OPTION_SEMAPHORE);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
+#if MDBX_ENABLE_MADVISE
+#ifdef MADV_DODUMP
+  err = madvise(env->me_lck_mmap.lck, size, MADV_DODUMP) ? ignore_enosys(errno)
+                                                         : MDBX_SUCCESS;
+  if (unlikely(MDBX_IS_ERROR(err)))
+    return err;
+#endif /* MADV_DODUMP */
+
+#ifdef MADV_WILLNEED
+  err = madvise(env->me_lck_mmap.lck, size, MADV_WILLNEED)
+            ? ignore_enosys(errno)
+            : MDBX_SUCCESS;
+  if (unlikely(MDBX_IS_ERROR(err)))
+    return err;
+#elif defined(POSIX_MADV_WILLNEED)
+  err = ignore_enosys(
+      posix_madvise(env->me_lck_mmap.lck, size, POSIX_MADV_WILLNEED));
+  if (unlikely(MDBX_IS_ERROR(err)))
+    return err;
+#endif /* MADV_WILLNEED */
+#endif /* MDBX_ENABLE_MADVISE */
+
+  struct MDBX_lockinfo *lck = env->me_lck_mmap.lck;
+  if (lck_seize_rc == MDBX_RESULT_TRUE) {
+    /* If we succeed got exclusive lock, then nobody is using the lock region
+     * and we should initialize it. */
+    memset(lck, 0, (size_t)size);
+    jitter4testing(false);
+    lck->mti_magic_and_version = MDBX_LOCK_MAGIC;
+    lck->mti_os_and_format = MDBX_LOCK_FORMAT;
+#if MDBX_ENABLE_PGOP_STAT
+    lck->mti_pgop_stat.wops.weak = 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
+    err = osal_msync(&env->me_lck_mmap, 0, (size_t)size,
+                     MDBX_SYNC_DATA | MDBX_SYNC_SIZE);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      ERROR("initial-%s for lck-file failed, err %d", "msync/fsync", err);
+      eASSERT(env, MDBX_IS_ERROR(err));
+      return err;
+    }
+  } else {
+    if (lck->mti_magic_and_version != MDBX_LOCK_MAGIC) {
+      const bool invalid = (lck->mti_magic_and_version >> 8) != MDBX_MAGIC;
+      ERROR("lock region has %s",
+            invalid
+                ? "invalid magic"
+                : "incompatible version (only applications with nearly or the "
+                  "same versions of libmdbx can share the same database)");
+      return invalid ? MDBX_INVALID : MDBX_VERSION_MISMATCH;
+    }
+    if (lck->mti_os_and_format != MDBX_LOCK_FORMAT) {
+      ERROR("lock region has os/format signature 0x%" PRIx32
+            ", expected 0x%" PRIx32,
+            lck->mti_os_and_format, MDBX_LOCK_FORMAT);
+      return MDBX_VERSION_MISMATCH;
+    }
+  }
+
+  err = osal_lck_init(env, inprocess_neighbor, lck_seize_rc);
+  if (unlikely(err != MDBX_SUCCESS)) {
+    eASSERT(env, MDBX_IS_ERROR(err));
+    return err;
+  }
+
+  env->me_lck = lck;
+  eASSERT(env, !MDBX_IS_ERROR(lck_seize_rc));
+  return lck_seize_rc;
+}
+
 /* Open and/or initialize the lock region for the environment. */
 __cold static int setup_lck(MDBX_env *env, mdbx_mode_t mode) {
   eASSERT(env, env->me_lazy_fd != INVALID_HANDLE_VALUE);
@@ -14615,157 +14759,10 @@ __cold static int setup_lck(MDBX_env *env, mdbx_mode_t mode) {
     env->me_lfd = INVALID_HANDLE_VALUE;
   }
 
-  /* beginning of a locked section ------------------------------------------ */
   rthc_lock();
-  err = rthc_register(env);
-  if (likely(err == MDBX_SUCCESS))
-    err = osal_lck_seize(env);
-
-  const int lck_seize_rc = err;
-  if (MDBX_IS_ERROR(err))
-    goto bailout;
-
-  struct MDBX_lockinfo *lck = nullptr;
-  if (env->me_lfd == INVALID_HANDLE_VALUE) {
-    lck = lckless_stub(env);
-    env->me_maxreaders = UINT_MAX;
-    DEBUG("lck-setup:%s%s%s", " lck-less",
-          (env->me_flags & MDBX_RDONLY) ? " readonly" : "",
-          (lck_seize_rc == MDBX_RESULT_TRUE) ? " exclusive" : " cooperative");
-    goto done;
-  }
-
-  DEBUG("lck-setup:%s%s%s", " with-lck",
-        (env->me_flags & MDBX_RDONLY) ? " readonly" : "",
-        (lck_seize_rc == MDBX_RESULT_TRUE) ? " exclusive" : " cooperative");
-
-  uint64_t size = 0;
-  err = osal_filesize(env->me_lfd, &size);
-  if (unlikely(err != MDBX_SUCCESS))
-    goto bailout;
-
-  if (lck_seize_rc == MDBX_RESULT_TRUE) {
-    size = ceil_powerof2(env->me_maxreaders * sizeof(MDBX_reader) +
-                             sizeof(MDBX_lockinfo),
-                         env->me_os_psize);
-    jitter4testing(false);
-  } else {
-    if (env->me_flags & MDBX_EXCLUSIVE) {
-      err = MDBX_BUSY;
-      goto bailout;
-    }
-    if (size > INT_MAX || (size & (env->me_os_psize - 1)) != 0 ||
-        size < env->me_os_psize) {
-      ERROR("lck-file has invalid size %" PRIu64 " bytes", size);
-      err = MDBX_PROBLEM;
-      goto bailout;
-    }
-  }
-
-  const size_t maxreaders =
-      ((size_t)size - sizeof(MDBX_lockinfo)) / sizeof(MDBX_reader);
-  if (maxreaders < 4) {
-    ERROR("lck-size too small (up to %" PRIuPTR " readers)", maxreaders);
-    err = MDBX_PROBLEM;
-    goto bailout;
-  }
-  env->me_maxreaders = (maxreaders <= MDBX_READERS_LIMIT)
-                           ? (unsigned)maxreaders
-                           : (unsigned)MDBX_READERS_LIMIT;
-
-  err = osal_mmap((env->me_flags & MDBX_EXCLUSIVE) | MDBX_WRITEMAP,
-                  &env->me_lck_mmap, (size_t)size, (size_t)size,
-                  lck_seize_rc ? MMAP_OPTION_TRUNCATE | MMAP_OPTION_SEMAPHORE
-                               : MMAP_OPTION_SEMAPHORE);
-  if (unlikely(err != MDBX_SUCCESS))
-    goto bailout;
-
-#if MDBX_ENABLE_MADVISE
-#ifdef MADV_DODUMP
-  err = madvise(env->me_lck_mmap.lck, size, MADV_DODUMP) ? ignore_enosys(errno)
-                                                         : MDBX_SUCCESS;
-  if (unlikely(MDBX_IS_ERROR(err)))
-    goto bailout;
-#endif /* MADV_DODUMP */
-
-#ifdef MADV_WILLNEED
-  err = madvise(env->me_lck_mmap.lck, size, MADV_WILLNEED)
-            ? ignore_enosys(errno)
-            : MDBX_SUCCESS;
-  if (unlikely(MDBX_IS_ERROR(err)))
-    goto bailout;
-#elif defined(POSIX_MADV_WILLNEED)
-  err = ignore_enosys(
-      posix_madvise(env->me_lck_mmap.lck, size, POSIX_MADV_WILLNEED));
-  if (unlikely(MDBX_IS_ERROR(err)))
-    goto bailout;
-#endif /* MADV_WILLNEED */
-#endif /* MDBX_ENABLE_MADVISE */
-
-  lck = env->me_lck_mmap.lck;
-  if (lck_seize_rc == MDBX_RESULT_TRUE) {
-    /* If we succeed got exclusive lock, then nobody is using the lock region
-     * and we should initialize it. */
-    memset(lck, 0, (size_t)size);
-    jitter4testing(false);
-    lck->mti_magic_and_version = MDBX_LOCK_MAGIC;
-    lck->mti_os_and_format = MDBX_LOCK_FORMAT;
-#if MDBX_ENABLE_PGOP_STAT
-    lck->mti_pgop_stat.wops.weak = 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-    err = osal_msync(&env->me_lck_mmap, 0, (size_t)size,
-                     MDBX_SYNC_DATA | MDBX_SYNC_SIZE);
-    if (unlikely(err != MDBX_SUCCESS)) {
-      ERROR("initial-%s for lck-file failed, err %d", "msync/fsync", err);
-      goto bailout;
-    }
-  } else {
-    if (lck->mti_magic_and_version != MDBX_LOCK_MAGIC) {
-      const bool invalid = (lck->mti_magic_and_version >> 8) != MDBX_MAGIC;
-      ERROR("lock region has %s",
-            invalid
-                ? "invalid magic"
-                : "incompatible version (only applications with nearly or the "
-                  "same versions of libmdbx can share the same database)");
-      err = invalid ? MDBX_INVALID : MDBX_VERSION_MISMATCH;
-      goto bailout;
-    }
-    if (lck->mti_os_and_format != MDBX_LOCK_FORMAT) {
-      ERROR("lock region has os/format signature 0x%" PRIx32
-            ", expected 0x%" PRIx32,
-            lck->mti_os_and_format, MDBX_LOCK_FORMAT);
-      err = MDBX_VERSION_MISMATCH;
-      goto bailout;
-    }
-  }
-
-  MDBX_env *inprocess_neighbor = nullptr;
-  if (lck_seize_rc == MDBX_RESULT_TRUE) {
-    err = rthc_uniq_check(&env->me_lck_mmap, &inprocess_neighbor);
-    if (MDBX_IS_ERROR(err))
-      goto bailout;
-    if (inprocess_neighbor &&
-        ((runtime_flags & MDBX_DBG_LEGACY_MULTIOPEN) == 0 ||
-         (inprocess_neighbor->me_flags & MDBX_EXCLUSIVE) != 0)) {
-      err = MDBX_BUSY;
-      goto bailout;
-    }
-  }
-
-  err = osal_lck_init(env, inprocess_neighbor, lck_seize_rc);
-  if (MDBX_IS_ERROR(err))
-    goto bailout;
-
-done:
-  env->me_lck = lck;
-  eASSERT(env, !MDBX_IS_ERROR(lck_seize_rc));
-
-bailout:
-  /* Calling osal_lck_destroy() is required to restore POSIX-filelock
-   * and this job will be done by env_close(). */
+  err = setup_lck_locked(env);
   rthc_unlock();
-  /* end of a locked section ------------------------------------------------ */
-  return lck_seize_rc;
+  return err;
 }
 
 __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
