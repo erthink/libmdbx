@@ -19626,8 +19626,8 @@ int mdbx_cursor_compare(const MDBX_cursor *l, const MDBX_cursor *r,
   const int incomparable = INT16_MAX + 1;
   if (unlikely(!l))
     return r ? -incomparable * 9 : 0;
-  if (unlikely(!r))
-    return l ? incomparable * 9 : 0;
+  else if (unlikely(!r))
+    return incomparable * 9;
 
   if (unlikely(l->mc_signature != MDBX_MC_LIVE))
     return (r->mc_signature == MDBX_MC_LIVE) ? -incomparable * 8 : 0;
