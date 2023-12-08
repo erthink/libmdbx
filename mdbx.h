@@ -5868,7 +5868,7 @@ typedef struct MDBX_chk_context {
         problems_gc, problems_kv, total_problems;
     uint64_t steady_txnid, recent_txnid;
     /** Указатель на массив размером subdb_total с указателями на экземпляры
-     * структур MDBX_chk_subdb_t с информацией о всех таблицах ключ-значние,
+     * структур MDBX_chk_subdb_t с информацией о всех таблицах ключ-значение,
      * включая MainDB и GC/FreeDB. */
     const MDBX_chk_subdb_t *const *subdbs;
   } result;
