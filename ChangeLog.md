@@ -5,9 +5,14 @@ English version [by Google](https://gitflic-ru.translate.goog/project/erthink/li
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
 
-## v0.12.9 (сопровождение и подготовка к релизу)
+## v0.12.9 "Ясень-4" от 2023-12-11
 
-Поддержка стабильной ветки.
+Стабилизирующий выпуск с исправлением обнаруженных ошибок и устранением недочетов.
+
+```
+git diff' stat: 32 commits, 8 files changed, 667 insertions(+), 401 deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
+```
 
 Исправления и доработки:
 
