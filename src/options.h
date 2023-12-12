@@ -28,9 +28,17 @@
 #define MDBX_OSX_SPEED_INSTEADOF_DURABILITY MDBX_OSX_WANNA_DURABILITY
 #endif /* MDBX_OSX_SPEED_INSTEADOF_DURABILITY */
 
+/** Controls using of POSIX' madvise() and/or similar hints. */
+#ifndef MDBX_ENABLE_MADVISE
+#define MDBX_ENABLE_MADVISE 1
+#elif !(MDBX_ENABLE_MADVISE == 0 || MDBX_ENABLE_MADVISE == 1)
+#error MDBX_ENABLE_MADVISE must be defined as 0 or 1
+#endif /* MDBX_ENABLE_MADVISE */
+
 /** Controls checking PID against reuse DB environment after the fork() */
 #ifndef MDBX_ENV_CHECKPID
-#if defined(MADV_DONTFORK) || defined(_WIN32) || defined(_WIN64)
+#if (defined(MADV_DONTFORK) && MDBX_ENABLE_MADVISE) || defined(_WIN32) ||      \
+    defined(_WIN64)
 /* PID check could be omitted:
  *  - on Linux when madvise(MADV_DONTFORK) is available, i.e. after the fork()
  *    mapped pages will not be available for child process.
@@ -96,8 +104,7 @@
 /** Controls using Unix' mincore() to determine whether DB-pages
  * are resident in memory. */
 #ifndef MDBX_ENABLE_MINCORE
-#if MDBX_ENABLE_PREFAULT &&                                                    \
-    (defined(MINCORE_INCORE) || !(defined(_WIN32) || defined(_WIN64)))
+#if defined(MINCORE_INCORE) || !(defined(_WIN32) || defined(_WIN64))
 #define MDBX_ENABLE_MINCORE 1
 #else
 #define MDBX_ENABLE_MINCORE 0
@@ -117,13 +124,6 @@
 #elif !(MDBX_ENABLE_BIGFOOT == 0 || MDBX_ENABLE_BIGFOOT == 1)
 #error MDBX_ENABLE_BIGFOOT must be defined as 0 or 1
 #endif /* MDBX_ENABLE_BIGFOOT */
-
-/** Controls using of POSIX' madvise() and/or similar hints. */
-#ifndef MDBX_ENABLE_MADVISE
-#define MDBX_ENABLE_MADVISE 1
-#elif !(MDBX_ENABLE_MADVISE == 0 || MDBX_ENABLE_MADVISE == 1)
-#error MDBX_ENABLE_MADVISE must be defined as 0 or 1
-#endif /* MDBX_ENABLE_MADVISE */
 
 /** Disable some checks to reduce an overhead and detection probability of
  * database corruption to a values closer to the LMDB. */

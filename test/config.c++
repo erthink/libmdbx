@@ -667,7 +667,10 @@ bool actor_config::deserialize(const char *str, actor_config &config) {
   }
   str = slash + 1;
 
-  uint64_t verify = std::stoull(std::string(str));
+  uint64_t verify = 0;
+  while (*str >= '0' && *str <= '9')
+    verify = verify * 10 + *str++ - '0';
+
   if (checksum.value != verify) {
     TRACE("<< actor_config::deserialize: checksum mismatch\n");
     return false;
