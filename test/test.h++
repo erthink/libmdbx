@@ -248,9 +248,10 @@ protected:
   void db_prepare();
   void db_open();
   void db_close();
-  void txn_begin(bool readonly, MDBX_txn_flags_t flags = MDBX_TXN_READWRITE);
+  virtual void txn_begin(bool readonly,
+                         MDBX_txn_flags_t flags = MDBX_TXN_READWRITE);
   int breakable_commit();
-  void txn_end(bool abort);
+  virtual void txn_end(bool abort);
   int breakable_restart();
   void txn_restart(bool abort, bool readonly,
                    MDBX_txn_flags_t flags = MDBX_TXN_READWRITE);
