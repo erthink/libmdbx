@@ -468,49 +468,59 @@ int main(int argc, char *const argv[]) {
       keycase_setup(value, params);
       continue;
     }
-    if (config::parse_option(argc, argv, narg, "keylen.min", params.keylen_min,
-                             config::no_scale, params.mdbx_keylen_min(),
-                             params.mdbx_keylen_max())) {
+    if (config::parse_option(
+            argc, argv, narg, "keylen.min", params.keylen_min,
+            (params.table_flags & MDBX_INTEGERKEY) ? config::intkey
+                                                   : config::no_scale,
+            params.mdbx_keylen_min(), params.mdbx_keylen_max())) {
       if ((params.table_flags & MDBX_INTEGERKEY) ||
           params.keylen_max < params.keylen_min)
         params.keylen_max = params.keylen_min;
       continue;
     }
-    if (config::parse_option(argc, argv, narg, "keylen.max", params.keylen_max,
-                             config::no_scale, params.mdbx_keylen_min(),
-                             params.mdbx_keylen_max())) {
+    if (config::parse_option(
+            argc, argv, narg, "keylen.max", params.keylen_max,
+            (params.table_flags & MDBX_INTEGERKEY) ? config::intkey
+                                                   : config::no_scale,
+            params.mdbx_keylen_min(), params.mdbx_keylen_max())) {
       if ((params.table_flags & MDBX_INTEGERKEY) ||
           params.keylen_min > params.keylen_max)
         params.keylen_min = params.keylen_max;
       continue;
     }
-    if (config::parse_option(argc, argv, narg, "keylen", params.keylen_min,
-                             config::no_scale, params.mdbx_keylen_min(),
-                             params.mdbx_keylen_max())) {
+    if (config::parse_option(
+            argc, argv, narg, "keylen", params.keylen_min,
+            (params.table_flags & MDBX_INTEGERKEY) ? config::intkey
+                                                   : config::no_scale,
+            params.mdbx_keylen_min(), params.mdbx_keylen_max())) {
       params.keylen_max = params.keylen_min;
       continue;
     }
-    if (config::parse_option(argc, argv, narg, "datalen.min",
-                             params.datalen_min, config::no_scale,
-                             params.mdbx_datalen_min(),
-                             params.mdbx_datalen_max())) {
+    if (config::parse_option(
+            argc, argv, narg, "datalen.min", params.datalen_min,
+            (params.table_flags & MDBX_INTEGERDUP) ? config::intkey
+                                                   : config::no_scale,
+            params.mdbx_datalen_min(), params.mdbx_datalen_max())) {
       if ((params.table_flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED)) ||
           params.datalen_max < params.datalen_min)
         params.datalen_max = params.datalen_min;
       continue;
     }
-    if (config::parse_option(argc, argv, narg, "datalen.max",
-                             params.datalen_max, config::no_scale,
-                             params.mdbx_datalen_min(),
-                             params.mdbx_datalen_max())) {
+    if (config::parse_option(
+            argc, argv, narg, "datalen.max", params.datalen_max,
+            (params.table_flags & MDBX_INTEGERDUP) ? config::intkey
+                                                   : config::no_scale,
+            params.mdbx_datalen_min(), params.mdbx_datalen_max())) {
       if ((params.table_flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED)) ||
           params.datalen_min > params.datalen_max)
         params.datalen_min = params.datalen_max;
       continue;
     }
-    if (config::parse_option(argc, argv, narg, "datalen", params.datalen_min,
-                             config::no_scale, params.mdbx_datalen_min(),
-                             params.mdbx_datalen_max())) {
+    if (config::parse_option(
+            argc, argv, narg, "datalen", params.datalen_min,
+            (params.table_flags & MDBX_INTEGERDUP) ? config::intkey
+                                                   : config::no_scale,
+            params.mdbx_datalen_min(), params.mdbx_datalen_max())) {
       params.datalen_max = params.datalen_min;
       continue;
     }

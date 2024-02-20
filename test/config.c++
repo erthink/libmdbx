@@ -145,6 +145,16 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
     return true;
   }
 
+  if (strcmp(value_cstr, "rnd") == 0 || strcmp(value_cstr, "rand") == 0 ||
+      strcmp(value_cstr, "random") == 0) {
+    value = minval;
+    if (maxval > minval)
+      value += (prng32() + UINT64_C(44263400549519813)) % (maxval - minval);
+    if (scale == intkey)
+      value &= ~3u;
+    return true;
+  }
+
   char *suffix = nullptr;
   errno = 0;
   unsigned long long raw = strtoull(value_cstr, &suffix, 0);
@@ -159,7 +169,7 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 
   uint64_t multiplier = 1;
   if (suffix && *suffix) {
-    if (scale == no_scale)
+    if (scale == no_scale || scale == intkey)
       failure("Option '--%s' doesn't accepts suffixes, so '%s' is unexpected\n",
               option, suffix);
     if (strcmp(suffix, "K") == 0 || strcasecmp(suffix, "Kilo") == 0)
@@ -203,6 +213,8 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
   if (value < minval)
     failure("The minimal value for option '--%s' is %" PRIu64 "\n", option,
             minval);
+  if (scale == intkey)
+    value &= ~3u;
   return true;
 }
 

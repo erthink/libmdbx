@@ -63,7 +63,7 @@ const char *keygencase2str(const keygen_case);
 
 namespace config {
 
-enum scale_mode { no_scale, decimal, binary, duration };
+enum scale_mode { no_scale, decimal, binary, duration, intkey };
 
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   const char **value, const char *default_value = nullptr);
