@@ -73,6 +73,10 @@ if(UNIX AND NOT SUBPROJECT)
   target_include_directories(test_extra_upsert_alldups PRIVATE "${PROJECT_SOURCE_DIR}")
   target_link_libraries(test_extra_upsert_alldups ${TOOL_MDBX_LIB})
 
+  add_executable(test_extra_dupfixed_addodd extra/dupfixed_addodd.c)
+  target_include_directories(test_extra_dupfixed_addodd PRIVATE "${PROJECT_SOURCE_DIR}")
+  target_link_libraries(test_extra_dupfixed_addodd ${TOOL_MDBX_LIB})
+
   if(MDBX_BUILD_CXX)
     add_executable(test_extra_maindb_ordinal extra/maindb_ordinal.c++)
     target_include_directories(test_extra_maindb_ordinal PRIVATE "${PROJECT_SOURCE_DIR}")
@@ -183,6 +187,7 @@ else()
 
   if(UNIX AND NOT SUBPROJECT)
     add_test(NAME extra_upsert_alldups COMMAND test_extra_upsert_alldups)
+    add_test(NAME extra_dupfixed_addodd COMMAND test_extra_dupfixed_addodd)
     if(MDBX_BUILD_CXX)
       add_test(NAME extra_maindb_ordinal COMMAND test_extra_maindb_ordinal)
       add_test(NAME extra_dupfixed_multiple COMMAND test_extra_dupfixed_multiple)
