@@ -24,9 +24,9 @@ const char *testcase2str(const actor_testcase testcase) {
   case ac_hill:
     return "hill";
   case ac_deadread:
-    return "deadread";
+    return "dead.reader";
   case ac_deadwrite:
-    return "deadwrite";
+    return "dead.writer";
   case ac_jitter:
     return "jitter";
   case ac_try:
