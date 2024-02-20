@@ -108,19 +108,15 @@ class maker {
 
   struct essentials {
     uint16_t minlen{0};
-    enum { prng_fill_flag = 1 };
+    enum { prng_fill_flag = 1, value_age_width = 8 };
     uint16_t flags{0};
     uint32_t maxlen{0};
   } key_essentials, value_essentials;
 
-  static void mk_begin(const serial_t serial, const essentials &params,
-                       result &out);
+  static serial_t mk_begin(serial_t serial, const essentials &params,
+                           result &out);
   static void mk_continue(const serial_t serial, const essentials &params,
                           result &out);
-  static void mk(const serial_t serial, const essentials &params, result &out) {
-    mk_begin(serial, params, out);
-    mk_continue(serial, params, out);
-  }
 
 public:
   void pair(serial_t serial, const buffer &key, buffer &value,

@@ -79,7 +79,7 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
              unsigned(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT))));
   assert(!(value_essentials.flags &
            ~(essentials::prng_fill_flag |
-             unsigned(MDBX_INTEGERDUP | MDBX_REVERSEDUP))));
+             unsigned(MDBX_INTEGERDUP | MDBX_REVERSEDUP | MDBX_DUPFIXED))));
 
   log_trace("keygen-pair: serial %" PRIu64 ", data-age %" PRIu64, serial,
             value_age);
@@ -126,15 +126,14 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
           actor_params::serial_mask(mapping.split);
     }
 
-    value_serial |= value_age << mapping.split;
     log_trace("keygen-pair: split@%u => k%" PRIu64 ", v%" PRIu64, mapping.split,
               key_serial, value_serial);
   }
 
   log_trace("keygen-pair: key %" PRIu64 ", value %" PRIu64, key_serial,
             value_serial);
-  mk_begin(key_serial, key_essentials, *key);
-  mk_begin(value_serial, value_essentials, *value);
+  key_serial = mk_begin(key_serial, key_essentials, *key);
+  value_serial = mk_begin(value_serial, value_essentials, *value);
 
 #if 0 /* unused for now */
   if (key->value.iov_len + value->value.iov_len > pair_maxlen) {
@@ -193,11 +192,13 @@ void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
                   unsigned thread_number) {
 #if CONSTEXPR_ENUM_FLAGS_OPERATIONS
   static_assert(unsigned(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT |
-                         MDBX_INTEGERDUP | MDBX_REVERSEDUP) < UINT16_MAX,
+                         MDBX_DUPFIXED | MDBX_INTEGERDUP | MDBX_REVERSEDUP) <
+                    UINT16_MAX,
                 "WTF?");
 #else
   assert(unsigned(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT |
-                  MDBX_INTEGERDUP | MDBX_REVERSEDUP) < UINT16_MAX);
+                  MDBX_DUPFIXED | MDBX_INTEGERDUP | MDBX_REVERSEDUP) <
+         UINT16_MAX);
 #endif
   key_essentials.flags = uint16_t(
       actor.table_flags &
@@ -205,20 +206,19 @@ void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
   assert(actor.keylen_min <= UINT16_MAX);
   key_essentials.minlen = uint16_t(actor.keylen_min);
   assert(actor.keylen_max <= UINT32_MAX);
-  key_essentials.maxlen =
-      std::min(uint32_t(actor.keylen_max),
-               uint32_t(mdbx_limits_keysize_max(
-                   actor.pagesize, MDBX_db_flags_t(key_essentials.flags))));
+  key_essentials.maxlen = std::min(
+      uint32_t(actor.keylen_max),
+      uint32_t(mdbx_limits_keysize_max(actor.pagesize, actor.table_flags)));
 
   value_essentials.flags = uint16_t(
-      actor.table_flags & MDBX_db_flags_t(MDBX_INTEGERDUP | MDBX_REVERSEDUP));
+      actor.table_flags &
+      MDBX_db_flags_t(MDBX_INTEGERDUP | MDBX_REVERSEDUP | MDBX_DUPFIXED));
   assert(actor.datalen_min <= UINT16_MAX);
   value_essentials.minlen = uint16_t(actor.datalen_min);
   assert(actor.datalen_max <= UINT32_MAX);
-  value_essentials.maxlen =
-      std::min(uint32_t(actor.datalen_max),
-               uint32_t(mdbx_limits_valsize_max(
-                   actor.pagesize, MDBX_db_flags_t(key_essentials.flags))));
+  value_essentials.maxlen = std::min(
+      uint32_t(actor.datalen_max),
+      uint32_t(mdbx_limits_valsize_max(actor.pagesize, actor.table_flags)));
 
   if (!actor.keygen.zero_fill) {
     key_essentials.flags |= essentials::prng_fill_flag;
@@ -227,6 +227,16 @@ void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
 
   (void)thread_number;
   mapping = actor.keygen;
+  while (mapping.split >
+             essentials::value_age_width + value_essentials.maxlen * CHAR_BIT ||
+         mapping.split >= mapping.width)
+    mapping.split -= 1;
+
+  while (unsigned((actor.table_flags & MDBX_DUPSORT)
+                      ? mapping.width - mapping.split
+                      : mapping.width) > key_essentials.maxlen * CHAR_BIT)
+    mapping.width -= 1;
+
   salt =
       (actor.keygen.seed + uint64_t(actor_id)) * UINT64_C(14653293970879851569);
 
@@ -307,11 +317,20 @@ buffer alloc(size_t limit) {
   return buffer(ptr);
 }
 
-void __hot maker::mk_begin(const serial_t serial, const essentials &params,
-                           result &out) {
+serial_t __hot maker::mk_begin(serial_t serial, const essentials &params,
+                               result &out) {
   assert(out.limit >= params.maxlen);
   assert(params.maxlen >= params.minlen);
-  assert(params.maxlen >= length(serial));
+  if (params.maxlen < sizeof(serial_t)) {
+    const serial_t max = actor_params::serial_mask(params.maxlen * CHAR_BIT);
+    if (serial > max) {
+      serial ^= (serial >> max / 2) * serial_t((sizeof(serial_t) > 4)
+                                                   ? UINT64_C(40719303417517073)
+                                                   : UINT32_C(3708688457));
+      serial &= max;
+    }
+    assert(params.maxlen >= length(serial));
+  }
 
   out.value.iov_len = std::max(unsigned(params.minlen), length(serial));
   const auto variation = params.maxlen - params.minlen;
@@ -328,6 +347,7 @@ void __hot maker::mk_begin(const serial_t serial, const essentials &params,
   assert(length(serial) <= out.value.iov_len);
   assert(out.value.iov_len >= params.minlen);
   assert(out.value.iov_len <= params.maxlen);
+  return serial;
 }
 
 void __hot maker::mk_continue(const serial_t serial, const essentials &params,
