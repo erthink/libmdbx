@@ -24,9 +24,9 @@ const char *testcase2str(const actor_testcase testcase) {
   case ac_hill:
     return "hill";
   case ac_deadread:
-    return "deadread";
+    return "dead.reader";
   case ac_deadwrite:
-    return "deadwrite";
+    return "dead.writer";
   case ac_jitter:
     return "jitter";
   case ac_try:
@@ -41,9 +41,9 @@ const char *testcase2str(const actor_testcase testcase) {
     return "nested";
 #if !defined(_WIN32) && !defined(_WIN64)
   case ac_forkread:
-    return "forkread";
+    return "fork.reader";
   case ac_forkwrite:
-    return "forkwrite";
+    return "fork.writer";
 #endif /* Windows */
   }
 }
