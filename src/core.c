@@ -15742,6 +15742,7 @@ __cold static int env_close(MDBX_env *env, bool resurrect_after_fork) {
     next = ptr->next;
     osal_free(ptr);
   }
+  env->me_defer_free = nullptr;
 #endif /* MDBX_ENABLE_DBI_LOCKFREE */
 
   if (!(env->me_flags & MDBX_RDONLY))
