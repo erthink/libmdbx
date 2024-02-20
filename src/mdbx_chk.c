@@ -691,7 +691,8 @@ int main(int argc, char *argv[]) {
 
 bailout:
   if (env) {
-    const bool dont_sync = rc != 0 || chk.result.total_problems;
+    const bool dont_sync = rc != 0 || chk.result.total_problems ||
+                           (chk_flags & MDBX_CHK_READWRITE) == 0;
     mdbx_env_close_ex(env, dont_sync);
   }
   flush();
