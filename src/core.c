@@ -16295,7 +16295,7 @@ static int setup_dbx(MDBX_dbx *const dbx, const MDBX_db *const db,
 
   dbx->md_vlen_min = (db->md_flags & MDBX_INTEGERDUP)
                          ? 4 /* sizeof(uint32_t) */
-                         : ((db->md_flags & MDBX_DUPFIXED) ? 1 : 0);
+                         : ((db->md_flags & MDBX_DUPFIXED) ? sizeof(indx_t) : 0);
   dbx->md_vlen_max = valsize_max(pagesize, db->md_flags);
   assert(dbx->md_vlen_max != (size_t)-1);
 
