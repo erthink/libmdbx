@@ -693,7 +693,7 @@ bool actor_config::deserialize(const char *str, actor_config &config) {
 }
 
 unsigned actor_params::mdbx_keylen_min() const {
-  return (table_flags & MDBX_INTEGERKEY) ? 4 : 0;
+  return unsigned(mdbx_limits_keysize_min(table_flags));
 }
 
 unsigned actor_params::mdbx_keylen_max() const {
@@ -701,7 +701,7 @@ unsigned actor_params::mdbx_keylen_max() const {
 }
 
 unsigned actor_params::mdbx_datalen_min() const {
-  return (table_flags & MDBX_INTEGERDUP) ? 4 : 0;
+  return unsigned(mdbx_limits_valsize_min(table_flags));
 }
 
 unsigned actor_params::mdbx_datalen_max() const {

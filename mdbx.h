@@ -3369,12 +3369,24 @@ mdbx_limits_dbsize_max(intptr_t pagesize);
 MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API intptr_t
 mdbx_limits_keysize_max(intptr_t pagesize, MDBX_db_flags_t flags);
 
+/** \brief Returns minimal key size in bytes for given database flags.
+ * \ingroup c_statinfo
+ * \see db_flags */
+MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API intptr_t
+mdbx_limits_keysize_min(MDBX_db_flags_t flags);
+
 /** \brief Returns maximal data size in bytes for given page size
  * and database flags, or -1 if pagesize is invalid.
  * \ingroup c_statinfo
  * \see db_flags */
 MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API intptr_t
 mdbx_limits_valsize_max(intptr_t pagesize, MDBX_db_flags_t flags);
+
+/** \brief Returns minimal data size in bytes for given database flags.
+ * \ingroup c_statinfo
+ * \see db_flags */
+MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API intptr_t
+mdbx_limits_valsize_min(MDBX_db_flags_t flags);
 
 /** \brief Returns maximal size of key-value pair to fit in a single page with
  * the given size and database flags, or -1 if pagesize is invalid.

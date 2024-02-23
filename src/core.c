@@ -458,6 +458,19 @@ static __inline size_t keysize_max(size_t pagesize, MDBX_db_flags_t flags) {
   return max_branch_key;
 }
 
+static __inline size_t keysize_min(MDBX_db_flags_t flags) {
+  return (flags & MDBX_INTEGERKEY) ? 4 /* sizeof(uint32_t) */ : 0;
+}
+
+static __inline size_t valsize_min(MDBX_db_flags_t flags) {
+  if (flags & MDBX_INTEGERDUP)
+    return 4 /* sizeof(uint32_t) */;
+  else if (flags & MDBX_DUPFIXED)
+    return sizeof(indx_t);
+  else
+    return 0;
+}
+
 static __inline size_t valsize_max(size_t pagesize, MDBX_db_flags_t flags) {
   assert(pagesize >= MIN_PAGESIZE && pagesize <= MAX_PAGESIZE &&
          is_powerof2(pagesize));
@@ -510,6 +523,10 @@ __cold intptr_t mdbx_limits_keysize_max(intptr_t pagesize,
   return keysize_max(pagesize, flags);
 }
 
+__cold intptr_t mdbx_limits_keysize_min(MDBX_db_flags_t flags) {
+  return keysize_min(flags);
+}
+
 __cold int mdbx_env_get_maxvalsize_ex(const MDBX_env *env,
                                       MDBX_db_flags_t flags) {
   if (unlikely(!env || env->me_signature.weak != MDBX_ME_SIGNATURE))
@@ -528,6 +545,10 @@ __cold intptr_t mdbx_limits_valsize_max(intptr_t pagesize,
     return -1;
 
   return valsize_max(pagesize, flags);
+}
+
+__cold intptr_t mdbx_limits_valsize_min(MDBX_db_flags_t flags) {
+  return valsize_min(flags);
 }
 
 __cold intptr_t mdbx_limits_pairsize4page_max(intptr_t pagesize,
@@ -16289,14 +16310,11 @@ static int setup_dbx(MDBX_dbx *const dbx, const MDBX_db *const db,
     dbx->md_dcmp = get_default_datacmp(db->md_flags);
   }
 
-  dbx->md_klen_min =
-      (db->md_flags & MDBX_INTEGERKEY) ? 4 /* sizeof(uint32_t) */ : 0;
+  dbx->md_klen_min = keysize_min(db->md_flags);
   dbx->md_klen_max = keysize_max(pagesize, db->md_flags);
   assert(dbx->md_klen_max != (unsigned)-1);
 
-  dbx->md_vlen_min = (db->md_flags & MDBX_INTEGERDUP)
-                         ? 4 /* sizeof(uint32_t) */
-                         : ((db->md_flags & MDBX_DUPFIXED) ? sizeof(indx_t) : 0);
+  dbx->md_vlen_min = valsize_min(db->md_flags);
   dbx->md_vlen_max = valsize_max(pagesize, db->md_flags);
   assert(dbx->md_vlen_max != (size_t)-1);
 
