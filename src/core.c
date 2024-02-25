@@ -20651,7 +20651,7 @@ static int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
   /* It is reasonable and possible to split the page at the begin */
   if (unlikely(newindx < minkeys)) {
     split_indx = minkeys;
-    if (newindx == 0 && foliage == 0 && !(naf & MDBX_SPLIT_REPLACE)) {
+    if (newindx == 0 && !(naf & MDBX_SPLIT_REPLACE)) {
       split_indx = 0;
       /* Checking for ability of splitting by the left-side insertion
        * of a pure page with the new key */
@@ -20671,8 +20671,8 @@ static int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
         } else
           get_key(page_node(mp, 0), &sepkey);
         cASSERT(mc, mc->mc_dbx->md_cmp(newkey, &sepkey) < 0);
-        /* Avoiding rare complex cases of split the parent page */
-        if (page_room(mn.mc_pg[ptop]) < branch_size(env, &sepkey))
+        /* Avoiding rare complex cases of nested split the parent page(s) */
+        if (page_room(mc->mc_pg[ptop]) < branch_size(env, &sepkey))
           split_indx = minkeys;
       }
       if (foliage) {
@@ -20696,9 +20696,10 @@ static int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
     sepkey = *newkey;
   } else if (unlikely(pure_left)) {
     /* newindx == split_indx == 0 */
-    TRACE("no-split, but add new pure page at the %s", "left/before");
+    TRACE("pure-left: no-split, but add new pure page at the %s",
+          "left/before");
     cASSERT(mc, newindx == 0 && split_indx == 0 && minkeys == 1);
-    TRACE("old-first-key is %s", DKEY_DEBUG(&sepkey));
+    TRACE("pure-left: old-first-key is %s", DKEY_DEBUG(&sepkey));
   } else {
     if (IS_LEAF2(sister)) {
       /* Move half of the keys to the right sibling */
@@ -20912,18 +20913,20 @@ static int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
     }
   } else if (unlikely(pure_left)) {
     MDBX_page *ptop_page = mc->mc_pg[ptop];
-    DEBUG("adding to parent page %u node[%u] left-leaf page #%u key %s",
+    TRACE("pure-left: adding to parent page %u node[%u] left-leaf page #%u key "
+          "%s",
           ptop_page->mp_pgno, mc->mc_ki[ptop], sister->mp_pgno,
           DKEY(mc->mc_ki[ptop] ? newkey : NULL));
-    mc->mc_top--;
+    assert(mc->mc_top == ptop + 1);
+    mc->mc_top = (uint8_t)ptop;
     rc = node_add_branch(mc, mc->mc_ki[ptop], mc->mc_ki[ptop] ? newkey : NULL,
                          sister->mp_pgno);
     cASSERT(mc, mp == mc->mc_pg[ptop + 1] && newindx == mc->mc_ki[ptop + 1] &&
                     ptop == mc->mc_top);
 
     if (likely(rc == MDBX_SUCCESS) && mc->mc_ki[ptop] == 0) {
-      DEBUG("update prev-first key on parent %s", DKEY(&sepkey));
       MDBX_node *node = page_node(mc->mc_pg[ptop], 1);
+      TRACE("pure-left: update prev-first key on parent to %s", DKEY(&sepkey));
       cASSERT(mc, node_ks(node) == 0 && node_pgno(node) == mp->mp_pgno);
       cASSERT(mc, mc->mc_top == ptop && mc->mc_ki[ptop] == 0);
       mc->mc_ki[ptop] = 1;
@@ -20931,6 +20934,9 @@ static int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
       cASSERT(mc, mc->mc_top == ptop && mc->mc_ki[ptop] == 1);
       cASSERT(mc, mp == mc->mc_pg[ptop + 1] && newindx == mc->mc_ki[ptop + 1]);
       mc->mc_ki[ptop] = 0;
+    } else {
+      TRACE("pure-left: no-need-update prev-first key on parent %s",
+            DKEY(&sepkey));
     }
 
     mc->mc_top++;
@@ -20979,7 +20985,7 @@ static int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
               &sepkey);
           if (mc->mc_dbx->md_cmp(newkey, &sepkey) < 0) {
             mc->mc_top -= (uint8_t)i;
-            DEBUG("update new-first on parent [%i] page %u key %s",
+            DEBUG("pure-left: update new-first on parent [%i] page %u key %s",
                   mc->mc_ki[mc->mc_top], mc->mc_pg[mc->mc_top]->mp_pgno,
                   DKEY(newkey));
             rc = update_key(mc, newkey);
@@ -20990,7 +20996,7 @@ static int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
           break;
         }
     }
-  } else if (tmp_ki_copy /* !IS_LEAF2(mp) */) {
+  } else if (tmp_ki_copy) { /* !IS_LEAF2(mp) */
     /* Move nodes */
     mc->mc_pg[mc->mc_top] = sister;
     i = split_indx;
@@ -21109,7 +21115,7 @@ static int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
         m3->mc_ki[k + 1] = m3->mc_ki[k];
         m3->mc_pg[k + 1] = m3->mc_pg[k];
       }
-      m3->mc_ki[0] = m3->mc_ki[0] >= nkeys;
+      m3->mc_ki[0] = m3->mc_ki[0] >= nkeys + pure_left;
       m3->mc_pg[0] = mc->mc_pg[0];
       m3->mc_snum++;
       m3->mc_top++;
