@@ -107,18 +107,22 @@ uint64_t prng64_white(uint64_t &state) {
   return bleach64(state);
 }
 
-uint32_t prng32(uint64_t &state) {
-  return (uint32_t)(prng64_careless(state) >> 32);
+uint32_t prng32_fast(uint64_t &state) {
+  return uint32_t(prng64_careless(state) >> 32);
+}
+
+uint32_t prng32_white(uint64_t &state) {
+  return bleach32(uint32_t(prng64_careless(state) >> 32));
 }
 
 void prng_fill(uint64_t &state, void *ptr, size_t bytes) {
-  uint32_t u32 = prng32(state);
+  uint32_t u32 = prng32_fast(state);
 
   while (bytes >= 4) {
     memcpy(ptr, &u32, 4);
     ptr = (uint32_t *)ptr + 1;
     bytes -= 4;
-    u32 = prng32(state);
+    u32 = prng32_fast(state);
   }
 
   switch (bytes & 3) {
@@ -140,7 +144,7 @@ void prng_fill(uint64_t &state, void *ptr, size_t bytes) {
 
 void prng_seed(uint64_t seed) { prng_state = bleach64(seed); }
 
-uint32_t prng32(void) { return prng32(prng_state); }
+uint32_t prng32(void) { return prng32_white(prng_state); }
 
 uint64_t prng64(void) { return prng64_white(prng_state); }
 
