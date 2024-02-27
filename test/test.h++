@@ -277,6 +277,7 @@ protected:
   void signal();
   bool should_continue(bool check_timeout_only = false) const;
 
+  void failure(const char *fmt, ...) const;
   void generate_pair(const keygen::serial_t serial, keygen::buffer &out_key,
                      keygen::buffer &out_value, keygen::serial_t data_age) {
     keyvalue_maker.pair(serial, out_key, out_value, data_age, false);
