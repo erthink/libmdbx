@@ -17343,11 +17343,11 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
     rc = MDBX_NO_ROOT;
   } else if ((flags & MDBX_CURRENT) == 0) {
     bool exact = false;
-    MDBX_val lastkey, olddata;
+    MDBX_val last_key, old_data;
     if ((flags & MDBX_APPEND) && mc->mc_db->md_entries > 0) {
-      rc = cursor_last(mc, &lastkey, &olddata);
+      rc = cursor_last(mc, &last_key, &old_data);
       if (likely(rc == MDBX_SUCCESS)) {
-        const int cmp = mc->mc_dbx->md_cmp(key, &lastkey);
+        const int cmp = mc->mc_dbx->md_cmp(key, &last_key);
         if (likely(cmp > 0)) {
           mc->mc_ki[mc->mc_top]++; /* step forward for appending */
           rc = MDBX_NOTFOUND;
@@ -17362,7 +17362,7 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
     } else {
       struct cursor_set_result csr =
           /* olddata may not be updated in case LEAF2-page of dupfixed-subDB */
-          cursor_set(mc, (MDBX_val *)key, &olddata, MDBX_SET);
+          cursor_set(mc, (MDBX_val *)key, &old_data, MDBX_SET);
       rc = csr.err;
       exact = csr.exact;
     }
@@ -17370,14 +17370,14 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
       if (exact) {
         if (unlikely(flags & MDBX_NOOVERWRITE)) {
           DEBUG("duplicate key [%s]", DKEY_DEBUG(key));
-          *data = olddata;
+          *data = old_data;
           return MDBX_KEYEXIST;
         }
         if (unlikely(mc->mc_flags & C_SUB)) {
           /* nested subtree of DUPSORT-database with the same key,
            * nothing to update */
           eASSERT(env, data->iov_len == 0 &&
-                           (olddata.iov_len == 0 ||
+                           (old_data.iov_len == 0 ||
                             /* olddata may not be updated in case LEAF2-page
                                of dupfixed-subDB */
                             (mc->mc_db->md_flags & MDBX_DUPFIXED)));
@@ -17393,8 +17393,8 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
           exact = false;
         } else if (!(flags & (MDBX_RESERVE | MDBX_MULTIPLE))) {
           /* checking for early exit without dirtying pages */
-          if (unlikely(eq_fast(data, &olddata))) {
-            cASSERT(mc, mc->mc_dbx->md_dcmp(data, &olddata) == 0);
+          if (unlikely(eq_fast(data, &old_data))) {
+            cASSERT(mc, mc->mc_dbx->md_dcmp(data, &old_data) == 0);
             if (mc->mc_xcursor) {
               if (flags & MDBX_NODUPDATA)
                 return MDBX_KEYEXIST;
@@ -17404,7 +17404,7 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
             /* the same data, nothing to update */
             return MDBX_SUCCESS;
           }
-          cASSERT(mc, mc->mc_dbx->md_dcmp(data, &olddata) != 0);
+          cASSERT(mc, mc->mc_dbx->md_dcmp(data, &old_data) != 0);
         }
       }
     } else if (unlikely(rc != MDBX_NOTFOUND))
@@ -17412,17 +17412,16 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
   }
 
   mc->mc_flags &= ~C_DEL;
-  MDBX_val xdata, *rdata = data;
-  size_t mcount = 0, dcount = 0;
+  MDBX_val xdata, *ref_data = data;
+  size_t *batch_dupfixed_done = nullptr, batch_dupfixed_given = 0;
   if (unlikely(flags & MDBX_MULTIPLE)) {
-    dcount = data[1].iov_len;
-    data[1].iov_len = 0 /* reset done item counter */;
-    rdata = &xdata;
-    xdata.iov_len = data->iov_len * dcount;
+    batch_dupfixed_given = data[1].iov_len;
+    batch_dupfixed_done = &data[1].iov_len;
+    *batch_dupfixed_done = 0;
   }
 
   /* Cursor is positioned, check for room in the dirty list */
-  err = cursor_touch(mc, key, rdata);
+  err = cursor_touch(mc, key, ref_data);
   if (unlikely(err))
     return err;
 
@@ -17457,7 +17456,7 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
     mc->mc_flags |= C_INITIALIZED;
   }
 
-  MDBX_val dkey, olddata;
+  MDBX_val old_singledup, old_data;
   MDBX_db nested_dupdb;
   MDBX_page *sub_root = nullptr;
   bool insert_key, insert_data;
@@ -17465,19 +17464,19 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
   MDBX_page *fp = env->me_pbuf;
   fp->mp_txnid = mc->mc_txn->mt_front;
   insert_key = insert_data = (rc != MDBX_SUCCESS);
-  dkey.iov_base = nullptr;
+  old_singledup.iov_base = nullptr;
   if (insert_key) {
     /* The key does not exist */
     DEBUG("inserting key at index %i", mc->mc_ki[mc->mc_top]);
     if ((mc->mc_db->md_flags & MDBX_DUPSORT) &&
         node_size(key, data) > env->me_leaf_nodemax) {
       /* Too big for a node, insert in sub-DB.  Set up an empty
-       * "old sub-page" for prep_subDB to expand to a full page. */
+       * "old sub-page" for convert_to_subtree to expand to a full page. */
       fp->mp_leaf2_ksize =
           (mc->mc_db->md_flags & MDBX_DUPFIXED) ? (uint16_t)data->iov_len : 0;
       fp->mp_lower = fp->mp_upper = 0;
-      olddata.iov_len = PAGEHDRSZ;
-      goto prep_subDB;
+      old_data.iov_len = PAGEHDRSZ;
+      goto convert_to_subtree;
     }
   } else {
     /* there's only a key anyway, so this is a no-op */
@@ -17522,7 +17521,8 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
       if (unlikely(err != MDBX_SUCCESS))
         return err;
     }
-    MDBX_node *node = page_node(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
+    MDBX_node *const node =
+        page_node(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
 
     /* Large/Overflow page overwrites need special handling */
     if (unlikely(node_flags(node) & F_BIGDATA)) {
@@ -17596,19 +17596,18 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
       if ((err = page_retire(mc, lp.page)) != MDBX_SUCCESS)
         return err;
     } else {
-      olddata.iov_len = node_ds(node);
-      olddata.iov_base = node_data(node);
-      cASSERT(mc, ptr_disp(olddata.iov_base, olddata.iov_len) <=
+      old_data.iov_len = node_ds(node);
+      old_data.iov_base = node_data(node);
+      cASSERT(mc, ptr_disp(old_data.iov_base, old_data.iov_len) <=
                       ptr_disp(mc->mc_pg[mc->mc_top], env->me_psize));
 
       /* DB has dups? */
       if (mc->mc_db->md_flags & MDBX_DUPSORT) {
         /* Prepare (sub-)page/sub-DB to accept the new item, if needed.
          * fp: old sub-page or a header faking it.
-         * mp: new (sub-)page.  offset: growth in page size.
-         * xdata: node data with new page or DB. */
-        size_t i;
-        size_t offset = 0;
+         * mp: new (sub-)page.
+         * xdata: node data with new sub-page or sub-DB. */
+        size_t growth = 0; /* growth in page size.*/
         MDBX_page *mp = fp = xdata.iov_base = env->me_pbuf;
         mp->mp_pgno = mc->mc_pg[mc->mc_top]->mp_pgno;
 
@@ -17616,19 +17615,19 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
         if (!(node_flags(node) & F_DUPDATA)) {
           /* does data match? */
           if (flags & MDBX_APPENDDUP) {
-            const int cmp = mc->mc_dbx->md_dcmp(data, &olddata);
-            cASSERT(mc, cmp != 0 || eq_fast(data, &olddata));
+            const int cmp = mc->mc_dbx->md_dcmp(data, &old_data);
+            cASSERT(mc, cmp != 0 || eq_fast(data, &old_data));
             if (unlikely(cmp <= 0))
               return MDBX_EKEYMISMATCH;
-          } else if (eq_fast(data, &olddata)) {
-            cASSERT(mc, mc->mc_dbx->md_dcmp(data, &olddata) == 0);
+          } else if (eq_fast(data, &old_data)) {
+            cASSERT(mc, mc->mc_dbx->md_dcmp(data, &old_data) == 0);
             if (flags & MDBX_NODUPDATA)
               return MDBX_KEYEXIST;
             /* data is match exactly byte-to-byte, nothing to update */
             rc = MDBX_SUCCESS;
-            if (likely((flags & MDBX_MULTIPLE) == 0))
-              return rc;
-            goto continue_multiple;
+            if (unlikely(batch_dupfixed_done))
+              goto batch_dupfixed_continue;
+            return rc;
           }
 
           /* Just overwrite the current item */
@@ -17638,13 +17637,13 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
           }
 
           /* Back up original data item */
-          memcpy(dkey.iov_base = fp + 1, olddata.iov_base,
-                 dkey.iov_len = olddata.iov_len);
+          memcpy(old_singledup.iov_base = fp + 1, old_data.iov_base,
+                 old_singledup.iov_len = old_data.iov_len);
 
           /* Make sub-page header for the dup items, with dummy body */
           fp->mp_flags = P_LEAF | P_SUBP;
           fp->mp_lower = 0;
-          xdata.iov_len = PAGEHDRSZ + dkey.iov_len + data->iov_len;
+          xdata.iov_len = PAGEHDRSZ + old_data.iov_len + data->iov_len;
           if (mc->mc_db->md_flags & MDBX_DUPFIXED) {
             fp->mp_flags |= P_LEAF2;
             fp->mp_leaf2_ksize = (uint16_t)data->iov_len;
@@ -17652,27 +17651,26 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
             cASSERT(mc, xdata.iov_len <= env->me_psize);
           } else {
             xdata.iov_len += 2 * (sizeof(indx_t) + NODESIZE) +
-                             (dkey.iov_len & 1) + (data->iov_len & 1);
-            cASSERT(mc, xdata.iov_len <= env->me_psize);
+                             (old_data.iov_len & 1) + (data->iov_len & 1);
           }
           fp->mp_upper = (uint16_t)(xdata.iov_len - PAGEHDRSZ);
-          olddata.iov_len = xdata.iov_len; /* pretend olddata is fp */
+          old_data.iov_len = xdata.iov_len; /* pretend olddata is fp */
         } else if (node_flags(node) & F_SUBDATA) {
           /* Data is on sub-DB, just store it */
           flags |= F_DUPDATA | F_SUBDATA;
-          goto put_sub;
+          goto dupsort_put;
         } else {
           /* Data is on sub-page */
-          fp = olddata.iov_base;
+          fp = old_data.iov_base;
           switch (flags) {
           default:
             if (!(mc->mc_db->md_flags & MDBX_DUPFIXED)) {
-              offset = node_size(data, nullptr) + sizeof(indx_t);
+              growth = node_size(data, nullptr) + sizeof(indx_t);
               break;
             }
-            offset = fp->mp_leaf2_ksize;
-            if (page_room(fp) < offset) {
-              offset *= 4; /* space for 4 more */
+            growth = fp->mp_leaf2_ksize;
+            if (page_room(fp) < growth) {
+              growth *= 4; /* space for 4 more */
               break;
             }
             /* FALLTHRU: Big enough MDBX_DUPFIXED sub-page */
@@ -17683,17 +17681,17 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
             fp->mp_pgno = mp->mp_pgno;
             mc->mc_xcursor->mx_cursor.mc_pg[0] = fp;
             flags |= F_DUPDATA;
-            goto put_sub;
+            goto dupsort_put;
           }
-          xdata.iov_len = olddata.iov_len + offset;
+          xdata.iov_len = old_data.iov_len + growth;
         }
 
         fp_flags = fp->mp_flags;
         if (node_size_len(node_ks(node), xdata.iov_len) >
             env->me_leaf_nodemax) {
           /* Too big for a sub-page, convert to sub-DB */
+        convert_to_subtree:
           fp_flags &= ~P_SUBP;
-        prep_subDB:
           nested_dupdb.md_xsize = 0;
           nested_dupdb.md_flags = flags_db2sub(mc->mc_db->md_flags);
           if (mc->mc_db->md_flags & MDBX_DUPFIXED) {
@@ -17712,8 +17710,8 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
           if (unlikely(par.err != MDBX_SUCCESS))
             return par.err;
           mc->mc_db->md_leaf_pages += 1;
-          cASSERT(mc, env->me_psize > olddata.iov_len);
-          offset = env->me_psize - (unsigned)olddata.iov_len;
+          cASSERT(mc, env->me_psize > old_data.iov_len);
+          growth = env->me_psize - (unsigned)old_data.iov_len;
           flags |= F_DUPDATA | F_SUBDATA;
           nested_dupdb.md_root = mp->mp_pgno;
           nested_dupdb.md_seq = 0;
@@ -17725,8 +17723,8 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
           mp->mp_txnid = mc->mc_txn->mt_front;
           mp->mp_leaf2_ksize = fp->mp_leaf2_ksize;
           mp->mp_lower = fp->mp_lower;
-          cASSERT(mc, fp->mp_upper + offset <= UINT16_MAX);
-          mp->mp_upper = (indx_t)(fp->mp_upper + offset);
+          cASSERT(mc, fp->mp_upper + growth < UINT16_MAX);
+          mp->mp_upper = fp->mp_upper + (indx_t)growth;
           if (unlikely(fp_flags & P_LEAF2)) {
             memcpy(page_data(mp), page_data(fp),
                    page_numkeys(fp) * fp->mp_leaf2_ksize);
@@ -17737,21 +17735,21 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
             cASSERT(mc, (mp->mp_upper & 1) == 0);
             memcpy(ptr_disp(mp, mp->mp_upper + PAGEHDRSZ),
                    ptr_disp(fp, fp->mp_upper + PAGEHDRSZ),
-                   olddata.iov_len - fp->mp_upper - PAGEHDRSZ);
+                   old_data.iov_len - fp->mp_upper - PAGEHDRSZ);
             memcpy(mp->mp_ptrs, fp->mp_ptrs,
                    page_numkeys(fp) * sizeof(mp->mp_ptrs[0]));
-            for (i = 0; i < page_numkeys(fp); i++) {
-              cASSERT(mc, mp->mp_ptrs[i] + offset <= UINT16_MAX);
-              mp->mp_ptrs[i] += (indx_t)offset;
+            for (size_t i = 0; i < page_numkeys(fp); i++) {
+              cASSERT(mc, mp->mp_ptrs[i] + growth <= UINT16_MAX);
+              mp->mp_ptrs[i] += (indx_t)growth;
             }
           }
         }
 
         if (!insert_key)
           node_del(mc, 0);
-        rdata = &xdata;
+        ref_data = &xdata;
         flags |= F_DUPDATA;
-        goto new_sub;
+        goto insert_node;
       }
 
       /* MDBX passes F_SUBDATA in 'flags' to write a DB record */
@@ -17759,15 +17757,15 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
         return MDBX_INCOMPATIBLE;
 
     current:
-      if (data->iov_len == olddata.iov_len) {
+      if (data->iov_len == old_data.iov_len) {
         cASSERT(mc, EVEN(key->iov_len) == EVEN(node_ks(node)));
         /* same size, just replace it. Note that we could
          * also reuse this node if the new data is smaller,
          * but instead we opt to shrink the node in that case. */
         if (flags & MDBX_RESERVE)
-          data->iov_base = olddata.iov_base;
+          data->iov_base = old_data.iov_base;
         else if (!(mc->mc_flags & C_SUB))
-          memcpy(olddata.iov_base, data->iov_base, data->iov_len);
+          memcpy(old_data.iov_base, data->iov_base, data->iov_len);
         else {
           cASSERT(mc, page_numkeys(mc->mc_pg[mc->mc_top]) == 1);
           cASSERT(mc, PAGETYPE_COMPAT(mc->mc_pg[mc->mc_top]) == P_LEAF);
@@ -17792,14 +17790,15 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
     node_del(mc, 0);
   }
 
-  rdata = data;
+  ref_data = data;
 
-new_sub:;
+insert_node:;
   const unsigned naf = flags & NODE_ADD_FLAGS;
-  size_t nsize = IS_LEAF2(mc->mc_pg[mc->mc_top]) ? key->iov_len
-                                                 : leaf_size(env, key, rdata);
+  size_t nsize = IS_LEAF2(mc->mc_pg[mc->mc_top])
+                     ? key->iov_len
+                     : leaf_size(env, key, ref_data);
   if (page_room(mc->mc_pg[mc->mc_top]) < nsize) {
-    rc = page_split(mc, key, rdata, P_INVALID,
+    rc = page_split(mc, key, ref_data, P_INVALID,
                     insert_key ? naf : naf | MDBX_SPLIT_REPLACE);
     if (rc == MDBX_SUCCESS && AUDIT_ENABLED())
       rc = insert_key ? cursor_check(mc) : cursor_check_updating(mc);
@@ -17807,25 +17806,25 @@ new_sub:;
     /* There is room already in this leaf page. */
     if (IS_LEAF2(mc->mc_pg[mc->mc_top])) {
       cASSERT(mc, !(naf & (F_BIGDATA | F_SUBDATA | F_DUPDATA)) &&
-                      rdata->iov_len == 0);
+                      ref_data->iov_len == 0);
       rc = node_add_leaf2(mc, mc->mc_ki[mc->mc_top], key);
     } else
-      rc = node_add_leaf(mc, mc->mc_ki[mc->mc_top], key, rdata, naf);
+      rc = node_add_leaf(mc, mc->mc_ki[mc->mc_top], key, ref_data, naf);
     if (likely(rc == 0)) {
       /* Adjust other cursors pointing to mp */
       const MDBX_dbi dbi = mc->mc_dbi;
-      const size_t i = mc->mc_top;
-      MDBX_page *const mp = mc->mc_pg[i];
+      const size_t top = mc->mc_top;
+      MDBX_page *const mp = mc->mc_pg[top];
       for (MDBX_cursor *m2 = mc->mc_txn->mt_cursors[dbi]; m2;
            m2 = m2->mc_next) {
         MDBX_cursor *m3 =
             (mc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
-        if (m3 == mc || m3->mc_snum < mc->mc_snum || m3->mc_pg[i] != mp)
+        if (m3 == mc || m3->mc_snum < mc->mc_snum || m3->mc_pg[top] != mp)
           continue;
-        if (m3->mc_ki[i] >= mc->mc_ki[i])
-          m3->mc_ki[i] += insert_key;
+        if (m3->mc_ki[top] >= mc->mc_ki[top])
+          m3->mc_ki[top] += insert_key;
         if (XCURSOR_INITED(m3))
-          XCURSOR_REFRESH(m3, mp, m3->mc_ki[i]);
+          XCURSOR_REFRESH(m3, mp, m3->mc_ki[top]);
       }
     }
   }
@@ -17836,18 +17835,18 @@ new_sub:;
      * size limits on dupdata. The actual data fields of the child
      * DB are all zero size. */
     if (flags & F_DUPDATA) {
-      unsigned xflags;
-      size_t ecount;
-    put_sub:
-      xdata.iov_len = 0;
-      xdata.iov_base = nullptr;
+      MDBX_val empty;
+    dupsort_put:
+      empty.iov_len = 0;
+      empty.iov_base = nullptr;
       MDBX_node *node = page_node(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
 #define SHIFT_MDBX_NODUPDATA_TO_MDBX_NOOVERWRITE 1
       STATIC_ASSERT(
           (MDBX_NODUPDATA >> SHIFT_MDBX_NODUPDATA_TO_MDBX_NOOVERWRITE) ==
           MDBX_NOOVERWRITE);
-      xflags = MDBX_CURRENT | ((flags & MDBX_NODUPDATA) >>
-                               SHIFT_MDBX_NODUPDATA_TO_MDBX_NOOVERWRITE);
+      unsigned xflags =
+          MDBX_CURRENT | ((flags & MDBX_NODUPDATA) >>
+                          SHIFT_MDBX_NODUPDATA_TO_MDBX_NOOVERWRITE);
       if ((flags & MDBX_CURRENT) == 0) {
         xflags -= MDBX_CURRENT;
         err = cursor_xinit1(mc, node, mc->mc_pg[mc->mc_top]);
@@ -17857,80 +17856,78 @@ new_sub:;
       if (sub_root)
         mc->mc_xcursor->mx_cursor.mc_pg[0] = sub_root;
       /* converted, write the original data first */
-      if (dkey.iov_base) {
-        rc = cursor_put_nochecklen(&mc->mc_xcursor->mx_cursor, &dkey, &xdata,
-                                   xflags);
+      if (old_singledup.iov_base) {
+        rc = cursor_put_nochecklen(&mc->mc_xcursor->mx_cursor, &old_singledup,
+                                   &empty, xflags);
         if (unlikely(rc))
-          goto bad_sub;
+          goto dupsort_error;
       }
       if (!(node_flags(node) & F_SUBDATA) || sub_root) {
         /* Adjust other cursors pointing to mp */
-        MDBX_cursor *m2;
-        MDBX_xcursor *mx = mc->mc_xcursor;
-        size_t i = mc->mc_top;
-        MDBX_page *mp = mc->mc_pg[i];
+        MDBX_xcursor *const mx = mc->mc_xcursor;
+        const size_t top = mc->mc_top;
+        MDBX_page *const mp = mc->mc_pg[top];
         const intptr_t nkeys = page_numkeys(mp);
 
-        for (m2 = mc->mc_txn->mt_cursors[mc->mc_dbi]; m2; m2 = m2->mc_next) {
+        for (MDBX_cursor *m2 = mc->mc_txn->mt_cursors[mc->mc_dbi]; m2;
+             m2 = m2->mc_next) {
           if (m2 == mc || m2->mc_snum < mc->mc_snum)
             continue;
           if (!(m2->mc_flags & C_INITIALIZED))
             continue;
-          if (m2->mc_pg[i] == mp) {
-            if (m2->mc_ki[i] == mc->mc_ki[i]) {
-              err = cursor_xinit2(m2, mx, dkey.iov_base != nullptr);
+          if (m2->mc_pg[top] == mp) {
+            if (m2->mc_ki[top] == mc->mc_ki[top]) {
+              err = cursor_xinit2(m2, mx, old_singledup.iov_base != nullptr);
               if (unlikely(err != MDBX_SUCCESS))
                 return err;
-            } else if (!insert_key && m2->mc_ki[i] < nkeys) {
-              XCURSOR_REFRESH(m2, mp, m2->mc_ki[i]);
+            } else if (!insert_key && m2->mc_ki[top] < nkeys) {
+              XCURSOR_REFRESH(m2, mp, m2->mc_ki[top]);
             }
           }
         }
       }
       cASSERT(mc, mc->mc_xcursor->mx_db.md_entries < PTRDIFF_MAX);
-      ecount = (size_t)mc->mc_xcursor->mx_db.md_entries;
+      const size_t probe = (size_t)mc->mc_xcursor->mx_db.md_entries;
 #define SHIFT_MDBX_APPENDDUP_TO_MDBX_APPEND 1
       STATIC_ASSERT((MDBX_APPENDDUP >> SHIFT_MDBX_APPENDDUP_TO_MDBX_APPEND) ==
                     MDBX_APPEND);
       xflags |= (flags & MDBX_APPENDDUP) >> SHIFT_MDBX_APPENDDUP_TO_MDBX_APPEND;
-      rc = cursor_put_nochecklen(&mc->mc_xcursor->mx_cursor, data, &xdata,
+      rc = cursor_put_nochecklen(&mc->mc_xcursor->mx_cursor, data, &empty,
                                  xflags);
       if (flags & F_SUBDATA) {
         void *db = node_data(node);
         mc->mc_xcursor->mx_db.md_mod_txnid = mc->mc_txn->mt_txnid;
         memcpy(db, &mc->mc_xcursor->mx_db, sizeof(MDBX_db));
       }
-      insert_data = (ecount != (size_t)mc->mc_xcursor->mx_db.md_entries);
+      insert_data = (probe != (size_t)mc->mc_xcursor->mx_db.md_entries);
     }
     /* Increment count unless we just replaced an existing item. */
     if (insert_data)
       mc->mc_db->md_entries++;
     if (insert_key) {
-      /* Invalidate txn if we created an empty sub-DB */
-      if (unlikely(rc))
-        goto bad_sub;
+      if (unlikely(rc != MDBX_SUCCESS))
+        goto dupsort_error;
       /* If we succeeded and the key didn't exist before,
        * make sure the cursor is marked valid. */
       mc->mc_flags |= C_INITIALIZED;
     }
-    if (unlikely(flags & MDBX_MULTIPLE)) {
-      if (likely(rc == MDBX_SUCCESS)) {
-      continue_multiple:
-        mcount++;
+    if (likely(rc == MDBX_SUCCESS)) {
+      if (unlikely(batch_dupfixed_done)) {
+      batch_dupfixed_continue:
         /* let caller know how many succeeded, if any */
-        data[1].iov_len = mcount;
-        if (mcount < dcount) {
+        if ((*batch_dupfixed_done += 1) < batch_dupfixed_given) {
           data[0].iov_base = ptr_disp(data[0].iov_base, data[0].iov_len);
           insert_key = insert_data = false;
-          dkey.iov_base = nullptr;
+          old_singledup.iov_base = nullptr;
           goto more;
         }
       }
+      if (AUDIT_ENABLED())
+        rc = cursor_check(mc);
     }
-    if (rc == MDBX_SUCCESS && AUDIT_ENABLED())
-      rc = cursor_check(mc);
     return rc;
-  bad_sub:
+
+  dupsort_error:
     if (unlikely(rc == MDBX_KEYEXIST)) {
       /* should not happen, we deleted that item */
       ERROR("Unexpected %i error while put to nested dupsort's hive", rc);
