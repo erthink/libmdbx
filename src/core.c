@@ -3357,7 +3357,7 @@ static int __must_check_result node_add_leaf2(MDBX_cursor *mc, size_t indx,
                                               const MDBX_val *key);
 
 static void node_del(MDBX_cursor *mc, size_t ksize);
-static void node_shrink(MDBX_page *mp, size_t indx);
+static MDBX_node *node_shrink(MDBX_page *mp, size_t indx, MDBX_node *node);
 static int __must_check_result node_move(MDBX_cursor *csrc, MDBX_cursor *cdst,
                                          bool fromleft);
 static int __must_check_result node_read(MDBX_cursor *mc, const MDBX_node *leaf,
@@ -18766,7 +18766,7 @@ static __hot int cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
       if (!(node_flags(node) & F_SUBDATA))
         mc->mc_xcursor->mx_cursor.mc_pg[0] = node_data(node);
       rc = cursor_del(&mc->mc_xcursor->mx_cursor, 0);
-      if (unlikely(rc))
+      if (unlikely(rc != MDBX_SUCCESS))
         return rc;
       /* If sub-DB still has entries, we're done */
       if (mc->mc_xcursor->mx_db.md_entries) {
@@ -18775,11 +18775,10 @@ static __hot int cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
           mc->mc_xcursor->mx_db.md_mod_txnid = mc->mc_txn->mt_txnid;
           memcpy(node_data(node), &mc->mc_xcursor->mx_db, sizeof(MDBX_db));
         } else {
-          /* shrink fake page */
-          node_shrink(mp, mc->mc_ki[mc->mc_top]);
-          node = page_node(mp, mc->mc_ki[mc->mc_top]);
+          /* shrink sub-page */
+          node = node_shrink(mp, mc->mc_ki[mc->mc_top], node);
           mc->mc_xcursor->mx_cursor.mc_pg[0] = node_data(node);
-          /* fix other sub-DB cursors pointed at fake pages on this page */
+          /* fix other sub-DB cursors pointed at sub-pages on this page */
           for (MDBX_cursor *m2 = mc->mc_txn->mt_cursors[mc->mc_dbi]; m2;
                m2 = m2->mc_next) {
             if (m2 == mc || m2->mc_snum < mc->mc_snum)
@@ -19234,35 +19233,28 @@ __hot static void node_del(MDBX_cursor *mc, size_t ksize) {
 /* Compact the main page after deleting a node on a subpage.
  * [in] mp The main page to operate on.
  * [in] indx The index of the subpage on the main page. */
-static void node_shrink(MDBX_page *mp, size_t indx) {
-  MDBX_node *node;
-  MDBX_page *sp, *xp;
-  size_t nsize, delta, len, ptr;
-  intptr_t i;
-
-  node = page_node(mp, indx);
-  sp = (MDBX_page *)node_data(node);
-  delta = page_room(sp);
-  assert(delta > 0);
+static MDBX_node *node_shrink(MDBX_page *mp, size_t indx, MDBX_node *node) {
+  assert(node = page_node(mp, indx));
+  MDBX_page *sp = (MDBX_page *)node_data(node);
+  assert(IS_SUBP(sp) && page_numkeys(sp) > 0);
+  const size_t delta =
+      EVEN_FLOOR(page_room(sp) /* avoid the node uneven-sized */);
+  if (unlikely(delta) == 0)
+    return node;
 
   /* Prepare to shift upward, set len = length(subpage part to shift) */
-  if (IS_LEAF2(sp)) {
-    delta &= /* do not make the node uneven-sized */ ~(size_t)1;
-    if (unlikely(delta) == 0)
-      return;
-    nsize = node_ds(node) - delta;
-    assert(nsize % 1 == 0);
-    len = nsize;
-  } else {
-    xp = ptr_disp(sp, delta); /* destination subpage */
-    for (i = page_numkeys(sp); --i >= 0;) {
+  size_t nsize = node_ds(node) - delta, len = nsize;
+  assert(nsize % 1 == 0);
+  if (!IS_LEAF2(sp)) {
+    len = PAGEHDRSZ;
+    MDBX_page *xp = ptr_disp(sp, delta); /* destination subpage */
+    for (intptr_t i = page_numkeys(sp); --i >= 0;) {
       assert(sp->mp_ptrs[i] >= delta);
       xp->mp_ptrs[i] = (indx_t)(sp->mp_ptrs[i] - delta);
     }
-    nsize = node_ds(node) - delta;
-    len = PAGEHDRSZ;
   }
-  sp->mp_upper = sp->mp_lower;
+  assert(sp->mp_upper >= sp->mp_lower + delta);
+  sp->mp_upper -= (indx_t)delta;
   sp->mp_pgno = mp->mp_pgno;
   node_set_ds(node, nsize);
 
@@ -19270,15 +19262,17 @@ static void node_shrink(MDBX_page *mp, size_t indx) {
   void *const base = ptr_disp(mp, mp->mp_upper + PAGEHDRSZ);
   memmove(ptr_disp(base, delta), base, ptr_dist(sp, base) + len);
 
-  ptr = mp->mp_ptrs[indx];
-  for (i = page_numkeys(mp); --i >= 0;) {
-    if (mp->mp_ptrs[i] <= ptr) {
+  const size_t pivot = mp->mp_ptrs[indx];
+  for (intptr_t i = page_numkeys(mp); --i >= 0;) {
+    if (mp->mp_ptrs[i] <= pivot) {
       assert((size_t)UINT16_MAX - mp->mp_ptrs[i] >= delta);
       mp->mp_ptrs[i] += (indx_t)delta;
     }
   }
   assert((size_t)UINT16_MAX - mp->mp_upper >= delta);
   mp->mp_upper += (indx_t)delta;
+
+  return ptr_disp(node, delta);
 }
 
 /* Initial setup of a sorted-dups cursor.
