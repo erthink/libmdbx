@@ -753,6 +753,18 @@ void testcase::speculum_check_iterator(const char *where, const char *stage,
             mdbx_dump_val(&v, dump_value, sizeof(dump_value)));
 }
 
+void testcase::failure(const char *fmt, ...) const {
+  va_list ap;
+  va_start(ap, fmt);
+  fflush(nullptr);
+  logging::output_nocheckloglevel_ap(logging::failure, fmt, ap);
+  va_end(ap);
+  fflush(nullptr);
+  if (txn_guard)
+    mdbx_txn_commit(const_cast<testcase *>(this)->txn_guard.release());
+  exit(EXIT_FAILURE);
+}
+
 #if SPECULUM_CURSORS
 void testcase::speculum_check_cursor(const char *where, const char *stage,
                                      const testcase::SET::const_iterator &it,
