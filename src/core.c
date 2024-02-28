@@ -13087,12 +13087,22 @@ __cold static void setup_pagesize(MDBX_env *env, const size_t pagesize) {
                   leaf_nodemax > (intptr_t)(sizeof(MDBX_db) + NODESIZE + 42) &&
                   leaf_nodemax >= branch_nodemax &&
                   leaf_nodemax < (int)UINT16_MAX && leaf_nodemax % 2 == 0);
-  env->me_leaf_nodemax = (unsigned)leaf_nodemax;
-  env->me_branch_nodemax = (unsigned)branch_nodemax;
+  env->me_leaf_nodemax = (uint16_t)leaf_nodemax;
+  env->me_branch_nodemax = (uint16_t)branch_nodemax;
   env->me_psize2log = (uint8_t)log2n_powerof2(pagesize);
   eASSERT(env, pgno2bytes(env, 1) == pagesize);
   eASSERT(env, bytes2pgno(env, pagesize + pagesize) == 2);
   recalculate_merge_threshold(env);
+
+  /* TODO: recalculate me_subpage_xyz values from MDBX_opt_subpage_xyz.  */
+  env->me_subpage_limit = env->me_leaf_nodemax - NODESIZE;
+  env->me_subpage_room_threshold = 0;
+  env->me_subpage_reserve_prereq = env->me_leaf_nodemax;
+  env->me_subpage_reserve_limit = env->me_subpage_limit / 42;
+  eASSERT(env,
+          env->me_subpage_reserve_prereq >
+              env->me_subpage_room_threshold + env->me_subpage_reserve_limit);
+  eASSERT(env, env->me_leaf_nodemax >= env->me_subpage_limit + NODESIZE);
 
   const pgno_t max_pgno = bytes2pgno(env, MAX_MAPSIZE);
   if (!env->me_options.flags.non_auto.dp_limit) {
@@ -17285,6 +17295,26 @@ static __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key,
   return rc;
 }
 
+static size_t leaf2_reserve(const MDBX_env *const env, size_t host_page_room,
+                            size_t subpage_len, size_t item_len) {
+  eASSERT(env, (subpage_len & 1) == 0);
+  eASSERT(env,
+          env->me_subpage_reserve_prereq > env->me_subpage_room_threshold +
+                                               env->me_subpage_reserve_limit &&
+              env->me_leaf_nodemax >= env->me_subpage_limit + NODESIZE);
+  size_t reserve = 0;
+  for (size_t n = 0;
+       n < 5 && reserve + item_len <= env->me_subpage_reserve_limit &&
+       EVEN(subpage_len + item_len) <= env->me_subpage_limit &&
+       host_page_room >=
+           env->me_subpage_reserve_prereq + EVEN(subpage_len + item_len);
+       ++n) {
+    subpage_len += item_len;
+    reserve += item_len;
+  }
+  return reserve + (subpage_len & 1);
+}
+
 static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
                                        MDBX_val *data, unsigned flags) {
   int err;
@@ -17656,12 +17686,21 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
           if (mc->mc_db->md_flags & MDBX_DUPFIXED) {
             fp->mp_flags |= P_LEAF2;
             fp->mp_leaf2_ksize = (uint16_t)data->iov_len;
-            xdata.iov_len += 2 * data->iov_len; /* leave space for 2 more */
-            cASSERT(mc, xdata.iov_len <= env->me_psize);
+            /* Будем создавать LEAF2-страницу, как минимум с двумя элементами.
+             * При коротких значениях и наличии свободного места можно сделать
+             * некоторое резервирование места, чтобы при последующих добавлениях
+             * не сразу расширять созданную под-страницу.
+             * Резервирование в целом сомнительно (см ниже), но может сработать
+             * в плюс (а если в минус то несущественный) при коротких ключах. */
+            xdata.iov_len += leaf2_reserve(
+                env, page_room(mc->mc_pg[mc->mc_top]) + old_data.iov_len,
+                xdata.iov_len, data->iov_len);
+            cASSERT(mc, (xdata.iov_len & 1) == 0);
           } else {
             xdata.iov_len += 2 * (sizeof(indx_t) + NODESIZE) +
                              (old_data.iov_len & 1) + (data->iov_len & 1);
           }
+          cASSERT(mc, (xdata.iov_len & 1) == 0);
           fp->mp_upper = (uint16_t)(xdata.iov_len - PAGEHDRSZ);
           old_data.iov_len = xdata.iov_len; /* pretend olddata is fp */
         } else if (node_flags(node) & F_SUBDATA) {
@@ -17673,19 +17712,85 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
           fp = old_data.iov_base;
           switch (flags) {
           default:
-            if (!(mc->mc_db->md_flags & MDBX_DUPFIXED)) {
-              growth = node_size(data, nullptr) + sizeof(indx_t);
-              break;
+            growth = IS_LEAF2(fp) ? fp->mp_leaf2_ksize
+                                  : (node_size(data, nullptr) + sizeof(indx_t));
+            if (page_room(fp) >= growth) {
+              /* На текущей под-странице есть место для добавления элемента.
+               * Оптимальнее продолжить использовать эту страницу, ибо
+               * добавление вложенного дерева увеличит WAF на одну страницу. */
+              goto continue_subpage;
             }
-            growth = fp->mp_leaf2_ksize;
-            if (page_room(fp) < growth) {
-              growth *= 4; /* space for 4 more */
-              break;
-            }
-            /* FALLTHRU: Big enough MDBX_DUPFIXED sub-page */
-            __fallthrough;
+            /* На текущей под-странице нет места для еще одного элемента.
+             * Можно либо увеличить эту под-страницу, либо вынести куст
+             * значений во вложенное дерево.
+             *
+             * Продолжать использовать текущую под-страницу возможно
+             * только пока и если размер после добавления элемента будет
+             * меньше me_leaf_nodemax. Соответственно, при превышении
+             * просто сразу переходим на вложенное дерево. */
+            xdata.iov_len = old_data.iov_len + (growth += growth & 1);
+            if (xdata.iov_len > env->me_subpage_limit)
+              goto convert_to_subtree;
+
+            /* Можно либо увеличить под-страницу, в том числе с некоторым
+             * запасом, либо перейти на вложенное поддерево.
+             *
+             * Резервирование места на под-странице представляется сомнительным:
+             *  - Резервирование увеличит рыхлость страниц, в том числе
+             *    вероятность разделения основной/гнездовой страницы;
+             *  - Сложно предсказать полезный размер резервирования,
+             *    особенно для не-MDBX_DUPFIXED;
+             *  - Наличие резерва позволяет съекономить только на перемещении
+             *    части элементов основной/гнездовой страницы при последующих
+             *    добавлениях в нее элементов. Причем после первого изменения
+             *    размера под-страницы, её тело будет примыкать
+             *    к неиспользуемому месту на основной/гнездовой странице,
+             *    поэтому последующие последовательные добавления потребуют
+             *    только передвижения в mp_ptrs[].
+             *
+             * Соответственно, более важным/определяющим представляется
+             * своевременный переход к вложеному дереву, но тут достаточно
+             * сложный конфликт интересов:
+             *  - При склонности к переходу к вложенным деревьям, суммарно
+             *    в БД будет большее кол-во более рыхлых страниц. Это увеличит
+             *    WAF, а также RAF при последовательных чтениях большой БД.
+             *    Однако, при коротких ключах и большом кол-ве
+             *    дубликатов/мультизначений, плотность ключей в листовых
+             *    страницах основного дерева будет выше. Соответственно, будет
+             *    пропорционально меньше branch-страниц. Поэтому будет выше
+             *    вероятность оседания/не-вымывания страниц основного дерева из
+             *    LRU-кэша, а также попадания в write-back кэш при записи.
+             *  - Наоботот, при склонности к использованию под-страниц, будут
+             *    наблюдаться обратные эффекты. Плюс некоторые накладные расходы
+             *    на лишнее копирование данных под-страниц в сценариях
+             *    нескольких обонвлений дубликатов одного куста в одной
+             *    транзакции.
+             *
+             * Суммарно наиболее рациональным представляется такая тактика:
+             *  - Вводим три порога subpage_limit, subpage_room_threshold
+             *    и subpage_reserve_prereq, которые могут быть
+             *    заданы/скорректированы пользователем в ‰ от me_leaf_nodemax;
+             *  - Используем под-страницу пока её размер меньше subpage_limit
+             *    и на основной/гнездовой странице не-менее
+             *    subpage_room_threshold свободного места;
+             *  - Резервируем место только для 1-3 коротких dupfixed-элементов,
+             *    расширяя размер под-страницы на размер кэш-линии ЦПУ, но
+             *    только если на странице не менее subpage_reserve_prereq
+             *    свободного места.
+             *  - По-умолчанию устанавливаем:
+             *     subpage_limit = me_leaf_nodemax (1000‰);
+             *     subpage_room_threshold = 0;
+             *     subpage_reserve_prereq = me_leaf_nodemax (1000‰).
+             */
+            if (IS_LEAF2(fp))
+              growth += leaf2_reserve(
+                  env, page_room(mc->mc_pg[mc->mc_top]) + old_data.iov_len,
+                  xdata.iov_len, data->iov_len);
+            break;
+
           case MDBX_CURRENT | MDBX_NODUPDATA:
           case MDBX_CURRENT:
+          continue_subpage:
             fp->mp_txnid = mc->mc_txn->mt_front;
             fp->mp_pgno = mp->mp_pgno;
             mc->mc_xcursor->mx_cursor.mc_pg[0] = fp;
@@ -17693,11 +17798,18 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
             goto dupsort_put;
           }
           xdata.iov_len = old_data.iov_len + growth;
+          cASSERT(mc, (xdata.iov_len & 1) == 0);
         }
 
         fp_flags = fp->mp_flags;
-        if (node_size_len(node_ks(node), xdata.iov_len) >
-            env->me_leaf_nodemax) {
+        if (xdata.iov_len > env->me_subpage_limit ||
+            node_size_len(node_ks(node), xdata.iov_len) >
+                env->me_leaf_nodemax ||
+            (env->me_subpage_room_threshold &&
+             page_room(mc->mc_pg[mc->mc_top]) +
+                     node_size_len(node_ks(node), old_data.iov_len) <
+                 env->me_subpage_room_threshold +
+                     node_size_len(node_ks(node), xdata.iov_len))) {
           /* Too big for a sub-page, convert to sub-DB */
         convert_to_subtree:
           fp_flags &= ~P_SUBP;
@@ -17721,6 +17833,7 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
           mc->mc_db->md_leaf_pages += 1;
           cASSERT(mc, env->me_psize > old_data.iov_len);
           growth = env->me_psize - (unsigned)old_data.iov_len;
+          cASSERT(mc, (growth & 1) == 0);
           flags |= F_DUPDATA | F_SUBDATA;
           nested_dupdb.md_root = mp->mp_pgno;
           nested_dupdb.md_seq = 0;

@@ -1376,8 +1376,12 @@ struct MDBX_env {
   struct MDBX_lockinfo *me_lck;
 
   unsigned me_psize;          /* DB page size, initialized from me_os_psize */
-  unsigned me_leaf_nodemax;   /* max size of a leaf-node */
-  unsigned me_branch_nodemax; /* max size of a branch-node */
+  uint16_t me_leaf_nodemax;   /* max size of a leaf-node */
+  uint16_t me_branch_nodemax; /* max size of a branch-node */
+  uint16_t me_subpage_limit;
+  uint16_t me_subpage_room_threshold;
+  uint16_t me_subpage_reserve_prereq;
+  uint16_t me_subpage_reserve_limit;
   atomic_pgno_t me_mlocked_pgno;
   uint8_t me_psize2log; /* log2 of DB page size */
   int8_t me_stuck_meta; /* recovery-only: target meta page or less that zero */
