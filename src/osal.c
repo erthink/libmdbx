@@ -2571,7 +2571,7 @@ retry_mapview:;
           ptr_disp(map->base, size),
           ((map->current < map->limit) ? map->current : map->limit) - size);
     }
-    map->current = size;
+    map->current = (size < map->limit) ? size : map->limit;
   }
 
   if (limit == map->limit)
@@ -2732,6 +2732,7 @@ retry_mapview:;
     map->base = ptr;
   }
   map->limit = limit;
+  map->current = size;
 
 #if MDBX_ENABLE_MADVISE
 #ifdef MADV_DONTFORK

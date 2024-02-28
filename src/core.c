@@ -6195,6 +6195,7 @@ __cold static int dxb_resize(MDBX_env *const env, const pgno_t used_pgno,
 #endif /* MDBX_ENABLE_MADVISE */
 
   rc = osal_mresize(mresize_flags, &env->me_dxb_mmap, size_bytes, limit_bytes);
+  eASSERT(env, env->me_dxb_mmap.limit >= env->me_dxb_mmap.current);
 
 #if MDBX_ENABLE_MADVISE
   if (rc == MDBX_SUCCESS) {
@@ -6220,6 +6221,7 @@ __cold static int dxb_resize(MDBX_env *const env, const pgno_t used_pgno,
 
 bailout:
   if (rc == MDBX_SUCCESS) {
+    eASSERT(env, env->me_dxb_mmap.limit >= env->me_dxb_mmap.current);
     eASSERT(env, limit_bytes == env->me_dxb_mmap.limit);
     eASSERT(env, size_bytes <= env->me_dxb_mmap.filesize);
     if (mode == explicit_resize)
@@ -6250,6 +6252,7 @@ bailout:
               "present %" PRIuPTR " -> %" PRIuPTR ", "
               "limit %" PRIuPTR " -> %" PRIuPTR ", errcode %d",
               prev_size, size_bytes, prev_limit, limit_bytes, rc);
+      eASSERT(env, env->me_dxb_mmap.limit >= env->me_dxb_mmap.current);
     }
     if (!env->me_dxb_mmap.base) {
       env->me_flags |= MDBX_FATAL_ERROR;
@@ -9061,6 +9064,7 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
     const size_t used_bytes = pgno2bytes(env, txn->mt_next_pgno);
     const size_t required_bytes =
         (txn->mt_flags & MDBX_TXN_RDONLY) ? used_bytes : size_bytes;
+    eASSERT(env, env->me_dxb_mmap.limit >= env->me_dxb_mmap.current);
     if (unlikely(required_bytes > env->me_dxb_mmap.current)) {
       /* Размер БД (для пишущих транзакций) или используемых данных (для
        * читающих транзакций) больше предыдущего/текущего размера внутри
@@ -9078,6 +9082,7 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
                       txn->mt_geo.upper, implicit_grow);
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
+      eASSERT(env, env->me_dxb_mmap.limit >= env->me_dxb_mmap.current);
     } else if (unlikely(size_bytes < env->me_dxb_mmap.current)) {
       /* Размер БД меньше предыдущего/текущего размера внутри процесса, можно
        * уменьшить, но всё сложнее:
@@ -9103,11 +9108,15 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
       rc = osal_fastmutex_acquire(&env->me_remap_guard);
 #endif
       if (likely(rc == MDBX_SUCCESS)) {
+        eASSERT(env, env->me_dxb_mmap.limit >= env->me_dxb_mmap.current);
         rc = osal_filesize(env->me_dxb_mmap.fd, &env->me_dxb_mmap.filesize);
         if (likely(rc == MDBX_SUCCESS)) {
           eASSERT(env, env->me_dxb_mmap.filesize >= required_bytes);
           if (env->me_dxb_mmap.current > env->me_dxb_mmap.filesize)
-            env->me_dxb_mmap.current = (size_t)env->me_dxb_mmap.filesize;
+            env->me_dxb_mmap.current =
+                (env->me_dxb_mmap.limit < env->me_dxb_mmap.filesize)
+                    ? env->me_dxb_mmap.limit
+                    : (size_t)env->me_dxb_mmap.filesize;
         }
 #if defined(_WIN32) || defined(_WIN64)
         osal_srwlock_ReleaseShared(&env->me_remap_guard);
