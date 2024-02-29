@@ -3423,7 +3423,7 @@ static void cursor_copy(const MDBX_cursor *csrc, MDBX_cursor *cdst);
 static int __must_check_result drop_tree(MDBX_cursor *mc,
                                          const bool may_have_subDBs);
 static int __must_check_result fetch_sdb(MDBX_txn *txn, size_t dbi);
-static int __must_check_result setup_dbx(MDBX_dbx *const dbx,
+static int __must_check_result setup_sdb(MDBX_dbx *const dbx,
                                          const MDBX_db *const db,
                                          const unsigned pagesize);
 
@@ -9493,7 +9493,7 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
                    txn->mt_dbs[MAIN_DBI].md_flags);
           env->me_db_flags[MAIN_DBI] = DB_POISON;
           atomic_store32(&env->me_dbi_seqs[MAIN_DBI], seq, mo_AcquireRelease);
-          rc = setup_dbx(&env->me_dbxs[MAIN_DBI], &txn->mt_dbs[MAIN_DBI],
+          rc = setup_sdb(&env->me_dbxs[MAIN_DBI], &txn->mt_dbs[MAIN_DBI],
                          env->me_psize);
           if (likely(rc == MDBX_SUCCESS)) {
             seq = dbi_seq_next(env, MAIN_DBI);
@@ -16320,7 +16320,7 @@ __hot __noinline static int page_search_root(MDBX_cursor *mc,
   return MDBX_SUCCESS;
 }
 
-static int setup_dbx(MDBX_dbx *const dbx, const MDBX_db *const db,
+static int setup_sdb(MDBX_dbx *const dbx, const MDBX_db *const db,
                      const unsigned pagesize) {
   if (unlikely(!db_check_flags(db->md_flags))) {
     ERROR("incompatible or invalid db.md_flags (%u) ", db->md_flags);
@@ -16415,7 +16415,7 @@ static int fetch_sdb(MDBX_txn *txn, size_t dbi) {
     return MDBX_CORRUPTED;
   }
 #endif /* !MDBX_DISABLE_VALIDATION */
-  rc = setup_dbx(dbx, db, txn->mt_env->me_psize);
+  rc = setup_sdb(dbx, db, txn->mt_env->me_psize);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -19596,7 +19596,7 @@ static __inline int couple_init(MDBX_cursor_couple *couple, const size_t dbi,
     rc = page_search(&couple->outer, NULL, MDBX_PS_ROOTONLY);
     rc = (rc != MDBX_NOTFOUND) ? rc : MDBX_SUCCESS;
   } else if (unlikely(dbx->md_klen_max == 0)) {
-    rc = setup_dbx(dbx, db, txn->mt_env->me_psize);
+    rc = setup_sdb(dbx, db, txn->mt_env->me_psize);
   }
 
   if (couple->outer.mc_db->md_flags & MDBX_DUPSORT) {
@@ -23511,7 +23511,7 @@ static int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags,
           datacmp ? datacmp : get_default_datacmp(user_flags);
       txn->mt_dbs[dbi].md_flags = db_flags;
       txn->mt_dbs[dbi].md_xsize = 0;
-      if (unlikely(setup_dbx(&env->me_dbxs[dbi], &txn->mt_dbs[dbi],
+      if (unlikely(setup_sdb(&env->me_dbxs[dbi], &txn->mt_dbs[dbi],
                              env->me_psize))) {
         txn->mt_dbi_state[dbi] = DBI_LINDO;
         txn->mt_flags |= MDBX_TXN_ERROR;
@@ -23588,7 +23588,7 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi,
     env->me_dbxs[MAIN_DBI].md_dcmp = get_default_datacmp(main_flags);
     txn->mt_dbs[MAIN_DBI].md_flags = main_flags;
     txn->mt_dbs[MAIN_DBI].md_xsize = 0;
-    if (unlikely(setup_dbx(&env->me_dbxs[MAIN_DBI], &txn->mt_dbs[MAIN_DBI],
+    if (unlikely(setup_sdb(&env->me_dbxs[MAIN_DBI], &txn->mt_dbs[MAIN_DBI],
                            env->me_psize) != MDBX_SUCCESS)) {
       txn->mt_dbi_state[MAIN_DBI] = DBI_LINDO;
       txn->mt_flags |= MDBX_TXN_ERROR;
