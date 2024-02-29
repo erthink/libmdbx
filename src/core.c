@@ -10243,7 +10243,9 @@ static int gcu_prepare_backlog(MDBX_txn *txn, gcu_context_t *ctx) {
   const size_t for_all_before_touch = for_relist + for_tree_before_touch;
   const size_t for_all_after_touch = for_relist + for_tree_after_touch;
 
-  if (likely(for_relist < 2 && gcu_backlog_size(txn) > for_all_before_touch))
+  if (likely(for_relist < 2 && gcu_backlog_size(txn) > for_all_before_touch) &&
+      (ctx->cursor.mc_snum == 0 ||
+       IS_MODIFIABLE(txn, ctx->cursor.mc_pg[ctx->cursor.mc_top])))
     return MDBX_SUCCESS;
 
   TRACE(">> retired-stored %zu, left %zi, backlog %zu, need %zu (4list %zu, "
@@ -18213,6 +18215,7 @@ static __hot int cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
     return rc;
 
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
+  cASSERT(mc, IS_MODIFIABLE(mc->mc_txn, mp));
   if (!MDBX_DISABLE_VALIDATION && unlikely(!CHECK_LEAF_TYPE(mc, mp))) {
     ERROR("unexpected leaf-page #%" PRIaPGNO " type 0x%x seen by cursor",
           mp->mp_pgno, mp->mp_flags);
@@ -19609,7 +19612,6 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
                     IS_LEAF(cdst->mc_pg[cdst->mc_db->md_depth - 1]));
   cASSERT(csrc, csrc->mc_snum < csrc->mc_db->md_depth ||
                     IS_LEAF(csrc->mc_pg[csrc->mc_db->md_depth - 1]));
-  cASSERT(cdst, page_room(pdst) >= page_used(cdst->mc_txn->mt_env, psrc));
   const int pagetype = PAGETYPE_WHOLE(psrc);
 
   /* Move all nodes from src to dst */
@@ -19620,7 +19622,9 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
     size_t j = dst_nkeys;
     if (unlikely(pagetype & P_LEAF2)) {
       /* Mark dst as dirty. */
-      if (unlikely(rc = page_touch(cdst)))
+      rc = page_touch(cdst);
+      cASSERT(cdst, rc != MDBX_RESULT_TRUE);
+      if (unlikely(rc != MDBX_SUCCESS))
         return rc;
 
       key.iov_len = csrc->mc_db->md_xsize;
@@ -19628,6 +19632,7 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
       size_t i = 0;
       do {
         rc = node_add_leaf2(cdst, j++, &key);
+        cASSERT(cdst, rc != MDBX_RESULT_TRUE);
         if (unlikely(rc != MDBX_SUCCESS))
           return rc;
         key.iov_base = ptr_disp(key.iov_base, key.iov_len);
@@ -19641,7 +19646,8 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
         cursor_copy(csrc, &mn);
         /* must find the lowest key below src */
         rc = page_search_lowest(&mn);
-        if (unlikely(rc))
+        cASSERT(csrc, rc != MDBX_RESULT_TRUE);
+        if (unlikely(rc != MDBX_SUCCESS))
           return rc;
 
         const MDBX_page *mp = mn.mc_pg[mn.mc_top];
@@ -19666,7 +19672,9 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
       }
 
       /* Mark dst as dirty. */
-      if (unlikely(rc = page_touch(cdst)))
+      rc = page_touch(cdst);
+      cASSERT(cdst, rc != MDBX_RESULT_TRUE);
+      if (unlikely(rc != MDBX_SUCCESS))
         return rc;
 
       size_t i = 0;
@@ -19680,6 +19688,7 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
           cASSERT(csrc, node_flags(srcnode) == 0);
           rc = node_add_branch(cdst, j++, &key, node_pgno(srcnode));
         }
+        cASSERT(cdst, rc != MDBX_RESULT_TRUE);
         if (unlikely(rc != MDBX_SUCCESS))
           return rc;
 
@@ -19706,7 +19715,8 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   if (csrc->mc_ki[csrc->mc_top] == 0) {
     const MDBX_val nullkey = {0, 0};
     rc = update_key(csrc, &nullkey);
-    if (unlikely(rc)) {
+    cASSERT(csrc, rc != MDBX_RESULT_TRUE);
+    if (unlikely(rc != MDBX_SUCCESS)) {
       csrc->mc_top++;
       return rc;
     }
@@ -19741,7 +19751,8 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   }
 
   rc = page_retire(csrc, (MDBX_page *)psrc);
-  if (unlikely(rc))
+  cASSERT(csrc, rc != MDBX_RESULT_TRUE);
+  if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
   cASSERT(cdst, cdst->mc_db->md_entries > 0);
@@ -19754,7 +19765,7 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   const uint16_t save_depth = cdst->mc_db->md_depth;
   cursor_pop(cdst);
   rc = rebalance(cdst);
-  if (unlikely(rc))
+  if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
   cASSERT(cdst, cdst->mc_db->md_entries > 0);
@@ -19942,11 +19953,9 @@ static int rebalance(MDBX_cursor *mc) {
       mc->mc_snum = 0;
       mc->mc_top = 0;
       mc->mc_flags &= ~C_INITIALIZED;
-
-      rc = page_retire(mc, mp);
-      if (unlikely(rc != MDBX_SUCCESS))
-        return rc;
-    } else if (IS_BRANCH(mp) && nkeys == 1) {
+      return page_retire(mc, mp);
+    }
+    if (IS_BRANCH(mp) && nkeys == 1) {
       DEBUG("%s", "collapsing root page!");
       mc->mc_db->md_root = node_pgno(page_node(mp, 0));
       rc = page_get(mc, mc->mc_db->md_root, &mc->mc_pg[0], mp->mp_txnid);
@@ -19979,15 +19988,10 @@ static int rebalance(MDBX_cursor *mc) {
                       PAGETYPE_WHOLE(mc->mc_pg[mc->mc_top]) == pagetype);
       cASSERT(mc, mc->mc_snum < mc->mc_db->md_depth ||
                       IS_LEAF(mc->mc_pg[mc->mc_db->md_depth - 1]));
-
-      rc = page_retire(mc, mp);
-      if (likely(rc == MDBX_SUCCESS))
-        rc = page_touch(mc);
-      return rc;
-    } else {
-      DEBUG("root page %" PRIaPGNO " doesn't need rebalancing (flags 0x%x)",
-            mp->mp_pgno, mp->mp_flags);
+      return page_retire(mc, mp);
     }
+    DEBUG("root page %" PRIaPGNO " doesn't need rebalancing (flags 0x%x)",
+          mp->mp_pgno, mp->mp_flags);
     return MDBX_SUCCESS;
   }
 
@@ -20036,6 +20040,7 @@ static int rebalance(MDBX_cursor *mc) {
   const size_t right_nkeys = right ? page_numkeys(right) : 0;
   bool involve = false;
 retry:
+  cASSERT(mc, mc->mc_snum > 1);
   if (left_room > room_threshold && left_room >= right_room &&
       (IS_MODIFIABLE(mc->mc_txn, left) || involve)) {
     /* try merge with left */
@@ -20107,7 +20112,18 @@ retry:
     return MDBX_SUCCESS;
   }
 
-  if (likely(!involve)) {
+  /* Заглушено в ветке v0.12.x, будет работать в v0.13.1 и далее.
+   *
+   * if (mc->mc_txn->mt_env->me_options.prefer_waf_insteadof_balance &&
+   *    likely(room_threshold > 0)) {
+   *  room_threshold = 0;
+   *  goto retry;
+   * }
+   */
+  if (likely(!involve) &&
+      (likely(mc->mc_dbi != FREE_DBI) || mc->mc_txn->tw.loose_pages ||
+       MDBX_PNL_GETSIZE(mc->mc_txn->tw.relist) || (mc->mc_flags & C_GCU) ||
+       (mc->mc_txn->mt_flags & MDBX_TXN_DRAINED_GC) || room_threshold)) {
     involve = true;
     goto retry;
   }
