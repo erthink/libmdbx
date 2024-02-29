@@ -1437,6 +1437,8 @@ struct MDBX_env {
     unsigned writethrough_threshold;
 #endif /* Windows */
     bool prefault_write;
+    bool prefer_waf_insteadof_balance; /* Strive to minimize WAF instead of
+                                          balancing pages fullment */
     union {
       unsigned all;
       /* tracks options with non-auto values but tuned by user */
