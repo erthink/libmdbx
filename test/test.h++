@@ -232,7 +232,8 @@ protected:
   int insert(const keygen::buffer &akey, const keygen::buffer &adata,
              MDBX_put_flags_t flags);
   int replace(const keygen::buffer &akey, const keygen::buffer &new_value,
-              const keygen::buffer &old_value, MDBX_put_flags_t flags);
+              const keygen::buffer &old_value, MDBX_put_flags_t flags,
+              bool hush_keygen_mistakes = true);
   int remove(const keygen::buffer &akey, const keygen::buffer &adata);
 
   static int hsr_callback(const MDBX_env *env, const MDBX_txn *txn,
@@ -262,7 +263,7 @@ protected:
   void txn_inject_writefault(MDBX_txn *txn);
   void fetch_canary();
   void update_canary(uint64_t increment);
-  void checkdata(const char *step, MDBX_dbi handle, MDBX_val key2check,
+  bool checkdata(const char *step, MDBX_dbi handle, MDBX_val key2check,
                  MDBX_val expected_valued);
   unsigned txn_underutilization_x256(MDBX_txn *txn) const;
 
