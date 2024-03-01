@@ -16981,8 +16981,9 @@ cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cursor_op op) {
           goto got_node;
         }
         if (cmp < 0) {
-          if (mc->mc_ki[mc->mc_top] < page_numkeys(mp)) {
-            /* This is definitely the right page, skip search_page */
+          /* This is definitely the right page, skip search_page */
+          if (mc->mc_ki[mc->mc_top] != 0 /* уже проверяли выше */ &&
+              mc->mc_ki[mc->mc_top] < page_numkeys(mp)) {
             if (IS_LEAF2(mp)) {
               nodekey.iov_base =
                   page_leaf2key(mp, mc->mc_ki[mc->mc_top], nodekey.iov_len);
