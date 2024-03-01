@@ -90,7 +90,7 @@ bool testcase_hill::run() {
     assert(b_serial > a_serial);
 
     // создаем первую запись из пары
-    const keygen::serial_t age_shift = UINT64_C(1) << (a_serial % 31);
+    const keygen::serial_t age_shift = keyvalue_maker.remix_age(a_serial);
     log_trace("uphill: insert-a (age %" PRIu64 ") %" PRIu64, age_shift,
               a_serial);
     generate_pair(a_serial, a_key, a_data_1, age_shift);
@@ -302,7 +302,7 @@ bool testcase_hill::run() {
     assert(b_serial > a_serial);
 
     // обновляем первую запись из пары
-    const keygen::serial_t age_shift = UINT64_C(1) << (a_serial % 31);
+    const keygen::serial_t age_shift = keyvalue_maker.remix_age(a_serial);
     log_trace("downhill: update-a (age 0->%" PRIu64 ") %" PRIu64, age_shift,
               a_serial);
     generate_pair(a_serial, a_key, a_data_0, 0);
