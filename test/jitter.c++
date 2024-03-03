@@ -124,6 +124,37 @@ bool testcase_jitter::run() {
       jitter_delay();
       txn_begin(true);
       fetch_canary();
+      if (flipcoin()) {
+        MDBX_txn_info info;
+        err = mdbx_txn_reset(txn_guard.get());
+        if (err)
+          failure_perror("mdbx_txn_reset()", err);
+        err = mdbx_txn_info(txn_guard.get(), &info, false);
+        if (err != MDBX_BAD_TXN)
+          failure_perror("mdbx_txn_info(MDBX_BAD_TXN)", err);
+        err = mdbx_txn_reset(txn_guard.get());
+        if (err)
+          failure_perror("mdbx_txn_reset(again)", err);
+        err = mdbx_txn_break(txn_guard.get());
+        if (err)
+          failure_perror("mdbx_txn_break()", err);
+
+        err = mdbx_txn_abort(txn_guard.get());
+        if (err)
+          failure_perror("mdbx_txn_abort()", err);
+        txn_guard.release();
+        txn_begin(true);
+        err = mdbx_txn_reset(txn_guard.get());
+        if (err)
+          failure_perror("mdbx_txn_reset()", err);
+
+        err = mdbx_txn_renew(txn_guard.get());
+        if (err)
+          failure_perror("mdbx_txn_renew()", err);
+        err = mdbx_txn_info(txn_guard.get(), &info, false);
+        if (err)
+          failure_perror("mdbx_txn_info()", err);
+      }
       jitter_delay();
       txn_end(flipcoin());
     }
