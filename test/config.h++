@@ -274,6 +274,7 @@ struct actor_params_pod {
   unsigned batch_read{0};
   unsigned batch_write{0};
 
+  unsigned prng_seed{0};
   unsigned delaystart{0};
   unsigned waitfor_nops{0};
   unsigned inject_writefaultn{0};

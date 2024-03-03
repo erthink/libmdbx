@@ -103,7 +103,7 @@ class registry {
   struct record {
     actor_testcase id = ac_none;
     std::string name;
-    bool (*review_params)(actor_params &) = nullptr;
+    bool (*review_params)(actor_params &, unsigned space_id) = nullptr;
     testcase *(*constructor)(const actor_config &, const mdbx_pid_t) = nullptr;
   };
   std::unordered_map<std::string, const record *> name2id;
@@ -124,8 +124,8 @@ public:
       add(this);
     }
   };
-  static bool review_actor_params(const actor_testcase id,
-                                  actor_params &params);
+  static bool review_actor_params(const actor_testcase id, actor_params &params,
+                                  const unsigned space_id);
   static testcase *create_actor(const actor_config &config,
                                 const mdbx_pid_t pid);
 };
@@ -301,8 +301,9 @@ public:
     memset(&last, 0, sizeof(last));
   }
 
-  static bool review_params(actor_params &params) {
+  static bool review_params(actor_params &params, unsigned space_id) {
     // silently fix key/data length for fixed-length modes
+    params.prng_seed += bleach32(space_id);
     if ((params.table_flags & MDBX_INTEGERKEY) &&
         params.keylen_min != params.keylen_max)
       params.keylen_min = params.keylen_max;

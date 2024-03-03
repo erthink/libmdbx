@@ -453,91 +453,72 @@ for nops in 10 33 100 333 1000 3333 10000 33333 100000 333333 1000000 3333333 10
 
       split=30
       caption="Probe #$((++count)) int-key,with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
-        --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-        --keygen.seed=${seed}
+        --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
       caption="Probe #$((++count)) int-key,int-data, split=${split}, case $((++subcase)) of ${cases}" probe \
-        --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-        --keygen.seed=${seed}
+        --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
       caption="Probe #$((++count)) with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
-        --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-        --keygen.seed=${seed}
+        --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
 
       split=24
       caption="Probe #$((++count)) int-key,with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
-        --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-        --keygen.seed=${seed}
+        --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
       caption="Probe #$((++count)) int-key,int-data, split=${split}, case $((++subcase)) of ${cases}" probe \
-        --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-        --keygen.seed=${seed}
+        --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
       caption="Probe #$((++count)) with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
-        --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-        --keygen.seed=${seed}
+        --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
 
       split=16
       caption="Probe #$((++count)) int-key,w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
-        --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-        --keygen.seed=${seed}
+        --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
       caption="Probe #$((++count)) int-key,with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
-        --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-        --keygen.seed=${seed}
+        --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
       caption="Probe #$((++count)) int-key,int-data, split=${split}, case $((++subcase)) of ${cases}" probe \
-        --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-        --keygen.seed=${seed}
+        --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
       caption="Probe #$((++count)) w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
-        --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-        --keygen.seed=${seed}
+        --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
       caption="Probe #$((++count)) with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
-        --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-        --keygen.seed=${seed}
+        --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
 
       if [ "$EXTRA" != "no" ]; then
         split=10
         caption="Probe #$((++count)) int-key,w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
-          --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-          --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-          --keygen.seed=${seed}
+          --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+          --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
         caption="Probe #$((++count)) int-key,with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
-          --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-          --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-          --keygen.seed=${seed}
+          --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+          --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
         caption="Probe #$((++count)) int-key,int-data, split=${split}, case $((++subcase)) of ${cases}" probe \
-          --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-          --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-          --keygen.seed=${seed}
+          --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+          --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
         caption="Probe #$((++count)) w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
-          --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-          --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-          --keygen.seed=${seed}
+          --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+          --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
         caption="Probe #$((++count)) with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
-          --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-          --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-          --keygen.seed=${seed}
+          --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+          --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
       fi
 
       split=4
       caption="Probe #$((++count)) int-key,w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
-        --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-        --keygen.seed=${seed}
+        --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
       caption="Probe #$((++count)) int-key,int-data, split=${split}, case $((++subcase)) of ${cases}" probe \
-        --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-        --keygen.seed=${seed}
+        --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
       caption="Probe #$((++count)) w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
-        --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
-        --keygen.seed=${seed}
+        --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
     done # options
     loop=$((loop + 1))
     if [ -n "$LOOPS" ] && [ $loop -ge "$LOOPS" ]; then break; fi

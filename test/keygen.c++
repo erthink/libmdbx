@@ -188,7 +188,7 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
   log_pair(logging::trace, "kv", key, value);
 }
 
-void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
+void maker::setup(const config::actor_params_pod &actor,
                   unsigned thread_number) {
 #if CONSTEXPR_ENUM_FLAGS_OPERATIONS
   static_assert(unsigned(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT |
@@ -238,7 +238,7 @@ void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
     mapping.width -= 1;
 
   salt =
-      (actor.keygen.seed + uint64_t(actor_id)) * UINT64_C(14653293970879851569);
+      (prng_state + uint64_t(thread_number)) * UINT64_C(14653293970879851569);
 
   base = actor.serial_base();
 }

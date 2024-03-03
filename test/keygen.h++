@@ -121,8 +121,7 @@ class maker {
 public:
   void pair(serial_t serial, const buffer &key, buffer &value,
             serial_t value_age, const bool keylen_changeable);
-  void setup(const config::actor_params_pod &actor, unsigned actor_id,
-             unsigned thread_number);
+  void setup(const config::actor_params_pod &actor, unsigned thread_number);
   bool is_unordered() const;
   void seek2end(serial_t &serial) const;
 

@@ -37,6 +37,7 @@ MDBX_NORETURN void usage(void) {
       "  --console[=yes/no]        Enable/disable console-like output\n"
       "  --cleanup-before[=YES/no] Cleanup/remove and re-create database\n"
       "  --cleanup-after[=YES/no]  Cleanup/remove database after completion\n"
+      "  --prng-seed=N             Seed PRNG\n"
       "Database size control:\n"
       "  --pagesize=...            Database page size: min, max, 256..65536\n"
       "  --size-lower=N[K|M|G|T]   Lower-bound of size in Kb/Mb/Gb/Tb\n"
@@ -88,7 +89,6 @@ MDBX_NORETURN void usage(void) {
       "  --datalen=N                   Set both min/max for data length\n"
       "  --keygen.width=N              TBD (see the source code)\n"
       "  --keygen.mesh=N               TBD (see the source code)\n"
-      "  --keygen.seed=N               TBD (see the source code)\n"
       "  --keygen.zerofill=yes|NO      TBD (see the source code)\n"
       "  --keygen.split=N              TBD (see the source code)\n"
       "  --keygen.rotate=N             TBD (see the source code)\n"
@@ -144,7 +144,7 @@ void actor_params::set_defaults(const std::string &tmpdir) {
   growth_step = -1;
   pagesize = -1;
 
-  keygen.seed = 1;
+  prng_seed = 0;
   keygen.zero_fill = false;
   keygen.keycase = kc_random;
   keygen.width = (table_flags & MDBX_DUPSORT) ? 32 : 64;
@@ -449,9 +449,11 @@ int main(int argc, char *const argv[]) {
     if (config::parse_option(argc, argv, narg, "keygen.mesh",
                              params.keygen.mesh, 0, 64))
       continue;
-    if (config::parse_option(argc, argv, narg, "keygen.seed",
-                             params.keygen.seed, config::no_scale))
+    if (config::parse_option(argc, argv, narg, "prng-seed", params.prng_seed,
+                             config::no_scale)) {
+      prng_seed(params.prng_seed);
       continue;
+    }
     if (config::parse_option(argc, argv, narg, "keygen.zerofill",
                              params.keygen.zero_fill))
       continue;

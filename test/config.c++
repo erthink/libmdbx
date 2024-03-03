@@ -434,6 +434,7 @@ void dump(const char *title) {
     log_verbose("#%u, testcase %s, space_id/table %u\n", i->actor_id,
                 testcase2str(i->testcase), i->space_id);
     indent.push();
+    log_verbose("prng-seed: %u\n", i->params.prng_seed);
 
     if (i->params.loglevel) {
       log_verbose("log: level %u, %s\n", i->params.loglevel,
@@ -473,7 +474,6 @@ void dump(const char *title) {
         i->params.keygen.mesh, i->params.keygen.rotate, i->params.keygen.offset,
         i->params.keygen.split,
         i->params.keygen.width - i->params.keygen.split);
-    log_verbose("keygen.seed: %u\n", i->params.keygen.seed);
     log_verbose("keygen.zerofill: %s\n",
                 i->params.keygen.zero_fill ? "Yes" : "No");
     log_verbose("key: minlen %u, maxlen %u\n", i->params.keylen_min,

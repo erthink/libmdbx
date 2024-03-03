@@ -346,6 +346,7 @@ uint64_t prng64_white(uint64_t &state);
 uint32_t prng32(uint64_t &state);
 void prng_fill(uint64_t &state, void *ptr, size_t bytes);
 
+extern uint64_t prng_state;
 void prng_seed(uint64_t seed);
 uint32_t prng32(void);
 uint64_t prng64(void);

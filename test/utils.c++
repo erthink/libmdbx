@@ -136,7 +136,7 @@ void prng_fill(uint64_t &state, void *ptr, size_t bytes) {
   }
 }
 
-static __thread uint64_t prng_state;
+/* __thread */ uint64_t prng_state;
 
 void prng_seed(uint64_t seed) { prng_state = bleach64(seed); }
 

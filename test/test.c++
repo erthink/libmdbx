@@ -668,8 +668,8 @@ bool test_execute(const actor_config &config_const) {
                       size_t(config.params.nrepeat));
         else
           log_verbose("test successfully (iteration %zi)", iter);
-        config.params.keygen.seed += INT32_C(0xA4F4D37B);
-        log_verbose("turn keygen to %u", config.params.keygen.seed);
+        prng_seed(config.params.prng_seed += INT32_C(0xA4F4D37B));
+        log_verbose("turn PRNG to %u", config.params.prng_seed);
       }
 
     } while (config.params.nrepeat == 0 || iter < config.params.nrepeat);

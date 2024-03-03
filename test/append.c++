@@ -20,8 +20,8 @@ public:
       : testcase(config, pid) {}
   bool run() override;
 
-  static bool review_params(actor_params &params) {
-    if (!testcase::review_params(params))
+  static bool review_params(actor_params &params, unsigned space_id) {
+    if (!testcase::review_params(params, space_id))
       return false;
     const bool ordered = !flipcoin_x3();
     log_notice("the '%s' key-generation mode is selected",
@@ -45,7 +45,7 @@ bool testcase_append::run() {
   }
 
   cursor_open(dbi);
-  keyvalue_maker.setup(config.params, config.actor_id, 0 /* thread_number */);
+  keyvalue_maker.setup(config.params, 0 /* thread_number */);
   /* LY: тест наполнения таблиц в append-режиме,
    * при котором записи добавляются строго в конец (в порядке сортировки) */
   const MDBX_put_flags_t flags =

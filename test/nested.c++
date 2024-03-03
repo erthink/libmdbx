@@ -74,7 +74,7 @@ bool testcase_nested::setup() {
     return false;
   }
 
-  keyvalue_maker.setup(config.params, config.actor_id, 0 /* thread_number */);
+  keyvalue_maker.setup(config.params, 0 /* thread_number */);
   key = keygen::alloc(config.params.keylen_max);
   data = keygen::alloc(config.params.datalen_max);
   serial = 0;
@@ -292,8 +292,7 @@ retry:
 }
 
 bool testcase_nested::run() {
-  uint64_t seed =
-      prng64_map2_white(config.params.keygen.seed) + config.actor_id;
+  uint64_t seed = prng64_map2_white(prng_state) + config.space_id;
 
   clear_wholetable_passed = 0;
   clear_stepbystep_passed = 0;

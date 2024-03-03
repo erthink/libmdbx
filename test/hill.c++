@@ -52,7 +52,7 @@ bool testcase_hill::run() {
   speculum_committed.clear();
 
   /* TODO: работа в несколько потоков */
-  keyvalue_maker.setup(config.params, config.actor_id, 0 /* thread_number */);
+  keyvalue_maker.setup(config.params, 0 /* thread_number */);
 
   keygen::buffer a_key = keygen::alloc(config.params.keylen_max);
   keygen::buffer a_data_0 = keygen::alloc(config.params.datalen_max);
