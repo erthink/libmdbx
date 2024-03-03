@@ -9181,10 +9181,11 @@ static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
   if (unlikely(txn->mt_flags & bad_bits))
     return MDBX_BAD_TXN;
 
-  tASSERT(txn, (txn->mt_flags & MDBX_NOTLS) ==
-                   ((txn->mt_flags & MDBX_TXN_RDONLY)
-                        ? txn->mt_env->me_flags & MDBX_NOTLS
-                        : 0));
+  tASSERT(txn, (txn->mt_flags & MDBX_TXN_FINISHED) ||
+                   (txn->mt_flags & MDBX_NOTLS) ==
+                       ((txn->mt_flags & MDBX_TXN_RDONLY)
+                            ? txn->mt_env->me_flags & MDBX_NOTLS
+                            : 0));
 #if MDBX_TXN_CHECKOWNER
   STATIC_ASSERT(MDBX_NOTLS > MDBX_TXN_FINISHED + MDBX_TXN_RDONLY);
   if (unlikely(txn->mt_owner != osal_thread_self()) &&
