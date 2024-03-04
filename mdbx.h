@@ -5714,6 +5714,18 @@ LIBMDBX_API int mdbx_env_open_for_recoveryW(MDBX_env *env,
  * leg(s). */
 LIBMDBX_API int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target_meta);
 
+/** \brief FIXME
+ */
+LIBMDBX_API int mdbx_preopen_snapinfo(const char *pathname, MDBX_envinfo *arg,
+                                      size_t bytes);
+#if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
+/** \copydoc mdbx_preopen_snapinfo()
+ * \note Available only on Windows.
+ * \see mdbx_preopen_snapinfo() */
+LIBMDBX_API int mdbx_preopen_snapinfoW(const wchar_t *pathname,
+                                       MDBX_envinfo *arg, size_t bytes);
+#endif /* Windows */
+
 /** \brief Флаги/опции для проверки целостности БД.
  * \see mdbx_env_chk() */
 enum MDBX_chk_flags_t {

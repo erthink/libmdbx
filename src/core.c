@@ -23396,6 +23396,89 @@ __cold int env_info(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo *out,
   }
 }
 
+__cold int mdbx_preopen_snapinfo(const char *pathname, MDBX_envinfo *out,
+                                 size_t bytes) {
+#if defined(_WIN32) || defined(_WIN64)
+  wchar_t *pathnameW = nullptr;
+  int rc = osal_mb2w(pathname, &pathnameW);
+  if (likely(rc == MDBX_SUCCESS)) {
+    rc = mdbx_preopen_snapinfoW(pathnameW, out, bytes);
+    osal_free(pathnameW);
+  }
+  return rc;
+}
+
+__cold int mdbx_preopen_snapinfoW(const wchar_t *pathname, MDBX_envinfo *out,
+                                  size_t bytes) {
+#endif /* Windows */
+  if (unlikely(!out))
+    return MDBX_EINVAL;
+
+  const size_t size_before_bootid = offsetof(MDBX_envinfo, mi_bootid);
+  const size_t size_before_pgop_stat = offsetof(MDBX_envinfo, mi_pgop_stat);
+  if (unlikely(bytes != sizeof(MDBX_envinfo)) && bytes != size_before_bootid &&
+      bytes != size_before_pgop_stat)
+    return MDBX_EINVAL;
+
+  memset(out, 0, bytes);
+  if (likely(bytes > size_before_bootid)) {
+    out->mi_bootid.current.x = bootid.x;
+    out->mi_bootid.current.y = bootid.y;
+  }
+
+  MDBX_env env;
+  memset(&env, 0, sizeof(env));
+  env.me_pid = osal_getpid();
+  const size_t os_psize = osal_syspagesize();
+  if (unlikely(!is_powerof2(os_psize) || os_psize < MIN_PAGESIZE)) {
+    ERROR("unsuitable system pagesize %" PRIuPTR, os_psize);
+    return MDBX_INCOMPATIBLE;
+  }
+  out->mi_sys_pagesize = env.me_os_psize = (unsigned)os_psize;
+  env.me_flags = MDBX_RDONLY | MDBX_NORDAHEAD | MDBX_ACCEDE | MDBX_VALIDATION;
+  env.me_stuck_meta = -1;
+  env.me_lfd = INVALID_HANDLE_VALUE;
+  env.me_lazy_fd = INVALID_HANDLE_VALUE;
+  env.me_dsync_fd = INVALID_HANDLE_VALUE;
+  env.me_fd4meta = INVALID_HANDLE_VALUE;
+#if defined(_WIN32) || defined(_WIN64)
+  env.me_data_lock_event = INVALID_HANDLE_VALUE;
+  env.me_overlapped_fd = INVALID_HANDLE_VALUE;
+#endif /* Windows */
+
+  int rc = env_handle_pathname(&env, pathname, 0);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
+  rc = osal_openfile(MDBX_OPEN_DXB_READ, &env, env.me_pathname.dxb,
+                     &env.me_lazy_fd, 0);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
+
+  MDBX_meta header;
+  rc = read_header(&env, &header, 0, 0);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
+
+  setup_pagesize(&env, header.mm_psize);
+  out->mi_dxb_pagesize = env.me_psize;
+  out->mi_geo.lower = pgno2bytes(&env, header.mm_geo.lower);
+  out->mi_geo.upper = pgno2bytes(&env, header.mm_geo.upper);
+  out->mi_geo.shrink = pgno2bytes(&env, pv2pages(header.mm_geo.shrink_pv));
+  out->mi_geo.grow = pgno2bytes(&env, pv2pages(header.mm_geo.grow_pv));
+  out->mi_geo.current = pgno2bytes(&env, header.mm_geo.now);
+  out->mi_last_pgno = header.mm_geo.next - 1;
+
+  const unsigned n = 0;
+  out->mi_recent_txnid = constmeta_txnid(&header);
+  out->mi_meta_sign[n] = unaligned_peek_u64(4, &header.mm_sign);
+  if (likely(bytes > size_before_bootid))
+    memcpy(&out->mi_bootid.meta[n], &header.mm_bootid, 16);
+
+bailout:
+  env_close(&env, false);
+  return rc;
+}
+
 __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
                             MDBX_envinfo *arg, size_t bytes) {
   if (unlikely((env == NULL && txn == NULL) || arg == NULL))

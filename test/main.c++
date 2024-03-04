@@ -743,6 +743,14 @@ int main(int argc, char *const argv[]) {
     log_trace("=== done...");
   }
 
+  if (!failed) {
+    MDBX_envinfo info;
+    int err =
+        mdbx_preopen_snapinfo(params.pathname_db.c_str(), &info, sizeof(info));
+    if (err != MDBX_SUCCESS)
+      failure_perror("mdbx_preopen_snapinfo()", err);
+  }
+
   log_notice("RESULT: %s\n", failed ? "Failed" : "Successful");
   if (global::config::cleanup_after) {
     if (failed)
