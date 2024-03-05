@@ -7290,7 +7290,7 @@ static pgr_t page_alloc_slowpath(const MDBX_cursor *const mc, const size_t num,
   //---------------------------------------------------------------------------
 
   if (unlikely(!is_gc_usable(txn, mc, flags))) {
-    eASSERT(env, txn->mt_flags & MDBX_TXN_DRAINED_GC);
+    eASSERT(env, (txn->mt_flags & MDBX_TXN_DRAINED_GC) || num > 1);
     goto no_gc;
   }
 
