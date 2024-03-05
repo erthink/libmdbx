@@ -432,6 +432,12 @@ for nops in 10 33 100 333 1000 3333 10000 33333 100000 333333 1000000 3333333 10
         --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
         --keygen.seed=${seed}
+      caption="Probe #$((++count)) int-key,fixdups, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --keygen.seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.fixed --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen=9 \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
+      caption="Probe #$((++count)) fixdups, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --keygen.seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.fixed --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen=11 \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
 
       split=24
       caption="Probe #$((++count)) int-key,with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
@@ -446,6 +452,12 @@ for nops in 10 33 100 333 1000 3333 10000 33333 100000 333333 1000000 3333333 10
         --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
         --keygen.seed=${seed}
+      caption="Probe #$((++count)) int-key,fixdups, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --keygen.seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.fixed --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen=10 \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
+      caption="Probe #$((++count)) fixdups, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --keygen.seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.fixed --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen=12 \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
 
       split=16
       caption="Probe #$((++count)) int-key,w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
@@ -468,6 +480,12 @@ for nops in 10 33 100 333 1000 3333 10000 33333 100000 333333 1000000 3333333 10
         --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
         --keygen.seed=${seed}
+      caption="Probe #$((++count)) int-key,fixdups, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --keygen.seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.fixed --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen=9 \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
+      caption="Probe #$((++count)) fixdups, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --keygen.seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.fixed --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen=11 \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
 
       if [ "$EXTRA" != "no" ]; then
         split=10
@@ -491,6 +509,12 @@ for nops in 10 33 100 333 1000 3333 10000 33333 100000 333333 1000000 3333333 10
           --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
           --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
           --keygen.seed=${seed}
+        caption="Probe #$((++count)) int-key,fixdups, split=${split}, case $((++subcase)) of ${cases}" probe \
+          --keygen.seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.fixed --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen=13 \
+          --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
+        caption="Probe #$((++count)) fixdups, split=${split}, case $((++subcase)) of ${cases}" probe \
+          --keygen.seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.fixed --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen=16 \
+          --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
       fi
 
       split=4
@@ -506,6 +530,12 @@ for nops in 10 33 100 333 1000 3333 10000 33333 100000 333333 1000000 3333333 10
         --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]} \
         --keygen.seed=${seed}
+      caption="Probe #$((++count)) int-key,fixdups, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --keygen.seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+key.integer,+data.fixed --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen=21 \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
+      caption="Probe #$((++count)) fixdups, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --keygen.seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.fixed --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen=32 \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
     done # options
     loop=$((loop + 1))
     if [ -n "$LOOPS" ] && [ $loop -ge "$LOOPS" ]; then break; fi
