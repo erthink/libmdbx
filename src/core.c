@@ -23697,8 +23697,7 @@ __cold static int walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
       (mp ? page_room(mp) : pagesize - header_size) - payload_size;
   size_t align_bytes = 0;
 
-  for (size_t i = 0; err == MDBX_SUCCESS && i < nentries;
-       align_bytes += ((payload_size + align_bytes) & 1), ++i) {
+  for (size_t i = 0; err == MDBX_SUCCESS && i < nentries; ++i) {
     if (type == MDBX_page_dupfixed_leaf) {
       /* LEAF2 pages have no mp_ptrs[] or node headers */
       payload_size += mp->mp_leaf2_ksize;
@@ -23706,23 +23705,26 @@ __cold static int walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
     }
 
     MDBX_node *node = page_node(mp, i);
-    payload_size += NODESIZE + node_ks(node);
+    const size_t node_key_size = node_ks(node);
+    payload_size += NODESIZE + node_key_size;
 
     if (type == MDBX_page_branch) {
       assert(i > 0 || node_ks(node) == 0);
+      align_bytes += node_key_size & 1;
       continue;
     }
 
+    const size_t node_data_size = node_ds(node);
     assert(type == MDBX_page_leaf);
     switch (node_flags(node)) {
     case 0 /* usual node */:
-      payload_size += node_ds(node);
+      payload_size += node_data_size;
+      align_bytes += (node_key_size + node_data_size) & 1;
       break;
 
     case F_BIGDATA /* long data on the large/overflow page */: {
-      payload_size += sizeof(pgno_t);
       const pgno_t large_pgno = node_largedata_pgno(node);
-      const size_t over_payload = node_ds(node);
+      const size_t over_payload = node_data_size;
       const size_t over_header = PAGEHDRSZ;
       npages = 1;
 
@@ -23741,27 +23743,31 @@ __cold static int walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
                                      over_payload, over_header, over_unused);
       if (unlikely(rc != MDBX_SUCCESS))
         return (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
+      payload_size += sizeof(pgno_t);
+      align_bytes += node_key_size & 1;
     } break;
 
     case F_SUBDATA /* sub-db */: {
-      const size_t namelen = node_ks(node);
-      payload_size += node_ds(node);
-      if (unlikely(namelen == 0 || node_ds(node) != sizeof(MDBX_db))) {
+      const size_t namelen = node_key_size;
+      if (unlikely(namelen == 0 || node_data_size != sizeof(MDBX_db))) {
         assert(err == MDBX_CORRUPTED);
         err = MDBX_CORRUPTED;
       }
+      header_size += node_data_size;
+      align_bytes += (node_key_size + node_data_size) & 1;
     } break;
 
     case F_SUBDATA | F_DUPDATA /* dupsorted sub-tree */:
-      payload_size += sizeof(MDBX_db);
-      if (unlikely(node_ds(node) != sizeof(MDBX_db))) {
+      if (unlikely(node_data_size != sizeof(MDBX_db))) {
         assert(err == MDBX_CORRUPTED);
         err = MDBX_CORRUPTED;
       }
+      header_size += node_data_size;
+      align_bytes += (node_key_size + node_data_size) & 1;
       break;
 
     case F_DUPDATA /* short sub-page */: {
-      if (unlikely(node_ds(node) <= PAGEHDRSZ)) {
+      if (unlikely(node_data_size <= PAGEHDRSZ || (node_data_size & 1))) {
         assert(err == MDBX_CORRUPTED);
         err = MDBX_CORRUPTED;
         break;
@@ -23789,16 +23795,17 @@ __cold static int walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
         err = MDBX_CORRUPTED;
       }
 
-      for (size_t j = 0; err == MDBX_SUCCESS && j < nsubkeys;
-           subalign_bytes += ((subpayload_size + subalign_bytes) & 1), ++j) {
-
+      for (size_t j = 0; err == MDBX_SUCCESS && j < nsubkeys; ++j) {
         if (subtype == MDBX_subpage_dupfixed_leaf) {
           /* LEAF2 pages have no mp_ptrs[] or node headers */
           subpayload_size += sp->mp_leaf2_ksize;
         } else {
           assert(subtype == MDBX_subpage_leaf);
-          MDBX_node *subnode = page_node(sp, j);
-          subpayload_size += NODESIZE + node_ks(subnode) + node_ds(subnode);
+          const MDBX_node *subnode = page_node(sp, j);
+          const size_t subnode_size = node_ks(subnode) + node_ds(subnode);
+          subheader_size += NODESIZE;
+          subpayload_size += subnode_size;
+          subalign_bytes += subnode_size & 1;
           if (unlikely(node_flags(subnode) != 0)) {
             assert(err == MDBX_CORRUPTED);
             err = MDBX_CORRUPTED;
@@ -23807,7 +23814,7 @@ __cold static int walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
       }
 
       const int rc =
-          ctx->mw_visitor(pgno, 0, ctx->mw_user, deep + 1, name, node_ds(node),
+          ctx->mw_visitor(pgno, 0, ctx->mw_user, deep + 1, name, node_data_size,
                           subtype, err, nsubkeys, subpayload_size,
                           subheader_size, subunused_size + subalign_bytes);
       if (unlikely(rc != MDBX_SUCCESS))
@@ -23815,7 +23822,7 @@ __cold static int walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
       header_size += subheader_size;
       unused_size += subunused_size;
       payload_size += subpayload_size;
-      align_bytes += subalign_bytes;
+      align_bytes += subalign_bytes + (node_key_size & 1);
     } break;
 
     default:
