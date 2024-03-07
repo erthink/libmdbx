@@ -17940,7 +17940,8 @@ static __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key,
   }
 
   int rc = MDBX_SUCCESS;
-  if (likely(mc->mc_snum)) {
+  if (likely(mc->mc_snum) &&
+      !IS_MODIFIABLE(mc->mc_txn, mc->mc_pg[mc->mc_snum - 1])) {
     mc->mc_top = 0;
     do {
       rc = page_touch(mc);
