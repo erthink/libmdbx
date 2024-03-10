@@ -1826,8 +1826,8 @@ MDBX_INTERNAL_FUNC int osal_check_fs_rdonly(mdbx_filehandle_t handle,
 #else
   struct statvfs info;
   if (err != MDBX_ENOFILE) {
-    if (statvfs(pathname, &info) == 0 && (info.f_flag & ST_RDONLY) == 0)
-      return err;
+    if (statvfs(pathname, &info) == 0)
+      return (info.f_flag & ST_RDONLY) ? MDBX_SUCCESS : err;
     if (errno != MDBX_ENOFILE)
       return errno;
   }
