@@ -611,7 +611,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
         problem_add("entry", txnid, "wrong idl size", "%" PRIuPTR,
                     data->iov_len);
       size_t number = (data->iov_len >= sizeof(pgno_t)) ? *iptr++ : 0;
-      if (number < 1 || number > MDBX_PGL_LIMIT)
+      if (number > MDBX_PGL_LIMIT)
         problem_add("entry", txnid, "wrong idl length", "%" PRIuPTR, number);
       else if ((number + 1) * sizeof(pgno_t) > data->iov_len) {
         problem_add("entry", txnid, "trimmed idl",
