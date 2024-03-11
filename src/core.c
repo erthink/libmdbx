@@ -28387,7 +28387,7 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope,
         chk_object_issue(scope, "entry", txnid, "wrong idl size", "%" PRIuPTR,
                          data->iov_len);
       size_t number = (data->iov_len >= sizeof(pgno_t)) ? *iptr++ : 0;
-      if (number < 1 || number > MDBX_PGL_LIMIT)
+      if (number > MDBX_PGL_LIMIT)
         chk_object_issue(scope, "entry", txnid, "wrong idl length", "%" PRIuPTR,
                          number);
       else if ((number + 1) * sizeof(pgno_t) > data->iov_len) {
