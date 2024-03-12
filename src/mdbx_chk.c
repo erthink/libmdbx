@@ -537,26 +537,14 @@ static int pgvisitor(const uint64_t pgno, const unsigned pgnumber,
       data_tree_problems += !is_gc_tree;
       gc_tree_problems += is_gc_tree;
     }
-    if (payload_bytes < 1) {
-      if (nentries > 1) {
-        problem_add("page", pgno, "zero size-of-entry",
-                    "%s-page: payload %" PRIuPTR " bytes, %" PRIuPTR " entries",
-                    pagetype_caption, payload_bytes, nentries);
-        /* if ((size_t)header_bytes + unused_bytes < page_size) {
-          // LY: hush a misuse error
-          page_bytes = page_size;
-        } */
-        data_tree_problems += !is_gc_tree;
-        gc_tree_problems += is_gc_tree;
-      } else {
-        problem_add("page", pgno, "empty",
-                    "%s-page: payload %" PRIuPTR " bytes, %" PRIuPTR
-                    " entries, deep %i",
-                    pagetype_caption, payload_bytes, nentries, deep);
-        dbi->pages.empty += 1;
-        data_tree_problems += !is_gc_tree;
-        gc_tree_problems += is_gc_tree;
-      }
+    if (nentries < 1 || (pagetype == MDBX_page_branch && nentries < 2)) {
+      problem_add("page", pgno, nentries ? "half-empty" : "empty",
+                  "%s-page: payload %" PRIuPTR " bytes, %" PRIuPTR
+                  " entries, deep %i",
+                  pagetype_caption, payload_bytes, nentries, deep);
+      dbi->pages.empty += 1;
+      data_tree_problems += !is_gc_tree;
+      gc_tree_problems += is_gc_tree;
     }
 
     if (pgnumber) {
