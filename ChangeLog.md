@@ -4,12 +4,13 @@ ChangeLog
 English version [by Google](https://gitflic-ru.translate.goog/project/erthink/libmdbx/blob?file=ChangeLog.md&_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
-## v0.12.10 (подготовка к выпуску)
+## v0.12.10 "СЭМ" от 2024-03-12
 
-Поддерживающий выпуск с исправлением обнаруженных ошибок и устранением недочетов.
+Поддерживающий выпуск с исправлением обнаруженных ошибок и устранением недочетов
+в память Героя России гвардии майора Дмитрия Семёнова с позывным "СЭМ".
 
 ```
-git diff' stat: 16 commits, 10 files changed, 665 insertions(+), 238 deletions(-)
+git diff' stat: 19 commits, 57 files changed, 751 insertions(+), 331 deletions(-)
 Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 ```
 
@@ -63,6 +64,11 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
    Последствий ошибки, кроме срабатывания assert-проверки в отладочных сборках, нет.
 
  - Устранение ошибки при открытии БД на файловой системе только-для-чтения.
+
+ - Удалены излишне строгие проверки в утилите `mdbx_chk`, которые
+   приводили к ложно-позитивным ошибкам при проверке БД после серии
+   последних доработок. Подробности см в комментариях к коммитам [781b3f64d52b73cbaeb00a55811d1247c25624a8](https://gitflic.ru/project/erthink/libmdbx/commit/781b3f64d52b73cbaeb00a55811d1247c25624a8)
+   и [0741c81cfd8dc0864fcf55e04192b2207c8f68f7](https://gitflic.ru/project/erthink/libmdbx/commit/0741c81cfd8dc0864fcf55e04192b2207c8f68f7).
 
 Прочее:
 
