@@ -10967,7 +10967,7 @@ retry:
       if (unlikely(!ctx->retired_stored)) {
         /* Make sure last page of GC is touched and on retired-list */
         rc = cursor_last(&ctx->cursor, nullptr, nullptr);
-        if (likely(rc != MDBX_SUCCESS))
+        if (likely(rc == MDBX_SUCCESS))
           rc = gcu_touch(ctx);
         if (unlikely(rc != MDBX_SUCCESS) && rc != MDBX_NOTFOUND)
           goto bailout;
