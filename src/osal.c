@@ -1,7 +1,7 @@
 /* https://en.wikipedia.org/wiki/Operating_system_abstraction_layer */
 
 /*
- * Copyright 2015-2023 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2015-2024 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -1826,8 +1826,8 @@ MDBX_INTERNAL_FUNC int osal_check_fs_rdonly(mdbx_filehandle_t handle,
 #else
   struct statvfs info;
   if (err != MDBX_ENOFILE) {
-    if (statvfs(pathname, &info) == 0 && (info.f_flag & ST_RDONLY) == 0)
-      return err;
+    if (statvfs(pathname, &info) == 0)
+      return (info.f_flag & ST_RDONLY) ? MDBX_SUCCESS : err;
     if (errno != MDBX_ENOFILE)
       return errno;
   }
@@ -2571,7 +2571,7 @@ retry_mapview:;
           ptr_disp(map->base, size),
           ((map->current < map->limit) ? map->current : map->limit) - size);
     }
-    map->current = size;
+    map->current = (size < map->limit) ? size : map->limit;
   }
 
   if (limit == map->limit)
@@ -2732,6 +2732,7 @@ retry_mapview:;
     map->base = ptr;
   }
   map->limit = limit;
+  map->current = size;
 
 #if MDBX_ENABLE_MADVISE
 #ifdef MADV_DONTFORK

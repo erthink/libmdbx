@@ -1,7 +1,7 @@
 /* mdbx_chk.c - memory-mapped database check tool */
 
 /*
- * Copyright 2015-2023 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2015-2024 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -537,26 +537,14 @@ static int pgvisitor(const uint64_t pgno, const unsigned pgnumber,
       data_tree_problems += !is_gc_tree;
       gc_tree_problems += is_gc_tree;
     }
-    if (payload_bytes < 1) {
-      if (nentries > 1) {
-        problem_add("page", pgno, "zero size-of-entry",
-                    "%s-page: payload %" PRIuPTR " bytes, %" PRIuPTR " entries",
-                    pagetype_caption, payload_bytes, nentries);
-        /* if ((size_t)header_bytes + unused_bytes < page_size) {
-          // LY: hush a misuse error
-          page_bytes = page_size;
-        } */
-        data_tree_problems += !is_gc_tree;
-        gc_tree_problems += is_gc_tree;
-      } else {
-        problem_add("page", pgno, "empty",
-                    "%s-page: payload %" PRIuPTR " bytes, %" PRIuPTR
-                    " entries, deep %i",
-                    pagetype_caption, payload_bytes, nentries, deep);
-        dbi->pages.empty += 1;
-        data_tree_problems += !is_gc_tree;
-        gc_tree_problems += is_gc_tree;
-      }
+    if (nentries < 1 || (pagetype == MDBX_page_branch && nentries < 2)) {
+      problem_add("page", pgno, nentries ? "half-empty" : "empty",
+                  "%s-page: payload %" PRIuPTR " bytes, %" PRIuPTR
+                  " entries, deep %i",
+                  pagetype_caption, payload_bytes, nentries, deep);
+      dbi->pages.empty += 1;
+      data_tree_problems += !is_gc_tree;
+      gc_tree_problems += is_gc_tree;
     }
 
     if (pgnumber) {
@@ -611,7 +599,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
         problem_add("entry", txnid, "wrong idl size", "%" PRIuPTR,
                     data->iov_len);
       size_t number = (data->iov_len >= sizeof(pgno_t)) ? *iptr++ : 0;
-      if (number < 1 || number > MDBX_PGL_LIMIT)
+      if (number > MDBX_PGL_LIMIT)
         problem_add("entry", txnid, "wrong idl length", "%" PRIuPTR, number);
       else if ((number + 1) * sizeof(pgno_t) > data->iov_len) {
         problem_add("entry", txnid, "trimmed idl",

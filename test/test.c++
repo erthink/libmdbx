@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2023 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2017-2024 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -24,9 +24,9 @@ const char *testcase2str(const actor_testcase testcase) {
   case ac_hill:
     return "hill";
   case ac_deadread:
-    return "deadread";
+    return "dead.reader";
   case ac_deadwrite:
-    return "deadwrite";
+    return "dead.writer";
   case ac_jitter:
     return "jitter";
   case ac_try:
@@ -731,6 +731,18 @@ void testcase::speculum_check_iterator(const char *where, const char *stage,
     failure("speculum-%s: %s data mismatch %s (must) != %s", where, stage,
             mdbx_dump_val(&it_data, dump_key, sizeof(dump_key)),
             mdbx_dump_val(&v, dump_value, sizeof(dump_value)));
+}
+
+void testcase::failure(const char *fmt, ...) const {
+  va_list ap;
+  va_start(ap, fmt);
+  fflush(nullptr);
+  logging::output_nocheckloglevel_ap(logging::failure, fmt, ap);
+  va_end(ap);
+  fflush(nullptr);
+  if (txn_guard)
+    mdbx_txn_commit(const_cast<testcase *>(this)->txn_guard.release());
+  exit(EXIT_FAILURE);
 }
 
 #if SPECULUM_CURSORS
