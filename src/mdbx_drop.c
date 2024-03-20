@@ -1,7 +1,7 @@
 /* mdbx_drop.c - memory-mapped database delete tool */
 
 /*
- * Copyright 2021-2023 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2021-2024 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  *
  * Copyright 2016-2021 Howard Chu, Symas Corp.

@@ -25,7 +25,7 @@ _The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет 
 
 \section copyright LICENSE & COPYRIGHT
 
-\authors Copyright (c) 2015-2023, Leonid Yuriev <leo@yuriev.ru>
+\authors Copyright (c) 2015-2024, Leonid Yuriev <leo@yuriev.ru>
 and other _libmdbx_ authors: please see [AUTHORS](./AUTHORS) file.
 
 \copyright Redistribution and use in source and binary forms, with or without
@@ -2408,7 +2408,6 @@ LIBMDBX_API int mdbx_env_get_option(const MDBX_env *env,
  *                            doesn't exist.
  * \retval MDBX_EACCES        The user didn't have permission to access
  *                            the environment files.
- * \retval MDBX_EAGAIN        The environment was locked by another process.
  * \retval MDBX_BUSY          The \ref MDBX_EXCLUSIVE flag was specified and the
  *                            environment is in use by another process,
  *                            or the current process tries to open environment

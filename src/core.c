@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2023 Leonid Yuriev <leo@yuriev.ru>.
+ * Copyright 2015-2024 Leonid Yuriev <leo@yuriev.ru>.
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -6452,7 +6452,7 @@ __cold static void munlock_all(const MDBX_env *env) {
 }
 
 __cold static unsigned default_rp_augment_limit(const MDBX_env *env) {
-  const size_t timeframe = 16 << 16;
+  const size_t timeframe = /* 16 секунд */ 16 << 16;
   const size_t remain_1sec =
       (env->me_options.gc_time_limit < timeframe)
           ? timeframe - (size_t)env->me_options.gc_time_limit
