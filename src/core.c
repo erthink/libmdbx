@@ -15926,7 +15926,7 @@ __cold int mdbx_env_resurrect_after_fork(MDBX_env *env) {
   int rc = env_close(env, true);
   env->me_signature.weak = MDBX_ME_SIGNATURE;
   if (likely(rc == MDBX_SUCCESS)) {
-    rc = env_open(env, 0);
+    rc = (env->me_flags & MDBX_EXCLUSIVE) ? MDBX_BUSY : env_open(env, 0);
     if (unlikely(rc != MDBX_SUCCESS && env_close(env, false) != MDBX_SUCCESS)) {
       rc = MDBX_PANIC;
       env->me_flags |= MDBX_FATAL_ERROR;
