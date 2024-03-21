@@ -4363,7 +4363,20 @@ MDBX_DEPRECATED LIBMDBX_API int
 mdbx_dbi_open_ex2(MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags,
                   MDBX_dbi *dbi, MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp);
 
-/** FIXME */
+/** \brief Переименовает таблицу по DBI-хендлу.
+ * \ingroup c_dbi
+ *
+ * Переименовывает пользовательскую именованную subDB связанную с передаваемым
+ * DBI-дескриптором.
+ *
+ * \param [in,out] txn   Пишущая транзакция запущенная посредством
+ *                       \ref mdbx_txn_begin().
+ * \param [in]     dbi   Дескриптор таблицы (именованной пользовательской subDB)
+ *                       открытый посредством \ref mdbx_dbi_open().
+ *
+ * \param [in]     name  Новое имя для переименования.
+ *
+ * \returns Ненулевое значение ошибки при сбое и 0 при успешном выполнении. */
 LIBMDBX_API int mdbx_dbi_rename(MDBX_txn *txn, MDBX_dbi dbi, const char *name);
 LIBMDBX_API int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi,
                                  const MDBX_val *name);
