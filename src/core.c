@@ -19806,7 +19806,7 @@ int mdbx_cursor_renew(const MDBX_txn *txn, MDBX_cursor *mc) {
 }
 
 int mdbx_cursor_compare(const MDBX_cursor *l, const MDBX_cursor *r,
-                        bool ignore_nested) {
+                        bool ignore_multival) {
   const int incomparable = INT16_MAX + 1;
   if (unlikely(!l))
     return r ? -incomparable * 9 : 0;
@@ -19847,7 +19847,7 @@ int mdbx_cursor_compare(const MDBX_cursor *l, const MDBX_cursor *r,
   assert((l->mc_xcursor != nullptr) == (r->mc_xcursor != nullptr));
   if (unlikely((l->mc_xcursor != nullptr) != (r->mc_xcursor != nullptr)))
     return l->mc_xcursor ? incomparable * 2 : -incomparable * 2;
-  if (ignore_nested || !l->mc_xcursor)
+  if (ignore_multival || !l->mc_xcursor)
     return 0;
 
 #if MDBX_DEBUG
