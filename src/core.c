@@ -8274,7 +8274,7 @@ static __inline int check_env(const MDBX_env *env, const bool wanna_active) {
 
   if (wanna_active) {
 #if MDBX_ENV_CHECKPID
-    if (unlikely(env->me_pid != osal_getpid())) {
+    if (unlikely(env->me_pid != osal_getpid()) && env->me_pid) {
       ((MDBX_env *)env)->me_flags |= MDBX_FATAL_ERROR;
       return MDBX_PANIC;
     }
