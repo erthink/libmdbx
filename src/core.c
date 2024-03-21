@@ -15913,6 +15913,9 @@ __cold int mdbx_env_resurrect_after_fork(MDBX_env *env) {
   if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
     return MDBX_PANIC;
 
+  if (unlikely((env->me_flags & MDBX_ENV_ACTIVE) == 0))
+    return MDBX_SUCCESS;
+
   const uint32_t new_pid = osal_getpid();
   if (unlikely(env->me_pid == new_pid))
     return MDBX_SUCCESS;
