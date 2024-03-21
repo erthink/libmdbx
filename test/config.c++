@@ -145,6 +145,16 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
     return true;
   }
 
+  if (strcmp(value_cstr, "rnd") == 0 || strcmp(value_cstr, "rand") == 0 ||
+      strcmp(value_cstr, "random") == 0) {
+    value = minval;
+    if (maxval > minval)
+      value += (prng32() + UINT64_C(44263400549519813)) % (maxval - minval);
+    if (scale == intkey)
+      value &= ~3u;
+    return true;
+  }
+
   char *suffix = nullptr;
   errno = 0;
   unsigned long long raw = strtoull(value_cstr, &suffix, 0);
@@ -159,7 +169,7 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 
   uint64_t multiplier = 1;
   if (suffix && *suffix) {
-    if (scale == no_scale)
+    if (scale == no_scale || scale == intkey)
       failure("Option '--%s' doesn't accepts suffixes, so '%s' is unexpected\n",
               option, suffix);
     if (strcmp(suffix, "K") == 0 || strcasecmp(suffix, "Kilo") == 0)
@@ -203,6 +213,8 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
   if (value < minval)
     failure("The minimal value for option '--%s' is %" PRIu64 "\n", option,
             minval);
+  if (scale == intkey)
+    value &= ~3u;
   return true;
 }
 
@@ -422,6 +434,7 @@ void dump(const char *title) {
     log_verbose("#%u, testcase %s, space_id/table %u\n", i->actor_id,
                 testcase2str(i->testcase), i->space_id);
     indent.push();
+    log_verbose("prng-seed: %u\n", i->params.prng_seed);
 
     if (i->params.loglevel) {
       log_verbose("log: level %u, %s\n", i->params.loglevel,
@@ -461,7 +474,6 @@ void dump(const char *title) {
         i->params.keygen.mesh, i->params.keygen.rotate, i->params.keygen.offset,
         i->params.keygen.split,
         i->params.keygen.width - i->params.keygen.split);
-    log_verbose("keygen.seed: %u\n", i->params.keygen.seed);
     log_verbose("keygen.zerofill: %s\n",
                 i->params.keygen.zero_fill ? "Yes" : "No");
     log_verbose("key: minlen %u, maxlen %u\n", i->params.keylen_min,
@@ -681,7 +693,7 @@ bool actor_config::deserialize(const char *str, actor_config &config) {
 }
 
 unsigned actor_params::mdbx_keylen_min() const {
-  return (table_flags & MDBX_INTEGERKEY) ? 4 : 0;
+  return unsigned(mdbx_limits_keysize_min(table_flags));
 }
 
 unsigned actor_params::mdbx_keylen_max() const {
@@ -689,7 +701,7 @@ unsigned actor_params::mdbx_keylen_max() const {
 }
 
 unsigned actor_params::mdbx_datalen_min() const {
-  return (table_flags & MDBX_INTEGERDUP) ? 4 : 0;
+  return unsigned(mdbx_limits_valsize_min(table_flags));
 }
 
 unsigned actor_params::mdbx_datalen_max() const {

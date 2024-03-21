@@ -503,8 +503,18 @@ MDBX_INTERNAL_FUNC int osal_fastmutex_init(osal_fastmutex_t *fastmutex) {
 #if defined(_WIN32) || defined(_WIN64)
   InitializeCriticalSection(fastmutex);
   return MDBX_SUCCESS;
+#elif MDBX_DEBUG
+  pthread_mutexattr_t ma;
+  int rc = pthread_mutexattr_init(&ma);
+  if (likely(!rc)) {
+    rc = pthread_mutexattr_settype(&ma, PTHREAD_MUTEX_ERRORCHECK);
+    if (likely(!rc) || rc == ENOTSUP)
+      rc = pthread_mutex_init(fastmutex, &ma);
+    pthread_mutexattr_destroy(&ma);
+  }
+  return rc;
 #else
-  return pthread_mutex_init(fastmutex, NULL);
+  return pthread_mutex_init(fastmutex, nullptr);
 #endif
 }
 
@@ -526,7 +536,7 @@ MDBX_INTERNAL_FUNC int osal_fastmutex_acquire(osal_fastmutex_t *fastmutex) {
        0xC0000194 /* STATUS_POSSIBLE_DEADLOCK / EXCEPTION_POSSIBLE_DEADLOCK */)
           ? EXCEPTION_EXECUTE_HANDLER
           : EXCEPTION_CONTINUE_SEARCH) {
-    return ERROR_POSSIBLE_DEADLOCK;
+    return MDBX_EDEADLK;
   }
   return MDBX_SUCCESS;
 #else

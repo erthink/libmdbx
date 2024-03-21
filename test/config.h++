@@ -25,6 +25,10 @@ enum actor_testcase {
   ac_hill,
   ac_deadread,
   ac_deadwrite,
+#if !defined(_WIN32) && !defined(_WIN64)
+  ac_forkread,
+  ac_forkwrite,
+#endif /* Windows */
   ac_jitter,
   ac_try,
   ac_copy,
@@ -59,7 +63,7 @@ const char *keygencase2str(const keygen_case);
 
 namespace config {
 
-enum scale_mode { no_scale, decimal, binary, duration };
+enum scale_mode { no_scale, decimal, binary, duration, intkey };
 
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   const char **value, const char *default_value = nullptr);
@@ -270,6 +274,7 @@ struct actor_params_pod {
   unsigned batch_read{0};
   unsigned batch_write{0};
 
+  unsigned prng_seed{0};
   unsigned delaystart{0};
   unsigned waitfor_nops{0};
   unsigned inject_writefaultn{0};

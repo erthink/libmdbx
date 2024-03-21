@@ -108,25 +108,24 @@ class maker {
 
   struct essentials {
     uint16_t minlen{0};
-    enum { prng_fill_flag = 1 };
+    enum { prng_fill_flag = 1, value_age_minwidth = 5 };
     uint16_t flags{0};
     uint32_t maxlen{0};
+    serial_t mask{0};
+    unsigned bits;
   } key_essentials, value_essentials;
+  unsigned value_age_bits;
+  serial_t value_age_mask{0};
 
-  static void mk_begin(const serial_t serial, const essentials &params,
-                       result &out);
+  static serial_t mk_begin(serial_t serial, const essentials &params,
+                           result &out);
   static void mk_continue(const serial_t serial, const essentials &params,
                           result &out);
-  static void mk(const serial_t serial, const essentials &params, result &out) {
-    mk_begin(serial, params, out);
-    mk_continue(serial, params, out);
-  }
 
 public:
   void pair(serial_t serial, const buffer &key, buffer &value,
             serial_t value_age, const bool keylen_changeable);
-  void setup(const config::actor_params_pod &actor, unsigned actor_id,
-             unsigned thread_number);
+  void setup(const config::actor_params_pod &actor, unsigned thread_number);
   bool is_unordered() const;
   void seek2end(serial_t &serial) const;
 
@@ -140,6 +139,11 @@ public:
         serial &= ~value_part_bits;
     }
     return increment(serial, int64_t(uint64_t(delta) << mapping.split));
+  }
+
+  serial_t remix_age(serial_t serial) const {
+    return (UINT64_C(768097847591) * (serial ^ UINT64_C(768097847591))) &
+           value_age_mask;
   }
 };
 

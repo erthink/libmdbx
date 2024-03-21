@@ -106,6 +106,7 @@ reservation can deplete system resources (trigger ENOMEM error, etc)
 when setting an inadequately large upper DB size using \ref
 mdbx_env_set_geometry() or \ref mdbx::env::geometry. So just avoid this.
 
+
 ## Remote filesystems
 Do not use MDBX databases on remote filesystems, even between processes
 on the same host. This breaks file locks on some platforms, possibly
@@ -131,6 +132,11 @@ corruption in such cases.
 
 On the other hand, MDBX allow calling \ref mdbx_env_close() in such cases to
 release resources, but no more and in general this is a wrong way.
+
+#### Since v0.13.1 and later
+Начиная с версии 0.13.1 в API доступна функция \ref mdbx_env_resurrect_after_fork(),
+которая позволяет пере-использовать в дочерних процессах уже открытую среду БД,
+но строго без наследования транзакций от родительского процесса.
 
 
 ## Read-only mode

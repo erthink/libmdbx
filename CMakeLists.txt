@@ -305,7 +305,7 @@ else()
         "${CMAKE_CURRENT_SOURCE_DIR}/test/valgrind_suppress.txt"
         CACHE FILEPATH "Suppressions file for Valgrind" FORCE)
       set(MEMORYCHECK_COMMAND_OPTIONS
-        "--trace-children=yes --leak-check=full --track-origins=yes --error-exitcode=42 --error-markers=@ --errors-for-leak-kinds=definite --fair-sched=yes --suppressions=${MEMORYCHECK_SUPPRESSIONS_FILE}"
+        "--trace-children=yes --leak-check=full --track-origins=yes --track-origins=yes --error-exitcode=42 --error-markers=@ --errors-for-leak-kinds=definite --fair-sched=yes --suppressions=${MEMORYCHECK_SUPPRESSIONS_FILE}"
         CACHE STRING "Valgrind options" FORCE)
       set(VALGRIND_COMMAND_OPTIONS "${MEMORYCHECK_COMMAND_OPTIONS}" CACHE STRING "Valgrind options" FORCE)
     endif()
@@ -467,7 +467,7 @@ endif()
 #           ####   #          #       #     ####   #    #   ####
 #
 
-set(MDBX_BUILD_OPTIONS ENABLE_UBSAN ENABLE_ASAN MDBX_USE_VALGRIND ENABLE_GPROF ENABLE_GCOV)
+set(MDBX_BUILD_OPTIONS ENABLE_UBSAN ENABLE_ASAN ENABLE_MEMCHECK ENABLE_GPROF ENABLE_GCOV)
 macro(add_mdbx_option NAME DESCRIPTION DEFAULT)
   list(APPEND MDBX_BUILD_OPTIONS ${NAME})
   if(NOT ${DEFAULT} STREQUAL "AUTO")
@@ -531,6 +531,8 @@ add_mdbx_option(MDBX_ENABLE_BIGFOOT "Chunking long list of retired pages during 
 add_mdbx_option(MDBX_ENABLE_PGOP_STAT "Gathering statistics for page operations" ON)
 add_mdbx_option(MDBX_ENABLE_PROFGC "Profiling of GC search and updates" OFF)
 mark_as_advanced(MDBX_ENABLE_PROFGC)
+add_mdbx_option(MDBX_ENABLE_DBI_SPARSE "FIXME" ON)
+add_mdbx_option(MDBX_ENABLE_DBI_LOCKFREE "FIXME" ON)
 
 if(NOT MDBX_AMALGAMATED_SOURCE)
   if(CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE_UPPERCASE STREQUAL "DEBUG")

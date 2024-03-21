@@ -39,6 +39,12 @@ const char *testcase2str(const actor_testcase testcase) {
     return "ttl";
   case ac_nested:
     return "nested";
+#if !defined(_WIN32) && !defined(_WIN64)
+  case ac_forkread:
+    return "fork.reader";
+  case ac_forkwrite:
+    return "fork.writer";
+#endif /* Windows */
   }
 }
 
@@ -537,29 +543,43 @@ int testcase::db_open__begin__table_create_open_clean(MDBX_dbi &handle) {
   return err;
 }
 
-MDBX_dbi testcase::db_table_open(bool create) {
-  log_trace(">> testcase::db_table_create");
-
-  char tablename_buf[16];
+const char *testcase::db_tablename(tablename_buf &buffer,
+                                   const char *suffix) const {
   const char *tablename = nullptr;
   if (config.space_id) {
-    int rc = snprintf(tablename_buf, sizeof(tablename_buf), "TBL%04u",
-                      config.space_id);
+    int rc =
+        snprintf(buffer, sizeof(buffer), "TBL%04u%s", config.space_id, suffix);
     if (rc < 4 || rc >= (int)sizeof(tablename_buf) - 1)
       failure("snprintf(tablename): %d", rc);
-    tablename = tablename_buf;
+    tablename = buffer;
   }
   log_debug("use %s table", tablename ? tablename : "MAINDB");
+  return tablename;
+}
+
+MDBX_dbi testcase::db_table_open(bool create, bool expect_failure) {
+  log_trace(">> testcase::db_table_%s%s", create ? "create" : "open",
+            expect_failure ? "(expect_failure)" : "");
+
+  tablename_buf buffer;
+  const char *tablename = db_tablename(buffer);
 
   MDBX_dbi handle = 0;
-  int rc = mdbx_dbi_open(txn_guard.get(), tablename,
-                         (create ? MDBX_CREATE : MDBX_DB_DEFAULTS) |
-                             config.params.table_flags,
-                         &handle);
-  if (unlikely(rc != MDBX_SUCCESS))
-    failure_perror("mdbx_dbi_open()", rc);
+  int rc = mdbx_dbi_open(
+      txn_guard.get(), tablename,
+      create ? (MDBX_CREATE | config.params.table_flags)
+             : (flipcoin() ? MDBX_DB_ACCEDE
+                           : MDBX_DB_DEFAULTS | config.params.table_flags),
+      &handle);
+  if (unlikely(expect_failure != (rc != MDBX_SUCCESS))) {
+    char act[64];
+    snprintf(act, sizeof(act), "mdbx_dbi_open(create=%s,expect_failure=%s)",
+             create ? "true" : "false", expect_failure ? "true" : "false");
+    failure_perror(act, rc);
+  }
 
-  log_trace("<< testcase::db_table_create, handle %u", handle);
+  log_trace("<< testcase::db_table_%s%s, handle %u", create ? "create" : "open",
+            expect_failure ? "(expect_failure)" : "", handle);
   return handle;
 }
 
@@ -579,9 +599,9 @@ void testcase::db_table_drop(MDBX_dbi handle) {
 
 void testcase::db_table_clear(MDBX_dbi handle, MDBX_txn *txn) {
   log_trace(">> testcase::db_table_clear, handle %u", handle);
-  int rc = mdbx_drop(txn ? txn : txn_guard.get(), handle, false);
-  if (unlikely(rc != MDBX_SUCCESS))
-    failure_perror("mdbx_drop(delete=false)", rc);
+  int err = mdbx_drop(txn ? txn : txn_guard.get(), handle, false);
+  if (unlikely(err != MDBX_SUCCESS))
+    failure_perror("mdbx_drop(delete=false)", err);
   speculum.clear();
   log_trace("<< testcase::db_table_clear");
 }
@@ -589,21 +609,25 @@ void testcase::db_table_clear(MDBX_dbi handle, MDBX_txn *txn) {
 void testcase::db_table_close(MDBX_dbi handle) {
   log_trace(">> testcase::db_table_close, handle %u", handle);
   assert(!txn_guard);
-  int rc = mdbx_dbi_close(db_guard.get(), handle);
-  if (unlikely(rc != MDBX_SUCCESS))
-    failure_perror("mdbx_dbi_close()", rc);
+  int err = mdbx_dbi_close(db_guard.get(), handle);
+  if (unlikely(err != MDBX_SUCCESS))
+    failure_perror("mdbx_dbi_close()", err);
   log_trace("<< testcase::db_table_close");
 }
 
-void testcase::checkdata(const char *step, MDBX_dbi handle, MDBX_val key2check,
+bool testcase::checkdata(const char *step, MDBX_dbi handle, MDBX_val key2check,
                          MDBX_val expected_valued) {
   MDBX_val actual_value = expected_valued;
-  int rc = mdbx_get_equal_or_great(txn_guard.get(), handle, &key2check,
-                                   &actual_value);
-  if (unlikely(rc != MDBX_SUCCESS))
-    failure_perror(step, rc);
+  int err = mdbx_get_equal_or_great(txn_guard.get(), handle, &key2check,
+                                    &actual_value);
+  if (unlikely(err != MDBX_SUCCESS)) {
+    if (!config.params.speculum || err != MDBX_RESULT_TRUE)
+      failure_perror(step, (err == MDBX_RESULT_TRUE) ? MDBX_NOTFOUND : err);
+    return false;
+  }
   if (!is_samedata(&actual_value, &expected_valued))
     failure("%s data mismatch", step);
+  return true;
 }
 
 //-----------------------------------------------------------------------------
@@ -648,8 +672,8 @@ bool test_execute(const actor_config &config_const) {
                       size_t(config.params.nrepeat));
         else
           log_verbose("test successfully (iteration %zi)", iter);
-        config.params.keygen.seed += INT32_C(0xA4F4D37B);
-        log_verbose("turn keygen to %u", config.params.keygen.seed);
+        prng_seed(config.params.prng_seed += INT32_C(0xA4F4D37B));
+        log_verbose("turn PRNG to %u", config.params.prng_seed);
       }
 
     } while (config.params.nrepeat == 0 || iter < config.params.nrepeat);
@@ -968,7 +992,9 @@ int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata,
     }
 
     auto it_lowerbound = insertion_result.first;
-    if (++it_lowerbound != speculum.end()) {
+    if (insertion_result.second)
+      ++it_lowerbound;
+    if (it_lowerbound != speculum.end()) {
       const auto cursor_lowerbound = speculum_cursors[lowerbound].get();
       speculum_check_cursor("after-insert", "lowerbound", it_lowerbound,
                             cursor_lowerbound, MDBX_GET_CURRENT);
@@ -995,30 +1021,37 @@ int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata,
 
 int testcase::replace(const keygen::buffer &akey,
                       const keygen::buffer &new_data,
-                      const keygen::buffer &old_data, MDBX_put_flags_t flags) {
+                      const keygen::buffer &old_data, MDBX_put_flags_t flags,
+                      bool hush_keygen_mistakes) {
+  int expected_err = MDBX_SUCCESS;
   if (config.params.speculum) {
     const auto S_key = iov2dataview(akey);
     const auto S_old = iov2dataview(old_data);
     const auto S_new = iov2dataview(new_data);
     const auto removed = speculum.erase(SET::key_type(S_key, S_old));
-    if (unlikely(removed != 1)) {
+    if (unlikely(!removed)) {
       char dump_key[128], dump_value[128];
       log_error(
-          "speculum-%s: %s old value {%s, %s}", "replace",
-          (removed > 1) ? "multi" : "no",
+          "speculum-%s: no old pair {%s, %s} (keygen mistake)", "replace",
           mdbx_dump_val(&akey->value, dump_key, sizeof(dump_key)),
           mdbx_dump_val(&old_data->value, dump_value, sizeof(dump_value)));
-    }
-    if (unlikely(!speculum.emplace(S_key, S_new).second)) {
+      expected_err = MDBX_NOTFOUND;
+    } else if (unlikely(!speculum.emplace(S_key, S_new).second)) {
       char dump_key[128], dump_value[128];
       log_error(
-          "speculum-replace: new pair not inserted {%s, %s}",
+          "speculum-%s: %s {%s, %s}", "replace", "new pair not inserted",
           mdbx_dump_val(&akey->value, dump_key, sizeof(dump_key)),
           mdbx_dump_val(&new_data->value, dump_value, sizeof(dump_value)));
+      expected_err = MDBX_KEYEXIST;
     }
   }
-  return mdbx_replace(txn_guard.get(), dbi, &akey->value, &new_data->value,
-                      &old_data->value, flags);
+  int err = mdbx_replace(txn_guard.get(), dbi, &akey->value, &new_data->value,
+                         &old_data->value, flags);
+  if (err && err == expected_err && hush_keygen_mistakes) {
+    log_notice("speculum-%s: %s %d", "replace", "hust keygen mistake", err);
+    err = MDBX_SUCCESS;
+  }
+  return err;
 }
 
 int testcase::remove(const keygen::buffer &akey, const keygen::buffer &adata) {

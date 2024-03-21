@@ -5,9 +5,9 @@ N |   MASK  | ENV       | TXN          | DB       | PUT       | DBI        | NOD
 2 |0000 0004|ALLOC_COLSC|TXN_DIRTY     |DUPSORT   |           |DBI_FRESH   |F_DUPDATA|P_OVERFLOW|         |
 3 |0000 0008|ALLOC_SSCAN|TXN_SPILLS    |INTEGERKEY|           |DBI_CREAT   |         |P_META    |         |
 4 |0000 0010|ALLOC_FIFO |TXN_HAS_CHILD |DUPFIXED  |NOOVERWRITE|DBI_VALID   |         |P_BAD     |         |
-5 |0000 0020|           |TXN_DRAINED_GC|INTEGERDUP|NODUPDATA  |DBI_USRVALID|         |P_LEAF2   |         |
-6 |0000 0040|           |              |REVERSEDUP|CURRENT    |DBI_DUPDATA |         |P_SUBP    |         |
-7 |0000 0080|           |              |          |ALLDUPS    |DBI_AUDITED |         |          |         |
+5 |0000 0020|           |TXN_DRAINED_GC|INTEGERDUP|NODUPDATA  |            |         |P_LEAF2   |         |
+6 |0000 0040|           |              |REVERSEDUP|CURRENT    |DBI_OLDEN   |         |P_SUBP    |         |
+7 |0000 0080|           |              |          |ALLDUPS    |DBI_LINDO   |         |          |         |
 8 |0000 0100| _MAY_MOVE |              |          |           |            |         |          | <=      |
 9 |0000 0200| _MAY_UNMAP|              |          |           |            |         |          | <=      |
 10|0000 0400|           |              |          |           |            |         |          |         |

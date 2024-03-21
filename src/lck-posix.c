@@ -120,7 +120,7 @@ mdbx_global_destructor(void) {
  *  - Блокировка таблицы читателей для регистрации,
  *    т.е. функции osal_rdt_lock() и osal_rdt_unlock().
  *  - Блокировка БД для пишущих транзакций,
- *    т.е. функции mdbx_txn_lock() и mdbx_txn_unlock().
+ *    т.е. функции osal_txn_lock() и osal_txn_unlock().
  *
  * Остальной функционал реализуется отдельно посредством файловых блокировок:
  *  - Первоначальный захват БД в режиме exclusive/shared и последующий перевод
@@ -294,7 +294,7 @@ MDBX_INTERNAL_FUNC int osal_rpid_check(MDBX_env *env, uint32_t pid) {
 /*---------------------------------------------------------------------------*/
 
 #if MDBX_LOCKING > MDBX_LOCKING_SYSV
-MDBX_INTERNAL_FUNC int osal_ipclock_stub(osal_ipclock_t *ipc) {
+MDBX_INTERNAL_FUNC int osal_ipclock_stubinit(osal_ipclock_t *ipc) {
 #if MDBX_LOCKING == MDBX_LOCKING_POSIX1988
   return sem_init(ipc, false, 1) ? errno : 0;
 #elif MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                \
@@ -527,15 +527,42 @@ MDBX_INTERNAL_FUNC int osal_lck_downgrade(MDBX_env *env) {
   return rc;
 }
 
-__cold MDBX_INTERNAL_FUNC int osal_lck_destroy(MDBX_env *env,
-                                               MDBX_env *inprocess_neighbor) {
+MDBX_INTERNAL_FUNC int osal_lck_upgrade(MDBX_env *env, bool dont_wait) {
+  assert(env->me_lfd != INVALID_HANDLE_VALUE);
   if (unlikely(osal_getpid() != env->me_pid))
     return MDBX_PANIC;
 
+  const int cmd = dont_wait ? op_setlk : op_setlkw;
+  int rc = lck_op(env->me_lfd, cmd, F_WRLCK, 0, 1);
+  if (rc == MDBX_SUCCESS && (env->me_flags & MDBX_EXCLUSIVE) == 0) {
+    rc = (env->me_pid > 1)
+             ? lck_op(env->me_lazy_fd, cmd, F_WRLCK, 0, env->me_pid - 1)
+             : MDBX_SUCCESS;
+    if (rc == MDBX_SUCCESS) {
+      rc = lck_op(env->me_lazy_fd, cmd, F_WRLCK, env->me_pid + 1,
+                  OFF_T_MAX - env->me_pid - 1);
+      if (rc != MDBX_SUCCESS && env->me_pid > 1 &&
+          lck_op(env->me_lazy_fd, op_setlk, F_UNLCK, 0, env->me_pid - 1))
+        rc = MDBX_PANIC;
+    }
+    if (rc != MDBX_SUCCESS && lck_op(env->me_lfd, op_setlk, F_RDLCK, 0, 1))
+      rc = MDBX_PANIC;
+  }
+  if (unlikely(rc != 0)) {
+    ERROR("%s, err %u", "lck", rc);
+    assert(MDBX_IS_ERROR(rc));
+  }
+  return rc;
+}
+
+__cold MDBX_INTERNAL_FUNC int osal_lck_destroy(MDBX_env *env,
+                                               MDBX_env *inprocess_neighbor,
+                                               const uint32_t current_pid) {
+  eASSERT(env, osal_getpid() == current_pid);
   int rc = MDBX_SUCCESS;
   struct stat lck_info;
-  MDBX_lockinfo *lck = env->me_lck_mmap.lck;
-  if (env->me_lfd != INVALID_HANDLE_VALUE && !inprocess_neighbor && lck &&
+  MDBX_lockinfo *lck = env->me_lck;
+  if (lck && lck == env->me_lck_mmap.lck && !inprocess_neighbor &&
       /* try get exclusive access */
       lck_op(env->me_lfd, op_setlk, F_WRLCK, 0, OFF_T_MAX) == 0 &&
       /* if LCK was not removed */
@@ -544,7 +571,8 @@ __cold MDBX_INTERNAL_FUNC int osal_lck_destroy(MDBX_env *env,
              (env->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0,
              OFF_T_MAX) == 0) {
 
-    VERBOSE("%p got exclusive, drown locks", (void *)env);
+    VERBOSE("%p got exclusive, drown ipc-locks", (void *)env);
+    eASSERT(env, current_pid == env->me_pid);
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
     if (env->me_sysv_ipc.semid != -1)
       rc = semctl(env->me_sysv_ipc.semid, 2, IPC_RMID) ? errno : 0;
@@ -558,11 +586,18 @@ __cold MDBX_INTERNAL_FUNC int osal_lck_destroy(MDBX_env *env,
     if (rc == 0) {
       const bool synced = lck->mti_unsynced_pages.weak == 0;
       osal_munmap(&env->me_lck_mmap);
-      if (synced)
+      if (synced && env->me_lfd != INVALID_HANDLE_VALUE)
         rc = ftruncate(env->me_lfd, 0) ? errno : 0;
     }
 
     jitter4testing(false);
+  }
+
+  if (current_pid != env->me_pid) {
+    eASSERT(env, !inprocess_neighbor);
+    NOTICE("drown env %p after-fork pid %d -> %d",
+           __Wpedantic_format_voidptr(env), env->me_pid, current_pid);
+    inprocess_neighbor = nullptr;
   }
 
   /* 1) POSIX's fcntl() locks (i.e. when op_setlk == F_SETLK) should be restored
@@ -761,7 +796,7 @@ bailout:
 #endif /* MDBX_LOCKING > 0 */
 }
 
-__cold static int mdbx_ipclock_failed(MDBX_env *env, osal_ipclock_t *ipc,
+__cold static int osal_ipclock_failed(MDBX_env *env, osal_ipclock_t *ipc,
                                       const int err) {
   int rc = err;
 #if MDBX_LOCKING == MDBX_LOCKING_POSIX2008 || MDBX_LOCKING == MDBX_LOCKING_SYSV
@@ -822,11 +857,6 @@ __cold static int mdbx_ipclock_failed(MDBX_env *env, osal_ipclock_t *ipc,
 #error "FIXME"
 #endif /* MDBX_LOCKING */
 
-#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
-  if (rc == EDEADLK && atomic_load32(&env->me_ignore_EDEADLK, mo_Relaxed) > 0)
-    return rc;
-#endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
-
   ERROR("mutex (un)lock failed, %s", mdbx_strerror(err));
   if (rc != EDEADLK)
     env->me_flags |= MDBX_FATAL_ERROR;
@@ -852,7 +882,7 @@ MDBX_INTERNAL_FUNC int osal_check_tid4bionic(void) {
 }
 #endif /* __ANDROID_API__ || ANDROID) || BIONIC */
 
-static int mdbx_ipclock_lock(MDBX_env *env, osal_ipclock_t *ipc,
+static int osal_ipclock_lock(MDBX_env *env, osal_ipclock_t *ipc,
                              const bool dont_wait) {
 #if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                  \
     MDBX_LOCKING == MDBX_LOCKING_POSIX2008
@@ -888,63 +918,87 @@ static int mdbx_ipclock_lock(MDBX_env *env, osal_ipclock_t *ipc,
 #endif /* MDBX_LOCKING */
 
   if (unlikely(rc != MDBX_SUCCESS && rc != MDBX_BUSY))
-    rc = mdbx_ipclock_failed(env, ipc, rc);
+    rc = osal_ipclock_failed(env, ipc, rc);
   return rc;
 }
 
-static int mdbx_ipclock_unlock(MDBX_env *env, osal_ipclock_t *ipc) {
+int osal_ipclock_unlock(MDBX_env *env, osal_ipclock_t *ipc) {
+  int err = MDBX_ENOSYS;
 #if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                  \
     MDBX_LOCKING == MDBX_LOCKING_POSIX2008
-  int rc = pthread_mutex_unlock(ipc);
-  (void)env;
+  err = pthread_mutex_unlock(ipc);
 #elif MDBX_LOCKING == MDBX_LOCKING_POSIX1988
-  int rc = sem_post(ipc) ? errno : MDBX_SUCCESS;
-  (void)env;
+  err = sem_post(ipc) ? errno : MDBX_SUCCESS;
 #elif MDBX_LOCKING == MDBX_LOCKING_SYSV
   if (unlikely(*ipc != (pid_t)env->me_pid))
-    return EPERM;
-  *ipc = 0;
-  struct sembuf op = {.sem_num = (ipc != &env->me_lck->mti_wlock),
-                      .sem_op = 1,
-                      .sem_flg = SEM_UNDO};
-  int rc = semop(env->me_sysv_ipc.semid, &op, 1) ? errno : MDBX_SUCCESS;
+    err = EPERM;
+  else {
+    *ipc = 0;
+    struct sembuf op = {.sem_num = (ipc != &env->me_lck->mti_wlock),
+                        .sem_op = 1,
+                        .sem_flg = SEM_UNDO};
+    err = semop(env->me_sysv_ipc.semid, &op, 1) ? errno : MDBX_SUCCESS;
+  }
 #else
 #error "FIXME"
 #endif /* MDBX_LOCKING */
+  int rc = err;
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    const uint32_t current_pid = osal_getpid();
+    if (current_pid == env->me_pid || LOG_ENABLED(MDBX_LOG_NOTICE))
+      debug_log((current_pid == env->me_pid)
+                    ? MDBX_LOG_FATAL
+                    : (rc = MDBX_SUCCESS, MDBX_LOG_NOTICE),
+                "ipc-unlock()", __LINE__, "failed: env %p, lck-%s %p, err %d\n",
+                __Wpedantic_format_voidptr(env),
+                (env->me_lck == env->me_lck_mmap.lck) ? "mmap" : "stub",
+                __Wpedantic_format_voidptr(env->me_lck), err);
+  }
   return rc;
 }
 
 MDBX_INTERNAL_FUNC int osal_rdt_lock(MDBX_env *env) {
   TRACE("%s", ">>");
   jitter4testing(true);
-  int rc = mdbx_ipclock_lock(env, &env->me_lck->mti_rlock, false);
+  int rc = osal_ipclock_lock(env, &env->me_lck->mti_rlock, false);
   TRACE("<< rc %d", rc);
   return rc;
 }
 
 MDBX_INTERNAL_FUNC void osal_rdt_unlock(MDBX_env *env) {
   TRACE("%s", ">>");
-  int rc = mdbx_ipclock_unlock(env, &env->me_lck->mti_rlock);
-  TRACE("<< rc %d", rc);
-  if (unlikely(rc != MDBX_SUCCESS))
-    mdbx_panic("%s() failed: err %d\n", __func__, rc);
+  int err = osal_ipclock_unlock(env, &env->me_lck->mti_rlock);
+  TRACE("<< err %d", err);
+  if (unlikely(err != MDBX_SUCCESS))
+    mdbx_panic("%s() failed: err %d\n", __func__, err);
   jitter4testing(true);
 }
 
-int mdbx_txn_lock(MDBX_env *env, bool dont_wait) {
+int osal_txn_lock(MDBX_env *env, bool dont_wait) {
   TRACE("%swait %s", dont_wait ? "dont-" : "", ">>");
   jitter4testing(true);
-  int rc = mdbx_ipclock_lock(env, &env->me_lck->mti_wlock, dont_wait);
-  TRACE("<< rc %d", rc);
-  return MDBX_IS_ERROR(rc) ? rc : MDBX_SUCCESS;
+  const int err = osal_ipclock_lock(env, &env->me_lck->mti_wlock, dont_wait);
+  int rc = err;
+  if (likely(!MDBX_IS_ERROR(err))) {
+    eASSERT(env, !env->me_txn0->mt_owner ||
+                     err == /* если другой поток в этом-же процессе завершился
+                               не освободив блокировку */
+                         MDBX_RESULT_TRUE);
+    env->me_txn0->mt_owner = osal_thread_self();
+    rc = MDBX_SUCCESS;
+  }
+  TRACE("<< err %d, rc %d", err, rc);
+  return rc;
 }
 
-void mdbx_txn_unlock(MDBX_env *env) {
+void osal_txn_unlock(MDBX_env *env) {
   TRACE("%s", ">>");
-  int rc = mdbx_ipclock_unlock(env, &env->me_lck->mti_wlock);
-  TRACE("<< rc %d", rc);
-  if (unlikely(rc != MDBX_SUCCESS))
-    mdbx_panic("%s() failed: err %d\n", __func__, rc);
+  eASSERT(env, env->me_txn0->mt_owner == osal_thread_self());
+  env->me_txn0->mt_owner = 0;
+  int err = osal_ipclock_unlock(env, &env->me_lck->mti_wlock);
+  TRACE("<< err %d", err);
+  if (unlikely(err != MDBX_SUCCESS))
+    mdbx_panic("%s() failed: err %d\n", __func__, err);
   jitter4testing(true);
 }
 

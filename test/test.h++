@@ -103,7 +103,7 @@ class registry {
   struct record {
     actor_testcase id = ac_none;
     std::string name;
-    bool (*review_params)(actor_params &) = nullptr;
+    bool (*review_params)(actor_params &, unsigned space_id) = nullptr;
     testcase *(*constructor)(const actor_config &, const mdbx_pid_t) = nullptr;
   };
   std::unordered_map<std::string, const record *> name2id;
@@ -124,8 +124,8 @@ public:
       add(this);
     }
   };
-  static bool review_actor_params(const actor_testcase id,
-                                  actor_params &params);
+  static bool review_actor_params(const actor_testcase id, actor_params &params,
+                                  const unsigned space_id);
   static testcase *create_actor(const actor_config &config,
                                 const mdbx_pid_t pid);
 };
@@ -232,7 +232,8 @@ protected:
   int insert(const keygen::buffer &akey, const keygen::buffer &adata,
              MDBX_put_flags_t flags);
   int replace(const keygen::buffer &akey, const keygen::buffer &new_value,
-              const keygen::buffer &old_value, MDBX_put_flags_t flags);
+              const keygen::buffer &old_value, MDBX_put_flags_t flags,
+              bool hush_keygen_mistakes = true);
   int remove(const keygen::buffer &akey, const keygen::buffer &adata);
 
   static int hsr_callback(const MDBX_env *env, const MDBX_txn *txn,
@@ -248,9 +249,10 @@ protected:
   void db_prepare();
   void db_open();
   void db_close();
-  void txn_begin(bool readonly, MDBX_txn_flags_t flags = MDBX_TXN_READWRITE);
+  virtual void txn_begin(bool readonly,
+                         MDBX_txn_flags_t flags = MDBX_TXN_READWRITE);
   int breakable_commit();
-  void txn_end(bool abort);
+  virtual void txn_end(bool abort);
   int breakable_restart();
   void txn_restart(bool abort, bool readonly,
                    MDBX_txn_flags_t flags = MDBX_TXN_READWRITE);
@@ -261,11 +263,14 @@ protected:
   void txn_inject_writefault(MDBX_txn *txn);
   void fetch_canary();
   void update_canary(uint64_t increment);
-  void checkdata(const char *step, MDBX_dbi handle, MDBX_val key2check,
+  bool checkdata(const char *step, MDBX_dbi handle, MDBX_val key2check,
                  MDBX_val expected_valued);
   unsigned txn_underutilization_x256(MDBX_txn *txn) const;
 
-  MDBX_dbi db_table_open(bool create);
+  using tablename_buf = char[32];
+  const char *db_tablename(tablename_buf &buffer,
+                           const char *suffix = "") const;
+  MDBX_dbi db_table_open(bool create, bool expect_failure = false);
   void db_table_drop(MDBX_dbi handle);
   void db_table_clear(MDBX_dbi handle, MDBX_txn *txn = nullptr);
   void db_table_close(MDBX_dbi handle);
@@ -298,8 +303,9 @@ public:
     memset(&last, 0, sizeof(last));
   }
 
-  static bool review_params(actor_params &params) {
+  static bool review_params(actor_params &params, unsigned space_id) {
     // silently fix key/data length for fixed-length modes
+    params.prng_seed += bleach32(space_id);
     if ((params.table_flags & MDBX_INTEGERKEY) &&
         params.keylen_min != params.keylen_max)
       params.keylen_min = params.keylen_max;

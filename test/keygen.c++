@@ -14,6 +14,39 @@
 
 #include "test.h++"
 
+static const uint64_t primes[64] = {
+    /* */
+    0, 1, 3, 7, 13, 31, 61, 127, 251, 509, 1021, 2039, 4093, 8191, 16381,
+    /* */
+    UINT64_C(32749), UINT64_C(65521), UINT64_C(131071), UINT64_C(262139),
+    UINT64_C(524287), UINT64_C(1048573), UINT64_C(2097143), UINT64_C(4194301),
+    UINT64_C(8388593), UINT64_C(16777213), UINT64_C(33554393),
+    UINT64_C(67108859), UINT64_C(134217689), UINT64_C(268435399),
+    UINT64_C(536870909), UINT64_C(1073741789), UINT64_C(2147483647),
+    UINT64_C(4294967291), UINT64_C(8589934583), UINT64_C(17179869143),
+    UINT64_C(34359738337), UINT64_C(68719476731), UINT64_C(137438953447),
+    UINT64_C(274877906899), UINT64_C(549755813881), UINT64_C(1099511627689),
+    UINT64_C(2199023255531), UINT64_C(4398046511093), UINT64_C(8796093022151),
+    UINT64_C(17592186044399), UINT64_C(35184372088777),
+    UINT64_C(70368744177643), UINT64_C(140737488355213),
+    UINT64_C(281474976710597), UINT64_C(562949953421231),
+    UINT64_C(1125899906842597), UINT64_C(2251799813685119),
+    UINT64_C(4503599627370449), UINT64_C(9007199254740881),
+    UINT64_C(18014398509481951), UINT64_C(36028797018963913),
+    UINT64_C(72057594037927931), UINT64_C(144115188075855859),
+    UINT64_C(288230376151711717), UINT64_C(576460752303423433),
+    UINT64_C(1152921504606846883), UINT64_C(2305843009213693951),
+    UINT64_C(4611686018427387847), UINT64_C(9223372036854775783)};
+
+/* static unsigned supid_log2(uint64_t v) {
+  unsigned r = 0;
+  while (v > 1) {
+    v >>= 1;
+    r += 1;
+  }
+  return r;
+} */
+
 namespace keygen {
 
 /* LY: https://en.wikipedia.org/wiki/Injective_function */
@@ -48,19 +81,19 @@ serial_t injective(const serial_t serial,
       10, 14, 22, 19, 3, 21, 18, 19, 26, 24, 2, 21, 25, 29, 24, 10, 11, 14, 20,
       19};
 
+  const auto mask = actor_params::serial_mask(bits);
   const auto mult = m[bits - 8];
   const auto shift = s[bits - 8];
   serial_t result = serial * mult;
   if (salt) {
     const unsigned left = bits / 2;
     const unsigned right = bits - left;
-    result = (result << left) |
-             ((result & actor_params::serial_mask(bits)) >> right);
+    result = (result << left) | ((result & mask) >> right);
     result = (result ^ salt) * mult;
   }
 
-  result ^= result << shift;
-  result &= actor_params::serial_mask(bits);
+  result ^= (result & mask) >> shift;
+  result &= mask;
   log_trace("keygen-injective: serial %" PRIu64 "/%u @%" PRIx64 ",%u,%" PRIu64
             " => %" PRIu64 "/%u",
             serial, bits, mult, shift, salt, result, bits);
@@ -79,7 +112,7 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
              unsigned(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT))));
   assert(!(value_essentials.flags &
            ~(essentials::prng_fill_flag |
-             unsigned(MDBX_INTEGERDUP | MDBX_REVERSEDUP))));
+             unsigned(MDBX_INTEGERDUP | MDBX_REVERSEDUP | MDBX_DUPFIXED))));
 
   log_trace("keygen-pair: serial %" PRIu64 ", data-age %" PRIu64, serial,
             value_age);
@@ -111,7 +144,7 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
   }
 
   serial_t key_serial = serial;
-  serial_t value_serial = value_age << mapping.split;
+  serial_t value_serial = (value_age & value_age_mask) << mapping.split;
   if (mapping.split) {
     if (MDBX_db_flags_t(key_essentials.flags) & MDBX_DUPSORT) {
       key_serial >>= mapping.split;
@@ -126,15 +159,14 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
           actor_params::serial_mask(mapping.split);
     }
 
-    value_serial |= value_age << mapping.split;
     log_trace("keygen-pair: split@%u => k%" PRIu64 ", v%" PRIu64, mapping.split,
               key_serial, value_serial);
   }
 
   log_trace("keygen-pair: key %" PRIu64 ", value %" PRIu64, key_serial,
             value_serial);
-  mk_begin(key_serial, key_essentials, *key);
-  mk_begin(value_serial, value_essentials, *value);
+  key_serial = mk_begin(key_serial, key_essentials, *key);
+  value_serial = mk_begin(value_serial, value_essentials, *value);
 
 #if 0 /* unused for now */
   if (key->value.iov_len + value->value.iov_len > pair_maxlen) {
@@ -189,47 +221,82 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
   log_pair(logging::trace, "kv", key, value);
 }
 
-void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
+void maker::setup(const config::actor_params_pod &actor,
                   unsigned thread_number) {
 #if CONSTEXPR_ENUM_FLAGS_OPERATIONS
   static_assert(unsigned(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT |
-                         MDBX_INTEGERDUP | MDBX_REVERSEDUP) < UINT16_MAX,
+                         MDBX_DUPFIXED | MDBX_INTEGERDUP | MDBX_REVERSEDUP) <
+                    UINT16_MAX,
                 "WTF?");
 #else
   assert(unsigned(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT |
-                  MDBX_INTEGERDUP | MDBX_REVERSEDUP) < UINT16_MAX);
+                  MDBX_DUPFIXED | MDBX_INTEGERDUP | MDBX_REVERSEDUP) <
+         UINT16_MAX);
 #endif
+
   key_essentials.flags = uint16_t(
       actor.table_flags &
       MDBX_db_flags_t(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT));
   assert(actor.keylen_min <= UINT16_MAX);
   key_essentials.minlen = uint16_t(actor.keylen_min);
   assert(actor.keylen_max <= UINT32_MAX);
-  key_essentials.maxlen =
-      std::min(uint32_t(actor.keylen_max),
-               uint32_t(mdbx_limits_keysize_max(
-                   actor.pagesize, MDBX_db_flags_t(key_essentials.flags))));
+  key_essentials.maxlen = std::min(
+      uint32_t(actor.keylen_max),
+      uint32_t(mdbx_limits_keysize_max(actor.pagesize, actor.table_flags)));
+  key_essentials.bits = (key_essentials.maxlen < sizeof(serial_t))
+                            ? key_essentials.maxlen * CHAR_BIT
+                            : sizeof(serial_t) * CHAR_BIT;
+  key_essentials.mask = actor_params::serial_mask(key_essentials.bits);
+  assert(key_essentials.bits > 63 ||
+         key_essentials.mask > primes[key_essentials.bits]);
 
   value_essentials.flags = uint16_t(
-      actor.table_flags & MDBX_db_flags_t(MDBX_INTEGERDUP | MDBX_REVERSEDUP));
+      actor.table_flags &
+      MDBX_db_flags_t(MDBX_INTEGERDUP | MDBX_REVERSEDUP | MDBX_DUPFIXED));
   assert(actor.datalen_min <= UINT16_MAX);
   value_essentials.minlen = uint16_t(actor.datalen_min);
   assert(actor.datalen_max <= UINT32_MAX);
-  value_essentials.maxlen =
-      std::min(uint32_t(actor.datalen_max),
-               uint32_t(mdbx_limits_valsize_max(
-                   actor.pagesize, MDBX_db_flags_t(key_essentials.flags))));
+  value_essentials.maxlen = std::min(
+      uint32_t(actor.datalen_max),
+      uint32_t(mdbx_limits_valsize_max(actor.pagesize, actor.table_flags)));
+  value_essentials.bits = (value_essentials.maxlen < sizeof(serial_t))
+                              ? value_essentials.maxlen * CHAR_BIT
+                              : sizeof(serial_t) * CHAR_BIT;
+  value_essentials.mask = actor_params::serial_mask(value_essentials.bits);
+  assert(value_essentials.bits > 63 ||
+         value_essentials.mask > primes[value_essentials.bits]);
 
   if (!actor.keygen.zero_fill) {
     key_essentials.flags |= essentials::prng_fill_flag;
     value_essentials.flags |= essentials::prng_fill_flag;
   }
 
-  (void)thread_number;
   mapping = actor.keygen;
-  salt =
-      (actor.keygen.seed + uint64_t(actor_id)) * UINT64_C(14653293970879851569);
+  const auto split = mapping.split;
+  while (mapping.split >
+             value_essentials.bits - essentials::value_age_minwidth ||
+         mapping.split >= mapping.width)
+    mapping.split -= 1;
+  if (split != mapping.width)
+    log_notice("keygen: reduce mapping-split from %u to %u", split,
+               mapping.split);
 
+  const auto width = mapping.width;
+  while (unsigned((actor.table_flags & MDBX_DUPSORT)
+                      ? mapping.width - mapping.split
+                      : mapping.width) > key_essentials.bits)
+    mapping.width -= 1;
+  if (width != mapping.width)
+    log_notice("keygen: reduce mapping-width from %u to %u", width,
+               mapping.width);
+
+  value_age_bits = value_essentials.bits - mapping.split;
+  value_age_mask = actor_params::serial_mask(value_age_bits);
+  assert(value_age_bits >= essentials::value_age_minwidth);
+
+  salt = (prng_state ^
+          (thread_number * 1575554837) * UINT64_C(59386707711075671)) *
+         UINT64_C(14653293970879851569);
   base = actor.serial_base();
 }
 
@@ -307,11 +374,24 @@ buffer alloc(size_t limit) {
   return buffer(ptr);
 }
 
-void __hot maker::mk_begin(const serial_t serial, const essentials &params,
-                           result &out) {
+serial_t __hot maker::mk_begin(serial_t serial, const essentials &params,
+                               result &out) {
   assert(out.limit >= params.maxlen);
   assert(params.maxlen >= params.minlen);
-  assert(params.maxlen >= length(serial));
+  assert(serial <= params.mask);
+  if (unlikely(serial > params.mask)) {
+#if 1
+    serial %= primes[params.bits];
+    assert(params.mask > primes[params.bits]);
+#else
+    const serial_t maxbits = params.maxlen * CHAR_BIT;
+    serial ^= (serial >> maxbits / 2) *
+              serial_t((sizeof(serial_t) > 4) ? UINT64_C(40719303417517073)
+                                              : UINT32_C(3708688457));
+    serial &= params.mask;
+#endif
+    assert(params.maxlen >= length(serial));
+  }
 
   out.value.iov_len = std::max(unsigned(params.minlen), length(serial));
   const auto variation = params.maxlen - params.minlen;
@@ -328,6 +408,7 @@ void __hot maker::mk_begin(const serial_t serial, const essentials &params,
   assert(length(serial) <= out.value.iov_len);
   assert(out.value.iov_len >= params.minlen);
   assert(out.value.iov_len <= params.maxlen);
+  return serial;
 }
 
 void __hot maker::mk_continue(const serial_t serial, const essentials &params,

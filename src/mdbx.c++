@@ -271,6 +271,11 @@ namespace mdbx {
       "into an incompatible memory allocation scheme.");
 }
 
+[[noreturn]] __cold void throw_incomparable_cursors() {
+  throw std::logic_error(
+      "mdbx:: incomparable and/or invalid cursors to compare positions.");
+}
+
 [[noreturn]] __cold void throw_bad_value_size() {
   throw bad_value_size(MDBX_BAD_VALSIZE);
 }
@@ -324,6 +329,8 @@ DEFINE_EXCEPTION(thread_mismatch)
 DEFINE_EXCEPTION(transaction_full)
 DEFINE_EXCEPTION(transaction_overlapping)
 DEFINE_EXCEPTION(duplicated_lck_file)
+DEFINE_EXCEPTION(dangling_map_id)
+
 #undef DEFINE_EXCEPTION
 
 __cold const char *error::what() const noexcept {
@@ -410,6 +417,7 @@ __cold void error::throw_exception() const {
     CASE_EXCEPTION(transaction_full, MDBX_TXN_FULL);
     CASE_EXCEPTION(transaction_overlapping, MDBX_TXN_OVERLAPPING);
     CASE_EXCEPTION(duplicated_lck_file, MDBX_DUPLICATED_CLK);
+    CASE_EXCEPTION(dangling_map_id, MDBX_DANGLING_DBI);
 #undef CASE_EXCEPTION
   default:
     if (is_mdbx_error())
@@ -527,48 +535,48 @@ bool slice::is_printable(bool disable_utf8) const noexcept {
 }
 
 #ifdef MDBX_U128_TYPE
-MDBX_U128_TYPE slice::as_uint128() const {
+MDBX_U128_TYPE slice::as_uint128_adapt() const {
   static_assert(sizeof(MDBX_U128_TYPE) == 16, "WTF?");
   if (size() == 16) {
     MDBX_U128_TYPE r;
     memcpy(&r, data(), sizeof(r));
     return r;
   } else
-    return as_uint64();
+    return as_uint64_adapt();
 }
 #endif /* MDBX_U128_TYPE */
 
-uint64_t slice::as_uint64() const {
+uint64_t slice::as_uint64_adapt() const {
   static_assert(sizeof(uint64_t) == 8, "WTF?");
   if (size() == 8) {
     uint64_t r;
     memcpy(&r, data(), sizeof(r));
     return r;
   } else
-    return as_uint32();
+    return as_uint32_adapt();
 }
 
-uint32_t slice::as_uint32() const {
+uint32_t slice::as_uint32_adapt() const {
   static_assert(sizeof(uint32_t) == 4, "WTF?");
   if (size() == 4) {
     uint32_t r;
     memcpy(&r, data(), sizeof(r));
     return r;
   } else
-    return as_uint16();
+    return as_uint16_adapt();
 }
 
-uint16_t slice::as_uint16() const {
+uint16_t slice::as_uint16_adapt() const {
   static_assert(sizeof(uint16_t) == 2, "WTF?");
   if (size() == 2) {
     uint16_t r;
     memcpy(&r, data(), sizeof(r));
     return r;
   } else
-    return as_uint8();
+    return as_uint8_adapt();
 }
 
-uint8_t slice::as_uint8() const {
+uint8_t slice::as_uint8_adapt() const {
   static_assert(sizeof(uint8_t) == 1, "WTF?");
   if (size() == 1)
     return *static_cast<const uint8_t *>(data());
@@ -579,48 +587,48 @@ uint8_t slice::as_uint8() const {
 }
 
 #ifdef MDBX_I128_TYPE
-MDBX_I128_TYPE slice::as_int128() const {
+MDBX_I128_TYPE slice::as_int128_adapt() const {
   static_assert(sizeof(MDBX_I128_TYPE) == 16, "WTF?");
   if (size() == 16) {
     MDBX_I128_TYPE r;
     memcpy(&r, data(), sizeof(r));
     return r;
   } else
-    return as_int64();
+    return as_int64_adapt();
 }
 #endif /* MDBX_I128_TYPE */
 
-int64_t slice::as_int64() const {
+int64_t slice::as_int64_adapt() const {
   static_assert(sizeof(int64_t) == 8, "WTF?");
   if (size() == 8) {
     uint64_t r;
     memcpy(&r, data(), sizeof(r));
     return r;
   } else
-    return as_int32();
+    return as_int32_adapt();
 }
 
-int32_t slice::as_int32() const {
+int32_t slice::as_int32_adapt() const {
   static_assert(sizeof(int32_t) == 4, "WTF?");
   if (size() == 4) {
     int32_t r;
     memcpy(&r, data(), sizeof(r));
     return r;
   } else
-    return as_int16();
+    return as_int16_adapt();
 }
 
-int16_t slice::as_int16() const {
+int16_t slice::as_int16_adapt() const {
   static_assert(sizeof(int16_t) == 2, "WTF?");
   if (size() == 2) {
     int16_t r;
     memcpy(&r, data(), sizeof(r));
     return r;
   } else
-    return as_int8();
+    return as_int8_adapt();
 }
 
-int8_t slice::as_int8() const {
+int8_t slice::as_int8_adapt() const {
   if (size() == 1)
     return *static_cast<const int8_t *>(data());
   else if (size() == 0)
@@ -1533,6 +1541,13 @@ void txn_managed::commit(commit_latency *latency) {
     MDBX_CXX20_LIKELY handle_ = nullptr;
   if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS))
     MDBX_CXX20_UNLIKELY err.throw_exception();
+}
+
+void txn_managed::commit_embark_read() {
+  auto env = this->env();
+  commit();
+  error::success_or_throw(
+      ::mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &handle_));
 }
 
 //------------------------------------------------------------------------------

@@ -5,7 +5,7 @@
 /* clang-format off */
 
 #cmakedefine LTO_ENABLED
-#cmakedefine MDBX_USE_VALGRIND
+#cmakedefine ENABLE_MEMCHECK
 #cmakedefine ENABLE_GPROF
 #cmakedefine ENABLE_GCOV
 #cmakedefine ENABLE_ASAN
@@ -33,6 +33,8 @@
 #cmakedefine01 MDBX_ENABLE_BIGFOOT
 #cmakedefine01 MDBX_ENABLE_PGOP_STAT
 #cmakedefine01 MDBX_ENABLE_PROFGC
+#cmakedefine01 MDBX_ENABLE_DBI_SPARSE
+#cmakedefine01 MDBX_ENABLE_DBI_LOCKFREE
 
 /* Windows */
 #cmakedefine01 MDBX_WITHOUT_MSVC_CRT

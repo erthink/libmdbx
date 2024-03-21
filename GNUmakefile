@@ -172,22 +172,22 @@ help:
 	@echo "  make bench-clean         - remove temp database(s) after benchmark"
 #> dist-cutoff-begin
 	@echo ""
-	@echo "  make smoke               - fast smoke test"
-	@echo "  make test                - basic test"
 	@echo "  make check               - smoke test with amalgamation and installation checking"
-	@echo "  make long-test           - execute long test which runs for several weeks, or until you interrupt it"
-	@echo "  make memcheck            - build with Valgrind's and smoke test with memcheck tool"
-	@echo "  make test-valgrind       - build with Valgrind's and basic test with memcheck tool"
-	@echo "  make test-asan           - build with AddressSanitizer and basic test"
-	@echo "  make test-leak           - build with LeakSanitizer and basic test"
-	@echo "  make test-ubsan          - build with UndefinedBehaviourSanitizer and basic test"
+	@echo "  make smoke               - fast smoke test"
+	@echo "  make smoke-memcheck      - build with Valgrind support and run smoke test under memcheck tool"
+	@echo "  make smoke-fault         - execute transaction owner failure smoke testcase"
+	@echo "  make smoke-singleprocess - execute single-process smoke test"
+	@echo "  make test                - basic test"
+	@echo "  make test-memcheck       - build with Valgrind support and run basic test under memcheck tool"
+	@echo "  make test-long           - execute long test which runs for several weeks, or until interruption"
+	@echo "  make test-asan           - build with AddressSanitizer and run basic test"
+	@echo "  make test-leak           - build with LeakSanitizer and run basic test"
+	@echo "  make test-ubsan          - build with UndefinedBehaviourSanitizer and run basic test"
+	@echo "  make test-singleprocess  - execute single-process basic test (also used by make cross-qemu)"
 	@echo "  make cross-gcc           - check cross-compilation without test execution"
 	@echo "  make cross-qemu          - run cross-compilation and execution basic test with QEMU"
 	@echo "  make gcc-analyzer        - run gcc-analyzer (mostly useless for now)"
 	@echo "  make build-test          - build test executable(s)"
-	@echo "  make smoke-fault         - execute transaction owner failure smoke testcase"
-	@echo "  make smoke-singleprocess - execute single-process smoke test"
-	@echo "  make test-singleprocess  - execute single-process basic test (also used by make cross-qemu)"
 	@echo ""
 	@echo "  make dist                - build amalgamated source code"
 	@echo "  make doxygen             - build HTML documentation"
@@ -328,8 +328,14 @@ else
 
 .PHONY: build-test build-test-with-valgrind check cross-gcc cross-qemu dist doxygen gcc-analyzer long-test
 .PHONY: reformat release-assets tags smoke test test-asan smoke-fault test-leak
-.PHONY: smoke-singleprocess test-singleprocess test-ubsan test-valgrind memcheck
-.PHONY: smoke-assertion test-assertion long-test-assertion
+.PHONY: smoke-singleprocess test-singleprocess test-ubsan test-valgrind test-memcheck memcheck smoke-memcheck
+.PHONY: smoke-assertion test-assertion long-test-assertion test-ci test-ci-extra
+
+test-ci-extra: test-ci cross-gcc cross-qemu
+
+test-ci: check \
+	smoke-singleprocess smoke-fault smoke-memcheck smoke \
+	test-leak test-asan test-ubsan test-singleprocess test test-memcheck
 
 define uname2osal
   case "$(UNAME)" in
@@ -418,27 +424,30 @@ smoke-fault: build-test
 
 test: build-test
 	@echo '  RUNNING `test/long_stochastic.sh --loops 2`...'
-	$(QUIET)test/long_stochastic.sh --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+	$(QUIET)test/long_stochastic.sh --dont-check-ram-size --loops 2 --db-upto-mb 256 --extra --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
-long-test: build-test
+long-test: test-long
+test-long: build-test
 	@echo '  RUNNING `test/long_stochastic.sh --loops 42`...'
-	$(QUIET)test/long_stochastic.sh --loops 42 --db-upto-mb 1024 --skip-make
+	$(QUIET)test/long_stochastic.sh --loops 42 --db-upto-mb 1024 --extra --skip-make --taillog
 
 test-singleprocess: build-test
 	@echo '  RUNNING `test/long_stochastic.sh --single --loops 2`...'
-	$(QUIET)test/long_stochastic.sh --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+	$(QUIET)test/long_stochastic.sh --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
-test-valgrind: CFLAGS_EXTRA=-Ofast -DMDBX_USE_VALGRIND
-test-valgrind: build-test
+test-valgrind: test-memcheck
+test-memcheck: CFLAGS_EXTRA=-Ofast -DENABLE_MEMCHECK
+test-memcheck: build-test
 	@echo '  RUNNING `test/long_stochastic.sh --with-valgrind --loops 2`...'
-	$(QUIET)test/long_stochastic.sh --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+	$(QUIET)test/long_stochastic.sh --with-valgrind --extra --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
-memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt
-memcheck: CFLAGS_EXTRA=-Ofast -DMDBX_USE_VALGRIND
-memcheck: build-test
+memcheck: smoke-memcheck
+smoke-memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt
+smoke-memcheck: CFLAGS_EXTRA=-Ofast -DENABLE_MEMCHECK
+smoke-memcheck: build-test
 	@echo "  SMOKE \`mdbx_test basic\` under Valgrind's memcheck..."
 	$(QUIET)rm -f valgrind-*.log $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; ( \
-		$(VALGRIND) ./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
+		$(VALGRIND) ./mdbx_test --table=+data.fixed --keygen.split=29 --datalen=35 --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
 		$(VALGRIND) ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
 		$(VALGRIND) ./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
 		$(VALGRIND) ./mdbx_chk -vvn $(TEST_DB) && \

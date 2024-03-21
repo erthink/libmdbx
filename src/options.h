@@ -164,6 +164,20 @@
 #error MDBX_AVOID_MSYNC must be defined as 0 or 1
 #endif /* MDBX_AVOID_MSYNC */
 
+/** FIXME */
+#ifndef MDBX_ENABLE_DBI_SPARSE
+#define MDBX_ENABLE_DBI_SPARSE 1
+#elif !(MDBX_ENABLE_DBI_SPARSE == 0 || MDBX_ENABLE_DBI_SPARSE == 1)
+#error MDBX_ENABLE_DBI_SPARSE must be defined as 0 or 1
+#endif /* MDBX_ENABLE_DBI_SPARSE */
+
+/** FIXME */
+#ifndef MDBX_ENABLE_DBI_LOCKFREE
+#define MDBX_ENABLE_DBI_LOCKFREE 1
+#elif !(MDBX_ENABLE_DBI_LOCKFREE == 0 || MDBX_ENABLE_DBI_LOCKFREE == 1)
+#error MDBX_ENABLE_DBI_LOCKFREE must be defined as 0 or 1
+#endif /* MDBX_ENABLE_DBI_LOCKFREE */
+
 /** Controls sort order of internal page number lists.
  * This mostly experimental/advanced option with not for regular MDBX users.
  * \warning The database format depend on this option and libmdbx built with
@@ -211,8 +225,8 @@
 
 /** If defined then enables integration with Valgrind,
  * a memory analyzing tool. */
-#ifndef MDBX_USE_VALGRIND
-#endif /* MDBX_USE_VALGRIND */
+#ifndef ENABLE_MEMCHECK
+#endif /* ENABLE_MEMCHECK */
 
 /** If defined then enables use C11 atomics,
  *  otherwise detects ones availability automatically. */

@@ -178,7 +178,7 @@ static int funlock(mdbx_filehandle_t fd, size_t offset, size_t bytes) {
 #define DXB_BODY (env->me_psize * (size_t)NUM_METAS), DXB_MAXLEN
 #define DXB_WHOLE 0, DXB_MAXLEN
 
-int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
+int osal_txn_lock(MDBX_env *env, bool dontwait) {
   if (dontwait) {
     if (!TryEnterCriticalSection(&env->me_windowsbug_lock))
       return MDBX_BUSY;
@@ -190,16 +190,13 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
                  0xC0000194 /* STATUS_POSSIBLE_DEADLOCK / EXCEPTION_POSSIBLE_DEADLOCK */)
                     ? EXCEPTION_EXECUTE_HANDLER
                     : EXCEPTION_CONTINUE_SEARCH) {
-      return ERROR_POSSIBLE_DEADLOCK;
+      return MDBX_EDEADLK;
     }
   }
 
-  if (env->me_flags & MDBX_EXCLUSIVE) {
-    /* Zap: Failing to release lock 'env->me_windowsbug_lock'
-     *      in function 'mdbx_txn_lock' */
-    MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(26115);
-    return MDBX_SUCCESS;
-  }
+  eASSERT(env, !env->me_txn0->mt_owner);
+  if (env->me_flags & MDBX_EXCLUSIVE)
+    goto done;
 
   const HANDLE fd4data =
       env->me_overlapped_fd ? env->me_overlapped_fd : env->me_lazy_fd;
@@ -218,17 +215,20 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
     }
   }
   if (rc == MDBX_SUCCESS) {
+  done:
     /* Zap: Failing to release lock 'env->me_windowsbug_lock'
      *      in function 'mdbx_txn_lock' */
     MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(26115);
-    return rc;
+    env->me_txn0->mt_owner = osal_thread_self();
+    return MDBX_SUCCESS;
   }
 
   LeaveCriticalSection(&env->me_windowsbug_lock);
   return (!dontwait || rc != ERROR_LOCK_VIOLATION) ? rc : MDBX_BUSY;
 }
 
-void mdbx_txn_unlock(MDBX_env *env) {
+void osal_txn_unlock(MDBX_env *env) {
+  eASSERT(env, env->me_txn0->mt_owner == osal_thread_self());
   if ((env->me_flags & MDBX_EXCLUSIVE) == 0) {
     const HANDLE fd4data =
         env->me_overlapped_fd ? env->me_overlapped_fd : env->me_lazy_fd;
@@ -236,6 +236,7 @@ void mdbx_txn_unlock(MDBX_env *env) {
     if (err != MDBX_SUCCESS)
       mdbx_panic("%s failed: err %u", __func__, err);
   }
+  env->me_txn0->mt_owner = 0;
   LeaveCriticalSection(&env->me_windowsbug_lock);
 }
 
@@ -442,7 +443,7 @@ osal_resume_threads_after_remap(mdbx_handle_array_t *array) {
  *  The osal_lck_downgrade() moves the locking-FSM from "exclusive write"
  *  state to the "used" (i.e. shared) state.
  *
- *  The mdbx_lck_upgrade() moves the locking-FSM from "used" (i.e. shared)
+ *  The osal_lck_upgrade() moves the locking-FSM from "used" (i.e. shared)
  *  state to the "exclusive write" state.
  */
 
@@ -615,7 +616,7 @@ MDBX_INTERNAL_FUNC int osal_lck_downgrade(MDBX_env *env) {
   return MDBX_SUCCESS /* 5) now at S-? (used), done */;
 }
 
-MDBX_INTERNAL_FUNC int mdbx_lck_upgrade(MDBX_env *env) {
+MDBX_INTERNAL_FUNC int osal_lck_upgrade(MDBX_env *env, bool dont_wait) {
   /* Transite from used state (S-?) to exclusive-write (E-E) */
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
 
@@ -625,7 +626,9 @@ MDBX_INTERNAL_FUNC int mdbx_lck_upgrade(MDBX_env *env) {
 
   /* 1) now on S-? (used), try S-E (locked) */
   jitter4testing(false);
-  int rc = flock(env->me_lfd, LCK_EXCLUSIVE | LCK_DONTWAIT, LCK_UPPER);
+  int rc = flock(env->me_lfd,
+                 dont_wait ? LCK_EXCLUSIVE | LCK_DONTWAIT : LCK_EXCLUSIVE,
+                 LCK_UPPER);
   if (rc != MDBX_SUCCESS) {
     /* 2) something went wrong, give up */;
     VERBOSE("%s, err %u", "S-?(used) >> S-E(locked)", rc);
@@ -640,7 +643,9 @@ MDBX_INTERNAL_FUNC int mdbx_lck_upgrade(MDBX_env *env) {
 
   /* 4) now on ?-E (middle), try E-E (exclusive-write) */
   jitter4testing(false);
-  rc = flock(env->me_lfd, LCK_EXCLUSIVE | LCK_DONTWAIT, LCK_LOWER);
+  rc = flock(env->me_lfd,
+             dont_wait ? LCK_EXCLUSIVE | LCK_DONTWAIT : LCK_EXCLUSIVE,
+             LCK_LOWER);
   if (rc != MDBX_SUCCESS) {
     /* 5) something went wrong, give up */;
     VERBOSE("%s, err %u", "?-E(middle) >> E-E(exclusive-write)", rc);
@@ -677,7 +682,9 @@ MDBX_INTERNAL_FUNC int osal_lck_init(MDBX_env *env,
 }
 
 MDBX_INTERNAL_FUNC int osal_lck_destroy(MDBX_env *env,
-                                        MDBX_env *inprocess_neighbor) {
+                                        MDBX_env *inprocess_neighbor,
+                                        const uint32_t current_pid) {
+  (void)current_pid;
   /* LY: should unmap before releasing the locks to avoid race condition and
    * STATUS_USER_MAPPED_FILE/ERROR_USER_MAPPED_FILE */
   if (env->me_map)
@@ -686,7 +693,7 @@ MDBX_INTERNAL_FUNC int osal_lck_destroy(MDBX_env *env,
     const bool synced = env->me_lck_mmap.lck->mti_unsynced_pages.weak == 0;
     osal_munmap(&env->me_lck_mmap);
     if (synced && !inprocess_neighbor && env->me_lfd != INVALID_HANDLE_VALUE &&
-        mdbx_lck_upgrade(env) == MDBX_SUCCESS)
+        osal_lck_upgrade(env, true) == MDBX_SUCCESS)
       /* this will fail if LCK is used/mmapped by other process(es) */
       osal_ftruncate(env->me_lfd, 0);
   }

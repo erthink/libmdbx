@@ -41,8 +41,9 @@ testcase *registry::create_actor(const actor_config &config,
 }
 
 bool registry::review_actor_params(const actor_testcase id,
-                                   actor_params &params) {
-  return instance()->id2record.at(id)->review_params(params);
+                                   actor_params &params,
+                                   const unsigned space_id) {
+  return instance()->id2record.at(id)->review_params(params, space_id);
 }
 
 //-----------------------------------------------------------------------------
@@ -78,13 +79,13 @@ void configure_actor(unsigned &last_space_id, const actor_testcase testcase,
       failure("The '%s' is unexpected for space-id\n", end);
   }
 
-  if (!registry::review_actor_params(testcase, params))
-    failure("Actor config-review failed for space-id %lu\n", space_id);
-
   if (space_id > ACTOR_ID_MAX)
     failure("Invalid space-id %lu\n", space_id);
-  last_space_id = unsigned(space_id);
 
+  if (!registry::review_actor_params(testcase, params, unsigned(space_id)))
+    failure("Actor config-review failed for space-id %lu\n", space_id);
+
+  last_space_id = unsigned(space_id);
   log_trace("configure_actor: space %lu for %s", space_id,
             testcase2str(testcase));
   global::actors.emplace_back(
@@ -105,6 +106,10 @@ void testcase_setup(const char *casename, const actor_params &params,
     configure_actor(last_space_id, ac_try, nullptr, params);
     configure_actor(last_space_id, ac_jitter, nullptr, params);
     configure_actor(last_space_id, ac_try, nullptr, params);
+#if !defined(_WIN32) && !defined(_WIN64)
+    configure_actor(last_space_id, ac_forkread, nullptr, params);
+    configure_actor(last_space_id, ac_forkwrite, nullptr, params);
+#endif /* Windows */
     log_notice("<<< testcase_setup(%s): done", casename);
   } else {
     failure("unknown testcase `%s`", casename);

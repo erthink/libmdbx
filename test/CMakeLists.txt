@@ -28,6 +28,7 @@ set(LIBMDBX_TEST_SOURCES
   append.c++
   ttl.c++
   nested.c++
+  fork.c++
   )
 
 if(NOT MDBX_BUILD_CXX)
@@ -91,6 +92,20 @@ if(UNIX AND NOT SUBPROJECT)
       set_target_properties(test_extra_dupfixed_multiple PROPERTIES
         CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
     endif()
+    add_executable(test_extra_hex_base64_base58 extra/hex_base64_base58.c++)
+    target_include_directories(test_extra_hex_base64_base58 PRIVATE "${PROJECT_SOURCE_DIR}")
+    target_link_libraries(test_extra_hex_base64_base58 ${TOOL_MDBX_LIB})
+    if(MDBX_CXX_STANDARD)
+      set_target_properties(test_extra_hex_base64_base58 PROPERTIES
+        CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
+    endif()
+    add_executable(test_extra_doubtless_positioning extra/doubtless_positioning.c++)
+    target_include_directories(test_extra_doubtless_positioning PRIVATE "${PROJECT_SOURCE_DIR}")
+    target_link_libraries(test_extra_doubtless_positioning ${TOOL_MDBX_LIB})
+    if(MDBX_CXX_STANDARD)
+      set_target_properties(test_extra_doubtless_positioning PROPERTIES
+        CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
+    endif()
   endif()
 endif()
 
@@ -107,7 +122,7 @@ else()
 
   add_test(NAME smoke COMMAND ${MDBX_OUTPUT_DIR}/mdbx_test
     --loglevel=verbose
-    --keygen.seed=${test_seed}
+    --prng-seed=${test_seed}
     --progress --console=no --pathname=smoke.db --dont-cleanup-after basic)
   set_tests_properties(smoke PROPERTIES
     TIMEOUT 600
@@ -129,11 +144,11 @@ else()
 
   add_test(NAME dupsort_writemap COMMAND ${MDBX_OUTPUT_DIR}/mdbx_test
     --loglevel=notice
-    --keygen.seed=${test_seed}
-    --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no
+    --prng-seed=${test_seed}
+    --table=+data.fixed --keygen.split=29 --datalen=rnd --progress --console=no
     --repeat=2 --pathname=dupsort_writemap.db --dont-cleanup-after basic)
   set_tests_properties(dupsort_writemap PROPERTIES
-    TIMEOUT 600
+    TIMEOUT 3600
     RUN_SERIAL OFF)
   if(MDBX_BUILD_TOOLS)
     add_test(NAME dupsort_writemap_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvvwc dupsort_writemap.db)
@@ -176,6 +191,11 @@ else()
     if(MDBX_BUILD_CXX)
       add_test(NAME extra_maindb_ordinal COMMAND test_extra_maindb_ordinal)
       add_test(NAME extra_dupfixed_multiple COMMAND test_extra_dupfixed_multiple)
+      add_test(NAME extra_hex_base64_base58 COMMAND test_extra_hex_base64_base58)
+      add_test(NAME extra_doubtless_positioning COMMAND test_extra_doubtless_positioning)
+      if (ENABLE_MEMCHECK)
+        set_tests_properties(extra_doubtless_positioning PROPERTIES TIMEOUT 10800)
+      endif()
     endif()
   endif()
 

@@ -2,7 +2,6 @@
    msync-whole-mmap-1
    Memcheck:Param
    msync(start)
-   fun:msync
    ...
    fun:sync_locked*
 }
@@ -10,7 +9,6 @@
    msync-whole-mmap-2
    Memcheck:Param
    msync(start)
-   fun:msync
    ...
    fun:env_sync*
 }
@@ -18,7 +16,6 @@
    msync-whole-mmap-3
    Memcheck:Param
    msync(start)
-   fun:msync
    ...
    fun:map_resize*
 }
@@ -26,7 +23,6 @@
    msync-wipe-steady
    Memcheck:Param
    msync(start)
-   fun:msync
    ...
    fun:wipe_steady*
 }
@@ -34,7 +30,6 @@
    msync-meta
    Memcheck:Param
    msync(start)
-   fun:msync
    ...
    fun:meta_sync*
 }
@@ -42,7 +37,6 @@
    msync-spill
    Memcheck:Param
    msync(start)
-   fun:msync
    ...
    fun:txn_spill*
 }
@@ -72,7 +66,6 @@
    pwrite-page-flush
    Memcheck:Param
    pwrite(buf)
-   fun:pwrite
    ...
    fun:iov_write*
 }
@@ -80,7 +73,6 @@
    pwrite64-page-flush
    Memcheck:Param
    pwrite64(buf)
-   fun:pwrite
    ...
    fun:iov_write*
 }
@@ -90,16 +82,14 @@
 #   pwritev-page-flush
 #   Memcheck:Param
 #   pwritev(vector[...])
-#   fun:pwritev
 #   ...
 #   fun:iov_write*
 #}
-# for((i=0;i<64;++i)); do echo -e "{\n   pwritev-page-flush-$i\n   Memcheck:Param\n   pwritev(vector[$i])\n   fun:pwritev\n   ...\n   fun:iov_write*\n}"; done >> valgrind_suppress.txt
+# for((i=0;i<64;++i)); do echo -e "{\n   pwritev-page-flush-$i\n   Memcheck:Param\n   pwritev(vector[$i])\n   ...\n   fun:iov_write*\n}"; done >> valgrind_suppress.txt
 {
    pwritev-page-flush-0
    Memcheck:Param
    pwritev(vector[0])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -107,7 +97,6 @@
    pwritev-page-flush-1
    Memcheck:Param
    pwritev(vector[1])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -115,7 +104,6 @@
    pwritev-page-flush-2
    Memcheck:Param
    pwritev(vector[2])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -123,7 +111,6 @@
    pwritev-page-flush-3
    Memcheck:Param
    pwritev(vector[3])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -131,7 +118,6 @@
    pwritev-page-flush-4
    Memcheck:Param
    pwritev(vector[4])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -139,7 +125,6 @@
    pwritev-page-flush-5
    Memcheck:Param
    pwritev(vector[5])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -147,7 +132,6 @@
    pwritev-page-flush-6
    Memcheck:Param
    pwritev(vector[6])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -155,7 +139,6 @@
    pwritev-page-flush-7
    Memcheck:Param
    pwritev(vector[7])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -163,7 +146,6 @@
    pwritev-page-flush-8
    Memcheck:Param
    pwritev(vector[8])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -171,7 +153,6 @@
    pwritev-page-flush-9
    Memcheck:Param
    pwritev(vector[9])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -179,7 +160,6 @@
    pwritev-page-flush-10
    Memcheck:Param
    pwritev(vector[10])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -187,7 +167,6 @@
    pwritev-page-flush-11
    Memcheck:Param
    pwritev(vector[11])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -195,7 +174,6 @@
    pwritev-page-flush-12
    Memcheck:Param
    pwritev(vector[12])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -203,7 +181,6 @@
    pwritev-page-flush-13
    Memcheck:Param
    pwritev(vector[13])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -211,7 +188,6 @@
    pwritev-page-flush-14
    Memcheck:Param
    pwritev(vector[14])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -219,7 +195,6 @@
    pwritev-page-flush-15
    Memcheck:Param
    pwritev(vector[15])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -227,7 +202,6 @@
    pwritev-page-flush-16
    Memcheck:Param
    pwritev(vector[16])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -235,7 +209,6 @@
    pwritev-page-flush-17
    Memcheck:Param
    pwritev(vector[17])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -243,7 +216,6 @@
    pwritev-page-flush-18
    Memcheck:Param
    pwritev(vector[18])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -251,7 +223,6 @@
    pwritev-page-flush-19
    Memcheck:Param
    pwritev(vector[19])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -259,7 +230,6 @@
    pwritev-page-flush-20
    Memcheck:Param
    pwritev(vector[20])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -267,7 +237,6 @@
    pwritev-page-flush-21
    Memcheck:Param
    pwritev(vector[21])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -275,7 +244,6 @@
    pwritev-page-flush-22
    Memcheck:Param
    pwritev(vector[22])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -283,7 +251,6 @@
    pwritev-page-flush-23
    Memcheck:Param
    pwritev(vector[23])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -291,7 +258,6 @@
    pwritev-page-flush-24
    Memcheck:Param
    pwritev(vector[24])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -299,7 +265,6 @@
    pwritev-page-flush-25
    Memcheck:Param
    pwritev(vector[25])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -307,7 +272,6 @@
    pwritev-page-flush-26
    Memcheck:Param
    pwritev(vector[26])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -315,7 +279,6 @@
    pwritev-page-flush-27
    Memcheck:Param
    pwritev(vector[27])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -323,7 +286,6 @@
    pwritev-page-flush-28
    Memcheck:Param
    pwritev(vector[28])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -331,7 +293,6 @@
    pwritev-page-flush-29
    Memcheck:Param
    pwritev(vector[29])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -339,7 +300,6 @@
    pwritev-page-flush-30
    Memcheck:Param
    pwritev(vector[30])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -347,7 +307,6 @@
    pwritev-page-flush-31
    Memcheck:Param
    pwritev(vector[31])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -355,7 +314,6 @@
    pwritev-page-flush-32
    Memcheck:Param
    pwritev(vector[32])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -363,7 +321,6 @@
    pwritev-page-flush-33
    Memcheck:Param
    pwritev(vector[33])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -371,7 +328,6 @@
    pwritev-page-flush-34
    Memcheck:Param
    pwritev(vector[34])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -379,7 +335,6 @@
    pwritev-page-flush-35
    Memcheck:Param
    pwritev(vector[35])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -387,7 +342,6 @@
    pwritev-page-flush-36
    Memcheck:Param
    pwritev(vector[36])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -395,7 +349,6 @@
    pwritev-page-flush-37
    Memcheck:Param
    pwritev(vector[37])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -403,7 +356,6 @@
    pwritev-page-flush-38
    Memcheck:Param
    pwritev(vector[38])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -411,7 +363,6 @@
    pwritev-page-flush-39
    Memcheck:Param
    pwritev(vector[39])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -419,7 +370,6 @@
    pwritev-page-flush-40
    Memcheck:Param
    pwritev(vector[40])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -427,7 +377,6 @@
    pwritev-page-flush-41
    Memcheck:Param
    pwritev(vector[41])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -435,7 +384,6 @@
    pwritev-page-flush-42
    Memcheck:Param
    pwritev(vector[42])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -443,7 +391,6 @@
    pwritev-page-flush-43
    Memcheck:Param
    pwritev(vector[43])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -451,7 +398,6 @@
    pwritev-page-flush-44
    Memcheck:Param
    pwritev(vector[44])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -459,7 +405,6 @@
    pwritev-page-flush-45
    Memcheck:Param
    pwritev(vector[45])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -467,7 +412,6 @@
    pwritev-page-flush-46
    Memcheck:Param
    pwritev(vector[46])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -475,7 +419,6 @@
    pwritev-page-flush-47
    Memcheck:Param
    pwritev(vector[47])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -483,7 +426,6 @@
    pwritev-page-flush-48
    Memcheck:Param
    pwritev(vector[48])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -491,7 +433,6 @@
    pwritev-page-flush-49
    Memcheck:Param
    pwritev(vector[49])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -499,7 +440,6 @@
    pwritev-page-flush-50
    Memcheck:Param
    pwritev(vector[50])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -507,7 +447,6 @@
    pwritev-page-flush-51
    Memcheck:Param
    pwritev(vector[51])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -515,7 +454,6 @@
    pwritev-page-flush-52
    Memcheck:Param
    pwritev(vector[52])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -523,7 +461,6 @@
    pwritev-page-flush-53
    Memcheck:Param
    pwritev(vector[53])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -531,7 +468,6 @@
    pwritev-page-flush-54
    Memcheck:Param
    pwritev(vector[54])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -539,7 +475,6 @@
    pwritev-page-flush-55
    Memcheck:Param
    pwritev(vector[55])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -547,7 +482,6 @@
    pwritev-page-flush-56
    Memcheck:Param
    pwritev(vector[56])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -555,7 +489,6 @@
    pwritev-page-flush-57
    Memcheck:Param
    pwritev(vector[57])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -563,7 +496,6 @@
    pwritev-page-flush-58
    Memcheck:Param
    pwritev(vector[58])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -571,7 +503,6 @@
    pwritev-page-flush-59
    Memcheck:Param
    pwritev(vector[59])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -579,7 +510,6 @@
    pwritev-page-flush-60
    Memcheck:Param
    pwritev(vector[60])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -587,7 +517,6 @@
    pwritev-page-flush-61
    Memcheck:Param
    pwritev(vector[61])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -595,7 +524,6 @@
    pwritev-page-flush-62
    Memcheck:Param
    pwritev(vector[62])
-   fun:pwritev
    ...
    fun:iov_write*
 }
@@ -603,7 +531,6 @@
    pwritev-page-flush-63
    Memcheck:Param
    pwritev(vector[63])
-   fun:pwritev
    ...
    fun:iov_write*
 }

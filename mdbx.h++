@@ -85,6 +85,10 @@
 #include <experimental/filesystem>
 #endif
 
+#if defined(__cpp_lib_span) && __cpp_lib_span >= 202002L
+#include <span>
+#endif
+
 #if __cplusplus >= 201103L
 #include <chrono>
 #include <ratio>
@@ -161,6 +165,20 @@
 #else
 #define MDBX_CXX20_CONSTEXPR inline
 #endif /* MDBX_CXX20_CONSTEXPR */
+
+#if CONSTEXPR_ENUM_FLAGS_OPERATIONS || defined(DOXYGEN)
+#define MDBX_CXX01_CONSTEXPR_ENUM MDBX_CXX01_CONSTEXPR
+#define MDBX_CXX11_CONSTEXPR_ENUM MDBX_CXX11_CONSTEXPR
+#define MDBX_CXX14_CONSTEXPR_ENUM MDBX_CXX14_CONSTEXPR
+#define MDBX_CXX17_CONSTEXPR_ENUM MDBX_CXX17_CONSTEXPR
+#define MDBX_CXX20_CONSTEXPR_ENUM MDBX_CXX20_CONSTEXPR
+#else
+#define MDBX_CXX01_CONSTEXPR_ENUM inline
+#define MDBX_CXX11_CONSTEXPR_ENUM inline
+#define MDBX_CXX14_CONSTEXPR_ENUM inline
+#define MDBX_CXX17_CONSTEXPR_ENUM inline
+#define MDBX_CXX20_CONSTEXPR_ENUM inline
+#endif /* CONSTEXPR_ENUM_FLAGS_OPERATIONS */
 
 /** Workaround for old compilers without support assertion inside `constexpr`
  * functions. */
@@ -340,18 +358,6 @@ static MDBX_CXX20_CONSTEXPR int memcmp(const void *a, const void *b,
 /// but it is recommended to use \ref polymorphic_allocator.
 using legacy_allocator = ::std::string::allocator_type;
 
-struct slice;
-struct default_capacity_policy;
-template <class ALLOCATOR = legacy_allocator,
-          class CAPACITY_POLICY = default_capacity_policy>
-class buffer;
-class env;
-class env_managed;
-class txn;
-class txn_managed;
-class cursor;
-class cursor_managed;
-
 #if defined(DOXYGEN) ||                                                        \
     (defined(__cpp_lib_memory_resource) &&                                     \
      __cpp_lib_memory_resource >= 201603L && _GLIBCXX_USE_CXX11_ABI)
@@ -361,6 +367,18 @@ using default_allocator = polymorphic_allocator;
 #else
 using default_allocator = legacy_allocator;
 #endif /* __cpp_lib_memory_resource >= 201603L */
+
+struct slice;
+struct default_capacity_policy;
+template <class ALLOCATOR = default_allocator,
+          class CAPACITY_POLICY = default_capacity_policy>
+class buffer;
+class env;
+class env_managed;
+class txn;
+class txn_managed;
+class cursor;
+class cursor_managed;
 
 /// \brief Default buffer.
 using default_buffer = buffer<default_allocator, default_capacity_policy>;
@@ -488,6 +506,7 @@ public:
   static inline void throw_on_failure(int error_code);
   static inline bool boolean_or_throw(int error_code);
   static inline void success_or_throw(int error_code, const exception_thunk &);
+  static inline bool boolean_or_throw(int error_code, const exception_thunk &);
   static inline void panic_on_failure(int error_code, const char *context_where,
                                       const char *func_who) noexcept;
   static inline void success_or_panic(int error_code, const char *context_where,
@@ -562,6 +581,7 @@ MDBX_DECLARE_EXCEPTION(thread_mismatch);
 MDBX_DECLARE_EXCEPTION(transaction_full);
 MDBX_DECLARE_EXCEPTION(transaction_overlapping);
 MDBX_DECLARE_EXCEPTION(duplicated_lck_file);
+MDBX_DECLARE_EXCEPTION(dangling_map_id);
 #undef MDBX_DECLARE_EXCEPTION
 
 [[noreturn]] LIBMDBX_API void throw_too_small_target_buffer();
@@ -569,6 +589,7 @@ MDBX_DECLARE_EXCEPTION(duplicated_lck_file);
 [[noreturn]] LIBMDBX_API void throw_out_range();
 [[noreturn]] LIBMDBX_API void throw_allocators_mismatch();
 [[noreturn]] LIBMDBX_API void throw_bad_value_size();
+[[noreturn]] LIBMDBX_API void throw_incomparable_cursors();
 static MDBX_CXX14_CONSTEXPR size_t check_length(size_t bytes);
 static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom,
                                                 size_t payload);
@@ -616,24 +637,24 @@ concept SliceTranscoder =
 
 #endif /* MDBX_HAVE_CXX20_CONCEPTS */
 
-template <class ALLOCATOR = legacy_allocator,
+template <class ALLOCATOR = default_allocator,
           typename CAPACITY_POLICY = default_capacity_policy,
           MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)>
 inline buffer<ALLOCATOR, CAPACITY_POLICY>
 make_buffer(PRODUCER &producer, const ALLOCATOR &allocator = ALLOCATOR());
 
-template <class ALLOCATOR = legacy_allocator,
+template <class ALLOCATOR = default_allocator,
           typename CAPACITY_POLICY = default_capacity_policy,
           MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)>
 inline buffer<ALLOCATOR, CAPACITY_POLICY>
 make_buffer(const PRODUCER &producer, const ALLOCATOR &allocator = ALLOCATOR());
 
-template <class ALLOCATOR = legacy_allocator,
+template <class ALLOCATOR = default_allocator,
           MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)>
 inline string<ALLOCATOR> make_string(PRODUCER &producer,
                                      const ALLOCATOR &allocator = ALLOCATOR());
 
-template <class ALLOCATOR = legacy_allocator,
+template <class ALLOCATOR = default_allocator,
           MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)>
 inline string<ALLOCATOR> make_string(const PRODUCER &producer,
                                      const ALLOCATOR &allocator = ALLOCATOR());
@@ -681,6 +702,47 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   MDBX_CXX11_CONSTEXPR slice(const slice &) noexcept = default;
   MDBX_CXX14_CONSTEXPR slice(MDBX_val &&src);
   MDBX_CXX14_CONSTEXPR slice(slice &&src) noexcept;
+
+#if defined(DOXYGEN) || (defined(__cpp_lib_span) && __cpp_lib_span >= 202002L)
+  template <typename POD>
+  MDBX_CXX14_CONSTEXPR slice(const ::std::span<POD> &span)
+      : slice(span.begin(), span.end()) {
+    static_assert(::std::is_standard_layout<POD>::value &&
+                      !::std::is_pointer<POD>::value,
+                  "Must be a standard layout type!");
+  }
+
+  template <typename POD>
+  MDBX_CXX14_CONSTEXPR ::std::span<const POD> as_span() const {
+    static_assert(::std::is_standard_layout<POD>::value &&
+                      !::std::is_pointer<POD>::value,
+                  "Must be a standard layout type!");
+    if (MDBX_LIKELY(size() % sizeof(POD) == 0))
+      MDBX_CXX20_LIKELY
+    return ::std::span<const POD>(static_cast<const POD *>(data()),
+                                  size() / sizeof(POD));
+    throw_bad_value_size();
+  }
+
+  template <typename POD> MDBX_CXX14_CONSTEXPR ::std::span<POD> as_span() {
+    static_assert(::std::is_standard_layout<POD>::value &&
+                      !::std::is_pointer<POD>::value,
+                  "Must be a standard layout type!");
+    if (MDBX_LIKELY(size() % sizeof(POD) == 0))
+      MDBX_CXX20_LIKELY
+    return ::std::span<POD>(static_cast<POD *>(data()), size() / sizeof(POD));
+    throw_bad_value_size();
+  }
+
+  MDBX_CXX14_CONSTEXPR ::std::span<const byte> bytes() const {
+    return as_span<const byte>();
+  }
+  MDBX_CXX14_CONSTEXPR ::std::span<byte> bytes() { return as_span<byte>(); }
+  MDBX_CXX14_CONSTEXPR ::std::span<const char> chars() const {
+    return as_span<const char>();
+  }
+  MDBX_CXX14_CONSTEXPR ::std::span<char> chars() { return as_span<char>(); }
+#endif /* __cpp_lib_span >= 202002L */
 
 #if defined(DOXYGEN) ||                                                        \
     (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
@@ -768,7 +830,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 #endif /* __cpp_lib_string_view >= 201606L */
 
   template <class CHAR = char, class T = ::std::char_traits<CHAR>,
-            class ALLOCATOR = legacy_allocator>
+            class ALLOCATOR = default_allocator>
   MDBX_CXX20_CONSTEXPR ::std::basic_string<CHAR, T, ALLOCATOR>
   as_string(const ALLOCATOR &allocator = ALLOCATOR()) const {
     static_assert(sizeof(CHAR) == 1, "Must be single byte characters");
@@ -783,27 +845,27 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   }
 
   /// \brief Returns a string with a hexadecimal dump of the slice content.
-  template <class ALLOCATOR = legacy_allocator>
+  template <class ALLOCATOR = default_allocator>
   inline string<ALLOCATOR>
   as_hex_string(bool uppercase = false, unsigned wrap_width = 0,
                 const ALLOCATOR &allocator = ALLOCATOR()) const;
 
   /// \brief Returns a string with a
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of the slice content.
-  template <class ALLOCATOR = legacy_allocator>
+  template <class ALLOCATOR = default_allocator>
   inline string<ALLOCATOR>
   as_base58_string(unsigned wrap_width = 0,
                    const ALLOCATOR &allocator = ALLOCATOR()) const;
 
   /// \brief Returns a string with a
   /// [Base58](https://en.wikipedia.org/wiki/Base64) dump of the slice content.
-  template <class ALLOCATOR = legacy_allocator>
+  template <class ALLOCATOR = default_allocator>
   inline string<ALLOCATOR>
   as_base64_string(unsigned wrap_width = 0,
                    const ALLOCATOR &allocator = ALLOCATOR()) const;
 
   /// \brief Returns a buffer with a hexadecimal dump of the slice content.
-  template <class ALLOCATOR = legacy_allocator,
+  template <class ALLOCATOR = default_allocator,
             class CAPACITY_POLICY = default_capacity_policy>
   inline buffer<ALLOCATOR, CAPACITY_POLICY>
   encode_hex(bool uppercase = false, unsigned wrap_width = 0,
@@ -811,7 +873,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 
   /// \brief Returns a buffer with a
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of the slice content.
-  template <class ALLOCATOR = legacy_allocator,
+  template <class ALLOCATOR = default_allocator,
             class CAPACITY_POLICY = default_capacity_policy>
   inline buffer<ALLOCATOR, CAPACITY_POLICY>
   encode_base58(unsigned wrap_width = 0,
@@ -819,14 +881,14 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 
   /// \brief Returns a buffer with a
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump of the slice content.
-  template <class ALLOCATOR = legacy_allocator,
+  template <class ALLOCATOR = default_allocator,
             class CAPACITY_POLICY = default_capacity_policy>
   inline buffer<ALLOCATOR, CAPACITY_POLICY>
   encode_base64(unsigned wrap_width = 0,
                 const ALLOCATOR &allocator = ALLOCATOR()) const;
 
   /// \brief Decodes hexadecimal dump from the slice content to returned buffer.
-  template <class ALLOCATOR = legacy_allocator,
+  template <class ALLOCATOR = default_allocator,
             class CAPACITY_POLICY = default_capacity_policy>
   inline buffer<ALLOCATOR, CAPACITY_POLICY>
   hex_decode(bool ignore_spaces = false,
@@ -834,7 +896,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 
   /// \brief Decodes [Base58](https://en.wikipedia.org/wiki/Base58) dump
   /// from the slice content to returned buffer.
-  template <class ALLOCATOR = legacy_allocator,
+  template <class ALLOCATOR = default_allocator,
             class CAPACITY_POLICY = default_capacity_policy>
   inline buffer<ALLOCATOR, CAPACITY_POLICY>
   base58_decode(bool ignore_spaces = false,
@@ -842,7 +904,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 
   /// \brief Decodes [Base64](https://en.wikipedia.org/wiki/Base64) dump
   /// from the slice content to returned buffer.
-  template <class ALLOCATOR = legacy_allocator,
+  template <class ALLOCATOR = default_allocator,
             class CAPACITY_POLICY = default_capacity_policy>
   inline buffer<ALLOCATOR, CAPACITY_POLICY>
   base64_decode(bool ignore_spaces = false,
@@ -1062,20 +1124,40 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   }
 
 #ifdef MDBX_U128_TYPE
-  MDBX_U128_TYPE as_uint128() const;
+  MDBX_CXX14_CONSTEXPR MDBX_U128_TYPE as_uint128() const {
+    return as_pod<MDBX_U128_TYPE>();
+  }
 #endif /* MDBX_U128_TYPE */
-  uint64_t as_uint64() const;
-  uint32_t as_uint32() const;
-  uint16_t as_uint16() const;
-  uint8_t as_uint8() const;
+  MDBX_CXX14_CONSTEXPR uint64_t as_uint64() const { return as_pod<uint64_t>(); }
+  MDBX_CXX14_CONSTEXPR uint32_t as_uint32() const { return as_pod<uint32_t>(); }
+  MDBX_CXX14_CONSTEXPR uint16_t as_uint16() const { return as_pod<uint16_t>(); }
+  MDBX_CXX14_CONSTEXPR uint8_t as_uint8() const { return as_pod<uint8_t>(); }
 
 #ifdef MDBX_I128_TYPE
-  MDBX_I128_TYPE as_int128() const;
+  MDBX_CXX14_CONSTEXPR MDBX_I128_TYPE as_int128() const {
+    return as_pod<MDBX_I128_TYPE>();
+  }
 #endif /* MDBX_I128_TYPE */
-  int64_t as_int64() const;
-  int32_t as_int32() const;
-  int16_t as_int16() const;
-  int8_t as_int8() const;
+  MDBX_CXX14_CONSTEXPR int64_t as_int64() const { return as_pod<int64_t>(); }
+  MDBX_CXX14_CONSTEXPR int32_t as_int32() const { return as_pod<int32_t>(); }
+  MDBX_CXX14_CONSTEXPR int16_t as_int16() const { return as_pod<int16_t>(); }
+  MDBX_CXX14_CONSTEXPR int8_t as_int8() const { return as_pod<int8_t>(); }
+
+#ifdef MDBX_U128_TYPE
+  MDBX_U128_TYPE as_uint128_adapt() const;
+#endif /* MDBX_U128_TYPE */
+  uint64_t as_uint64_adapt() const;
+  uint32_t as_uint32_adapt() const;
+  uint16_t as_uint16_adapt() const;
+  uint8_t as_uint8_adapt() const;
+
+#ifdef MDBX_I128_TYPE
+  MDBX_I128_TYPE as_int128_adapt() const;
+#endif /* MDBX_I128_TYPE */
+  int64_t as_int64_adapt() const;
+  int32_t as_int32_adapt() const;
+  int16_t as_int16_adapt() const;
+  int8_t as_int8_adapt() const;
 
 protected:
   MDBX_CXX11_CONSTEXPR slice(size_t invalid_length) noexcept
@@ -1259,13 +1341,13 @@ struct LIBMDBX_API to_hex {
   }
 
   /// \brief Returns a string with a hexadecimal dump of a passed slice.
-  template <class ALLOCATOR = legacy_allocator>
+  template <class ALLOCATOR = default_allocator>
   string<ALLOCATOR> as_string(const ALLOCATOR &allocator = ALLOCATOR()) const {
     return make_string<ALLOCATOR>(*this, allocator);
   }
 
   /// \brief Returns a buffer with a hexadecimal dump of a passed slice.
-  template <class ALLOCATOR = legacy_allocator,
+  template <class ALLOCATOR = default_allocator,
             typename CAPACITY_POLICY = default_capacity_policy>
   buffer<ALLOCATOR, CAPACITY_POLICY>
   as_buffer(const ALLOCATOR &allocator = ALLOCATOR()) const {
@@ -1310,14 +1392,14 @@ struct LIBMDBX_API to_base58 {
 
   /// \brief Returns a string with a
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of a passed slice.
-  template <class ALLOCATOR = legacy_allocator>
+  template <class ALLOCATOR = default_allocator>
   string<ALLOCATOR> as_string(const ALLOCATOR &allocator = ALLOCATOR()) const {
     return make_string<ALLOCATOR>(*this, allocator);
   }
 
   /// \brief Returns a buffer with a
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of a passed slice.
-  template <class ALLOCATOR = legacy_allocator,
+  template <class ALLOCATOR = default_allocator,
             typename CAPACITY_POLICY = default_capacity_policy>
   buffer<ALLOCATOR, CAPACITY_POLICY>
   as_buffer(const ALLOCATOR &allocator = ALLOCATOR()) const {
@@ -1364,14 +1446,14 @@ struct LIBMDBX_API to_base64 {
 
   /// \brief Returns a string with a
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump of a passed slice.
-  template <class ALLOCATOR = legacy_allocator>
+  template <class ALLOCATOR = default_allocator>
   string<ALLOCATOR> as_string(const ALLOCATOR &allocator = ALLOCATOR()) const {
     return make_string<ALLOCATOR>(*this, allocator);
   }
 
   /// \brief Returns a buffer with a
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump of a passed slice.
-  template <class ALLOCATOR = legacy_allocator,
+  template <class ALLOCATOR = default_allocator,
             typename CAPACITY_POLICY = default_capacity_policy>
   buffer<ALLOCATOR, CAPACITY_POLICY>
   as_buffer(const ALLOCATOR &allocator = ALLOCATOR()) const {
@@ -1428,13 +1510,13 @@ struct LIBMDBX_API from_hex {
   }
 
   /// \brief Decodes hexadecimal dump from a passed slice to returned string.
-  template <class ALLOCATOR = legacy_allocator>
+  template <class ALLOCATOR = default_allocator>
   string<ALLOCATOR> as_string(const ALLOCATOR &allocator = ALLOCATOR()) const {
     return make_string<ALLOCATOR>(*this, allocator);
   }
 
   /// \brief Decodes hexadecimal dump from a passed slice to returned buffer.
-  template <class ALLOCATOR = legacy_allocator,
+  template <class ALLOCATOR = default_allocator,
             typename CAPACITY_POLICY = default_capacity_policy>
   buffer<ALLOCATOR, CAPACITY_POLICY>
   as_buffer(const ALLOCATOR &allocator = ALLOCATOR()) const {
@@ -1474,14 +1556,14 @@ struct LIBMDBX_API from_base58 {
 
   /// \brief Decodes [Base58](https://en.wikipedia.org/wiki/Base58) dump from a
   /// passed slice to returned string.
-  template <class ALLOCATOR = legacy_allocator>
+  template <class ALLOCATOR = default_allocator>
   string<ALLOCATOR> as_string(const ALLOCATOR &allocator = ALLOCATOR()) const {
     return make_string<ALLOCATOR>(*this, allocator);
   }
 
   /// \brief Decodes [Base58](https://en.wikipedia.org/wiki/Base58) dump from a
   /// passed slice to returned buffer.
-  template <class ALLOCATOR = legacy_allocator,
+  template <class ALLOCATOR = default_allocator,
             typename CAPACITY_POLICY = default_capacity_policy>
   buffer<ALLOCATOR, CAPACITY_POLICY>
   as_buffer(const ALLOCATOR &allocator = ALLOCATOR()) const {
@@ -1523,14 +1605,14 @@ struct LIBMDBX_API from_base64 {
 
   /// \brief Decodes [Base64](https://en.wikipedia.org/wiki/Base64) dump from a
   /// passed slice to returned string.
-  template <class ALLOCATOR = legacy_allocator>
+  template <class ALLOCATOR = default_allocator>
   string<ALLOCATOR> as_string(const ALLOCATOR &allocator = ALLOCATOR()) const {
     return make_string<ALLOCATOR>(*this, allocator);
   }
 
   /// \brief Decodes [Base64](https://en.wikipedia.org/wiki/Base64) dump from a
   /// passed slice to returned buffer.
-  template <class ALLOCATOR = legacy_allocator,
+  template <class ALLOCATOR = default_allocator,
             typename CAPACITY_POLICY = default_capacity_policy>
   buffer<ALLOCATOR, CAPACITY_POLICY>
   as_buffer(const ALLOCATOR &allocator = ALLOCATOR()) const {
@@ -2334,6 +2416,33 @@ public:
     return slice_;
   }
 
+#if defined(DOXYGEN) || (defined(__cpp_lib_span) && __cpp_lib_span >= 202002L)
+  template <typename POD>
+  MDBX_CXX14_CONSTEXPR buffer(const ::std::span<POD> &span)
+      : buffer(span.begin(), span.end()) {
+    static_assert(::std::is_standard_layout<POD>::value &&
+                      !::std::is_pointer<POD>::value,
+                  "Must be a standard layout type!");
+  }
+
+  template <typename POD>
+  MDBX_CXX14_CONSTEXPR ::std::span<const POD> as_span() const {
+    return slice_.template as_span<const POD>();
+  }
+  template <typename POD> MDBX_CXX14_CONSTEXPR ::std::span<POD> as_span() {
+    return slice_.template as_span<POD>();
+  }
+
+  MDBX_CXX14_CONSTEXPR ::std::span<const byte> bytes() const {
+    return as_span<const byte>();
+  }
+  MDBX_CXX14_CONSTEXPR ::std::span<byte> bytes() { return as_span<byte>(); }
+  MDBX_CXX14_CONSTEXPR ::std::span<const char> chars() const {
+    return as_span<const char>();
+  }
+  MDBX_CXX14_CONSTEXPR ::std::span<char> chars() { return as_span<char>(); }
+#endif /* __cpp_lib_span >= 202002L */
+
   template <typename POD>
   static buffer wrap(const POD &pod, bool make_reference = false,
                      const allocator_type &allocator = allocator_type()) {
@@ -2343,6 +2452,48 @@ public:
   template <typename POD> MDBX_CXX14_CONSTEXPR POD as_pod() const {
     return slice_.as_pod<POD>();
   }
+
+#ifdef MDBX_U128_TYPE
+  MDBX_CXX14_CONSTEXPR MDBX_U128_TYPE as_uint128() const {
+    return slice().as_uint128();
+  }
+#endif /* MDBX_U128_TYPE */
+  MDBX_CXX14_CONSTEXPR uint64_t as_uint64() const {
+    return slice().as_uint64();
+  }
+  MDBX_CXX14_CONSTEXPR uint32_t as_uint32() const {
+    return slice().as_uint32();
+  }
+  MDBX_CXX14_CONSTEXPR uint16_t as_uint16() const {
+    return slice().as_uint16();
+  }
+  MDBX_CXX14_CONSTEXPR uint8_t as_uint8() const { return slice().as_uint8(); }
+
+#ifdef MDBX_I128_TYPE
+  MDBX_CXX14_CONSTEXPR MDBX_I128_TYPE as_int128() const {
+    return slice().as_int128();
+  }
+#endif /* MDBX_I128_TYPE */
+  MDBX_CXX14_CONSTEXPR int64_t as_int64() const { return slice().as_int64(); }
+  MDBX_CXX14_CONSTEXPR int32_t as_int32() const { return slice().as_int32(); }
+  MDBX_CXX14_CONSTEXPR int16_t as_int16() const { return slice().as_int16(); }
+  MDBX_CXX14_CONSTEXPR int8_t as_int8() const { return slice().as_int8(); }
+
+#ifdef MDBX_U128_TYPE
+  MDBX_U128_TYPE as_uint128_adapt() const { return slice().as_uint128_adapt(); }
+#endif /* MDBX_U128_TYPE */
+  uint64_t as_uint64_adapt() const { return slice().as_uint64_adapt(); }
+  uint32_t as_uint32_adapt() const { return slice().as_uint32_adapt(); }
+  uint16_t as_uint16_adapt() const { return slice().as_uint16_adapt(); }
+  uint8_t as_uint8_adapt() const { return slice().as_uint8_adapt(); }
+
+#ifdef MDBX_I128_TYPE
+  MDBX_I128_TYPE as_int128_adapt() const { return slice().as_int128_adapt(); }
+#endif /* MDBX_I128_TYPE */
+  int64_t as_int64_adapt() const { return slice().as_int64_adapt(); }
+  int32_t as_int32_adapt() const { return slice().as_int32_adapt(); }
+  int16_t as_int16_adapt() const { return slice().as_int16_adapt(); }
+  int8_t as_int8_adapt() const { return slice().as_int8_adapt(); }
 
   /// \brief Returns a new buffer with a hexadecimal dump of the slice content.
   static buffer hex(const ::mdbx::slice &source, bool uppercase = false,
@@ -2975,22 +3126,54 @@ struct value_result {
 /// \brief Combines pair of slices for key and value to represent result of
 /// certain operations.
 struct pair {
+  using stl_pair = std::pair<slice, slice>;
   slice key, value;
-  pair(const slice &key, const slice &value) noexcept
+  MDBX_CXX11_CONSTEXPR pair(const slice &key, const slice &value) noexcept
       : key(key), value(value) {}
+  MDBX_CXX11_CONSTEXPR pair(const stl_pair &couple) noexcept
+      : key(couple.first), value(couple.second) {}
+  MDBX_CXX11_CONSTEXPR operator stl_pair() const noexcept {
+    return stl_pair(key, value);
+  }
   pair(const pair &) noexcept = default;
   pair &operator=(const pair &) noexcept = default;
   MDBX_CXX14_CONSTEXPR operator bool() const noexcept {
     assert(bool(key) == bool(value));
     return key;
   }
+  MDBX_CXX14_CONSTEXPR static pair invalid() noexcept {
+    return pair(slice::invalid(), slice::invalid());
+  }
+
+  /// \brief Three-way fast non-lexicographically length-based comparison.
+  MDBX_NOTHROW_PURE_FUNCTION static MDBX_CXX14_CONSTEXPR intptr_t
+  compare_fast(const pair &a, const pair &b) noexcept;
+
+  /// \brief Three-way lexicographically comparison.
+  MDBX_NOTHROW_PURE_FUNCTION static MDBX_CXX14_CONSTEXPR intptr_t
+  compare_lexicographically(const pair &a, const pair &b) noexcept;
+  friend MDBX_CXX14_CONSTEXPR bool operator==(const pair &a,
+                                              const pair &b) noexcept;
+  friend MDBX_CXX14_CONSTEXPR bool operator<(const pair &a,
+                                             const pair &b) noexcept;
+  friend MDBX_CXX14_CONSTEXPR bool operator>(const pair &a,
+                                             const pair &b) noexcept;
+  friend MDBX_CXX14_CONSTEXPR bool operator<=(const pair &a,
+                                              const pair &b) noexcept;
+  friend MDBX_CXX14_CONSTEXPR bool operator>=(const pair &a,
+                                              const pair &b) noexcept;
+  friend MDBX_CXX14_CONSTEXPR bool operator!=(const pair &a,
+                                              const pair &b) noexcept;
 };
 
 /// \brief Combines pair of slices for key and value with boolean flag to
 /// represent result of certain operations.
 struct pair_result : public pair {
   bool done;
-  pair_result(const slice &key, const slice &value, bool done) noexcept
+  MDBX_CXX11_CONSTEXPR pair_result() noexcept
+      : pair(pair::invalid()), done(false) {}
+  MDBX_CXX11_CONSTEXPR pair_result(const slice &key, const slice &value,
+                                   bool done) noexcept
       : pair(key, value), done(done) {}
   pair_result(const pair_result &) noexcept = default;
   pair_result &operator=(const pair_result &) noexcept = default;
@@ -2999,6 +3182,92 @@ struct pair_result : public pair {
     return done;
   }
 };
+
+template <typename ALLOCATOR, typename CAPACITY_POLICY>
+struct buffer_pair_spec {
+  using buffer_type = buffer<ALLOCATOR, CAPACITY_POLICY>;
+  using allocator_type = typename buffer_type::allocator_type;
+  using allocator_traits = typename buffer_type::allocator_traits;
+  using reservation_policy = CAPACITY_POLICY;
+  using stl_pair = ::std::pair<buffer_type, buffer_type>;
+  buffer_type key, value;
+
+  MDBX_CXX20_CONSTEXPR buffer_pair_spec() noexcept = default;
+  MDBX_CXX20_CONSTEXPR
+  buffer_pair_spec(const allocator_type &allocator) noexcept
+      : key(allocator), value(allocator) {}
+
+  buffer_pair_spec(const buffer_type &key, const buffer_type &value,
+                   const allocator_type &allocator = allocator_type())
+      : key(key, allocator), value(value, allocator) {}
+  buffer_pair_spec(const buffer_type &key, const buffer_type &value,
+                   bool make_reference,
+                   const allocator_type &allocator = allocator_type())
+      : key(key, make_reference, allocator),
+        value(value, make_reference, allocator) {}
+
+  buffer_pair_spec(const stl_pair &pair,
+                   const allocator_type &allocator = allocator_type())
+      : buffer_pair_spec(pair.first, pair.second, allocator) {}
+  buffer_pair_spec(const stl_pair &pair, bool make_reference,
+                   const allocator_type &allocator = allocator_type())
+      : buffer_pair_spec(pair.first, pair.second, make_reference, allocator) {}
+
+  buffer_pair_spec(const slice &key, const slice &value,
+                   const allocator_type &allocator = allocator_type())
+      : key(key, allocator), value(value, allocator) {}
+  buffer_pair_spec(const slice &key, const slice &value, bool make_reference,
+                   const allocator_type &allocator = allocator_type())
+      : key(key, make_reference, allocator),
+        value(value, make_reference, allocator) {}
+
+  buffer_pair_spec(const pair &pair,
+                   const allocator_type &allocator = allocator_type())
+      : buffer_pair_spec(pair.key, pair.value, allocator) {}
+  buffer_pair_spec(const pair &pair, bool make_reference,
+                   const allocator_type &allocator = allocator_type())
+      : buffer_pair_spec(pair.key, pair.value, make_reference, allocator) {}
+
+  buffer_pair_spec(const txn &txn, const slice &key, const slice &value,
+                   const allocator_type &allocator = allocator_type())
+      : key(txn, key, allocator), value(txn, value, allocator) {}
+  buffer_pair_spec(const txn &txn, const pair &pair,
+                   const allocator_type &allocator = allocator_type())
+      : buffer_pair_spec(txn, pair.key, pair.value, allocator) {}
+
+  buffer_pair_spec(buffer_type &&key, buffer_type &&value) noexcept(
+      buffer_type::move_assign_alloc::is_nothrow())
+      : key(::std::move(key)), value(::std::move(value)) {}
+  buffer_pair_spec(buffer_pair_spec &&pair) noexcept(
+      buffer_type::move_assign_alloc::is_nothrow())
+      : buffer_pair_spec(::std::move(pair.key), ::std::move(pair.value)) {}
+
+  /// \brief Checks whether data chunk stored inside the buffers both, otherwise
+  /// at least one of buffers just refers to data located outside.
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR bool
+  is_freestanding() const noexcept {
+    return key.is_freestanding() && value.is_freestanding();
+  }
+  /// \brief Checks whether one of the buffers just refers to data located
+  /// outside the buffer, rather than stores it.
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR bool
+  is_reference() const noexcept {
+    return key.is_reference() || value.is_reference();
+  }
+  /// \brief Makes buffers owning the data.
+  /// \details If buffer refers to an external data, then makes it the owner
+  /// of clone by allocating storage and copying the data.
+  void make_freestanding() {
+    key.make_freestanding();
+    value.make_freestanding();
+  }
+
+  operator pair() const noexcept { return pair(key, value); }
+};
+
+template <typename BUFFER>
+using buffer_pair = buffer_pair_spec<typename BUFFER::allocator_type,
+                                     typename BUFFER::reservation_policy>;
 
 /// end of cxx_data @}
 
@@ -3024,6 +3293,26 @@ enum class key_mode {
                ///< format with appropriate comparison.
                ///< \note Not yet implemented and PRs are welcome.
 };
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_usual(key_mode mode) noexcept {
+  return (MDBX_db_flags_t(mode) & (MDBX_REVERSEKEY | MDBX_INTEGERKEY)) == 0;
+}
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_ordinal(key_mode mode) noexcept {
+  return (MDBX_db_flags_t(mode) & MDBX_INTEGERKEY) != 0;
+}
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_samelength(key_mode mode) noexcept {
+  return (MDBX_db_flags_t(mode) & MDBX_INTEGERKEY) != 0;
+}
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_reverse(key_mode mode) noexcept {
+  return (MDBX_db_flags_t(mode) & MDBX_REVERSEKEY) != 0;
+}
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_msgpack(key_mode mode) noexcept {
+  return mode == key_mode::msgpack;
+}
 
 /// \brief Kind of the values and sorted multi-values with corresponding
 /// comparison.
@@ -3077,6 +3366,15 @@ enum class value_mode {
                      ///< end of the keys to the beginning. In terms of keys,
                      ///< they are not unique, i.e. has duplicates which are
                      ///< sorted by associated data values.
+#else
+  multi_reverse = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_REVERSEDUP),
+  multi_samelength = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_DUPFIXED),
+  multi_ordinal = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_DUPFIXED) |
+                  uint32_t(MDBX_INTEGERDUP),
+  multi_reverse_samelength = uint32_t(MDBX_DUPSORT) |
+                             uint32_t(MDBX_REVERSEDUP) |
+                             uint32_t(MDBX_DUPFIXED),
+#endif
   msgpack = -1 ///< A more than one data value could be associated with each
                ///< key. Values are in [MessagePack](https://msgpack.org/)
                ///< format with appropriate comparison. Internally each key is
@@ -3084,15 +3382,32 @@ enum class value_mode {
                ///< In terms of keys, they are not unique, i.e. has duplicates
                ///< which are sorted by associated data values.
                ///< \note Not yet implemented and PRs are welcome.
-#else
-  multi_reverse = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_REVERSEDUP),
-  multi_samelength = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_DUPFIXED),
-  multi_ordinal = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_DUPFIXED) |
-                  uint32_t(MDBX_INTEGERDUP),
-  multi_reverse_samelength = uint32_t(MDBX_DUPSORT) |
-                             uint32_t(MDBX_REVERSEDUP) | uint32_t(MDBX_DUPFIXED)
-#endif
 };
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_usual(value_mode mode) noexcept {
+  return (MDBX_db_flags_t(mode) & (MDBX_DUPSORT | MDBX_INTEGERDUP |
+                                   MDBX_DUPFIXED | MDBX_REVERSEDUP)) == 0;
+}
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_multi(value_mode mode) noexcept {
+  return (MDBX_db_flags_t(mode) & MDBX_DUPSORT) != 0;
+}
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_ordinal(value_mode mode) noexcept {
+  return (MDBX_db_flags_t(mode) & MDBX_INTEGERDUP) != 0;
+}
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_samelength(value_mode mode) noexcept {
+  return (MDBX_db_flags_t(mode) & MDBX_DUPFIXED) != 0;
+}
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_reverse(value_mode mode) noexcept {
+  return (MDBX_db_flags_t(mode) & MDBX_REVERSEDUP) != 0;
+}
+
+MDBX_CXX01_CONSTEXPR_ENUM bool is_msgpack(value_mode mode) noexcept {
+  return mode == value_mode::msgpack;
+}
 
 /// \brief A handle for an individual database (key-value spaces) in the
 /// environment.
@@ -3119,18 +3434,8 @@ struct LIBMDBX_API_TYPE map_handle {
                               map_handle::state state) noexcept;
     info(const info &) noexcept = default;
     info &operator=(const info &) noexcept = default;
-#if CONSTEXPR_ENUM_FLAGS_OPERATIONS
-    MDBX_CXX11_CONSTEXPR
-#else
-    inline
-#endif
-    ::mdbx::key_mode key_mode() const noexcept;
-#if CONSTEXPR_ENUM_FLAGS_OPERATIONS
-    MDBX_CXX11_CONSTEXPR
-#else
-    inline
-#endif
-    ::mdbx::value_mode value_mode() const noexcept;
+    MDBX_CXX11_CONSTEXPR_ENUM mdbx::key_mode key_mode() const noexcept;
+    MDBX_CXX11_CONSTEXPR_ENUM mdbx::value_mode value_mode() const noexcept;
   };
 };
 
@@ -3981,6 +4286,15 @@ public:
   /// \brief Opens cursor for specified key-value map handle.
   inline cursor_managed open_cursor(map_handle map) const;
 
+  /// \brief Unbind or close all cursors.
+  inline size_t release_all_cursors(bool unbind) const;
+
+  /// \brief Close all cursors.
+  inline size_t close_all_cursors() const { return release_all_cursors(false); }
+
+  /// \brief Unbind all cursors.
+  inline size_t unbind_all_cursors() const { return release_all_cursors(true); }
+
   /// \brief Open existing key-value map.
   inline map_handle open_map(
       const char *name,
@@ -4226,6 +4540,10 @@ public:
   /// \brief Commit all the operations of a transaction into the database.
   void commit();
 
+  /// \brief Commit all the operations of a transaction into the database
+  /// and then start read transaction.
+  void commit_embark_read();
+
   using commit_latency = MDBX_commit_latency;
 
   /// \brief Commit all the operations of a transaction into the database
@@ -4273,6 +4591,34 @@ public:
   friend MDBX_CXX11_CONSTEXPR bool operator!=(const cursor &a,
                                               const cursor &b) noexcept;
 
+  friend inline int compare_position_nothrow(const cursor &left,
+                                             const cursor &right,
+                                             bool ignore_nested) noexcept;
+  friend inline int compare_position(const cursor &left, const cursor &right,
+                                     bool ignore_nested);
+
+  bool is_before_than(const cursor &other, bool ignore_nested = false) const {
+    return compare_position(*this, other, ignore_nested) < 0;
+  }
+
+  bool is_same_or_before_than(const cursor &other,
+                              bool ignore_nested = false) const {
+    return compare_position(*this, other, ignore_nested) <= 0;
+  }
+
+  bool is_same_position(const cursor &other, bool ignore_nested = false) const {
+    return compare_position(*this, other, ignore_nested) == 0;
+  }
+
+  bool is_after_than(const cursor &other, bool ignore_nested = false) const {
+    return compare_position(*this, other, ignore_nested) > 0;
+  }
+
+  bool is_same_or_after_than(const cursor &other,
+                             bool ignore_nested = false) const {
+    return compare_position(*this, other, ignore_nested) >= 0;
+  }
+
   /// \brief Returns the application context associated with the cursor.
   inline void *get_context() const noexcept;
 
@@ -4296,9 +4642,33 @@ public:
     multi_find_pair = MDBX_GET_BOTH,
     multi_exactkey_lowerboundvalue = MDBX_GET_BOTH_RANGE,
 
-    find_key = MDBX_SET,
+    seek_key = MDBX_SET,
     key_exact = MDBX_SET_KEY,
-    key_lowerbound = MDBX_SET_RANGE
+    key_lowerbound = MDBX_SET_RANGE,
+
+    /* Doubtless cursor positioning at a specified key. */
+    key_lesser_than = MDBX_TO_KEY_LESSER_THAN,
+    key_lesser_or_equal = MDBX_TO_KEY_LESSER_OR_EQUAL,
+    key_equal = MDBX_TO_KEY_EQUAL,
+    key_greater_or_equal = MDBX_TO_KEY_GREATER_OR_EQUAL,
+    key_greater_than = MDBX_TO_KEY_GREATER_THAN,
+
+    /* Doubtless cursor positioning at a specified key-value pair
+     * for dupsort/multi-value hives. */
+    multi_exactkey_value_lesser_than = MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN,
+    multi_exactkey_value_lesser_or_equal =
+        MDBX_TO_EXACT_KEY_VALUE_LESSER_OR_EQUAL,
+    multi_exactkey_value_equal = MDBX_TO_EXACT_KEY_VALUE_EQUAL,
+    multi_exactkey_value_greater_or_equal =
+        MDBX_TO_EXACT_KEY_VALUE_GREATER_OR_EQUAL,
+    multi_exactkey_value_greater = MDBX_TO_EXACT_KEY_VALUE_GREATER_THAN,
+
+    pair_lesser_than = MDBX_TO_PAIR_LESSER_THAN,
+    pair_lesser_or_equal = MDBX_TO_PAIR_LESSER_OR_EQUAL,
+    pair_equal = MDBX_TO_PAIR_EQUAL,
+    pair_exact = pair_equal,
+    pair_greater_or_equal = MDBX_TO_PAIR_GREATER_OR_EQUAL,
+    pair_greater_than = MDBX_TO_PAIR_GREATER_THAN,
   };
 
   struct move_result : public pair_result {
@@ -4332,49 +4702,243 @@ public:
   };
 
 protected:
+  /* fake const, i.e. for some move/get operations */
   inline bool move(move_operation operation, MDBX_val *key, MDBX_val *value,
-                   bool throw_notfound) const
-      /* fake const, i.e. for some operations */;
+                   bool throw_notfound) const;
+
   inline ptrdiff_t estimate(move_operation operation, MDBX_val *key,
                             MDBX_val *value) const;
 
 public:
-  inline move_result move(move_operation operation, bool throw_notfound);
-  inline move_result to_first(bool throw_notfound = true);
-  inline move_result to_previous(bool throw_notfound = true);
-  inline move_result to_previous_last_multi(bool throw_notfound = true);
-  inline move_result to_current_first_multi(bool throw_notfound = true);
-  inline move_result to_current_prev_multi(bool throw_notfound = true);
-  inline move_result current(bool throw_notfound = true) const;
-  inline move_result to_current_next_multi(bool throw_notfound = true);
-  inline move_result to_current_last_multi(bool throw_notfound = true);
-  inline move_result to_next_first_multi(bool throw_notfound = true);
-  inline move_result to_next(bool throw_notfound = true);
-  inline move_result to_last(bool throw_notfound = true);
+  template <typename CALLABLE_PREDICATE>
+  bool scan(CALLABLE_PREDICATE predicate, move_operation start = first,
+            move_operation turn = next) {
+    struct wrapper : public exception_thunk {
+      static int probe(void *context, MDBX_val *key, MDBX_val *value,
+                       void *arg) noexcept {
+        auto thunk = static_cast<wrapper *>(context);
+        assert(thunk->is_clean());
+        auto &predicate = *static_cast<CALLABLE_PREDICATE *>(arg);
+        try {
+          return predicate(pair(*key, *value)) ? MDBX_RESULT_TRUE
+                                               : MDBX_RESULT_FALSE;
+        } catch (... /* capture any exception to rethrow it over C code */) {
+          thunk->capture();
+          return MDBX_RESULT_TRUE;
+        }
+      }
+    } thunk;
+    return error::boolean_or_throw(
+        ::mdbx_cursor_scan(handle_, wrapper::probe, &thunk,
+                           MDBX_cursor_op(start), MDBX_cursor_op(turn),
+                           &predicate),
+        thunk);
+  }
 
-  inline move_result move(move_operation operation, const slice &key,
-                          bool throw_notfound);
+  template <typename CALLABLE_PREDICATE>
+  bool fullscan(CALLABLE_PREDICATE predicate, bool backward = false) {
+    return scan(std::move(predicate), backward ? last : first,
+                backward ? previous : next);
+  }
+
+  template <typename CALLABLE_PREDICATE>
+  bool scan_from(CALLABLE_PREDICATE predicate, slice &from,
+                 move_operation start = key_greater_or_equal,
+                 move_operation turn = next) {
+    struct wrapper : public exception_thunk {
+      static int probe(void *context, MDBX_val *key, MDBX_val *value,
+                       void *arg) noexcept {
+        auto thunk = static_cast<wrapper *>(context);
+        assert(thunk->is_clean());
+        auto &predicate = *static_cast<CALLABLE_PREDICATE *>(arg);
+        try {
+          return predicate(pair(*key, *value)) ? MDBX_RESULT_TRUE
+                                               : MDBX_RESULT_FALSE;
+        } catch (... /* capture any exception to rethrow it over C code */) {
+          thunk->capture();
+          return MDBX_RESULT_TRUE;
+        }
+      }
+    } thunk;
+    return error::boolean_or_throw(
+        ::mdbx_cursor_scan_from(handle_, wrapper::probe, &thunk,
+                                MDBX_cursor_op(start), &from, nullptr,
+                                MDBX_cursor_op(turn), &predicate),
+        thunk);
+  }
+
+  template <typename CALLABLE_PREDICATE>
+  bool scan_from(CALLABLE_PREDICATE predicate, pair &from,
+                 move_operation start = pair_greater_or_equal,
+                 move_operation turn = next) {
+    struct wrapper : public exception_thunk {
+      static int probe(void *context, MDBX_val *key, MDBX_val *value,
+                       void *arg) noexcept {
+        auto thunk = static_cast<wrapper *>(context);
+        assert(thunk->is_clean());
+        auto &predicate = *static_cast<CALLABLE_PREDICATE *>(arg);
+        try {
+          return predicate(pair(*key, *value)) ? MDBX_RESULT_TRUE
+                                               : MDBX_RESULT_FALSE;
+        } catch (... /* capture any exception to rethrow it over C code */) {
+          thunk->capture();
+          return MDBX_RESULT_TRUE;
+        }
+      }
+    } thunk;
+    return error::boolean_or_throw(
+        ::mdbx_cursor_scan_from(handle_, wrapper::probe, &thunk,
+                                MDBX_cursor_op(start), &from.key, &from.value,
+                                MDBX_cursor_op(turn), &predicate),
+        thunk);
+  }
+
+  move_result move(move_operation operation, bool throw_notfound) {
+    return move_result(*this, operation, throw_notfound);
+  }
+  move_result move(move_operation operation, const slice &key,
+                   bool throw_notfound) {
+    return move_result(*this, operation, key, slice::invalid(), throw_notfound);
+  }
+  move_result move(move_operation operation, const slice &key,
+                   const slice &value, bool throw_notfound) {
+    return move_result(*this, operation, key, value, throw_notfound);
+  }
+  bool move(move_operation operation, slice &key, slice &value,
+            bool throw_notfound) {
+    return move(operation, &key, &value, throw_notfound);
+  }
+
+  move_result to_first(bool throw_notfound = true) {
+    return move(first, throw_notfound);
+  }
+  move_result to_previous(bool throw_notfound = true) {
+    return move(previous, throw_notfound);
+  }
+  move_result to_previous_last_multi(bool throw_notfound = true) {
+    return move(multi_prevkey_lastvalue, throw_notfound);
+  }
+  move_result to_current_first_multi(bool throw_notfound = true) {
+    return move(multi_currentkey_firstvalue, throw_notfound);
+  }
+  move_result to_current_prev_multi(bool throw_notfound = true) {
+    return move(multi_currentkey_prevvalue, throw_notfound);
+  }
+  move_result current(bool throw_notfound = true) const {
+    return move_result(*this, throw_notfound);
+  }
+  move_result to_current_next_multi(bool throw_notfound = true) {
+    return move(multi_currentkey_nextvalue, throw_notfound);
+  }
+  move_result to_current_last_multi(bool throw_notfound = true) {
+    return move(multi_currentkey_lastvalue, throw_notfound);
+  }
+  move_result to_next_first_multi(bool throw_notfound = true) {
+    return move(multi_nextkey_firstvalue, throw_notfound);
+  }
+  move_result to_next(bool throw_notfound = true) {
+    return move(next, throw_notfound);
+  }
+  move_result to_last(bool throw_notfound = true) {
+    return move(last, throw_notfound);
+  }
+
+  move_result to_key_lesser_than(const slice &key, bool throw_notfound = true) {
+    return move(key_lesser_than, key, throw_notfound);
+  }
+  move_result to_key_lesser_or_equal(const slice &key,
+                                     bool throw_notfound = true) {
+    return move(key_lesser_or_equal, key, throw_notfound);
+  }
+  move_result to_key_equal(const slice &key, bool throw_notfound = true) {
+    return move(key_equal, key, throw_notfound);
+  }
+  move_result to_key_exact(const slice &key, bool throw_notfound = true) {
+    return move(key_exact, key, throw_notfound);
+  }
+  move_result to_key_greater_or_equal(const slice &key,
+                                      bool throw_notfound = true) {
+    return move(key_greater_or_equal, key, throw_notfound);
+  }
+  move_result to_key_greater_than(const slice &key,
+                                  bool throw_notfound = true) {
+    return move(key_greater_than, key, throw_notfound);
+  }
+
+  move_result to_exact_key_value_lesser_than(const slice &key,
+                                             const slice &value,
+                                             bool throw_notfound = true) {
+    return move(multi_exactkey_value_lesser_than, key, value, throw_notfound);
+  }
+  move_result to_exact_key_value_lesser_or_equal(const slice &key,
+                                                 const slice &value,
+                                                 bool throw_notfound = true) {
+    return move(multi_exactkey_value_lesser_or_equal, key, value,
+                throw_notfound);
+  }
+  move_result to_exact_key_value_equal(const slice &key, const slice &value,
+                                       bool throw_notfound = true) {
+    return move(multi_exactkey_value_equal, key, value, throw_notfound);
+  }
+  move_result to_exact_key_value_greater_or_equal(const slice &key,
+                                                  const slice &value,
+                                                  bool throw_notfound = true) {
+    return move(multi_exactkey_value_greater_or_equal, key, value,
+                throw_notfound);
+  }
+  move_result to_exact_key_value_greater_than(const slice &key,
+                                              const slice &value,
+                                              bool throw_notfound = true) {
+    return move(multi_exactkey_value_greater, key, value, throw_notfound);
+  }
+
+  move_result to_pair_lesser_than(const slice &key, const slice &value,
+                                  bool throw_notfound = true) {
+    return move(pair_lesser_than, key, value, throw_notfound);
+  }
+  move_result to_pair_lesser_or_equal(const slice &key, const slice &value,
+                                      bool throw_notfound = true) {
+    return move(pair_lesser_or_equal, key, value, throw_notfound);
+  }
+  move_result to_pair_equal(const slice &key, const slice &value,
+                            bool throw_notfound = true) {
+    return move(pair_equal, key, value, throw_notfound);
+  }
+  move_result to_pair_exact(const slice &key, const slice &value,
+                            bool throw_notfound = true) {
+    return move(pair_exact, key, value, throw_notfound);
+  }
+  move_result to_pair_greater_or_equal(const slice &key, const slice &value,
+                                       bool throw_notfound = true) {
+    return move(pair_greater_or_equal, key, value, throw_notfound);
+  }
+  move_result to_pair_greater_than(const slice &key, const slice &value,
+                                   bool throw_notfound = true) {
+    return move(pair_greater_than, key, value, throw_notfound);
+  }
+
+  inline bool seek(const slice &key);
   inline move_result find(const slice &key, bool throw_notfound = true);
-  inline move_result lower_bound(const slice &key, bool throw_notfound = true);
+  inline move_result lower_bound(const slice &key, bool throw_notfound = false);
+  inline move_result upper_bound(const slice &key, bool throw_notfound = false);
 
-  inline move_result move(move_operation operation, const slice &key,
-                          const slice &value, bool throw_notfound);
+  /// \brief Return count of duplicates for current key.
+  inline size_t count_multivalue() const;
+
   inline move_result find_multivalue(const slice &key, const slice &value,
                                      bool throw_notfound = true);
   inline move_result lower_bound_multivalue(const slice &key,
                                             const slice &value,
                                             bool throw_notfound = false);
-
-  inline bool seek(const slice &key);
-  inline bool move(move_operation operation, slice &key, slice &value,
-                   bool throw_notfound);
-
-  /// \brief Return count of duplicates for current key.
-  inline size_t count_multivalue() const;
+  inline move_result upper_bound_multivalue(const slice &key,
+                                            const slice &value,
+                                            bool throw_notfound = false);
 
   inline bool eof() const;
   inline bool on_first() const;
   inline bool on_last() const;
+  inline bool on_first_multival() const;
+  inline bool on_last_multival() const;
   inline estimate_result estimate(const slice &key, const slice &value) const;
   inline estimate_result estimate(const slice &key) const;
   inline estimate_result estimate(move_operation operation) const;
@@ -4389,6 +4953,9 @@ public:
   /// \brief Bind/renew a cursor with a new transaction and specified key-value
   /// map handle.
   inline void bind(const ::mdbx::txn &txn, ::mdbx::map_handle map_handle);
+
+  /// \brief Unbind cursor from a transaction.
+  inline void unbind();
 
   /// \brief Returns the cursor's transaction.
   inline ::mdbx::txn txn() const;
@@ -4653,7 +5220,8 @@ inline void error::success_or_throw() const {
 inline void error::success_or_throw(const exception_thunk &thunk) const {
   assert(thunk.is_clean() || code() != MDBX_SUCCESS);
   if (MDBX_UNLIKELY(!is_success())) {
-    MDBX_CXX20_UNLIKELY if (!thunk.is_clean()) thunk.rethrow_captured();
+    MDBX_CXX20_UNLIKELY if (MDBX_UNLIKELY(!thunk.is_clean()))
+        thunk.rethrow_captured();
     else throw_exception();
   }
 }
@@ -4712,6 +5280,13 @@ inline void error::success_or_panic(int error_code, const char *context_where,
                                     const char *func_who) noexcept {
   error rc(static_cast<MDBX_error_t>(error_code));
   rc.success_or_panic(context_where, func_who);
+}
+
+inline bool error::boolean_or_throw(int error_code,
+                                    const exception_thunk &thunk) {
+  if (MDBX_UNLIKELY(!thunk.is_clean()))
+    MDBX_CXX20_UNLIKELY thunk.rethrow_captured();
+  return boolean_or_throw(error_code);
 }
 
 //------------------------------------------------------------------------------
@@ -5088,6 +5663,56 @@ slice::is_base64(bool ignore_spaces) const noexcept {
 
 //------------------------------------------------------------------------------
 
+MDBX_CXX14_CONSTEXPR intptr_t pair::compare_fast(const pair &a,
+                                                 const pair &b) noexcept {
+  const auto diff = slice::compare_fast(a.key, b.key);
+  return diff ? diff : slice::compare_fast(a.value, b.value);
+}
+
+MDBX_CXX14_CONSTEXPR intptr_t
+pair::compare_lexicographically(const pair &a, const pair &b) noexcept {
+  const auto diff = slice::compare_lexicographically(a.key, b.key);
+  return diff ? diff : slice::compare_lexicographically(a.value, b.value);
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR bool
+operator==(const pair &a, const pair &b) noexcept {
+  return a.key.length() == b.key.length() &&
+         a.value.length() == b.value.length() &&
+         memcmp(a.key.data(), b.key.data(), a.key.length()) == 0 &&
+         memcmp(a.value.data(), b.value.data(), a.value.length()) == 0;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR bool
+operator<(const pair &a, const pair &b) noexcept {
+  return pair::compare_lexicographically(a, b) < 0;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR bool
+operator>(const pair &a, const pair &b) noexcept {
+  return pair::compare_lexicographically(a, b) > 0;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR bool
+operator<=(const pair &a, const pair &b) noexcept {
+  return pair::compare_lexicographically(a, b) <= 0;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR bool
+operator>=(const pair &a, const pair &b) noexcept {
+  return pair::compare_lexicographically(a, b) >= 0;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR bool
+operator!=(const pair &a, const pair &b) noexcept {
+  return a.key.length() != b.key.length() ||
+         a.value.length() != b.value.length() ||
+         memcmp(a.key.data(), b.key.data(), a.key.length()) != 0 ||
+         memcmp(a.value.data(), b.value.data(), a.value.length()) != 0;
+}
+
+//------------------------------------------------------------------------------
+
 template <class ALLOCATOR, typename CAPACITY_POLICY>
 inline buffer<ALLOCATOR, CAPACITY_POLICY>::buffer(
     const txn &txn, const struct slice &src, const allocator_type &allocator)
@@ -5099,17 +5724,13 @@ MDBX_CXX11_CONSTEXPR map_handle::info::info(map_handle::flags flags,
                                             map_handle::state state) noexcept
     : flags(flags), state(state) {}
 
-#if CONSTEXPR_ENUM_FLAGS_OPERATIONS
-MDBX_CXX11_CONSTEXPR
-#endif
-::mdbx::key_mode map_handle::info::key_mode() const noexcept {
+MDBX_CXX11_CONSTEXPR_ENUM mdbx::key_mode
+map_handle::info::key_mode() const noexcept {
   return ::mdbx::key_mode(flags & (MDBX_REVERSEKEY | MDBX_INTEGERKEY));
 }
 
-#if CONSTEXPR_ENUM_FLAGS_OPERATIONS
-MDBX_CXX11_CONSTEXPR
-#endif
-::mdbx::value_mode map_handle::info::value_mode() const noexcept {
+MDBX_CXX11_CONSTEXPR_ENUM mdbx::value_mode
+map_handle::info::value_mode() const noexcept {
   return ::mdbx::value_mode(flags & (MDBX_DUPSORT | MDBX_REVERSEDUP |
                                      MDBX_DUPFIXED | MDBX_INTEGERDUP));
 }
@@ -5640,6 +6261,13 @@ inline cursor_managed txn::open_cursor(map_handle map) const {
   return cursor_managed(ptr);
 }
 
+inline size_t txn::release_all_cursors(bool unbind) const {
+  int err = ::mdbx_txn_release_all_cursors(handle_, unbind);
+  if (MDBX_UNLIKELY(err < 0))
+    MDBX_CXX20_UNLIKELY error::throw_exception(err);
+  return size_t(err);
+}
+
 inline ::mdbx::map_handle
 txn::open_map(const char *name, const ::mdbx::key_mode key_mode,
               const ::mdbx::value_mode value_mode) const {
@@ -6119,9 +6747,24 @@ MDBX_CXX11_CONSTEXPR bool operator!=(const cursor &a,
   return a.handle_ != b.handle_;
 }
 
+inline int compare_position_nothrow(const cursor &left, const cursor &right,
+                                    bool ignore_nested = false) noexcept {
+  return mdbx_cursor_compare(left.handle_, right.handle_, ignore_nested);
+}
+
+inline int compare_position(const cursor &left, const cursor &right,
+                            bool ignore_nested = false) {
+  const auto diff = compare_position_nothrow(left, right, ignore_nested);
+  assert(compare_position_nothrow(right, left, ignore_nested) == -diff);
+  if (MDBX_LIKELY(int16_t(diff) == diff))
+    MDBX_CXX20_LIKELY return int(diff);
+  else
+    throw_incomparable_cursors();
+}
+
 inline cursor::move_result::move_result(const cursor &cursor,
                                         bool throw_notfound)
-    : pair_result(slice(), slice(), false) {
+    : pair_result() {
   done = cursor.move(get_current, &this->key, &this->value, throw_notfound);
 }
 
@@ -6140,6 +6783,8 @@ inline bool cursor::move(move_operation operation, MDBX_val *key,
   switch (err) {
   case MDBX_SUCCESS:
     MDBX_CXX20_LIKELY return true;
+  case MDBX_RESULT_TRUE:
+    return false;
   case MDBX_NOTFOUND:
     if (!throw_notfound)
       return false;
@@ -6171,60 +6816,6 @@ inline ptrdiff_t estimate(const cursor &from, const cursor &to) {
   return result;
 }
 
-inline cursor::move_result cursor::move(move_operation operation,
-                                        bool throw_notfound) {
-  return move_result(*this, operation, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_first(bool throw_notfound) {
-  return move(first, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_previous(bool throw_notfound) {
-  return move(previous, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_previous_last_multi(bool throw_notfound) {
-  return move(multi_prevkey_lastvalue, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_current_first_multi(bool throw_notfound) {
-  return move(multi_currentkey_firstvalue, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_current_prev_multi(bool throw_notfound) {
-  return move(multi_currentkey_prevvalue, throw_notfound);
-}
-
-inline cursor::move_result cursor::current(bool throw_notfound) const {
-  return move_result(*this, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_current_next_multi(bool throw_notfound) {
-  return move(multi_currentkey_nextvalue, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_current_last_multi(bool throw_notfound) {
-  return move(multi_currentkey_lastvalue, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_next_first_multi(bool throw_notfound) {
-  return move(multi_nextkey_firstvalue, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_next(bool throw_notfound) {
-  return move(next, throw_notfound);
-}
-
-inline cursor::move_result cursor::to_last(bool throw_notfound) {
-  return move(last, throw_notfound);
-}
-
-inline cursor::move_result cursor::move(move_operation operation,
-                                        const slice &key, bool throw_notfound) {
-  return move_result(*this, operation, key, throw_notfound);
-}
-
 inline cursor::move_result cursor::find(const slice &key, bool throw_notfound) {
   return move(key_exact, key, throw_notfound);
 }
@@ -6232,12 +6823,6 @@ inline cursor::move_result cursor::find(const slice &key, bool throw_notfound) {
 inline cursor::move_result cursor::lower_bound(const slice &key,
                                                bool throw_notfound) {
   return move(key_lowerbound, key, throw_notfound);
-}
-
-inline cursor::move_result cursor::move(move_operation operation,
-                                        const slice &key, const slice &value,
-                                        bool throw_notfound) {
-  return move_result(*this, operation, key, value, throw_notfound);
 }
 
 inline cursor::move_result cursor::find_multivalue(const slice &key,
@@ -6253,12 +6838,7 @@ inline cursor::move_result cursor::lower_bound_multivalue(const slice &key,
 }
 
 inline bool cursor::seek(const slice &key) {
-  return move(find_key, const_cast<slice *>(&key), nullptr, false);
-}
-
-inline bool cursor::move(move_operation operation, slice &key, slice &value,
-                         bool throw_notfound) {
-  return move(operation, &key, &value, throw_notfound);
+  return move(seek_key, const_cast<slice *>(&key), nullptr, false);
 }
 
 inline size_t cursor::count_multivalue() const {
@@ -6277,6 +6857,14 @@ inline bool cursor::on_first() const {
 
 inline bool cursor::on_last() const {
   return error::boolean_or_throw(::mdbx_cursor_on_last(*this));
+}
+
+inline bool cursor::on_first_multival() const {
+  return error::boolean_or_throw(::mdbx_cursor_on_first_dup(*this));
+}
+
+inline bool cursor::on_last_multival() const {
+  return error::boolean_or_throw(::mdbx_cursor_on_last_dup(*this));
 }
 
 inline cursor::estimate_result cursor::estimate(const slice &key,
@@ -6300,6 +6888,10 @@ inline void cursor::renew(const ::mdbx::txn &txn) {
 inline void cursor::bind(const ::mdbx::txn &txn,
                          ::mdbx::map_handle map_handle) {
   error::success_or_throw(::mdbx_cursor_bind(txn, handle_, map_handle.dbi));
+}
+
+inline void cursor::unbind() {
+  error::success_or_throw(::mdbx_cursor_unbind(handle_));
 }
 
 inline txn cursor::txn() const {

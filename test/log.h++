@@ -55,6 +55,7 @@ bool MDBX_PRINTF_ARGS(2, 3)
     output(const loglevel priority, const char *format, ...);
 bool feed_ap(const char *format, va_list ap);
 bool MDBX_PRINTF_ARGS(1, 2) feed(const char *format, ...);
+void ln();
 
 void inline MDBX_PRINTF_ARGS(2, 3)
     output_nocheckloglevel(const loglevel priority, const char *format, ...) {

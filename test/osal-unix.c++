@@ -356,6 +356,7 @@ mdbx_pid_t osal_getpid(void) { return getpid(); }
 int osal_delay(unsigned seconds) { return sleep(seconds) ? errno : 0; }
 
 int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
+  static sigset_t mask;
   if (children.empty()) {
     struct sigaction act;
     memset(&act, 0, sizeof(act));
@@ -366,7 +367,6 @@ int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
     sigaction(SIGUSR1, &act, nullptr);
     sigaction(SIGUSR2, &act, nullptr);
 
-    sigset_t mask;
     sigemptyset(&mask);
     sigaddset(&mask, SIGCHLD);
     sigaddset(&mask, SIGUSR1);
@@ -377,6 +377,7 @@ int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
   pid = fork();
 
   if (pid == 0) {
+    sigprocmask(SIG_BLOCK, &mask, nullptr);
     overlord_pid = getppid();
     const bool result = test_execute(config);
     exit(result ? EXIT_SUCCESS : EXIT_FAILURE);
@@ -400,7 +401,7 @@ void osal_killall_actors(void) {
   }
 }
 
-static const char *signal_name(const int sig) {
+const char *signal_name(const int sig) {
   if (sig == SIGHUP)
     return "HUP";
   if (sig == SIGINT)
@@ -532,24 +533,25 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
         children[pid] =
             (WEXITSTATUS(status) == EXIT_SUCCESS) ? as_successful : as_failed;
       else if (WIFSIGNALED(status)) {
+        int sig = WTERMSIG(status);
 #ifdef WCOREDUMP
         if (WCOREDUMP(status))
           children[pid] = as_coredump;
         else
 #endif /* WCOREDUMP */
-          switch (WTERMSIG(status)) {
+          switch (sig) {
           case SIGABRT:
           case SIGBUS:
           case SIGFPE:
           case SIGILL:
           case SIGSEGV:
-            log_notice("child pid %lu terminated by SIG%s", (long)pid,
-                       signal_name(WTERMSIG(status)));
+            log_notice("child pid %lu %s by SIG%s", (long)pid, "terminated",
+                       signal_name(sig));
             children[pid] = as_coredump;
             break;
           default:
-            log_notice("child pid %lu killed by SIG%s", (long)pid,
-                       signal_name(WTERMSIG(status)));
+            log_notice("child pid %lu %s by SIG%s", (long)pid, "killed",
+                       signal_name(sig));
             children[pid] = as_killed;
           }
       } else if (WIFSTOPPED(status))

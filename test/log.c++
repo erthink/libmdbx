@@ -53,10 +53,18 @@ static void mdbx_logger(MDBX_log_level_t priority, const char *function,
 
 namespace logging {
 
-static std::string prefix;
-static std::string suffix;
+/* логирование может быть вызвано после деструкторов */
+static char prefix_buf[64];
+static size_t prefix_len;
+static std::string suffix_buf;
+static const char *suffix_ptr = "~~~";
+struct suffix_cleaner {
+  suffix_cleaner() { suffix_ptr = ""; }
+  ~suffix_cleaner() { suffix_ptr = "~~~"; }
+} static anchor;
+
 static loglevel level;
-static FILE *last;
+static FILE *flow;
 
 void setlevel(loglevel priority) {
   level = priority;
@@ -67,12 +75,15 @@ void setlevel(loglevel priority) {
   log_trace("set mdbx debug-opts: 0x%02x", rc);
 }
 
-void setup(loglevel priority, const std::string &_prefix) {
-  setlevel(priority);
-  prefix = _prefix;
+void setup(const std::string &prefix) {
+  prefix_len = std::min(prefix.size(), sizeof(prefix_buf) - 1);
+  memcpy(prefix_buf, prefix.data(), prefix_len);
 }
 
-void setup(const std::string &_prefix) { prefix = _prefix; }
+void setup(loglevel priority, const std::string &prefix) {
+  setlevel(priority);
+  setup(prefix);
+}
 
 const char *level2str(const loglevel alevel) {
   switch (alevel) {
@@ -108,18 +119,18 @@ bool output(const loglevel priority, const char *format, ...) {
   return true;
 }
 
+void ln() {
+  if (flow) {
+    putc('\n', flow);
+    if (flow != stdout)
+      putc('\n', stdout);
+    flow = nullptr;
+  }
+}
+
 void output_nocheckloglevel_ap(const logging::loglevel priority,
                                const char *format, va_list ap) {
-  if (last) {
-    putc('\n', last);
-    fflush(last);
-    if (last == stderr) {
-      putc('\n', stdout);
-      fflush(stdout);
-    }
-    last = nullptr;
-  }
-
+  ln();
   chrono::time now = chrono::now_realtime();
   struct tm tm;
 #ifdef _MSC_VER
@@ -134,30 +145,27 @@ void output_nocheckloglevel_ap(const logging::loglevel priority,
   if (rc != MDBX_SUCCESS)
     failure_perror("localtime_r()", rc);
 
-  last = stdout;
-  fprintf(last,
+  fprintf(stdout,
           "[ %02d%02d%02d-%02d:%02d:%02d.%06d_%05lu %-10s %.4s ] %s" /* TODO */,
           tm.tm_year - 100, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min,
           tm.tm_sec, chrono::fractional2us(now.fractional), (long)osal_getpid(),
-          prefix.c_str(), level2str(priority), suffix.c_str());
+          prefix_buf, level2str(priority), suffix_ptr);
 
   va_list ones;
   memset(&ones, 0, sizeof(ones)) /* zap MSVC and other goofy compilers */;
   if (same_or_higher(priority, error))
     va_copy(ones, ap);
-  vfprintf(last, format, ap);
+  vfprintf(stdout, format, ap);
 
   size_t len = strlen(format);
   char end = len ? format[len - 1] : '\0';
 
   switch (end) {
   default:
-    putc('\n', last);
-    MDBX_CXX17_FALLTHROUGH; // fall through
+    putc('\n', stdout);
+    break;
   case '\n':
-    fflush(last);
-    last = nullptr;
-    MDBX_CXX17_FALLTHROUGH; // fall through
+    break;
   case ' ':
   case '_':
   case ':':
@@ -167,46 +175,39 @@ void output_nocheckloglevel_ap(const logging::loglevel priority,
   case '\b':
   case '\r':
   case '\0':
+    flow = stdout;
     break;
   }
 
   if (same_or_higher(priority, error)) {
-    if (last != stderr) {
-      fprintf(stderr, "[ %05lu %-10s %.4s ] %s", (long)osal_getpid(),
-              prefix.c_str(), level2str(priority), suffix.c_str());
-      vfprintf(stderr, format, ones);
-      if (end == '\n')
-        fflush(stderr);
-      else
-        last = stderr;
-    }
+    if (flow)
+      flow = stderr;
+    fprintf(stderr, "[ %05lu %-10s %.4s ] %s", (long)osal_getpid(), prefix_buf,
+            level2str(priority), suffix_ptr);
+    vfprintf(stderr, format, ones);
     va_end(ones);
   }
 }
 
 bool feed_ap(const char *format, va_list ap) {
-  if (!last)
+  if (!flow)
     return false;
 
-  if (last == stderr) {
+  if (flow == stderr) {
     va_list ones;
     va_copy(ones, ap);
     vfprintf(stdout, format, ones);
     va_end(ones);
   }
-  vfprintf(last, format, ap);
+  vfprintf(flow, format, ap);
   size_t len = strlen(format);
-  if (len && format[len - 1] == '\n') {
-    fflush(last);
-    if (last == stderr)
-      fflush(stdout);
-    last = nullptr;
-  }
+  if (len && format[len - 1] == '\n')
+    flow = nullptr;
   return true;
 }
 
 bool feed(const char *format, ...) {
-  if (!last)
+  if (!flow)
     return false;
 
   va_list ap;
@@ -217,29 +218,36 @@ bool feed(const char *format, ...) {
 }
 
 local_suffix::local_suffix(const char *c_str)
-    : trim_pos(suffix.size()), indent(0) {
-  suffix.append(c_str);
+    : trim_pos(suffix_buf.size()), indent(0) {
+  suffix_buf.append(c_str);
+  suffix_ptr = suffix_buf.c_str();
 }
 
 local_suffix::local_suffix(const std::string &str)
-    : trim_pos(suffix.size()), indent(0) {
-  suffix.append(str);
+    : trim_pos(suffix_buf.size()), indent(0) {
+  suffix_buf.append(str);
+  suffix_ptr = suffix_buf.c_str();
 }
 
 void local_suffix::push() {
   indent += 1;
-  suffix.push_back('\t');
+  suffix_buf.push_back('\t');
+  suffix_ptr = suffix_buf.c_str();
 }
 
 void local_suffix::pop() {
   assert(indent > 0);
   if (indent > 0) {
     indent -= 1;
-    suffix.pop_back();
+    suffix_buf.pop_back();
+    suffix_ptr = suffix_buf.c_str();
   }
 }
 
-local_suffix::~local_suffix() { suffix.erase(trim_pos); }
+local_suffix::~local_suffix() {
+  suffix_buf.erase(trim_pos);
+  suffix_ptr = suffix_buf.c_str();
+}
 
 void progress_canary(bool active) {
   static chrono::time progress_timestamp;
@@ -294,73 +302,73 @@ void progress_canary(bool active) {
 } // namespace logging
 
 void log_extra(const char *msg, ...) {
+  logging::ln();
   if (logging::same_or_higher(logging::extra, logging::level)) {
     va_list ap;
     va_start(ap, msg);
     logging::output_nocheckloglevel_ap(logging::extra, msg, ap);
     va_end(ap);
-  } else
-    logging::last = nullptr;
+  }
 }
 
 void log_trace(const char *msg, ...) {
+  logging::ln();
   if (logging::same_or_higher(logging::trace, logging::level)) {
     va_list ap;
     va_start(ap, msg);
     logging::output_nocheckloglevel_ap(logging::trace, msg, ap);
     va_end(ap);
-  } else
-    logging::last = nullptr;
+  }
 }
 
 void log_debug(const char *msg, ...) {
+  logging::ln();
   if (logging::same_or_higher(logging::debug, logging::level)) {
     va_list ap;
     va_start(ap, msg);
     logging::output_nocheckloglevel_ap(logging::debug, msg, ap);
     va_end(ap);
-  } else
-    logging::last = nullptr;
+  }
 }
 
 void log_verbose(const char *msg, ...) {
+  logging::ln();
   if (logging::same_or_higher(logging::verbose, logging::level)) {
     va_list ap;
     va_start(ap, msg);
     logging::output_nocheckloglevel_ap(logging::verbose, msg, ap);
     va_end(ap);
-  } else
-    logging::last = nullptr;
+  }
 }
 
 void log_notice(const char *msg, ...) {
+  logging::ln();
   if (logging::same_or_higher(logging::notice, logging::level)) {
     va_list ap;
     va_start(ap, msg);
     logging::output_nocheckloglevel_ap(logging::notice, msg, ap);
     va_end(ap);
-  } else
-    logging::last = nullptr;
+  }
 }
 
 void log_warning(const char *msg, ...) {
+  logging::ln();
   if (logging::same_or_higher(logging::warning, logging::level)) {
     va_list ap;
     va_start(ap, msg);
     logging::output_nocheckloglevel_ap(logging::warning, msg, ap);
     va_end(ap);
-  } else
-    logging::last = nullptr;
+  }
 }
 
 void log_error(const char *msg, ...) {
+  logging::ln();
   if (logging::same_or_higher(logging::error, logging::level)) {
     va_list ap;
     va_start(ap, msg);
     logging::output_nocheckloglevel_ap(logging::error, msg, ap);
     va_end(ap);
-  } else
-    logging::last = nullptr;
+  }
 }
 
 void log_trouble(const char *where, const char *what, int errnum) {
@@ -371,4 +379,7 @@ bool log_enabled(const logging::loglevel priority) {
   return logging::same_or_higher(priority, logging::level);
 }
 
-void log_flush(void) { fflushall(); }
+void log_flush(void) {
+  logging::ln();
+  fflushall();
+}
