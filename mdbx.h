@@ -2444,7 +2444,7 @@ enum MDBX_env_delete_mode_t {
   /** \brief Just delete the environment's files and directory if any.
    * \note On POSIX systems, processes already working with the database will
    * continue to work without interference until it close the environment.
-   * \note On Windows, the behavior of `MDB_ENV_JUST_DELETE` is different
+   * \note On Windows, the behavior of `MDBX_ENV_JUST_DELETE` is different
    * because the system does not support deleting files that are currently
    * memory mapped. */
   MDBX_ENV_JUST_DELETE = 0,
