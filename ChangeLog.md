@@ -4,8 +4,42 @@ ChangeLog
 English version [by Google](https://gitflic-ru.translate.goog/project/erthink/libmdbx/blob?file=ChangeLog.md&_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
+## v0.13.1 (в процессе подготовки релиза)
 
-## v0.13.0 at 2023-04-23
+Новая версия с существенным расширением API и добавлением функционала.
+
+Новое:
+
+ - Управление основной блокировкой lock/unlock/upgrade/downgrade для координации пишущих транзакций.
+ - `mdbx_env_chk() `для проверка целостности структуры БД, с переработкой и переносом функционала утилиты `mdbx_chk` внутрь библиотеки.
+ - `mdbx_dbi_rename()` и `mdbx_dbi_rename()` для переименования таблиц.
+ - `mdbx_cursor_unbind()` и `mdbx_txn_release_all_cursors()` для управления курсорами.
+ - `mdbx_env_resurrect_after_fork()` для восстановление открытой среды работы с БД в дочернем процессе после ветвления/расщепления процесса.
+ - `mdbx_cursor_compare()` для сравнения позиций курсоров.
+ - `mdbx_cursor_scan()` и `mdbx_cursor_scan_from()` для сканирования таблиц с использованием функционального предиката.
+ - `mdbx_cursor_on_first_dup()` и `mdbx_cursor_on_last_dup()` для проверки позиции курсора.
+ - `mdbx_preopen_snapinfo()` для получения информации о БД без её открытия.
+
+ - Расширение и доработка C++ API:
+
+     - добавлен тип `mdbx::cursor::estimation_result`, а поведение методов
+      `cursor::estimate()` унифицировано с `cursor::move()`;
+     - для предотвращения незаметного неверного использования API, для инициализации
+       возвращаемых по ссылке срезов, вместо пустых срезов задействован `slice::invalid()`;
+     - добавлены дополнительные C++ операторы преобразования к типам C API;
+     - для совместимости со старыми стандартами C++ и старыми версиями STL перенесены
+       в public классы `buffer::move_assign_alloc` и `buffer::copy_assign_alloc`;
+     - добавлен тип `mdbx::default_buffer`;
+     - для срезов и буферов добавлены методы `hex_decode()`, `base64_decode()`, `base58_decode()`;
+     - добавлен тип `mdbx::comparator` и функций `mdbx::default_comparator()`;
+     - добавлены статические методы `buffer::hex()`, `base64()`, `base58()`;
+     - для транзакций и курсоров добавлены методы `get_/set_context`;
+     - добавлен метод `cursor::clone()`;
+     - поддержка base58 переработана и приведена в соответствии с черновиком RFC, в текущем понимании теперь это одна из самых высокопроизводительных реализаций;
+     - переработка `to_hex()` и `from_hex()`.
+
+
+## v0.13.0 от 2023-04-23
 
 Не выпуск, а начало ветки `0.13` с новым функционалом и изменением API.
 
