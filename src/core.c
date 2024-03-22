@@ -25115,7 +25115,7 @@ int mdbx_cursor_on_first_dup(const MDBX_cursor *mc) {
                                                      : MDBX_EBADSIGN;
 
   if (!(mc->mc_flags & C_INITIALIZED))
-    return mc->mc_db->md_entries ? MDBX_RESULT_FALSE : MDBX_RESULT_TRUE;
+    return MDBX_RESULT_TRUE;
 
   if (!mc->mc_xcursor)
     return MDBX_RESULT_TRUE;
@@ -25158,7 +25158,7 @@ int mdbx_cursor_on_last_dup(const MDBX_cursor *mc) {
                                                      : MDBX_EBADSIGN;
 
   if (!(mc->mc_flags & C_INITIALIZED))
-    return mc->mc_db->md_entries ? MDBX_RESULT_FALSE : MDBX_RESULT_TRUE;
+    return MDBX_RESULT_FALSE;
 
   if (!mc->mc_xcursor)
     return MDBX_RESULT_TRUE;

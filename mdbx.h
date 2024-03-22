@@ -5501,7 +5501,17 @@ mdbx_cursor_eof(const MDBX_cursor *cursor);
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_cursor_on_first(const MDBX_cursor *cursor);
 
-/** FIXME */
+/** \brief Определяет стоит ли курсор на первом или единственном мульти-значении
+ * соответствующем ключу.
+ * \ingroup c_cursors
+ * \param [in] cursor    Курсор созданный посредством \ref mdbx_cursor_open().
+ * \returns Значание \ref MDBX_RESULT_TRUE, либо \ref MDBX_RESULT_FALSE,
+ *          иначе код ошибки.
+ * \retval MDBX_RESULT_TRUE   курсор установлен на первом или единственном
+ *                            мульти-значении соответствующем ключу.
+ * \retval MDBX_RESULT_FALSE  курсор НЕ установлен на первом или единственном
+ *                            мульти-значении соответствующем ключу.
+ * \retval ИНАЧЕ код ошибки. */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_cursor_on_first_dup(const MDBX_cursor *cursor);
 
@@ -5519,7 +5529,17 @@ mdbx_cursor_on_first_dup(const MDBX_cursor *cursor);
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_cursor_on_last(const MDBX_cursor *cursor);
 
-/** FIXME */
+/** \brief Определяет стоит ли курсор на последнем или единственном мульти-значении
+ * соответствующем ключу.
+ * \ingroup c_cursors
+ * \param [in] cursor    Курсор созданный посредством \ref mdbx_cursor_open().
+ * \returns Значание \ref MDBX_RESULT_TRUE, либо \ref MDBX_RESULT_FALSE,
+ *          иначе код ошибки.
+ * \retval MDBX_RESULT_TRUE   курсор установлен на последнем или единственном
+ *                            мульти-значении соответствующем ключу.
+ * \retval MDBX_RESULT_FALSE  курсор НЕ установлен на последнем или единственном
+ *                            мульти-значении соответствующем ключу.
+ * \retval ИНАЧЕ код ошибки. */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_cursor_on_last_dup(const MDBX_cursor *cursor);
 
