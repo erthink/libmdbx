@@ -5095,16 +5095,198 @@ LIBMDBX_API int mdbx_cursor_compare(const MDBX_cursor *left,
  * \retval MDBX_EINVAL    An invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_get(MDBX_cursor *cursor, MDBX_val *key,
                                 MDBX_val *data, MDBX_cursor_op op);
-/** FIXME */
+
+/** \brief Тип предикативных функций обратного вызова используемых
+ * \ref mdbx_cursor_scan() и \ref mdbx_cursor_scan_from() для пробирования
+ * пар ключ-значения.
+ * \ingroup c_crud
+ *
+ * \param [in,out] context  Указатель на контекст с необходимой для оценки
+ *                          информацией, который полностью подготавливается
+ *                          и контролируется вами.
+ * \param [in] key          Ключ для оценки пользовательской функцией.
+ * \param [in] value        Значение для оценки пользовательской функцией.
+ * \param [in,out] arg      Дополнительный аргумент предикативной функции,
+ *                          который полностью подготавливается
+ *                          и контролируется вами.
+ *
+ * \returns Результат проверки соответствия переданной пары ключ-значения
+ * искомой цели. Иначе код ошибки, который прерывает сканирование и возвращается
+ * без изменения в качестве результата из функций \ref mdbx_cursor_scan()
+ * или \ref mdbx_cursor_scan_from().
+ *
+ * \retval MDBX_RESULT_TRUE если переданная пара ключ-значение соответствует
+ *         искомой и следует завершить сканирование.
+ * \retval MDBX_RESULT_FALSE если переданная пара ключ-значение НЕ соответствует
+ *         искомой и следует продолжать сканирование.
+ * \retval ИНАЧЕ любое другое значение, отличное от \ref MDBX_RESULT_TRUE
+ *         и \ref MDBX_RESULT_FALSE, считается индикатором ошибки
+ *         и возвращается без изменений в качестве результата сканирования.
+ *
+ * \see mdbx_cursor_scan()
+ * \see mdbx_cursor_scan_from() */
 typedef int(MDBX_predicate_func)(void *context, MDBX_val *key, MDBX_val *value,
                                  void *arg) MDBX_CXX17_NOEXCEPT;
-/** FIXME */
+
+/** \brief Сканирует таблицу с использованием передаваемого предиката,
+ * с уменьшением сопутствующих накладных расходов.
+ * \ingroup c_crud
+ *
+ * Реализует функционал сходный с шаблоном `std::find_if<>()` с использованием
+ * курсора и пользовательской предикативной функции, экономя при этом
+ * на сопутствующих накладных расходах, в том числе, не выполняя часть проверок
+ * внутри цикла итерации записей и потенциально уменьшая количество
+ * DSO-трансграничных вызовов.
+ *
+ * Функция принимает курсор, который должен быть привязан к некоторой транзакции
+ * и DBI-дескриптору таблицы (именованной пользовательской subDB), выполняет
+ * первоначальное позиционирование курсора определяемое аргументом `start_op`.
+ * Далее, производится оценка каждой пары ключ-значения посредством
+ * предоставляемой вами предикативной функции `predicate` и затем, при
+ * необходимости, переход к следующему элементу посредством операции `turn_op`,
+ * до наступления одного из четырех событий:
+ *  - достигается конец данных;
+ *  - возникнет ошибка при позиционировании курсора;
+ *  - оценочная функция вернет \ref MDBX_RESULT_TRUE, сигнализируя
+ *    о необходимости остановить дальнейшее сканирование;
+ *  - оценочная функция возвратит значение отличное от \ref MDBX_RESULT_FALSE
+ *    и \ref MDBX_RESULT_TRUE сигнализируя об ошибке.
+ *
+ * \param [in,out] cursor   Курсор для выполнения операции сканирования,
+ *                          связанный с активной транзакцией и DBI-дескриптором
+ *                          таблицы. Например, курсор созданный
+ *                          посредством \ref mdbx_cursor_open().
+ * \param [in] predicate    Предикативная функция для оценки итерируемых
+ *                          пар ключ-значения,
+ *                          более подробно смотрите \ref MDBX_predicate_func.
+ * \param [in,out] context  Указатель на контекст с необходимой для оценки
+ *                          информацией, который полностью подготавливается
+ *                          и контролируется вами.
+ * \param [in] start_op     Стартовая операция позиционирования курсора,
+ *                          более подробно смотрите \ref MDBX_cursor_op.
+ *                          Для сканирования без изменения исходной позиции
+ *                          курсора используйте \ref MDBX_GET_CURRENT.
+ *                          Допустимые значения \ref MDBX_FIRST,
+ *                          \ref MDBX_FIRST_DUP, \ref MDBX_LAST,
+ *                          \ref MDBX_LAST_DUP, \ref MDBX_GET_CURRENT,
+ *                          а также \ref MDBX_GET_MULTIPLE.
+ * \param [in] turn_op      Операция позиционирования курсора для перехода
+ *                          к следующему элементу. Допустимые значения
+ *                          \ref MDBX_NEXT, \ref MDBX_NEXT_DUP,
+ *                          \ref MDBX_NEXT_NODUP, \ref MDBX_PREV,
+ *                          \ref MDBX_PREV_DUP, \ref MDBX_PREV_NODUP, а также
+ *                          \ref MDBX_NEXT_MULTIPLE и \ref MDBX_PREV_MULTIPLE.
+ * \param [in,out] arg      Дополнительный аргумент предикативной функции,
+ *                          который полностью подготавливается
+ *                          и контролируется вами.
+ *
+ * \note При использовании \ref MDBX_GET_MULTIPLE, \ref MDBX_NEXT_MULTIPLE
+ * или \ref MDBX_PREV_MULTIPLE внимательно учитывайте пакетную специфику
+ * передачи значений через параметры предикативной функции.
+ *
+ * \see MDBX_predicate_func
+ * \see mdbx_cursor_scan_from
+ *
+ * \returns Результат операции сканирования, либо код ошибки.
+ *
+ * \retval MDBX_RESULT_TRUE если найдена пара ключ-значение, для которой
+ *         предикативная функция вернула \ref MDBX_RESULT_TRUE.
+ * \retval MDBX_RESULT_FALSE если если подходящая пара ключ-значения НЕ найдена,
+ *         в процессе поиска достигнут конец данных, либо нет данных для поиска.
+ * \retval ИНАЧЕ любое другое значение, отличное от \ref MDBX_RESULT_TRUE
+ *         и \ref MDBX_RESULT_FALSE, является кодом ошибки при позиционировании
+ *         курса, либо определяемым пользователем кодом остановки поиска
+ *         или ошибочной ситуации. */
 LIBMDBX_API int mdbx_cursor_scan(MDBX_cursor *cursor,
                                  MDBX_predicate_func *predicate, void *context,
                                  MDBX_cursor_op start_op,
                                  MDBX_cursor_op turn_op, void *arg);
 
-/** FIXME */
+/** Сканирует таблицу с использованием передаваемого предиката,
+ *  начиная с передаваемой пары ключ-значение,
+ *  с уменьшением сопутствующих накладных расходов.
+ * \ingroup c_crud
+ *
+ * Функция принимает курсор, который должен быть привязан к некоторой транзакции
+ * и DBI-дескриптору таблицы (именованной пользовательской subDB), выполняет
+ * первоначальное позиционирование курсора определяемое аргументом `from_op`.
+ * а также аргументами `from_key` и `from_value`.
+ * Далее, производится оценка каждой пары ключ-значения посредством
+ * предоставляемой вами предикативной функции `predicate` и затем, при
+ * необходимости, переход к следующему элементу посредством операции `turn_op`,
+ * до наступления одного из четырех событий:
+ *  - достигается конец данных;
+ *  - возникнет ошибка при позиционировании курсора;
+ *  - оценочная функция вернет \ref MDBX_RESULT_TRUE, сигнализируя
+ *    о необходимости остановить дальнейшее сканирование;
+ *  - оценочная функция возвратит значение отличное от \ref MDBX_RESULT_FALSE
+ *    и \ref MDBX_RESULT_TRUE сигнализируя об ошибке.
+ *
+ * \param [in,out] cursor    Курсор для выполнения операции сканирования,
+ *                           связанный с активной транзакцией и DBI-дескриптором
+ *                           таблицы. Например, курсор созданный
+ *                           посредством \ref mdbx_cursor_open().
+ * \param [in] predicate     Предикативная функция для оценки итерируемых
+ *                           пар ключ-значения,
+ *                           более подробно смотрите \ref MDBX_predicate_func.
+ * \param [in,out] context   Указатель на контекст с необходимой для оценки
+ *                           информацией, который полностью подготавливается
+ *                           и контролируется вами.
+ * \param [in] from_op       Операция позиционирования курсора к исходной
+ *                           позиции, более подробно смотрите
+ *                           \ref MDBX_cursor_op.
+ *                           Допустимые значения \ref MDBX_GET_BOTH,
+ *                           \ref MDBX_GET_BOTH_RANGE, \ref MDBX_SET_KEY,
+ *                           \ref MDBX_SET_LOWERBOUND, \ref MDBX_SET_UPPERBOUND,
+ *                           \ref MDBX_TO_KEY_LESSER_THAN,
+ *                           \ref MDBX_TO_KEY_LESSER_OR_EQUAL,
+ *                           \ref MDBX_TO_KEY_EQUAL,
+ *                           \ref MDBX_TO_KEY_GREATER_OR_EQUAL,
+ *                           \ref MDBX_TO_KEY_GREATER_THAN,
+ *                           \ref MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN,
+ *                           \ref MDBX_TO_EXACT_KEY_VALUE_LESSER_OR_EQUAL,
+ *                           \ref MDBX_TO_EXACT_KEY_VALUE_EQUAL,
+ *                           \ref MDBX_TO_EXACT_KEY_VALUE_GREATER_OR_EQUAL,
+ *                           \ref MDBX_TO_EXACT_KEY_VALUE_GREATER_THAN,
+ *                           \ref MDBX_TO_PAIR_LESSER_THAN,
+ *                           \ref MDBX_TO_PAIR_LESSER_OR_EQUAL,
+ *                           \ref MDBX_TO_PAIR_EQUAL,
+ *                           \ref MDBX_TO_PAIR_GREATER_OR_EQUAL,
+ *                           \ref MDBX_TO_PAIR_GREATER_THAN,
+ *                           а также \ref MDBX_GET_MULTIPLE.
+ * \param [in,out] from_key  Указатель на ключ используемый как для исходного
+ *                           позиционирования, так и для последующих итераций
+ *                           перехода.
+ * \param [in,out] from_value Указатель на значние используемое как для
+ *                            исходного позиционирования, так и для последующих
+ *                            итераций перехода.
+ * \param [in] turn_op       Операция позиционирования курсора для перехода
+ *                           к следующему элементу. Допустимые значения
+ *                           \ref MDBX_NEXT, \ref MDBX_NEXT_DUP,
+ *                           \ref MDBX_NEXT_NODUP, \ref MDBX_PREV,
+ *                           \ref MDBX_PREV_DUP, \ref MDBX_PREV_NODUP, а также
+ *                           \ref MDBX_NEXT_MULTIPLE и \ref MDBX_PREV_MULTIPLE.
+ * \param [in,out] arg       Дополнительный аргумент предикативной функции,
+ *                           который полностью подготавливается
+ *                           и контролируется вами.
+ *
+ * \note При использовании \ref MDBX_GET_MULTIPLE, \ref MDBX_NEXT_MULTIPLE
+ * или \ref MDBX_PREV_MULTIPLE внимательно учитывайте пакетную специфику
+ * передачи значений через параметры предикативной функции.
+ *
+ * \see MDBX_predicate_func
+ * \see mdbx_cursor_scan
+ *
+ * \returns Результат операции сканирования, либо код ошибки.
+ *
+ * \retval MDBX_RESULT_TRUE если найдена пара ключ-значение, для которой
+ *         предикативная функция вернула \ref MDBX_RESULT_TRUE.
+ * \retval MDBX_RESULT_FALSE если если подходящая пара ключ-значения НЕ найдена,
+ *         в процессе поиска достигнут конец данных, либо нет данных для поиска.
+ * \retval ИНАЧЕ любое другое значение, отличное от \ref MDBX_RESULT_TRUE
+ *         и \ref MDBX_RESULT_FALSE, является кодом ошибки при позиционировании
+ *         курса, либо определяемым пользователем кодом остановки поиска
+ *         или ошибочной ситуации. */
 LIBMDBX_API int mdbx_cursor_scan_from(MDBX_cursor *cursor,
                                       MDBX_predicate_func *predicate,
                                       void *context, MDBX_cursor_op from_op,
