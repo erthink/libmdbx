@@ -17721,18 +17721,15 @@ int mdbx_cursor_scan(MDBX_cursor *mc, MDBX_predicate_func *predicate,
   if (unlikely(turn_op > 30 || ((1 << turn_op) & valid_turn_mask) == 0))
     return MDBX_EINVAL;
 
-  MDBX_val key, data;
+  MDBX_val key = {nullptr, 0}, data = {nullptr, 0};
   int rc = mdbx_cursor_get(mc, &key, &data, start_op);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-  for (;;) {
+  while (likely(rc == MDBX_SUCCESS)) {
     rc = predicate(context, &key, &data, arg);
     if (rc != MDBX_RESULT_FALSE)
       return rc;
     rc = cursor_get(mc, &key, &data, turn_op);
-    if (rc != MDBX_SUCCESS)
-      return (rc == MDBX_NOTFOUND) ? MDBX_RESULT_FALSE : rc;
   }
+  return (rc == MDBX_NOTFOUND) ? MDBX_RESULT_FALSE : rc;
 }
 
 int mdbx_cursor_scan_from(MDBX_cursor *mc, MDBX_predicate_func *predicate,
