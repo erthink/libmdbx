@@ -5120,8 +5120,8 @@ static MDBX_CXX20_CONSTEXPR int memcmp(const void *a, const void *b,
     __cpp_lib_is_constant_evaluated >= 201811L
   if (::std::is_constant_evaluated()) {
     for (size_t i = 0; i < bytes; ++i) {
-      const int diff =
-          static_cast<const byte *>(a)[i] - static_cast<const byte *>(b)[i];
+      const int diff = int(static_cast<const byte *>(a)[i]) -
+                       int(static_cast<const byte *>(b)[i]);
       if (diff)
         return diff;
     }
