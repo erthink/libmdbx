@@ -6020,16 +6020,45 @@ LIBMDBX_API int mdbx_env_open_for_recoveryW(MDBX_env *env,
  * leg(s). */
 LIBMDBX_API int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target_meta);
 
-/** \brief FIXME
- */
-LIBMDBX_API int mdbx_preopen_snapinfo(const char *pathname, MDBX_envinfo *arg,
+/** \brief Получает базовую информацию о БД не открывая её.
+ * \ingroup c_opening
+ *
+ * Назначение функции в получении базовой информации без открытия БД и
+ * отображения данных в память (что может быть достаточно затратным действием
+ * для ядра ОС). Полученная таким образом информация может быть полезной для
+ * подстройки опций работы с БД перед её открытием, а также в сценариях файловых
+ * менеджерах и прочих вспомогательных утилитах.
+ *
+ * \todo Добавить в API возможность установки обратного вызова для ревизии опций
+ *       работы с БД в процессе её открытия (при удержании блокировок).
+ *
+ * \param [in]  pathname  Путь к директории или файлу БД.
+ * \param [out] into      Указатель на структуру \ref MDBX_envinfo
+ *                        для получения информации.
+ * \param [int] bytes     Актуальный размер структуры \ref MDBX_envinfo, это
+ *                        значение используется для обеспечения совместимости
+ *                        ABI.
+ *
+ * \note Заполняется только некоторые поля структуры \ref MDBX_envinfo, значения
+ * которых возможно получить без отображения файлов БД в память и без захвата
+ * блокировок: размер страницы БД, геометрия БД, размер распределенного места
+ * (номер последней распределенной страницы), номер последней транзакции и
+ * boot-id.
+ *
+ * \warning Полученная информация является снимком на время выполнения функции и
+ * может быть в любой момент изменена работающим с БД процессом. В том числе,
+ * нет препятствий к тому, чтобы другой процесс удалил БД и создал её заново с
+ * другим размером страницы и/или изменением любых других параметров.
+ *
+ * \returns Ненулевое значение ошибки при сбое и 0 при успешном выполнении. */
+LIBMDBX_API int mdbx_preopen_snapinfo(const char *pathname, MDBX_envinfo *info,
                                       size_t bytes);
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
 /** \copydoc mdbx_preopen_snapinfo()
  * \note Available only on Windows.
  * \see mdbx_preopen_snapinfo() */
 LIBMDBX_API int mdbx_preopen_snapinfoW(const wchar_t *pathname,
-                                       MDBX_envinfo *arg, size_t bytes);
+                                       MDBX_envinfo *info, size_t bytes);
 #endif /* Windows */
 
 /** \brief Флаги/опции для проверки целостности БД.
