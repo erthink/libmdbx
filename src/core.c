@@ -7874,6 +7874,8 @@ next_gc:;
     goto depleted_gc;
   }
   if (unlikely(key.iov_len != sizeof(txnid_t))) {
+    ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+          "invalid GC key-length");
     ret.err = MDBX_CORRUPTED;
     goto fail;
   }
@@ -7900,6 +7902,8 @@ next_gc:;
   if (unlikely(data.iov_len % sizeof(pgno_t) ||
                data.iov_len < MDBX_PNL_SIZEOF(gc_pnl) ||
                !pnl_check(gc_pnl, txn->mt_next_pgno))) {
+    ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+          "invalid GC value-length");
     ret.err = MDBX_CORRUPTED;
     goto fail;
   }
@@ -7983,6 +7987,8 @@ next_gc:;
   flags |= MDBX_ALLOC_SHOULD_SCAN;
   if (AUDIT_ENABLED()) {
     if (unlikely(!pnl_check(txn->tw.relist, txn->mt_next_pgno))) {
+      ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+            "invalid txn retired-list");
       ret.err = MDBX_CORRUPTED;
       goto fail;
     }
@@ -10442,8 +10448,11 @@ __cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored,
   MDBX_val key, data;
   while ((rc = cursor_get(&cx.outer, &key, &data, MDBX_NEXT)) == 0) {
     if (!dont_filter_gc) {
-      if (unlikely(key.iov_len != sizeof(txnid_t)))
+      if (unlikely(key.iov_len != sizeof(txnid_t))) {
+        ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+              "invalid GC-key size", (unsigned)key.iov_len);
         return MDBX_CORRUPTED;
+      }
       txnid_t id = unaligned_peek_u64(4, key.iov_base);
       if (txn->tw.lifo_reclaimed) {
         for (size_t i = 1; i <= MDBX_PNL_GETSIZE(txn->tw.lifo_reclaimed); ++i)
@@ -10484,8 +10493,11 @@ __cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored,
       MDBX_node *node = page_node(mp, k);
       if (node_flags(node) != F_SUBDATA)
         continue;
-      if (unlikely(node_ds(node) != sizeof(MDBX_db)))
+      if (unlikely(node_ds(node) != sizeof(MDBX_db))) {
+        ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+              "invalid dupsort sub-tree node size", (unsigned)node_ds(node));
         return MDBX_CORRUPTED;
+      }
 
       MDBX_db reside;
       const MDBX_db *db = memcpy(&reside, node_data(node), sizeof(reside));
@@ -10826,6 +10838,8 @@ retry:
           goto bailout;
         if (!MDBX_DISABLE_VALIDATION &&
             unlikely(key.iov_len != sizeof(txnid_t))) {
+          ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+                "invalid GC-key size", (unsigned)key.iov_len);
           rc = MDBX_CORRUPTED;
           goto bailout;
         }
@@ -11220,6 +11234,8 @@ retry:
             rc = cursor_first(&ctx->cursor, &key, nullptr);
             if (unlikely(rc != MDBX_SUCCESS ||
                          key.iov_len != sizeof(txnid_t))) {
+              ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+                    "invalid GC-key size", (unsigned)key.iov_len);
               rc = MDBX_CORRUPTED;
               goto bailout;
             }
@@ -11275,6 +11291,8 @@ retry:
         rc = cursor_first(&ctx->cursor, &key, nullptr);
         if (likely(rc == MDBX_SUCCESS)) {
           if (unlikely(key.iov_len != sizeof(txnid_t))) {
+            ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+                  "invalid GC-key size", (unsigned)key.iov_len);
             rc = MDBX_CORRUPTED;
             goto bailout;
           }
@@ -22371,6 +22389,9 @@ __cold static int compacting_walk_tree(mdbx_compacting_ctx *ctx,
           } else if (node_flags(node) & F_SUBDATA) {
             if (!MDBX_DISABLE_VALIDATION &&
                 unlikely(node_ds(node) != sizeof(MDBX_db))) {
+              ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+                    "invalid dupsort sub-tree node size",
+                    (unsigned)node_ds(node));
               rc = MDBX_CORRUPTED;
               goto done;
             }
@@ -22568,9 +22589,16 @@ __cold static int env_compact(MDBX_env *env, MDBX_txn *read_txn,
            MDBX_SUCCESS) {
       const MDBX_PNL pnl = data.iov_base;
       if (unlikely(data.iov_len % sizeof(pgno_t) ||
-                   data.iov_len < MDBX_PNL_SIZEOF(pnl) ||
-                   !(pnl_check(pnl, read_txn->mt_next_pgno))))
+                   data.iov_len < MDBX_PNL_SIZEOF(pnl))) {
+        ERROR("%s/%d: %s %zu", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+              "invalid GC-record length", data.iov_len);
         return MDBX_CORRUPTED;
+      }
+      if (unlikely(!pnl_check(pnl, read_txn->mt_next_pgno))) {
+        ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+              "invalid GC-record content");
+        return MDBX_CORRUPTED;
+      }
       gc += MDBX_PNL_GETSIZE(pnl);
     }
     if (unlikely(rc != MDBX_NOTFOUND))
@@ -23139,8 +23167,11 @@ __cold static int stat_acc(const MDBX_txn *txn, MDBX_stat *st, size_t bytes) {
         const MDBX_node *node = page_node(mp, i);
         if (node_flags(node) != F_SUBDATA)
           continue;
-        if (unlikely(node_ds(node) != sizeof(MDBX_db)))
+        if (unlikely(node_ds(node) != sizeof(MDBX_db))) {
+          ERROR("%s/%d: %s %zu", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+                "invalid subDb node size", node_ds(node));
           return MDBX_CORRUPTED;
+        }
 
         /* skip opened and already accounted */
         const MDBX_val name = {node_key(node), node_ks(node)};
@@ -23242,7 +23273,8 @@ __cold int mdbx_dbi_dupsort_depthmask(const MDBX_txn *txn, MDBX_dbi dbi,
       *mask |= 1 << UNALIGNED_PEEK_16(db, MDBX_db, md_depth);
       break;
     default:
-      ERROR("wrong node-flags %u", flags);
+      ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+            "invalid node-size", flags);
       return MDBX_CORRUPTED;
     }
     rc = cursor_next(&cx.outer, &key, &data, MDBX_NEXT_NODUP);
@@ -23788,8 +23820,11 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi,
                                 cx.outer.mc_ki[cx.outer.mc_top]);
     if (unlikely((node_flags(node) & (F_DUPDATA | F_SUBDATA)) != F_SUBDATA))
       return MDBX_INCOMPATIBLE;
-    if (!MDBX_DISABLE_VALIDATION && unlikely(body.iov_len != sizeof(MDBX_db)))
+    if (!MDBX_DISABLE_VALIDATION && unlikely(body.iov_len != sizeof(MDBX_db))) {
+      ERROR("%s/%d: %s %zu", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+            "invalid subDb node size", body.iov_len);
       return MDBX_CORRUPTED;
+    }
     memcpy(&txn->mt_dbs[slot], body.iov_base, sizeof(MDBX_db));
   }
 
@@ -24850,8 +24885,9 @@ __cold static int walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
     } break;
 
     case F_SUBDATA /* sub-db */: {
-      const size_t namelen = node_key_size;
-      if (unlikely(namelen == 0 || node_data_size != sizeof(MDBX_db))) {
+      if (unlikely(node_data_size != sizeof(MDBX_db))) {
+        ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+              "invalid subDb node size", (unsigned)node_data_size);
         assert(err == MDBX_CORRUPTED);
         err = MDBX_CORRUPTED;
       }
@@ -24861,6 +24897,8 @@ __cold static int walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
 
     case F_SUBDATA | F_DUPDATA /* dupsorted sub-tree */:
       if (unlikely(node_data_size != sizeof(MDBX_db))) {
+        ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+              "invalid sub-tree node size", (unsigned)node_data_size);
         assert(err == MDBX_CORRUPTED);
         err = MDBX_CORRUPTED;
       }
@@ -24870,6 +24908,8 @@ __cold static int walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
 
     case F_DUPDATA /* short sub-page */: {
       if (unlikely(node_data_size <= PAGEHDRSZ || (node_data_size & 1))) {
+        ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+              "invalid sub-page node size", (unsigned)node_data_size);
         assert(err == MDBX_CORRUPTED);
         err = MDBX_CORRUPTED;
         break;
@@ -24892,6 +24932,8 @@ __cold static int walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
         subtype = MDBX_subpage_dupfixed_leaf;
         break;
       default:
+        ERROR("%s/%d: %s 0x%x", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+              "invalid sub-page flags", sp->mp_flags);
         assert(err == MDBX_CORRUPTED);
         subtype = MDBX_subpage_broken;
         err = MDBX_CORRUPTED;
@@ -24909,6 +24951,8 @@ __cold static int walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
           subpayload_size += subnode_size;
           subalign_bytes += subnode_size & 1;
           if (unlikely(node_flags(subnode) != 0)) {
+            ERROR("%s/%d: %s 0x%x", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+                  "unexpected sub-node flags", node_flags(subnode));
             assert(err == MDBX_CORRUPTED);
             err = MDBX_CORRUPTED;
           }
@@ -24928,6 +24972,8 @@ __cold static int walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
     } break;
 
     default:
+      ERROR("%s/%d: %s 0x%x", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+            "invalid node flags", node_flags(node));
       assert(err == MDBX_CORRUPTED);
       err = MDBX_CORRUPTED;
     }
@@ -24962,6 +25008,8 @@ __cold static int walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
 
     case F_SUBDATA /* sub-db */:
       if (unlikely(node_ds(node) != sizeof(MDBX_db))) {
+        ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+              "invalid sub-tree node size", (unsigned)node_ds(node));
         assert(err == MDBX_CORRUPTED);
         err = MDBX_CORRUPTED;
       } else {
@@ -24976,8 +25024,14 @@ __cold static int walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
       break;
 
     case F_SUBDATA | F_DUPDATA /* dupsorted sub-tree */:
-      if (unlikely(node_ds(node) != sizeof(MDBX_db) ||
-                   ctx->mw_cursor->mc_xcursor == NULL)) {
+      if (unlikely(node_ds(node) != sizeof(MDBX_db))) {
+        ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+              "invalid dupsort sub-tree node size", (unsigned)node_ds(node));
+        assert(err == MDBX_CORRUPTED);
+        err = MDBX_CORRUPTED;
+      } else if (unlikely(!ctx->mw_cursor->mc_xcursor)) {
+        ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+              "unexpected dupsort sub-tree node for non-dupsort subDB");
         assert(err == MDBX_CORRUPTED);
         err = MDBX_CORRUPTED;
       } else {
@@ -28558,9 +28612,16 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
     if (unlikely(usr->result.backed_pages < NUM_METAS))
       chk_scope_issue(inner, "backed-pages %zu < %u", usr->result.backed_pages,
                       NUM_METAS);
-    if (unlikely(usr->result.backed_pages < NUM_METAS ||
-                 dxbfile_pages < NUM_METAS))
+    if (unlikely(usr->result.backed_pages < NUM_METAS)) {
+      chk_scope_issue(inner, "backed-pages %zu < num-metas %u",
+                      usr->result.backed_pages, NUM_METAS);
       return MDBX_CORRUPTED;
+    }
+    if (unlikely(dxbfile_pages < NUM_METAS)) {
+      chk_scope_issue(inner, "backed-pages %zu < num-metas %u",
+                      usr->result.backed_pages, NUM_METAS);
+      return MDBX_CORRUPTED;
+    }
     if (unlikely(usr->result.backed_pages > (size_t)MAX_PAGENO + 1)) {
       chk_scope_issue(inner, "backed-pages %zu > max-pages %zu",
                       usr->result.backed_pages, (size_t)MAX_PAGENO + 1);
