@@ -97,7 +97,8 @@
 #include <vector>
 
 #define MDBX_INTERNAL_FUNC
-#define MDBX_INTERNAL_VAR extern
+#define MDBX_INTERNAL_VAR_PROTO extern
+#define MDBX_INTERNAL_VAR_INSTA
 #define xMDBX_TOOLS /* Avoid using internal eASSERT() */
 #include "../mdbx.h++"
 #include "../src/base.h"

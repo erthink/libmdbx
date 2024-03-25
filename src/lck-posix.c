@@ -27,10 +27,9 @@
 
 #include <sys/utsname.h>
 
-#ifndef xMDBX_ALLOY
-uint32_t linux_kernel_version;
-bool mdbx_RunningOnWSL1;
-#endif /* xMDBX_ALLOY */
+MDBX_INTERNAL_VAR_INSTA uint32_t linux_kernel_version;
+MDBX_INTERNAL_VAR_INSTA bool
+    mdbx_RunningOnWSL1 /* Windows Subsystem 1 for Linux */;
 
 MDBX_EXCLUDE_FOR_GPROF
 __cold static uint8_t probe_for_WSL(const char *tag) {
@@ -170,7 +169,7 @@ mdbx_global_destructor(void) {
 static int op_setlk, op_setlkw, op_getlk;
 __cold static void choice_fcntl(void) {
   assert(!op_setlk && !op_setlkw && !op_getlk);
-  if ((runtime_flags & MDBX_DBG_LEGACY_MULTIOPEN) == 0
+  if ((mdbx_static.flags & MDBX_DBG_LEGACY_MULTIOPEN) == 0
 #if defined(__linux__) || defined(__gnu_linux__)
       && linux_kernel_version >
              0x030f0000 /* OFD locks are available since 3.15, but engages here

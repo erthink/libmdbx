@@ -244,7 +244,7 @@ MDBX_NORETURN __cold void assert_fail(const char *msg, const char *func,
                                       unsigned line) {
 #endif /* MDBX_DEBUG */
 
-  if (debug_logger)
+  if (mdbx_static.logger)
     debug_log(MDBX_LOG_FATAL, func, line, "assert: %s\n", msg);
   else {
 #if defined(_WIN32) || defined(_WIN64)
@@ -287,7 +287,7 @@ __cold void mdbx_panic(const char *fmt, ...) {
           ? "<troubles with panic-message preparation>"
           : message;
 
-  if (debug_logger)
+  if (mdbx_static.logger)
     debug_log(MDBX_LOG_FATAL, "panic", 0, "%s", const_message);
 
   while (1) {
@@ -3488,10 +3488,8 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages,
   return MDBX_SUCCESS;
 }
 
-#ifndef xMDBX_ALLOY
-unsigned sys_pagesize;
-MDBX_MAYBE_UNUSED unsigned sys_pagesize_ln2, sys_allocation_granularity;
-#endif /* xMDBX_ALLOY */
+MDBX_INTERNAL_VAR_INSTA unsigned sys_pagesize, sys_pagesize_ln2,
+    sys_allocation_granularity;
 
 void osal_ctor(void) {
 #if MDBX_HAVE_PWRITEV && defined(_SC_IOV_MAX)

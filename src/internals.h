@@ -24,11 +24,13 @@
 #ifdef xMDBX_ALLOY
 /* Amalgamated build */
 #define MDBX_INTERNAL_FUNC static
-#define MDBX_INTERNAL_VAR static
+#define MDBX_INTERNAL_VAR_PROTO static
+#define MDBX_INTERNAL_VAR_INSTA static
 #else
 /* Non-amalgamated build */
 #define MDBX_INTERNAL_FUNC
-#define MDBX_INTERNAL_VAR extern
+#define MDBX_INTERNAL_VAR_PROTO extern
+#define MDBX_INTERNAL_VAR_INSTA
 #endif /* xMDBX_ALLOY */
 
 /*----------------------------------------------------------------------------*/
@@ -242,13 +244,17 @@ extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
 #define MDBX_RUNTIME_FLAGS_INIT                                                \
   ((MDBX_DEBUG) > 0) * MDBX_DBG_ASSERT + ((MDBX_DEBUG) > 1) * MDBX_DBG_AUDIT
 
-extern uint8_t runtime_flags;
-extern uint8_t loglevel;
-extern MDBX_debug_func *debug_logger;
+MDBX_INTERNAL_VAR_PROTO struct mdbx_static {
+  uint8_t flags;
+  uint8_t loglevel;
+  MDBX_debug_func *logger;
+  size_t logger_buffer_size;
+  char *logger_buffer;
+} mdbx_static;
 
 MDBX_MAYBE_UNUSED static __inline void jitter4testing(bool tiny) {
 #if MDBX_DEBUG
-  if (MDBX_DBG_JITTER & runtime_flags)
+  if (MDBX_DBG_JITTER & mdbx_static.flags)
     osal_jitter(tiny);
 #else
   (void)tiny;
@@ -262,17 +268,17 @@ MDBX_INTERNAL_FUNC void debug_log_va(int level, const char *function, int line,
                                      const char *fmt, va_list args);
 
 #if MDBX_DEBUG
-#define LOG_ENABLED(msg) unlikely(msg <= loglevel)
-#define AUDIT_ENABLED() unlikely((runtime_flags & MDBX_DBG_AUDIT))
+#define LOG_ENABLED(msg) unlikely(msg <= mdbx_static.loglevel)
+#define AUDIT_ENABLED() unlikely((mdbx_static.flags & MDBX_DBG_AUDIT))
 #else /* MDBX_DEBUG */
-#define LOG_ENABLED(msg) (msg < MDBX_LOG_VERBOSE && msg <= loglevel)
+#define LOG_ENABLED(msg) (msg < MDBX_LOG_VERBOSE && msg <= mdbx_static.loglevel)
 #define AUDIT_ENABLED() (0)
 #endif /* MDBX_DEBUG */
 
 #if MDBX_FORCE_ASSERTIONS
 #define ASSERT_ENABLED() (1)
 #elif MDBX_DEBUG
-#define ASSERT_ENABLED() likely((runtime_flags & MDBX_DBG_ASSERT))
+#define ASSERT_ENABLED() likely((mdbx_static.flags & MDBX_DBG_ASSERT))
 #else
 #define ASSERT_ENABLED() (0)
 #endif /* assertions */

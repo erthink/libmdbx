@@ -3233,9 +3233,8 @@ static __always_inline int __must_check_result dpl_append(MDBX_txn *txn,
 
 /*----------------------------------------------------------------------------*/
 
-uint8_t runtime_flags = MDBX_RUNTIME_FLAGS_INIT;
-uint8_t loglevel = MDBX_LOG_FATAL;
-MDBX_debug_func *debug_logger;
+MDBX_INTERNAL_VAR_INSTA struct mdbx_static mdbx_static = {
+    MDBX_RUNTIME_FLAGS_INIT, MDBX_LOG_FATAL, nullptr, 0, nullptr};
 
 static __must_check_result __inline int page_retire(MDBX_cursor *mc,
                                                     MDBX_page *mp);
@@ -3588,8 +3587,8 @@ const char *mdbx_strerror_ANSI2OEM(int errnum) {
 
 __cold void debug_log_va(int level, const char *function, int line,
                          const char *fmt, va_list args) {
-  if (debug_logger)
-    debug_logger(level, function, line, fmt, args);
+  if (mdbx_static.logger)
+    mdbx_static.logger(level, function, line, fmt, args);
   else {
 #if defined(_WIN32) || defined(_WIN64)
     if (IsDebuggerPresent()) {
@@ -9243,7 +9242,7 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
       r = thread_rthc_get(env->me_txkey);
       if (likely(r)) {
         if (unlikely(!r->mr_pid.weak) &&
-            (runtime_flags & MDBX_DBG_LEGACY_MULTIOPEN)) {
+            (mdbx_static.flags & MDBX_DBG_LEGACY_MULTIOPEN)) {
           thread_rthc_set(env->me_txkey, nullptr);
           r = nullptr;
         } else {
@@ -9367,7 +9366,7 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
       return MDBX_BUSY;
     MDBX_lockinfo *const lck = env->me_lck_mmap.lck;
     if (lck && (env->me_flags & MDBX_NOTLS) == 0 &&
-        (runtime_flags & MDBX_DBG_LEGACY_OVERLAP) == 0) {
+        (mdbx_static.flags & MDBX_DBG_LEGACY_OVERLAP) == 0) {
       const size_t snap_nreaders =
           atomic_load32(&lck->mti_numreaders, mo_AcquireRelease);
       for (size_t i = 0; i < snap_nreaders; ++i) {
@@ -9772,7 +9771,7 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
   } else if (flags & MDBX_TXN_RDONLY) {
     if (env->me_txn0 &&
         unlikely(env->me_txn0->mt_owner == osal_thread_self()) && env->me_txn &&
-        (runtime_flags & MDBX_DBG_LEGACY_OVERLAP) == 0)
+        (mdbx_static.flags & MDBX_DBG_LEGACY_OVERLAP) == 0)
       return MDBX_TXN_OVERLAPPING;
   } else {
     /* Reuse preallocated write txn. However, do not touch it until
@@ -14339,7 +14338,7 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
     return err;
 #endif /* MADV_DONTDUMP */
 #if defined(MADV_DODUMP)
-  if (runtime_flags & MDBX_DBG_DUMP) {
+  if (mdbx_static.flags & MDBX_DBG_DUMP) {
     const size_t meta_length_aligned2os = pgno_align2os_bytes(env, NUM_METAS);
     err = madvise(env->me_map, meta_length_aligned2os, MADV_DODUMP)
               ? ignore_enosys(errno)
@@ -14589,7 +14588,7 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
                    bytes2pgno(env, used_aligned2os_bytes), mo_Relaxed);
 
     if ((env->me_flags & MDBX_RDONLY) == 0 && env->me_stuck_meta < 0 &&
-        (runtime_flags & MDBX_DBG_DONT_UPGRADE) == 0) {
+        (mdbx_static.flags & MDBX_DBG_DONT_UPGRADE) == 0) {
       for (int n = 0; n < NUM_METAS; ++n) {
         MDBX_meta *const meta = METAPAGE(env, n);
         if (unlikely(unaligned_peek_u64(4, &meta->mm_magic_and_version) !=
@@ -14697,7 +14696,7 @@ __cold static int setup_lck_locked(MDBX_env *env) {
   if (unlikely(MDBX_IS_ERROR(err)))
     return err;
   if (inprocess_neighbor) {
-    if ((runtime_flags & MDBX_DBG_LEGACY_MULTIOPEN) == 0 ||
+    if ((mdbx_static.flags & MDBX_DBG_LEGACY_MULTIOPEN) == 0 ||
         (inprocess_neighbor->me_flags & MDBX_EXCLUSIVE) != 0)
       return MDBX_BUSY;
     if (lck_seize_rc == MDBX_RESULT_TRUE) {
@@ -14929,7 +14928,7 @@ __cold static int __must_check_result override_meta(MDBX_env *env,
             target, "pre", constmeta_txnid(shape));
       return MDBX_PROBLEM;
     }
-    if (runtime_flags & MDBX_DBG_DONT_UPGRADE)
+    if (mdbx_static.flags & MDBX_DBG_DONT_UPGRADE)
       memcpy(&model->mm_magic_and_version, &shape->mm_magic_and_version,
              sizeof(model->mm_magic_and_version));
     model->mm_extra_flags = shape->mm_extra_flags;
@@ -24624,10 +24623,10 @@ __cold MDBX_INTERNAL_FUNC int cleanup_dead_readers(MDBX_env *env,
 
 __cold int mdbx_setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags,
                             MDBX_debug_func *logger) {
-  const int rc = runtime_flags | (loglevel << 16);
+  const int rc = mdbx_static.flags | (mdbx_static.loglevel << 16);
 
   if (level != MDBX_LOG_DONTCHANGE)
-    loglevel = (uint8_t)level;
+    mdbx_static.loglevel = (uint8_t)level;
 
   if (flags != MDBX_DBG_DONTCHANGE) {
     flags &=
@@ -24636,11 +24635,11 @@ __cold int mdbx_setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags,
 #endif
         MDBX_DBG_DUMP | MDBX_DBG_LEGACY_MULTIOPEN | MDBX_DBG_LEGACY_OVERLAP |
         MDBX_DBG_DONT_UPGRADE;
-    runtime_flags = (uint8_t)flags;
+    mdbx_static.flags = (uint8_t)flags;
   }
 
   if (logger != MDBX_LOGGER_DONTCHANGE)
-    debug_logger = logger;
+    mdbx_static.logger = logger;
   return rc;
 }
 

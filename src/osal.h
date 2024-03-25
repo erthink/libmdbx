@@ -210,8 +210,8 @@ typedef pthread_mutex_t osal_fastmutex_t;
 /*----------------------------------------------------------------------------*/
 /* OS abstraction layer stuff */
 
-MDBX_INTERNAL_VAR unsigned sys_pagesize;
-MDBX_MAYBE_UNUSED MDBX_INTERNAL_VAR unsigned sys_pagesize_ln2,
+MDBX_INTERNAL_VAR_PROTO unsigned sys_pagesize;
+MDBX_MAYBE_UNUSED MDBX_INTERNAL_VAR_PROTO unsigned sys_pagesize_ln2,
     sys_allocation_granularity;
 
 /* Get the size of a memory page for the system.
@@ -475,8 +475,9 @@ MDBX_MAYBE_UNUSED static __inline void jitter4testing(bool tiny);
 #endif
 
 #if defined(__linux__) || defined(__gnu_linux__)
-MDBX_INTERNAL_VAR uint32_t linux_kernel_version;
-MDBX_INTERNAL_VAR bool mdbx_RunningOnWSL1 /* Windows Subsystem 1 for Linux */;
+MDBX_INTERNAL_VAR_PROTO uint32_t linux_kernel_version;
+MDBX_INTERNAL_VAR_PROTO bool
+    mdbx_RunningOnWSL1 /* Windows Subsystem 1 for Linux */;
 #endif /* Linux */
 
 #ifndef osal_strdup
@@ -763,7 +764,7 @@ MDBX_INTERNAL_FUNC int osal_rpid_check(MDBX_env *env, uint32_t pid);
 MDBX_INTERNAL_FUNC int osal_mb2w(const char *const src, wchar_t **const pdst);
 
 typedef void(WINAPI *osal_srwlock_t_function)(osal_srwlock_t *);
-MDBX_INTERNAL_VAR osal_srwlock_t_function osal_srwlock_Init,
+MDBX_INTERNAL_VAR_PROTO osal_srwlock_t_function osal_srwlock_Init,
     osal_srwlock_AcquireShared, osal_srwlock_ReleaseShared,
     osal_srwlock_AcquireExclusive, osal_srwlock_ReleaseExclusive;
 
@@ -816,7 +817,7 @@ typedef struct _FILE_REMOTE_PROTOCOL_INFO {
 typedef BOOL(WINAPI *MDBX_GetFileInformationByHandleEx)(
     _In_ HANDLE hFile, _In_ FILE_INFO_BY_HANDLE_CLASS FileInformationClass,
     _Out_ LPVOID lpFileInformation, _In_ DWORD dwBufferSize);
-MDBX_INTERNAL_VAR MDBX_GetFileInformationByHandleEx
+MDBX_INTERNAL_VAR_PROTO MDBX_GetFileInformationByHandleEx
     mdbx_GetFileInformationByHandleEx;
 
 typedef BOOL(WINAPI *MDBX_GetVolumeInformationByHandleW)(
@@ -825,19 +826,20 @@ typedef BOOL(WINAPI *MDBX_GetVolumeInformationByHandleW)(
     _Out_opt_ LPDWORD lpMaximumComponentLength,
     _Out_opt_ LPDWORD lpFileSystemFlags,
     _Out_opt_ LPWSTR lpFileSystemNameBuffer, _In_ DWORD nFileSystemNameSize);
-MDBX_INTERNAL_VAR MDBX_GetVolumeInformationByHandleW
+MDBX_INTERNAL_VAR_PROTO MDBX_GetVolumeInformationByHandleW
     mdbx_GetVolumeInformationByHandleW;
 
 typedef DWORD(WINAPI *MDBX_GetFinalPathNameByHandleW)(_In_ HANDLE hFile,
                                                       _Out_ LPWSTR lpszFilePath,
                                                       _In_ DWORD cchFilePath,
                                                       _In_ DWORD dwFlags);
-MDBX_INTERNAL_VAR MDBX_GetFinalPathNameByHandleW mdbx_GetFinalPathNameByHandleW;
+MDBX_INTERNAL_VAR_PROTO MDBX_GetFinalPathNameByHandleW
+    mdbx_GetFinalPathNameByHandleW;
 
 typedef BOOL(WINAPI *MDBX_SetFileInformationByHandle)(
     _In_ HANDLE hFile, _In_ FILE_INFO_BY_HANDLE_CLASS FileInformationClass,
     _Out_ LPVOID lpFileInformation, _In_ DWORD dwBufferSize);
-MDBX_INTERNAL_VAR MDBX_SetFileInformationByHandle
+MDBX_INTERNAL_VAR_PROTO MDBX_SetFileInformationByHandle
     mdbx_SetFileInformationByHandle;
 
 typedef NTSTATUS(NTAPI *MDBX_NtFsControlFile)(
@@ -846,10 +848,10 @@ typedef NTSTATUS(NTAPI *MDBX_NtFsControlFile)(
     OUT PIO_STATUS_BLOCK IoStatusBlock, IN ULONG FsControlCode,
     IN OUT PVOID InputBuffer, IN ULONG InputBufferLength,
     OUT OPTIONAL PVOID OutputBuffer, IN ULONG OutputBufferLength);
-MDBX_INTERNAL_VAR MDBX_NtFsControlFile mdbx_NtFsControlFile;
+MDBX_INTERNAL_VAR_PROTO MDBX_NtFsControlFile mdbx_NtFsControlFile;
 
 typedef uint64_t(WINAPI *MDBX_GetTickCount64)(void);
-MDBX_INTERNAL_VAR MDBX_GetTickCount64 mdbx_GetTickCount64;
+MDBX_INTERNAL_VAR_PROTO MDBX_GetTickCount64 mdbx_GetTickCount64;
 
 #if !defined(_WIN32_WINNT_WIN8) || _WIN32_WINNT < _WIN32_WINNT_WIN8
 typedef struct _WIN32_MEMORY_RANGE_ENTRY {
@@ -861,13 +863,13 @@ typedef struct _WIN32_MEMORY_RANGE_ENTRY {
 typedef BOOL(WINAPI *MDBX_PrefetchVirtualMemory)(
     HANDLE hProcess, ULONG_PTR NumberOfEntries,
     PWIN32_MEMORY_RANGE_ENTRY VirtualAddresses, ULONG Flags);
-MDBX_INTERNAL_VAR MDBX_PrefetchVirtualMemory mdbx_PrefetchVirtualMemory;
+MDBX_INTERNAL_VAR_PROTO MDBX_PrefetchVirtualMemory mdbx_PrefetchVirtualMemory;
 
 typedef enum _SECTION_INHERIT { ViewShare = 1, ViewUnmap = 2 } SECTION_INHERIT;
 
 typedef NTSTATUS(NTAPI *MDBX_NtExtendSection)(IN HANDLE SectionHandle,
                                               IN PLARGE_INTEGER NewSectionSize);
-MDBX_INTERNAL_VAR MDBX_NtExtendSection mdbx_NtExtendSection;
+MDBX_INTERNAL_VAR_PROTO MDBX_NtExtendSection mdbx_NtExtendSection;
 
 static __inline bool mdbx_RunningUnderWine(void) {
   return !mdbx_NtExtendSection;
@@ -877,14 +879,15 @@ typedef LSTATUS(WINAPI *MDBX_RegGetValueA)(HKEY hkey, LPCSTR lpSubKey,
                                            LPCSTR lpValue, DWORD dwFlags,
                                            LPDWORD pdwType, PVOID pvData,
                                            LPDWORD pcbData);
-MDBX_INTERNAL_VAR MDBX_RegGetValueA mdbx_RegGetValueA;
+MDBX_INTERNAL_VAR_PROTO MDBX_RegGetValueA mdbx_RegGetValueA;
 
 NTSYSAPI ULONG RtlRandomEx(PULONG Seed);
 
 typedef BOOL(WINAPI *MDBX_SetFileIoOverlappedRange)(HANDLE FileHandle,
                                                     PUCHAR OverlappedRangeStart,
                                                     ULONG Length);
-MDBX_INTERNAL_VAR MDBX_SetFileIoOverlappedRange mdbx_SetFileIoOverlappedRange;
+MDBX_INTERNAL_VAR_PROTO MDBX_SetFileIoOverlappedRange
+    mdbx_SetFileIoOverlappedRange;
 
 #endif /* Windows */
 
