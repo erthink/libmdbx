@@ -244,10 +244,16 @@ extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
 #define MDBX_RUNTIME_FLAGS_INIT                                                \
   ((MDBX_DEBUG) > 0) * MDBX_DBG_ASSERT + ((MDBX_DEBUG) > 1) * MDBX_DBG_AUDIT
 
+union logger_union {
+  void *ptr;
+  MDBX_debug_func *fmt;
+  MDBX_debug_func_nofmt *nofmt;
+};
+
 MDBX_INTERNAL_VAR_PROTO struct mdbx_static {
   uint8_t flags;
   uint8_t loglevel;
-  MDBX_debug_func *logger;
+  union logger_union logger;
   size_t logger_buffer_size;
   char *logger_buffer;
 } mdbx_static;

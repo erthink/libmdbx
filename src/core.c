@@ -1445,6 +1445,10 @@ __cold void thread_dtor(void *rthc) {
 #endif
 }
 
+MDBX_INTERNAL_VAR_INSTA struct mdbx_static mdbx_static = {
+    MDBX_RUNTIME_FLAGS_INIT, MDBX_LOG_FATAL, {nullptr}, 0, nullptr};
+static osal_fastmutex_t debug_lock;
+
 MDBX_EXCLUDE_FOR_GPROF
 __cold void global_dtor(void) {
   const uint32_t current_pid = osal_getpid();
@@ -1547,6 +1551,7 @@ __cold void global_dtor(void) {
 
   osal_dtor();
   TRACE("<< pid %d\n", current_pid);
+  ENSURE(nullptr, osal_fastmutex_destroy(&debug_lock) == 0);
 }
 
 __cold int rthc_register(MDBX_env *const env) {
@@ -3233,9 +3238,6 @@ static __always_inline int __must_check_result dpl_append(MDBX_txn *txn,
 
 /*----------------------------------------------------------------------------*/
 
-MDBX_INTERNAL_VAR_INSTA struct mdbx_static mdbx_static = {
-    MDBX_RUNTIME_FLAGS_INIT, MDBX_LOG_FATAL, nullptr, 0, nullptr};
-
 static __must_check_result __inline int page_retire(MDBX_cursor *mc,
                                                     MDBX_page *mp);
 
@@ -3587,9 +3589,18 @@ const char *mdbx_strerror_ANSI2OEM(int errnum) {
 
 __cold void debug_log_va(int level, const char *function, int line,
                          const char *fmt, va_list args) {
-  if (mdbx_static.logger)
-    mdbx_static.logger(level, function, line, fmt, args);
-  else {
+  ENSURE(nullptr, osal_fastmutex_acquire(&debug_lock) == 0);
+  if (mdbx_static.logger.ptr) {
+    if (mdbx_static.logger_buffer == nullptr)
+      mdbx_static.logger.fmt(level, function, line, fmt, args);
+    else {
+      const int len = vsnprintf(mdbx_static.logger_buffer,
+                                mdbx_static.logger_buffer_size, fmt, args);
+      if (len > 0)
+        mdbx_static.logger.nofmt(level, function, line,
+                                 mdbx_static.logger_buffer, len);
+    }
+  } else {
 #if defined(_WIN32) || defined(_WIN64)
     if (IsDebuggerPresent()) {
       int prefix_len = 0;
@@ -3622,6 +3633,7 @@ __cold void debug_log_va(int level, const char *function, int line,
     fflush(stderr);
 #endif
   }
+  ENSURE(nullptr, osal_fastmutex_release(&debug_lock) == 0);
 }
 
 __cold void debug_log(int level, const char *function, int line,
@@ -24621,10 +24633,12 @@ __cold MDBX_INTERNAL_FUNC int cleanup_dead_readers(MDBX_env *env,
   return rc;
 }
 
-__cold int mdbx_setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags,
-                            MDBX_debug_func *logger) {
-  const int rc = mdbx_static.flags | (mdbx_static.loglevel << 16);
+__cold static int setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags,
+                              union logger_union logger, char *buffer,
+                              size_t buffer_size) {
+  ENSURE(nullptr, osal_fastmutex_acquire(&debug_lock) == 0);
 
+  const int rc = mdbx_static.flags | (mdbx_static.loglevel << 16);
   if (level != MDBX_LOG_DONTCHANGE)
     mdbx_static.loglevel = (uint8_t)level;
 
@@ -24638,9 +24652,32 @@ __cold int mdbx_setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags,
     mdbx_static.flags = (uint8_t)flags;
   }
 
-  if (logger != MDBX_LOGGER_DONTCHANGE)
-    mdbx_static.logger = logger;
+  assert(MDBX_LOGGER_DONTCHANGE == ((MDBX_debug_func *)(intptr_t)-1));
+  if (logger.ptr != (void *)((intptr_t)-1)) {
+    mdbx_static.logger.ptr = logger.ptr;
+    mdbx_static.logger_buffer = buffer;
+    mdbx_static.logger_buffer_size = buffer_size;
+  }
+
+  ENSURE(nullptr, osal_fastmutex_release(&debug_lock) == 0);
   return rc;
+}
+
+__cold int mdbx_setup_debug_nofmt(MDBX_log_level_t level,
+                                  MDBX_debug_flags_t flags,
+                                  MDBX_debug_func_nofmt *logger, char *buffer,
+                                  size_t buffer_size) {
+  union logger_union thunk;
+  thunk.nofmt =
+      (logger && buffer && buffer_size) ? logger : MDBX_LOGGER_NOFMT_DONTCHANGE;
+  return setup_debug(level, flags, thunk, buffer, buffer_size);
+}
+
+__cold int mdbx_setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags,
+                            MDBX_debug_func *logger) {
+  union logger_union thunk;
+  thunk.fmt = logger;
+  return setup_debug(level, flags, thunk, nullptr, 0);
 }
 
 __cold static txnid_t kick_longlived_readers(MDBX_env *env,
@@ -26761,6 +26798,7 @@ __cold static void rthc_afterfork(void) {
 #endif /* ! Windows */
 
 __cold void global_ctor(void) {
+  ENSURE(nullptr, osal_fastmutex_init(&debug_lock) == 0);
   osal_ctor();
   rthc_limit = RTHC_INITIAL_LIMIT;
   rthc_table = rthc_table_static;

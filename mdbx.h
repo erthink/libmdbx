@@ -1012,6 +1012,7 @@ typedef void MDBX_debug_func(MDBX_log_level_t loglevel, const char *function,
 
 /** \brief The "don't change `logger`" value for mdbx_setup_debug() */
 #define MDBX_LOGGER_DONTCHANGE ((MDBX_debug_func *)(intptr_t)-1)
+#define MDBX_LOGGER_NOFMT_DONTCHANGE ((MDBX_debug_func_nofmt *)(intptr_t)-1)
 
 /** \brief Setup global log-level, debug options and debug logger.
  * \returns The previously `debug_flags` in the 0-15 bits
@@ -1019,6 +1020,17 @@ typedef void MDBX_debug_func(MDBX_log_level_t loglevel, const char *function,
 LIBMDBX_API int mdbx_setup_debug(MDBX_log_level_t log_level,
                                  MDBX_debug_flags_t debug_flags,
                                  MDBX_debug_func *logger);
+
+typedef void MDBX_debug_func_nofmt(MDBX_log_level_t loglevel,
+                                   const char *function, int line,
+                                   const char *msg,
+                                   unsigned length) MDBX_CXX17_NOEXCEPT;
+
+LIBMDBX_API int mdbx_setup_debug_nofmt(MDBX_log_level_t log_level,
+                                       MDBX_debug_flags_t debug_flags,
+                                       MDBX_debug_func_nofmt *logger,
+                                       char *logger_buffer,
+                                       size_t logger_buffer_size);
 
 /** \brief A callback function for most MDBX assert() failures,
  * called before printing the message and aborting.

@@ -244,7 +244,7 @@ MDBX_NORETURN __cold void assert_fail(const char *msg, const char *func,
                                       unsigned line) {
 #endif /* MDBX_DEBUG */
 
-  if (mdbx_static.logger)
+  if (mdbx_static.logger.ptr)
     debug_log(MDBX_LOG_FATAL, func, line, "assert: %s\n", msg);
   else {
 #if defined(_WIN32) || defined(_WIN64)
@@ -287,7 +287,7 @@ __cold void mdbx_panic(const char *fmt, ...) {
           ? "<troubles with panic-message preparation>"
           : message;
 
-  if (mdbx_static.logger)
+  if (mdbx_static.logger.ptr)
     debug_log(MDBX_LOG_FATAL, "panic", 0, "%s", const_message);
 
   while (1) {
