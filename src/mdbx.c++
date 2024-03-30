@@ -1586,6 +1586,29 @@ bool txn::clear_map(const char *name, bool throw_if_absent) {
   }
 }
 
+bool txn::rename_map(const char *old_name, const char *new_name,
+                     bool throw_if_absent) {
+  map_handle map;
+  const int err = ::mdbx_dbi_open(handle_, old_name, MDBX_DB_ACCEDE, &map.dbi);
+  switch (err) {
+  case MDBX_SUCCESS:
+    rename_map(map, new_name);
+    return true;
+  case MDBX_NOTFOUND:
+  case MDBX_BAD_DBI:
+    if (!throw_if_absent)
+      return false;
+    MDBX_CXX17_FALLTHROUGH /* fallthrough */;
+  default:
+    MDBX_CXX20_UNLIKELY error::throw_exception(err);
+  }
+}
+
+bool txn::rename_map(const ::std::string &old_name,
+                     const ::std::string &new_name, bool throw_if_absent) {
+  return rename_map(old_name.c_str(), new_name.c_str(), throw_if_absent);
+}
+
 //------------------------------------------------------------------------------
 
 void cursor_managed::close() {

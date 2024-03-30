@@ -4338,6 +4338,21 @@ public:
   inline bool clear_map(const ::std::string &name,
                         bool throw_if_absent = false);
 
+  /// \brief Переименовывает таблицу ключ-значение.
+  inline void rename_map(map_handle map, const char *new_name);
+  /// \brief Переименовывает таблицу ключ-значение.
+  inline void rename_map(map_handle map, const ::std::string &new_name);
+  /// \brief Переименовывает таблицу ключ-значение.
+  /// \return `True` если таблица существует и была переименована, либо
+  /// `false` в случае отсутствия исходной таблицы.
+  bool rename_map(const char *old_name, const char *new_name,
+                  bool throw_if_absent = false);
+  /// \brief Переименовывает таблицу ключ-значение.
+  /// \return `True` если таблица существует и была переименована, либо
+  /// `false` в случае отсутствия исходной таблицы.
+  bool rename_map(const ::std::string &old_name, const ::std::string &new_name,
+                  bool throw_if_absent = false);
+
   using map_stat = ::MDBX_stat;
   /// \brief Returns statistics for a sub-database.
   inline map_stat get_map_stat(map_handle map) const;
@@ -6317,6 +6332,14 @@ inline void txn::clear_map(map_handle map) {
 
 inline bool txn::clear_map(const ::std::string &name, bool throw_if_absent) {
   return clear_map(name.c_str(), throw_if_absent);
+}
+
+inline void txn::rename_map(map_handle map, const char *new_name) {
+  error::success_or_throw(::mdbx_dbi_rename(handle_, map, new_name));
+}
+
+inline void txn::rename_map(map_handle map, const ::std::string &new_name) {
+  return rename_map(map, new_name.c_str());
 }
 
 inline txn::map_stat txn::get_map_stat(map_handle map) const {
