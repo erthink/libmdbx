@@ -1283,7 +1283,7 @@ bool env::is_pristine() const {
 
 bool env::is_empty() const { return get_stat().ms_leaf_pages == 0; }
 
-env &env::copy(filehandle fd, bool compactify, bool force_dynamic_size) {
+__cold env &env::copy(filehandle fd, bool compactify, bool force_dynamic_size) {
   error::success_or_throw(
       ::mdbx_env_copy2fd(handle_, fd,
                          (compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
@@ -1292,8 +1292,8 @@ env &env::copy(filehandle fd, bool compactify, bool force_dynamic_size) {
   return *this;
 }
 
-env &env::copy(const char *destination, bool compactify,
-               bool force_dynamic_size) {
+__cold env &env::copy(const char *destination, bool compactify,
+                      bool force_dynamic_size) {
   error::success_or_throw(
       ::mdbx_env_copy(handle_, destination,
                       (compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
@@ -1302,14 +1302,14 @@ env &env::copy(const char *destination, bool compactify,
   return *this;
 }
 
-env &env::copy(const ::std::string &destination, bool compactify,
-               bool force_dynamic_size) {
+__cold env &env::copy(const ::std::string &destination, bool compactify,
+                      bool force_dynamic_size) {
   return copy(destination.c_str(), compactify, force_dynamic_size);
 }
 
 #if defined(_WIN32) || defined(_WIN64)
-env &env::copy(const wchar_t *destination, bool compactify,
-               bool force_dynamic_size) {
+__cold env &env::copy(const wchar_t *destination, bool compactify,
+                      bool force_dynamic_size) {
   error::success_or_throw(
       ::mdbx_env_copyW(handle_, destination,
                        (compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
@@ -1325,13 +1325,13 @@ env &env::copy(const ::std::wstring &destination, bool compactify,
 #endif /* Windows */
 
 #ifdef MDBX_STD_FILESYSTEM_PATH
-env &env::copy(const MDBX_STD_FILESYSTEM_PATH &destination, bool compactify,
-               bool force_dynamic_size) {
+__cold env &env::copy(const MDBX_STD_FILESYSTEM_PATH &destination,
+                      bool compactify, bool force_dynamic_size) {
   return copy(destination.native(), compactify, force_dynamic_size);
 }
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 
-path env::get_path() const {
+__cold path env::get_path() const {
 #if defined(_WIN32) || defined(_WIN64)
   const wchar_t *c_wstr;
   error::success_or_throw(::mdbx_env_get_pathW(handle_, &c_wstr));
@@ -1345,29 +1345,30 @@ path env::get_path() const {
 #endif
 }
 
-bool env::remove(const char *pathname, const remove_mode mode) {
+__cold bool env::remove(const char *pathname, const remove_mode mode) {
   return error::boolean_or_throw(
       ::mdbx_env_delete(pathname, MDBX_env_delete_mode_t(mode)));
 }
 
-bool env::remove(const ::std::string &pathname, const remove_mode mode) {
+__cold bool env::remove(const ::std::string &pathname, const remove_mode mode) {
   return remove(pathname.c_str(), mode);
 }
 
 #if defined(_WIN32) || defined(_WIN64)
-bool env::remove(const wchar_t *pathname, const remove_mode mode) {
+__cold bool env::remove(const wchar_t *pathname, const remove_mode mode) {
   return error::boolean_or_throw(
       ::mdbx_env_deleteW(pathname, MDBX_env_delete_mode_t(mode)));
 }
 
-bool env::remove(const ::std::wstring &pathname, const remove_mode mode) {
+__cold bool env::remove(const ::std::wstring &pathname,
+                        const remove_mode mode) {
   return remove(pathname.c_str(), mode);
 }
 #endif /* Windows */
 
 #ifdef MDBX_STD_FILESYSTEM_PATH
-bool env::remove(const MDBX_STD_FILESYSTEM_PATH &pathname,
-                 const remove_mode mode) {
+__cold bool env::remove(const MDBX_STD_FILESYSTEM_PATH &pathname,
+                        const remove_mode mode) {
   return remove(pathname.native(), mode);
 }
 #endif /* MDBX_STD_FILESYSTEM_PATH */
@@ -1381,13 +1382,13 @@ static inline MDBX_env *create_env() {
   return ptr;
 }
 
-env_managed::~env_managed() noexcept {
+__cold env_managed::~env_managed() noexcept {
   if (MDBX_UNLIKELY(handle_))
     MDBX_CXX20_UNLIKELY error::success_or_panic(
         ::mdbx_env_close(handle_), "mdbx::~env()", "mdbx_env_close");
 }
 
-void env_managed::close(bool dont_sync) {
+__cold void env_managed::close(bool dont_sync) {
   const error rc =
       static_cast<MDBX_error_t>(::mdbx_env_close_ex(handle_, dont_sync));
   switch (rc.code()) {
@@ -1537,7 +1538,7 @@ void txn_managed::commit(commit_latency *latency) {
 
 //------------------------------------------------------------------------------
 
-bool txn::drop_map(const char *name, bool throw_if_absent) {
+__cold bool txn::drop_map(const char *name, bool throw_if_absent) {
   map_handle map;
   const int err = ::mdbx_dbi_open(handle_, name, MDBX_DB_ACCEDE, &map.dbi);
   switch (err) {
@@ -1554,7 +1555,7 @@ bool txn::drop_map(const char *name, bool throw_if_absent) {
   }
 }
 
-bool txn::clear_map(const char *name, bool throw_if_absent) {
+__cold bool txn::clear_map(const char *name, bool throw_if_absent) {
   map_handle map;
   const int err = ::mdbx_dbi_open(handle_, name, MDBX_DB_ACCEDE, &map.dbi);
   switch (err) {
