@@ -2815,6 +2815,79 @@ public:
     return append_producer(from_base64(data, ignore_spaces));
   }
 
+  buffer &append_u8(uint_fast8_t u8) {
+    if (MDBX_UNLIKELY(tailroom() < 1))
+      MDBX_CXX20_UNLIKELY reserve_tailroom(1);
+    *slice_.byte_ptr() = u8;
+    slice_.iov_len += 1;
+    return *this;
+  }
+
+  buffer &append_byte(uint_fast8_t byte) { return append_u8(byte); }
+
+  buffer &append_u16(uint_fast16_t u16) {
+    if (MDBX_UNLIKELY(tailroom() < 2))
+      MDBX_CXX20_UNLIKELY reserve_tailroom(2);
+    const auto ptr = slice_.byte_ptr();
+    ptr[0] = uint8_t(u16);
+    ptr[1] = uint8_t(u16 >> 8);
+    slice_.iov_len += 2;
+    return *this;
+  }
+
+  buffer &append_u24(uint_fast32_t u24) {
+    if (MDBX_UNLIKELY(tailroom() < 3))
+      MDBX_CXX20_UNLIKELY reserve_tailroom(3);
+    const auto ptr = slice_.byte_ptr();
+    ptr[0] = uint8_t(u24);
+    ptr[1] = uint8_t(u24 >> 8);
+    ptr[2] = uint8_t(u24 >> 16);
+    slice_.iov_len += 3;
+    return *this;
+  }
+
+  buffer &append_u32(uint_fast32_t u32) {
+    if (MDBX_UNLIKELY(tailroom() < 4))
+      MDBX_CXX20_UNLIKELY reserve_tailroom(4);
+    const auto ptr = slice_.byte_ptr();
+    ptr[0] = uint8_t(u32);
+    ptr[1] = uint8_t(u32 >> 8);
+    ptr[2] = uint8_t(u32 >> 16);
+    ptr[3] = uint8_t(u32 >> 24);
+    slice_.iov_len += 4;
+    return *this;
+  }
+
+  buffer &append_u48(uint_fast64_t u48) {
+    if (MDBX_UNLIKELY(tailroom() < 6))
+      MDBX_CXX20_UNLIKELY reserve_tailroom(6);
+    const auto ptr = slice_.byte_ptr();
+    ptr[0] = uint8_t(u48);
+    ptr[1] = uint8_t(u48 >> 8);
+    ptr[2] = uint8_t(u48 >> 16);
+    ptr[3] = uint8_t(u48 >> 24);
+    ptr[4] = uint8_t(u48 >> 32);
+    ptr[5] = uint8_t(u48 >> 40);
+    slice_.iov_len += 6;
+    return *this;
+  }
+
+  buffer &append_u64(uint_fast64_t u64) {
+    if (MDBX_UNLIKELY(tailroom() < 8))
+      MDBX_CXX20_UNLIKELY reserve_tailroom(8);
+    const auto ptr = slice_.byte_ptr();
+    ptr[0] = uint8_t(u64);
+    ptr[1] = uint8_t(u64 >> 8);
+    ptr[2] = uint8_t(u64 >> 16);
+    ptr[3] = uint8_t(u64 >> 24);
+    ptr[4] = uint8_t(u64 >> 32);
+    ptr[5] = uint8_t(u64 >> 40);
+    ptr[6] = uint8_t(u64 >> 48);
+    ptr[7] = uint8_t(u64 >> 56);
+    slice_.iov_len += 8;
+    return *this;
+  }
+
   //----------------------------------------------------------------------------
 
   template <size_t SIZE>
