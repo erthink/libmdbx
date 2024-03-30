@@ -1907,7 +1907,6 @@ private:
       const size_t old_capacity = bin_.capacity();
       const size_t new_capacity =
           bin::advise_capacity(old_capacity, wanna_capacity);
-      assert(new_capacity >= wanna_capacity);
       if (MDBX_LIKELY(new_capacity == old_capacity))
         MDBX_CXX20_LIKELY {
           assert(bin_.is_inplace() ==
@@ -2073,7 +2072,13 @@ private:
       return *this;
     }
 
-    MDBX_CXX20_CONSTEXPR void clear() { reshape<true>(0, 0, nullptr, 0); }
+    MDBX_CXX20_CONSTEXPR void *clear() {
+      return reshape<true>(0, 0, nullptr, 0);
+    }
+    MDBX_CXX20_CONSTEXPR void *clear_and_reserve(size_t whole_capacity,
+                                                 size_t headroom) {
+      return reshape<false>(whole_capacity, headroom, nullptr, 0);
+    }
     MDBX_CXX20_CONSTEXPR void resize(size_t capacity, size_t headroom,
                                      slice &content) {
       content.iov_base =
@@ -2803,9 +2808,11 @@ public:
   }
 
   /// \brief Clears the contents and storage.
-  void clear() noexcept {
-    slice_.clear();
-    silo_.clear();
+  void clear() noexcept { slice_.assign(silo_.clear(), size_t(0)); }
+
+  /// \brief Clears the contents and reserve storage.
+  void clear_and_reserve(size_t whole_capacity, size_t headroom = 0) noexcept {
+    slice_.assign(silo_.clear_and_reserve(whole_capacity, headroom), size_t(0));
   }
 
   /// \brief Reduces memory usage by freeing unused storage space.
