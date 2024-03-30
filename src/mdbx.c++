@@ -1354,7 +1354,7 @@ __cold path env::get_path() const {
 }
 
 __cold bool env::remove(const char *pathname, const remove_mode mode) {
-  return error::boolean_or_throw(
+  return !error::boolean_or_throw(
       ::mdbx_env_delete(pathname, MDBX_env_delete_mode_t(mode)));
 }
 
@@ -1364,7 +1364,7 @@ __cold bool env::remove(const ::std::string &pathname, const remove_mode mode) {
 
 #if defined(_WIN32) || defined(_WIN64)
 __cold bool env::remove(const wchar_t *pathname, const remove_mode mode) {
-  return error::boolean_or_throw(
+  return !error::boolean_or_throw(
       ::mdbx_env_deleteW(pathname, MDBX_env_delete_mode_t(mode)));
 }
 
