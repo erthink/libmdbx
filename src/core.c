@@ -14865,7 +14865,10 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname,
         err = MDBX_SUCCESS;
     }
 
-    if (err == MDBX_SUCCESS && !(dummy_env->me_flags & MDBX_NOSUBDIR)) {
+    if (err == MDBX_SUCCESS && !(dummy_env->me_flags & MDBX_NOSUBDIR) &&
+        (/* pathname != "." */ pathname[0] != '.' || pathname[1] != 0) &&
+        (/* pathname != ".." */ pathname[0] != '.' || pathname[1] != '.' ||
+         pathname[2] != 0)) {
       err = osal_removedirectory(pathname);
       if (err == MDBX_SUCCESS)
         rc = MDBX_SUCCESS;
