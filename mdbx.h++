@@ -4386,6 +4386,11 @@ public:
       const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
       const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single) const;
 
+  /// \brief Open existing key-value map.
+  inline map_handle open_map_accede(const char *name) const;
+  /// \brief Open existing key-value map.
+  inline map_handle open_map_accede(const ::std::string &name) const;
+
   /// \brief Create new or open existing key-value map.
   inline map_handle
   create_map(const char *name,
@@ -4441,6 +4446,8 @@ public:
       const ::std::string_view &name,
       const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
       const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single) const;
+  /// \brief Open existing key-value map.
+  inline map_handle open_map_accede(const ::std::string_view &name) const;
   /// \brief Create new or open existing key-value map.
   inline map_handle
   create_map(const ::std::string_view &name,
@@ -6405,6 +6412,14 @@ txn::open_map(const char *name, const ::mdbx::key_mode key_mode,
   return map;
 }
 
+inline ::mdbx::map_handle txn::open_map_accede(const char *name) const {
+  ::mdbx::map_handle map;
+  error::success_or_throw(
+      ::mdbx_dbi_open(handle_, name, MDBX_DB_ACCEDE, &map.dbi));
+  assert(map.dbi != 0);
+  return map;
+}
+
 inline ::mdbx::map_handle txn::create_map(const char *name,
                                           const ::mdbx::key_mode key_mode,
                                           const ::mdbx::value_mode value_mode) {
@@ -6443,6 +6458,15 @@ txn::open_map(const ::std::string_view &name, const ::mdbx::key_mode key_mode,
   return map;
 }
 
+inline ::mdbx::map_handle
+txn::open_map_accede(const ::std::string_view &name) const {
+  ::mdbx::map_handle map;
+  error::success_or_throw(
+      ::mdbx_dbi_open2(handle_, ::mdbx::slice(name), MDBX_DB_ACCEDE, &map.dbi));
+  assert(map.dbi != 0);
+  return map;
+}
+
 inline ::mdbx::map_handle txn::create_map(const ::std::string_view &name,
                                           const ::mdbx::key_mode key_mode,
                                           const ::mdbx::value_mode value_mode) {
@@ -6465,6 +6489,11 @@ inline ::mdbx::map_handle
 txn::open_map(const ::std::string &name, const ::mdbx::key_mode key_mode,
               const ::mdbx::value_mode value_mode) const {
   return open_map(::std::string_view(name), key_mode, value_mode);
+}
+
+inline ::mdbx::map_handle
+txn::open_map_accede(const ::std::string &name) const {
+  return open_map_accede(::std::string_view(name));
 }
 
 inline ::mdbx::map_handle txn::create_map(const ::std::string &name,
@@ -6491,6 +6520,11 @@ inline ::mdbx::map_handle
 txn::open_map(const ::std::string &name, const ::mdbx::key_mode key_mode,
               const ::mdbx::value_mode value_mode) const {
   return open_map(name.c_str(), key_mode, value_mode);
+}
+
+inline ::mdbx::map_handle
+txn::open_map_accede(const ::std::string &name) const {
+  return open_map_accede(name.c_str());
 }
 
 inline ::mdbx::map_handle txn::create_map(const ::std::string &name,
