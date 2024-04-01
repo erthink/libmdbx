@@ -842,8 +842,9 @@ MDBX_INTERNAL_FUNC int osal_ipclock_destroy(osal_ipclock_t *ipc);
  * read transactions started by the same thread need no further locking to
  * proceed.
  *
- * If MDBX_NOTLS is set, the slot address is not saved in thread-specific data.
- * No reader table is used if the database is on a read-only filesystem.
+ * If MDBX_NOSTICKYTHREADS is set, the slot address is not saved in
+ * thread-specific data. No reader table is used if the database is on a
+ * read-only filesystem.
  *
  * Since the database uses multi-version concurrency control, readers don't
  * actually need any locking. This table is used to keep track of which
@@ -1786,8 +1787,8 @@ log2n_powerof2(size_t value_uintptr) {
    MDBX_NOMEMINIT | MDBX_COALESCE | MDBX_PAGEPERTURB | MDBX_ACCEDE |           \
    MDBX_VALIDATION)
 #define ENV_CHANGELESS_FLAGS                                                   \
-  (MDBX_NOSUBDIR | MDBX_RDONLY | MDBX_WRITEMAP | MDBX_NOTLS | MDBX_NORDAHEAD | \
-   MDBX_LIFORECLAIM | MDBX_EXCLUSIVE)
+  (MDBX_NOSUBDIR | MDBX_RDONLY | MDBX_WRITEMAP | MDBX_NOSTICKYTHREADS |        \
+   MDBX_NORDAHEAD | MDBX_LIFORECLAIM | MDBX_EXCLUSIVE)
 #define ENV_USABLE_FLAGS (ENV_CHANGEABLE_FLAGS | ENV_CHANGELESS_FLAGS)
 
 #if !defined(__cplusplus) || CONSTEXPR_ENUM_FLAGS_OPERATIONS

@@ -106,7 +106,7 @@ MDBX_NORETURN void usage(void) {
       "    writemap       == MDBX_WRITEMAP\n"
       "    nosync-utterly == MDBX_UTTERLY_NOSYNC\n"
       "    perturb        == MDBX_PAGEPERTURB\n"
-      "    notls          == MDBX_NOTLS\n"
+      "    nostickythreads== MDBX_NOSTICKYTHREADS\n"
       "    nordahead      == MDBX_NORDAHEAD\n"
       "    nomeminit      == MDBX_NOMEMINIT\n"
       "  --random-writemap[=YES|no]    Toggle MDBX_WRITEMAP randomly\n"

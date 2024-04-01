@@ -326,7 +326,7 @@ static int suspend_and_append(mdbx_handle_array_t **array,
 
 MDBX_INTERNAL_FUNC int
 osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
-  eASSERT(env, (env->me_flags & MDBX_NOTLS) == 0);
+  eASSERT(env, (env->me_flags & MDBX_NOSTICKYTHREADS) == 0);
   const uintptr_t CurrentTid = GetCurrentThreadId();
   int rc;
   if (env->me_lck_mmap.lck) {

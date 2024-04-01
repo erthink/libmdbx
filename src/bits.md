@@ -21,7 +21,7 @@ N |   MASK  | ENV       | TXN          | DB       | PUT       | DBI        | NOD
 18|0004 0000|NOMETASYNC |TXN_NOMETASYNC|CREATE    |APPENDDUP  |            |         |          |         |
 19|0008 0000|WRITEMAP   |<=            |          |MULTIPLE   |            |         |          | <=      |
 20|0010 0000|UTTERLY    |              |          |           |            |         |          | <=      |
-21|0020 0000|NOTLS      |<=            |          |           |            |         |          |         |
+21|0020 0000|NOSTICKYTHR|<=            |          |           |            |         |          |         |
 22|0040 0000|EXCLUSIVE  |              |          |           |            |         |          |         |
 23|0080 0000|NORDAHEAD  |              |          |           |            |         |          |         |
 24|0100 0000|NOMEMINIT  |TXN_PREPARE   |          |           |            |         |          |         |

@@ -385,9 +385,9 @@ else
 fi
 
 if [ "$EXTRA" != "no" ]; then
-  options=(writemap lifo notls perturb nomeminit nordahead)
+  options=(writemap lifo nostickythreads perturb nomeminit nordahead)
 else
-  options=(writemap lifo notls)
+  options=(writemap lifo nostickythreads)
 fi
 syncmodes=("" ,+nosync-safe ,+nosync-utterly ,+nometasync)
 function join { local IFS="$1"; shift; echo "$*"; }

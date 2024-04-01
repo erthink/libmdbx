@@ -190,18 +190,20 @@ readers without writer" case.
 
 
 ## One thread - One transaction
-  A thread can only use one transaction at a time, plus any nested
-  read-write transactions in the non-writemap mode. Each transaction
-  belongs to one thread. The \ref MDBX_NOTLS flag changes this for read-only
-  transactions. See below.
+A thread can only use one transaction at a time, plus any nested
+read-write transactions in the non-writemap mode. Each transaction
+belongs to one thread. The \ref MDBX_NOSTICKYTHREADS flag changes this,
+see below.
 
-  Do not start more than one transaction for a one thread. If you think
-  about this, it's really strange to do something with two data snapshots
-  at once, which may be different. MDBX checks and preventing this by
-  returning corresponding error code (\ref MDBX_TXN_OVERLAPPING, \ref MDBX_BAD_RSLOT,
-  \ref MDBX_BUSY) unless you using \ref MDBX_NOTLS option on the environment.
-  Nonetheless, with the `MDBX_NOTLS` option, you must know exactly what you
-  are doing, otherwise you will get deadlocks or reading an alien data.
+Do not start more than one transaction for a one thread. If you think
+about this, it's really strange to do something with two data snapshots
+at once, which may be different. MDBX checks and preventing this by
+returning corresponding error code (\ref MDBX_TXN_OVERLAPPING,
+\ref MDBX_BAD_RSLOT, \ref MDBX_BUSY) unless you using
+\ref MDBX_NOSTICKYTHREADS option on the environment.
+Nonetheless, with the `MDBX_NOSTICKYTHREADS` option, you must know
+exactly what you are doing, otherwise you will get deadlocks or reading
+an alien data.
 
 
 ## Do not open twice

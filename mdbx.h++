@@ -3679,8 +3679,8 @@ public:
 
   /// \brief Operate options.
   struct LIBMDBX_API_TYPE operate_options {
-    /// \copydoc MDBX_NOTLS
-    bool orphan_read_transactions{false};
+    /// \copydoc MDBX_NOSTICKYTHREADS
+    bool no_sticky_threads{false};
     /// \brief Разрешает вложенные транзакции ценой отключения
     /// \ref MDBX_WRITEMAP и увеличением накладных расходов.
     bool nested_write_transactions{false};

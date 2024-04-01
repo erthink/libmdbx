@@ -1216,8 +1216,8 @@ env::operate_parameters::make_flags(bool accede, bool use_subdirectory) const {
     flags |= MDBX_NOSUBDIR;
   if (options.exclusive)
     flags |= MDBX_EXCLUSIVE;
-  if (options.orphan_read_transactions)
-    flags |= MDBX_NOTLS;
+  if (options.no_sticky_threads)
+    flags |= MDBX_NOSTICKYTHREADS;
   if (options.disable_readahead)
     flags |= MDBX_NORDAHEAD;
   if (options.disable_clear_memory)
@@ -1275,9 +1275,10 @@ env::reclaiming_options::reclaiming_options(MDBX_env_flags_t flags) noexcept
       coalesce((flags & MDBX_COALESCE) ? true : false) {}
 
 env::operate_options::operate_options(MDBX_env_flags_t flags) noexcept
-    : orphan_read_transactions(
-          ((flags & (MDBX_NOTLS | MDBX_EXCLUSIVE)) == MDBX_NOTLS) ? true
-                                                                  : false),
+    : no_sticky_threads(((flags & (MDBX_NOSTICKYTHREADS | MDBX_EXCLUSIVE)) ==
+                         MDBX_NOSTICKYTHREADS)
+                            ? true
+                            : false),
       nested_write_transactions((flags & (MDBX_WRITEMAP | MDBX_RDONLY)) ? false
                                                                         : true),
       exclusive((flags & MDBX_EXCLUSIVE) ? true : false),
@@ -1831,8 +1832,8 @@ __cold ::std::ostream &operator<<(::std::ostream &out,
   static const char comma[] = ", ";
   const char *delimiter = "";
   out << "{";
-  if (it.orphan_read_transactions) {
-    out << delimiter << "orphan_read_transactions";
+  if (it.no_sticky_threads) {
+    out << delimiter << "no_sticky_threads";
     delimiter = comma;
   }
   if (it.nested_write_transactions) {
