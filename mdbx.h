@@ -5541,13 +5541,11 @@ mdbx_cursor_on_first_dup(const MDBX_cursor *cursor);
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_cursor_on_last(const MDBX_cursor *cursor);
 
-/** \brief Определяет стоит ли курсор на последнем или единственном мульти-значении
- * соответствующем ключу.
- * \ingroup c_cursors
- * \param [in] cursor    Курсор созданный посредством \ref mdbx_cursor_open().
- * \returns Значание \ref MDBX_RESULT_TRUE, либо \ref MDBX_RESULT_FALSE,
- *          иначе код ошибки.
- * \retval MDBX_RESULT_TRUE   курсор установлен на последнем или единственном
+/** \brief Определяет стоит ли курсор на последнем или единственном
+ * мульти-значении соответствующем ключу. \ingroup c_cursors \param [in] cursor
+ * Курсор созданный посредством \ref mdbx_cursor_open(). \returns Значание \ref
+ * MDBX_RESULT_TRUE, либо \ref MDBX_RESULT_FALSE, иначе код ошибки. \retval
+ * MDBX_RESULT_TRUE   курсор установлен на последнем или единственном
  *                            мульти-значении соответствующем ключу.
  * \retval MDBX_RESULT_FALSE  курсор НЕ установлен на последнем или единственном
  *                            мульти-значении соответствующем ключу.
@@ -6073,7 +6071,9 @@ LIBMDBX_API int mdbx_preopen_snapinfoW(const wchar_t *pathname,
                                        MDBX_envinfo *info, size_t bytes);
 #endif /* Windows */
 
-/** \brief Флаги/опции для проверки целостности БД.
+/** \brief Флаги/опции для проверки целостности базы данных.
+ * \note Данный API еще не зафиксирован, в последующих версиях могут быть
+ * незначительные доработки и изменения.
  * \see mdbx_env_chk() */
 enum MDBX_chk_flags_t {
   /** Режим проверки по-умолчанию, в том числе в режиме только-чтения. */
@@ -6102,7 +6102,7 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_chk_flags_t)
 #endif
 
 /** \brief Уровни логирование/детализации информации,
- * поставляемой через обратные вызовы при проверке целостности БД.
+ * поставляемой через обратные вызовы при проверке целостности базы данных.
  * \see mdbx_env_chk() */
 enum MDBX_chk_severity {
   MDBX_chk_severity_prio_shift = 4,
@@ -6121,7 +6121,7 @@ enum MDBX_chk_severity {
 };
 
 /** \brief Стадии проверки,
- * сообщаемые через обратные вызовы при проверке целостности БД.
+ * сообщаемые через обратные вызовы при проверке целостности базы данных.
  * \see mdbx_env_chk() */
 enum MDBX_chk_stage {
   MDBX_chk_none,
@@ -6138,15 +6138,15 @@ enum MDBX_chk_stage {
   MDBX_chk_finalize
 };
 
-/** \brief Виртуальная строка отчета, формируемого при проверке целостности БД.
- * \see mdbx_env_chk() */
+/** \brief Виртуальная строка отчета, формируемого при проверке целостности базы
+ * данных. \see mdbx_env_chk() */
 typedef struct MDBX_chk_line {
   struct MDBX_chk_context *ctx;
   uint8_t severity, scope_depth, empty;
   char *begin, *end, *out;
 } MDBX_chk_line_t;
 
-/** \brief Проблема обнаруженная при проверке целостности БД.
+/** \brief Проблема обнаруженная при проверке целостности базы данных.
  * \see mdbx_env_chk() */
 typedef struct MDBX_chk_issue {
   struct MDBX_chk_issue *next;
@@ -6154,7 +6154,7 @@ typedef struct MDBX_chk_issue {
   const char *caption;
 } MDBX_chk_issue_t;
 
-/** \brief Иерархический контекст при проверке целостности БД.
+/** \brief Иерархический контекст при проверке целостности базы данных.
  * \see mdbx_env_chk() */
 typedef struct MDBX_chk_scope {
   MDBX_chk_issue_t *issues;
@@ -6170,8 +6170,8 @@ typedef struct MDBX_chk_scope {
 } MDBX_chk_scope_t;
 
 /** \brief Пользовательский тип для привязки дополнительных данных,
- * связанных с некоторой таблицей ключ-значение, при проверке целостности БД.
- * \see mdbx_env_chk() */
+ * связанных с некоторой таблицей ключ-значение, при проверке целостности базы
+ * данных. \see mdbx_env_chk() */
 typedef struct MDBX_chk_user_subdb_cookie MDBX_chk_user_subdb_cookie_t;
 
 /** \brief Гистограмма с некоторой статистической информацией,
@@ -6185,7 +6185,7 @@ struct MDBX_chk_histogram {
 };
 
 /** \brief Информация о некоторой таблицей ключ-значение,
- * при проверке целостности БД.
+ * при проверке целостности базы данных.
  * \see mdbx_env_chk() */
 typedef struct MDBX_chk_subdb {
   MDBX_chk_user_subdb_cookie_t *cookie;
@@ -6221,7 +6221,7 @@ typedef struct MDBX_chk_subdb {
   } histogram;
 } MDBX_chk_subdb_t;
 
-/** \brief Контекст проверки целостности БД.
+/** \brief Контекст проверки целостности базы данных.
  * \see mdbx_env_chk() */
 typedef struct MDBX_chk_context {
   struct MDBX_chk_internal *internal;
@@ -6245,7 +6245,21 @@ typedef struct MDBX_chk_context {
   } result;
 } MDBX_chk_context_t;
 
-/** FIXME */
+/** \brief Набор функций обратного вызова используемых при проверке целостности
+ * базы данных.
+ *
+ * Функции обратного вызова предназначены для организации взаимодействия с кодом
+ * приложения. В том числе, для интеграции логики приложения проверяющей
+ * целостность стуктуры данных выше уровня ключ-значение, подготовки и
+ * структурированного вывода информации как о ходе, так и результатов проверки.
+ *
+ * Все функции обратного вызова опциональны, неиспользуемые указатели должны
+ * быть установлены в `nullptr`.
+ *
+ * \note Данный API еще не зафиксирован, в последующих версиях могут быть
+ * незначительные доработки и изменения.
+ *
+ * \see mdbx_env_chk() */
 typedef struct MDBX_chk_callbacks {
   bool (*check_break)(MDBX_chk_context_t *ctx);
   int (*scope_push)(MDBX_chk_context_t *ctx, MDBX_chk_scope_t *outer,
@@ -6281,13 +6295,46 @@ typedef struct MDBX_chk_callbacks {
                      const uint64_t value, const char *suffix);
 } MDBX_chk_callbacks_t;
 
-/** FIXME */
+/** \brief Проверяет целостность базы данных.
+ *
+ * Взаимодействие с кодом приложения реализуется через функции обратного вызова,
+ * предоставляемые приложением посредством параметра `cb`. В ходе такого
+ * взаимодействия приложение может контролировать ход проверки, в том числе,
+ * пропускать/фильтровать обработку отдельных элементов, а также реализовать
+ * дополнительную верификацию структуры и/или информации с учетом назначения и
+ * семантической значимости для приложения. Например, приложение может выполнить
+ * проверку собственных индексов и корректность записей в БД. Именно с этой
+ * целью функционал проверки целостности был доработан для интенсивного
+ * использования обратных вызовов и перенесен из утилиты `mdbx_chk` в основную
+ * библиотеку.
+ *
+ * Проверка выполняется в несколько стадий, начиная с инициализации и до
+ * завершения, более подробно см \ref enum MDBX_chk_stage. О начале и завершении
+ * каждой стадии код приложения уведомляется через соответствующие функции
+ * обратного вызова, более подробно см \ref MDBX_chk_callbacks_t.
+ *
+ * \param [in] env        Указатель на экземпляр среды.
+ * \param [in] cb         Набор функций обратного вызова.
+ * \param [in,out] ctx    Контекст проверки целостности базы данных,
+ *                        где будут формироваться результаты проверки.
+ * \param [in] flags      Флаги/опции проверки целостности базы данных.
+ * \param [in] verbosity  Необходимый уровень детализации информации о ходе
+ *                        и результатах проверки.
+ * \param [in] timeout_seconds_16dot16  Ограничение длительности в 1/65536 долях
+ *                        секунды для выполнения проверки,
+ *                        либо 0 при отсутствии ограничения.
+ * \returns Нулевое значение в случае успеха, иначе код ошибки. */
 LIBMDBX_API int mdbx_env_chk(MDBX_env *env, const MDBX_chk_callbacks_t *cb,
                              MDBX_chk_context_t *ctx,
                              const enum MDBX_chk_flags_t flags,
                              enum MDBX_chk_severity verbosity,
                              unsigned timeout_seconds_16dot16);
-/** FIXME */
+
+/** \brief Вспомогательная функция для подсчета проблем детектируемых
+ * приложением, в том числе, поступающим к приложению через логирование.
+ * \see mdbx_env_chk()
+ * \see MDBX_debug_func
+ * \returns Нулевое значение в случае успеха, иначе код ошибки. */
 LIBMDBX_API int mdbx_env_chk_encount_problem(MDBX_chk_context_t *ctx);
 
 /** end of chk @} */
