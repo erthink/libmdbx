@@ -2721,7 +2721,8 @@ typedef struct MDBX_envinfo MDBX_envinfo;
  * \param [in] txn     A transaction handle returned by \ref mdbx_txn_begin()
  * \param [out] info   The address of an \ref MDBX_envinfo structure
  *                     where the information will be copied
- * \param [in] bytes   The size of \ref MDBX_envinfo.
+ * \param [in] bytes   The actual size of \ref MDBX_envinfo,
+ *                     this value is used to provide ABI compatibility.
  *
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
@@ -3016,6 +3017,9 @@ LIBMDBX_INLINE_API(int, mdbx_env_close, (MDBX_env * env)) {
  * Вызов \ref mdbx_env_resurrect_after_fork() без ветвления, не в дочернем
  * процессе, либо повторные вызовы не приводят к каким-либо действиям или
  * изменениям.
+ *
+ * \param [in,out] env   Экземпляр среды созданный функцией
+ *                       \ref mdbx_env_create().
  *
  * \returns Ненулевое значение ошибки при сбое и 0 при успешном выполнении,
  *          некоторые возможные ошибки таковы:
@@ -3410,7 +3414,7 @@ MDBX_DEPRECATED LIBMDBX_INLINE_API(int, mdbx_env_set_mapsize,
  *                         value.
  *
  * \returns A \ref MDBX_RESULT_TRUE or \ref MDBX_RESULT_FALSE value,
- *          otherwise the error code:
+ *          otherwise the error code.
  * \retval MDBX_RESULT_TRUE   Readahead is reasonable.
  * \retval MDBX_RESULT_FALSE  Readahead is NOT reasonable,
  *                            i.e. \ref MDBX_NORDAHEAD is useful to
@@ -4350,6 +4354,7 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a,
  *                               by current thread. */
 LIBMDBX_API int mdbx_dbi_open(MDBX_txn *txn, const char *name,
                               MDBX_db_flags_t flags, MDBX_dbi *dbi);
+/** \copydoc mdbx_dbi_open() */
 LIBMDBX_API int mdbx_dbi_open2(MDBX_txn *txn, const MDBX_val *name,
                                MDBX_db_flags_t flags, MDBX_dbi *dbi);
 
@@ -4371,6 +4376,7 @@ LIBMDBX_API int mdbx_dbi_open2(MDBX_txn *txn, const MDBX_val *name,
 MDBX_DEPRECATED LIBMDBX_API int
 mdbx_dbi_open_ex(MDBX_txn *txn, const char *name, MDBX_db_flags_t flags,
                  MDBX_dbi *dbi, MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp);
+/** \copydoc mdbx_dbi_open_ex() */
 MDBX_DEPRECATED LIBMDBX_API int
 mdbx_dbi_open_ex2(MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags,
                   MDBX_dbi *dbi, MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp);
@@ -4390,6 +4396,7 @@ mdbx_dbi_open_ex2(MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags,
  *
  * \returns Ненулевое значение ошибки при сбое и 0 при успешном выполнении. */
 LIBMDBX_API int mdbx_dbi_rename(MDBX_txn *txn, MDBX_dbi dbi, const char *name);
+/** \copydoc mdbx_dbi_rename() */
 LIBMDBX_API int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi,
                                  const MDBX_val *name);
 
@@ -5491,7 +5498,7 @@ LIBMDBX_API int mdbx_cursor_count(const MDBX_cursor *cursor, size_t *pcount);
  * \param [in] cursor    A cursor handle returned by \ref mdbx_cursor_open().
  *
  * \returns A \ref MDBX_RESULT_TRUE or \ref MDBX_RESULT_FALSE value,
- *          otherwise the error code:
+ *          otherwise the error code.
  * \retval MDBX_RESULT_TRUE    No more data available or cursor not
  *                             positioned
  * \retval MDBX_RESULT_FALSE   A data is available
@@ -5506,15 +5513,15 @@ mdbx_cursor_eof(const MDBX_cursor *cursor);
  * \param [in] cursor    A cursor handle returned by \ref mdbx_cursor_open().
  *
  * \returns A MDBX_RESULT_TRUE or MDBX_RESULT_FALSE value,
- *          otherwise the error code:
+ *          otherwise the error code.
  * \retval MDBX_RESULT_TRUE   Cursor positioned to the first key-value pair
  * \retval MDBX_RESULT_FALSE  Cursor NOT positioned to the first key-value
  * pair \retval Otherwise the error code */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_cursor_on_first(const MDBX_cursor *cursor);
 
-/** \brief Определяет стоит ли курсор на первом или единственном мульти-значении
- * соответствующем ключу.
+/** \brief Определяет стоит ли курсор на первом или единственном
+ * мульти-значении соответствующем ключу.
  * \ingroup c_cursors
  * \param [in] cursor    Курсор созданный посредством \ref mdbx_cursor_open().
  * \returns Значание \ref MDBX_RESULT_TRUE, либо \ref MDBX_RESULT_FALSE,
@@ -5534,7 +5541,7 @@ mdbx_cursor_on_first_dup(const MDBX_cursor *cursor);
  * \param [in] cursor    A cursor handle returned by \ref mdbx_cursor_open().
  *
  * \returns A \ref MDBX_RESULT_TRUE or \ref MDBX_RESULT_FALSE value,
- *          otherwise the error code:
+ *          otherwise the error code.
  * \retval MDBX_RESULT_TRUE   Cursor positioned to the last key-value pair
  * \retval MDBX_RESULT_FALSE  Cursor NOT positioned to the last key-value pair
  * \retval Otherwise the error code */
@@ -5542,10 +5549,12 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_cursor_on_last(const MDBX_cursor *cursor);
 
 /** \brief Определяет стоит ли курсор на последнем или единственном
- * мульти-значении соответствующем ключу. \ingroup c_cursors \param [in] cursor
- * Курсор созданный посредством \ref mdbx_cursor_open(). \returns Значание \ref
- * MDBX_RESULT_TRUE, либо \ref MDBX_RESULT_FALSE, иначе код ошибки. \retval
- * MDBX_RESULT_TRUE   курсор установлен на последнем или единственном
+ * мульти-значении соответствующем ключу.
+ * \ingroup c_cursors
+ * \param [in] cursor    Курсор созданный посредством \ref mdbx_cursor_open().
+ * \returns Значание \ref MDBX_RESULT_TRUE, либо \ref MDBX_RESULT_FALSE,
+ *          иначе код ошибки.
+ * \retval MDBX_RESULT_TRUE   курсор установлен на последнем или единственном
  *                            мульти-значении соответствующем ключу.
  * \retval MDBX_RESULT_FALSE  курсор НЕ установлен на последнем или единственном
  *                            мульти-значении соответствующем ключу.
@@ -5689,7 +5698,7 @@ LIBMDBX_API int mdbx_estimate_range(const MDBX_txn *txn, MDBX_dbi dbi,
  * \param [in] ptr      The address of data to check.
  *
  * \returns A MDBX_RESULT_TRUE or MDBX_RESULT_FALSE value,
- *          otherwise the error code:
+ *          otherwise the error code.
  * \retval MDBX_RESULT_TRUE    Given address is on the dirty page.
  * \retval MDBX_RESULT_FALSE   Given address is NOT on the dirty page.
  * \retval Otherwise the error code. */
