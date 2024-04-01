@@ -196,7 +196,7 @@ static FILE *MDBX_PRINTF_ARGS(2, 3)
 static void logger(MDBX_log_level_t level, const char *function, int line,
                    const char *fmt, va_list args) {
   if (level <= MDBX_LOG_ERROR)
-    mdbx_env_chk_problem(&chk);
+      mdbx_env_chk_encount_problem(&chk);
 
   const unsigned kind = (level > MDBX_LOG_NOTICE)
                             ? level - MDBX_LOG_NOTICE +

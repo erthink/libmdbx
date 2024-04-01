@@ -6288,7 +6288,7 @@ LIBMDBX_API int mdbx_env_chk(MDBX_env *env, const MDBX_chk_callbacks_t *cb,
                              enum MDBX_chk_severity verbosity,
                              unsigned timeout_seconds_16dot16);
 /** FIXME */
-LIBMDBX_API int mdbx_env_chk_problem(MDBX_chk_context_t *ctx);
+LIBMDBX_API int mdbx_env_chk_encount_problem(MDBX_chk_context_t *ctx);
 
 /** end of chk @} */
 

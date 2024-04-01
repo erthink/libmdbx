@@ -27075,7 +27075,7 @@ __cold __must_check_result static MDBX_chk_line_t *
 chk_line_begin(MDBX_chk_scope_t *const scope, enum MDBX_chk_severity severity) {
   MDBX_chk_internal_t *const chk = scope->internal;
   if (severity < MDBX_chk_warning)
-    mdbx_env_chk_problem(chk->usr);
+    mdbx_env_chk_encount_problem(chk->usr);
   MDBX_chk_line_t *line = nullptr;
   if (likely(chk->cb->print_begin)) {
     line = chk->cb->print_begin(chk->usr, severity);
@@ -27270,7 +27270,7 @@ __cold static void MDBX_PRINTF_ARGS(5, 6)
   va_list args;
   va_start(args, extra_fmt);
   if (chk->cb->issue) {
-    mdbx_env_chk_problem(chk->usr);
+    mdbx_env_chk_encount_problem(chk->usr);
     chk->cb->issue(chk->usr, object, entry_number, caption, extra_fmt, args);
   } else {
     MDBX_chk_line_t *line = chk_line_begin(scope, MDBX_chk_error);
@@ -27291,7 +27291,7 @@ __cold static void MDBX_PRINTF_ARGS(2, 3)
   va_list args;
   va_start(args, fmt);
   if (likely(chk->cb->issue)) {
-    mdbx_env_chk_problem(chk->usr);
+    mdbx_env_chk_encount_problem(chk->usr);
     chk->cb->issue(chk->usr, nullptr, 0, nullptr, fmt, args);
   } else
     chk_line_end(
@@ -29025,7 +29025,7 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
                                             nullptr, nullptr));
 }
 
-__cold int mdbx_env_chk_problem(MDBX_chk_context_t *ctx) {
+__cold int mdbx_env_chk_encount_problem(MDBX_chk_context_t *ctx) {
   if (likely(ctx && ctx->internal && ctx->internal->usr == ctx &&
              ctx->internal->problem_counter && ctx->scope)) {
     *ctx->internal->problem_counter += 1;
