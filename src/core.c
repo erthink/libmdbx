@@ -3924,8 +3924,10 @@ static __inline size_t dbi_bitmap_ctz(const MDBX_txn *txn, intptr_t bmi) {
               bitmap_item = TXN->mt_dbi_sparse[0] >> FROM, I = FROM;           \
        I < TXN->mt_numdbs; ++I)                                                \
     if (bitmap_item == 0) {                                                    \
-      I |= bitmap_chunk - 1;                                                   \
+      I = (I - 1) | (bitmap_chunk - 1);                                        \
       bitmap_item = TXN->mt_dbi_sparse[(1 + I) / bitmap_chunk];                \
+      if (!bitmap_item)                                                        \
+        I += bitmap_chunk;                                                     \
       continue;                                                                \
     } else if ((bitmap_item & 1) == 0) {                                       \
       size_t bitmap_skip = dbi_bitmap_ctz(txn, bitmap_item);                   \
