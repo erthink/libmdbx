@@ -354,7 +354,7 @@ static MDBX_CXX20_CONSTEXPR void *memcpy(void *dest, const void *src,
 static MDBX_CXX20_CONSTEXPR int memcmp(const void *a, const void *b,
                                        size_t bytes) noexcept;
 
-/// \brief Legacy default allocator
+/// \brief Legacy allocator
 /// but it is recommended to use \ref polymorphic_allocator.
 using legacy_allocator = ::std::string::allocator_type;
 
@@ -3681,6 +3681,8 @@ public:
   struct LIBMDBX_API_TYPE operate_options {
     /// \copydoc MDBX_NOTLS
     bool orphan_read_transactions{false};
+    /// \brief Разрешает вложенные транзакции ценой отключения
+    /// \ref MDBX_WRITEMAP и увеличением накладных расходов.
     bool nested_write_transactions{false};
     /// \copydoc MDBX_EXCLUSIVE
     bool exclusive{false};
