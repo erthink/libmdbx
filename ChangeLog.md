@@ -66,7 +66,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
    интеграции с легковесными потоками/нитями их мультиплексирования вместе
    с транзакциями по потокам операционной системы.
 
- - TODO: Опция `MDBX_opt_prefer_waf_insteadof_balance`.
+ - Опция `MDBX_opt_prefer_waf_insteadof_balance`.
 
  - TODO: Опции `MDBX_opt_subpage_limit`, `MDBX_opt_subpage_room_threshold`, `MDBX_opt_subpage_reserve_prereq`, `MDBX_opt_subpage_reserve_limit`.
 

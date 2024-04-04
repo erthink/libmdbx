@@ -6487,6 +6487,11 @@ static bool default_prefault_write(const MDBX_env *env) {
          (env->me_flags & (MDBX_WRITEMAP | MDBX_RDONLY)) == MDBX_WRITEMAP;
 }
 
+static bool default_prefer_waf_insteadof_balance(const MDBX_env *env) {
+  (void)env;
+  return false;
+}
+
 static void adjust_defaults(MDBX_env *env) {
   if (!env->me_options.flags.non_auto.rp_augment_limit)
     env->me_options.rp_augment_limit = default_rp_augment_limit(env);
@@ -13692,6 +13697,8 @@ __cold int mdbx_env_create(MDBX_env **penv) {
   env->me_options.spill_parent4child_denominator = 0;
   env->me_options.dp_loose_limit = 64;
   env->me_options.merge_threshold_16dot16_percent = 65536 / 4 /* 25% */;
+  if (default_prefer_waf_insteadof_balance(env))
+    env->me_options.prefer_waf_insteadof_balance = true;
 
 #if !(defined(_WIN32) || defined(_WIN64))
   env->me_options.writethrough_threshold =
@@ -26459,6 +26466,16 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     }
     break;
 
+  case MDBX_opt_prefer_waf_insteadof_balance:
+    if (value == /* default */ UINT64_MAX)
+      env->me_options.prefer_waf_insteadof_balance =
+          default_prefer_waf_insteadof_balance(env);
+    else if (value > 1)
+      err = MDBX_EINVAL;
+    else
+      env->me_options.prefer_waf_insteadof_balance = value != 0;
+    break;
+
   default:
     return MDBX_EINVAL;
   }
@@ -26546,6 +26563,10 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
 
   case MDBX_opt_prefault_write_enable:
     *pvalue = env->me_options.prefault_write;
+    break;
+
+  case MDBX_opt_prefer_waf_insteadof_balance:
+    *pvalue = env->me_options.prefer_waf_insteadof_balance;
     break;
 
   default:

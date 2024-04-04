@@ -2320,14 +2320,14 @@ enum MDBX_option_t {
   MDBX_opt_spill_parent4child_denominator,
 
   /** \brief Controls the in-process threshold of semi-empty pages merge.
-   * \warning This is experimental option and subject for change or removal.
    * \details This option controls the in-process threshold of minimum page
    * fill, as used space of percentage of a page. Neighbour pages emptier than
    * this value are candidates for merging. The threshold value is specified
    * in 1/65536 of percent, which is equivalent to the 16-dot-16 fixed point
    * format. The specified value must be in the range from 12.5% (almost empty)
    * to 50% (half empty) which corresponds to the range from 8192 and to 32768
-   * in units respectively. */
+   * in units respectively.
+   * \see MDBX_opt_prefer_waf_insteadof_balance */
   MDBX_opt_merge_threshold_16dot16_percent,
 
   /** \brief Controls the choosing between use write-through disk writes and
@@ -2388,7 +2388,32 @@ enum MDBX_option_t {
    * С другой стороны, при минимальном значении (включая 0)
    * `MDBX_opt_rp_augment_limit` переработка GC будет ограничиваться
    * преимущественно затраченным временем. */
-  MDBX_opt_gc_time_limit
+  MDBX_opt_gc_time_limit,
+
+  /** \brief Управляет выбором между стремлением к равномерности наполнения
+   * страниц, либо уменьшением количества измененных и записанных страниц.
+   *
+   * \details После операций удаления страницы содержащие меньше минимума
+   * ключей, либо опустошенные до \ref MDBX_opt_merge_threshold_16dot16_percent
+   * подлежат слиянию с одной из соседних. Если страницы справа и слева от
+   * текущей обе «грязные» (были изменены в ходе транзакции и должны быть
+   * записаны на диск), либо обе «чисты» (не изменялись в текущей транзакции),
+   * то целью для слияния всегда выбирается менее заполненная страница.
+   * Когда же только одна из соседствующих является «грязной», а другая
+   * «чистой», то возможны две тактики выбора цели для слияния:
+   *
+   *  - Если `MDBX_opt_prefer_waf_insteadof_balance = True`, то будет выбрана
+   *    уже измененная страница, что НЕ УВЕЛИЧИТ количество измененных страниц
+   *    и объем записи на диск при фиксации текущей транзакции, но в среднем
+   *    будет УВЕЛИЧИВАТЬ неравномерность заполнения страниц.
+   *
+   *  - Если `MDBX_opt_prefer_waf_insteadof_balance = False`, то будет выбрана
+   *    менее заполненная страница, что УВЕЛИЧИТ количество измененных страниц
+   *    и объем записи на диск при фиксации текущей транзакции, но в среднем
+   *    будет УМЕНЬШАТЬ неравномерность заполнения страниц.
+   *
+   * \see MDBX_opt_merge_threshold_16dot16_percent */
+  MDBX_opt_prefer_waf_insteadof_balance
 };
 #ifndef __cplusplus
 /** \ingroup c_settings */
