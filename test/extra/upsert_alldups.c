@@ -62,8 +62,7 @@ int main(int argc, const char *argv[]) {
     errmsg = "failed to mdbx_env_create: %s\n";
     goto Fail;
   }
-  if ((rc = mdbx_env_open(
-           env, ".", MDBX_NOSUBDIR | MDBX_COALESCE | MDBX_LIFORECLAIM, 0644))) {
+  if ((rc = mdbx_env_open(env, ".", MDBX_NOSUBDIR | MDBX_LIFORECLAIM, 0644))) {
     errmsg = "failed to mdbx_env_open: %s\n";
     goto Fail;
   }

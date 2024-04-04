@@ -94,8 +94,8 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "mdbx_env_create: (%d) %s\n", rc, mdbx_strerror(rc));
     goto bailout;
   }
-  rc = mdbx_env_open(env, "./example-db",
-                     MDBX_NOSUBDIR | MDBX_COALESCE | MDBX_LIFORECLAIM, 0664);
+  rc = mdbx_env_open(env, "./example-db", MDBX_NOSUBDIR | MDBX_LIFORECLAIM,
+                     0664);
   if (rc != MDBX_SUCCESS) {
     fprintf(stderr, "mdbx_env_open: (%d) %s\n", rc, mdbx_strerror(rc));
     goto bailout;

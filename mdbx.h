@@ -1327,8 +1327,9 @@ enum MDBX_env_flags_t {
    * This flag may be changed at any time using `mdbx_env_set_flags()`. */
   MDBX_NOMEMINIT = UINT32_C(0x1000000),
 
+#ifndef _MSC_VER /* avoid madness MSVC */
   /** Aims to coalesce a Garbage Collection items.
-   * \note Always enabled since v0.12
+   * \deprecated Always enabled since v0.12 and deprecated since v0.13.
    *
    * With `MDBX_COALESCE` flag MDBX will aims to coalesce items while recycling
    * a Garbage Collection. Technically, when possible short lists of pages
@@ -1338,7 +1339,8 @@ enum MDBX_env_flags_t {
    * Unallocated space and reducing the database file.
    *
    * This flag may be changed at any time using mdbx_env_set_flags(). */
-  MDBX_COALESCE = UINT32_C(0x2000000),
+  MDBX_COALESCE MDBX_DEPRECATED = UINT32_C(0x2000000),
+#endif /* avoid madness MSVC */
 
   /** LIFO policy for recycling a Garbage Collection items.
    *

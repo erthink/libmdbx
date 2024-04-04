@@ -1227,7 +1227,7 @@ env::operate_parameters::make_flags(bool accede, bool use_subdirectory) const {
     if (options.nested_write_transactions)
       flags &= ~MDBX_WRITEMAP;
     if (reclaiming.coalesce)
-      flags |= MDBX_COALESCE;
+      flags |= MDBX_env_flags_t(MDBX_DEPRECATED_COALESCE);
     if (reclaiming.lifo)
       flags |= MDBX_LIFORECLAIM;
     switch (durability) {
@@ -1272,7 +1272,7 @@ env::durability env::operate_parameters::durability_from_flags(
 
 env::reclaiming_options::reclaiming_options(MDBX_env_flags_t flags) noexcept
     : lifo((flags & MDBX_LIFORECLAIM) ? true : false),
-      coalesce((flags & MDBX_COALESCE) ? true : false) {}
+      coalesce((flags & MDBX_DEPRECATED_COALESCE) ? true : false) {}
 
 env::operate_options::operate_options(MDBX_env_flags_t flags) noexcept
     : no_sticky_threads(((flags & (MDBX_NOSTICKYTHREADS | MDBX_EXCLUSIVE)) ==
