@@ -6109,9 +6109,9 @@ LIBMDBX_API int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target_meta);
  *       работы с БД в процессе её открытия (при удержании блокировок).
  *
  * \param [in]  pathname  Путь к директории или файлу БД.
- * \param [out] into      Указатель на структуру \ref MDBX_envinfo
+ * \param [out] info      Указатель на структуру \ref MDBX_envinfo
  *                        для получения информации.
- * \param [int] bytes     Актуальный размер структуры \ref MDBX_envinfo, это
+ * \param [in] bytes      Актуальный размер структуры \ref MDBX_envinfo, это
  *                        значение используется для обеспечения совместимости
  *                        ABI.
  *
@@ -6375,7 +6375,7 @@ typedef struct MDBX_chk_callbacks {
  * библиотеку.
  *
  * Проверка выполняется в несколько стадий, начиная с инициализации и до
- * завершения, более подробно см \ref enum MDBX_chk_stage. О начале и завершении
+ * завершения, более подробно см \ref MDBX_chk_stage. О начале и завершении
  * каждой стадии код приложения уведомляется через соответствующие функции
  * обратного вызова, более подробно см \ref MDBX_chk_callbacks_t.
  *
