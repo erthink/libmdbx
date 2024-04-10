@@ -11940,7 +11940,7 @@ static __inline void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
             }
             ++w;
           }
-        NOTICE("squash to begin for extending-merge %zu -> %zu", d, w - 1);
+        VERBOSE("squash to begin for extending-merge %zu -> %zu", d, w - 1);
         d = w - 1;
         continue;
       }
@@ -11982,7 +11982,7 @@ static __inline void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
             }
             --w;
           }
-        NOTICE("squash to end for shrinking-merge %zu -> %zu", d, w + 1);
+        VERBOSE("squash to end for shrinking-merge %zu -> %zu", d, w + 1);
         d = w + 1;
         continue;
       }
