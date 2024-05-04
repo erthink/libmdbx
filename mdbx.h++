@@ -1734,24 +1734,13 @@ private:
         return capacity_bytes < sizeof(bin);
       }
 
-      enum : byte {
-        /* Little Endian:
-         *   last byte is the most significant byte of u_.allocated.cap,
-         *   so use higher bit of capacity as the inplace-flag */
-        le_lastbyte_mask = 0x80,
-        /* Big Endian:
-         *   last byte is the least significant byte of u_.allocated.cap,
-         *   so use lower bit of capacity as the inplace-flag. */
-        be_lastbyte_mask = 0x01
+      enum : byte { lastbyte_inplace_signature = byte(~0u) };
+      enum : size_t {
+        inplace_signature_limit =
+            size_t(lastbyte_inplace_signature)
+            << (sizeof(size_t /* allocated::capacity_bytes_ */) - 1) * CHAR_BIT
       };
 
-      static constexpr byte inplace_lastbyte_mask() noexcept {
-        static_assert(
-            endian::native == endian::little || endian::native == endian::big,
-            "Only the little-endian or big-endian bytes order are supported");
-        return (endian::native == endian::little) ? le_lastbyte_mask
-                                                  : be_lastbyte_mask;
-      }
       constexpr byte lastbyte() const noexcept {
         return inplace_[sizeof(bin) - 1];
       }
@@ -1760,7 +1749,14 @@ private:
       }
 
       constexpr bool is_inplace() const noexcept {
-        return (lastbyte() & inplace_lastbyte_mask()) != 0;
+        static_assert(size_t(inplace_signature_limit) > size_t(max_capacity),
+                      "WTF?");
+        static_assert(
+            std::numeric_limits<size_t>::max() -
+                    (std::numeric_limits<size_t>::max() >> CHAR_BIT) ==
+                inplace_signature_limit,
+            "WTF?");
+        return lastbyte() == lastbyte_inplace_signature;
       }
       constexpr bool is_allocated() const noexcept { return !is_inplace(); }
 
@@ -1773,8 +1769,8 @@ private:
         }
         if (::std::is_trivial<allocator_pointer>::value)
           /* workaround for "uninitialized" warning from some compilers */
-          ::std::memset(&allocated_.ptr_, 0, sizeof(allocated_.ptr_));
-        lastbyte() = inplace_lastbyte_mask();
+          memset(&allocated_.ptr_, 0, sizeof(allocated_.ptr_));
+        lastbyte() = lastbyte_inplace_signature;
         MDBX_CONSTEXPR_ASSERT(is_inplace() && address() == inplace_ &&
                               is_suitable_for_inplace(capacity()));
         return address();
@@ -1783,11 +1779,7 @@ private:
       template <bool construct_ptr>
       MDBX_CXX17_CONSTEXPR byte *
       make_allocated(allocator_pointer ptr, size_t capacity_bytes) noexcept {
-        MDBX_CONSTEXPR_ASSERT(
-            (capacity_bytes & be_lastbyte_mask) == 0 &&
-            ((capacity_bytes >>
-              (sizeof(allocated_.capacity_bytes_) - 1) * CHAR_BIT) &
-             le_lastbyte_mask) == 0);
+        MDBX_CONSTEXPR_ASSERT(inplace_signature_limit > capacity_bytes);
         if (construct_ptr)
           /* properly construct allocator::pointer */
           new (&allocated_) allocated(ptr, capacity_bytes);
