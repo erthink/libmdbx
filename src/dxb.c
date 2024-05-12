@@ -589,7 +589,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc,
 
     if (!env->geo_in_bytes.now) {
       /* set defaults if not configured */
-      err = mdbx_env_set_geometry(env, 0, -1, DEFAULT_MAPSIZE, -1, -1, -1);
+      err = mdbx_env_set_geometry(env, 0, -1, -1, -1, -1, -1);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
     }

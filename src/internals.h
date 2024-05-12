@@ -494,11 +494,6 @@ struct MDBX_env {
 /* pseudo-error code, not exposed outside libmdbx */
 #define MDBX_NO_ROOT (MDBX_LAST_ADDED_ERRCODE + 33)
 
-/* Default size of memory map.
- * This is certainly too small for any actual applications. Apps should
- * always set the size explicitly using mdbx_env_set_geometry(). */
-#define DEFAULT_MAPSIZE MEGABYTE
-
 /* Number of slots in the reader table.
  * This value was chosen somewhat arbitrarily. The 61 is a prime number,
  * and such readers plus a couple mutexes fit into single 4KB page.
