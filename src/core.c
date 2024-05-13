@@ -12232,6 +12232,22 @@ static int validate_meta(MDBX_env *env, MDBX_meta *const meta,
     return MDBX_RESULT_TRUE;
   }
 
+  if (unlikely(meta->mm_extra_flags != 0)) {
+    WARNING("meta[%u] has unsupported %s 0x%x, skip it", meta_number,
+            "extra-flags", meta->mm_extra_flags);
+    return MDBX_RESULT_TRUE;
+  }
+  if (unlikely(meta->mm_validator_id != 0)) {
+    WARNING("meta[%u] has unsupported %s 0x%x, skip it", meta_number,
+            "validator-id", meta->mm_validator_id);
+    return MDBX_RESULT_TRUE;
+  }
+  if (unlikely(meta->mm_extra_pagehdr != 0)) {
+    WARNING("meta[%u] has unsupported %s 0x%x, skip it", meta_number,
+            "extra-pageheader", meta->mm_extra_pagehdr);
+    return MDBX_RESULT_TRUE;
+  }
+
   /* LY: check signature as a checksum */
   if (META_IS_STEADY(meta) &&
       unlikely(unaligned_peek_u64(4, &meta->mm_sign) != meta_sign(meta))) {
