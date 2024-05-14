@@ -369,16 +369,15 @@ static int badend(void) {
 }
 
 static inline int unhex(unsigned char *c2) {
-  int x, c;
-  x = *c2++ & 0x4f;
-  if (x & 0x40)
-    x -= 55;
-  c = x << 4;
-  x = *c2 & 0x4f;
-  if (x & 0x40)
-    x -= 55;
-  c |= x;
-  return c;
+  int8_t hi = c2[0];
+  hi = (hi | 0x20) - 'a';
+  hi += 10 + ((hi >> 7) & 39);
+
+  int8_t lo = c2[1];
+  lo = (lo | 0x20) - 'a';
+  lo += 10 + ((lo >> 7) & 39);
+
+  return hi << 4 | lo;
 }
 
 __hot static int readline(MDBX_val *out, MDBX_val *buf) {
