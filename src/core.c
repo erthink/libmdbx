@@ -8327,7 +8327,8 @@ static int cursor_shadow(MDBX_txn *parent, MDBX_txn *nested) {
         MDBX_xcursor *mx = mc->mc_xcursor;
         if (mx != NULL) {
           *(MDBX_xcursor *)(bk + 1) = *mx;
-          mx->mx_cursor.mc_txn = nested;
+          mx->mx_cursor.mc_txn = mc->mc_txn;
+          mx->mx_cursor.mc_dbistate = mc->mc_dbistate;
         }
         mc->mc_next = nested->mt_cursors[i];
         nested->mt_cursors[i] = mc;
@@ -8374,11 +8375,8 @@ static void cursors_eot(MDBX_txn *txn, const bool merge) {
           mc->mc_db = bk->mc_db;
           mc->mc_dbistate = bk->mc_dbistate;
           if (mx) {
-            if (mx != bk->mc_xcursor) {
-              *bk->mc_xcursor = *mx;
-              mx = bk->mc_xcursor;
-            }
-            mx->mx_cursor.mc_txn = bk->mc_txn;
+            mx->mx_cursor.mc_txn = mc->mc_txn;
+            mx->mx_cursor.mc_dbistate = mc->mc_dbistate;
           }
         } else {
           /* Restore from backup, i.e. rollback/abort nested txn */
