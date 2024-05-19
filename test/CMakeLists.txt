@@ -1,3 +1,6 @@
+##  Copyright (c) 2020-2024 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
+##  SPDX-License-Identifier: Apache-2.0
+
 enable_language(CXX)
 include(../cmake/compiler.cmake)
 
@@ -37,6 +40,7 @@ if(NOT MDBX_BUILD_CXX)
 endif()
 
 add_executable(mdbx_test ${LIBMDBX_TEST_SOURCES})
+target_compile_definitions(mdbx_test PRIVATE MDBX_BUILD_TEST=1 MDBX_BUILD_CXX=1)
 
 if(MDBX_CXX_STANDARD)
   set_target_properties(mdbx_test PROPERTIES
@@ -46,6 +50,13 @@ endif()
 set_target_properties(mdbx_test PROPERTIES
   INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
 target_setup_options(mdbx_test)
+
+if(NOT MDBX_BUILD_CXX)
+  target_compile_definitions(mdbx_test PRIVATE MDBX_BUILD_CXX=1)
+  if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+    target_compile_definitions(mdbx_test PRIVATE MDBX_WITHOUT_MSVC_CRT=0)
+  endif()
+endif()
 
 if(NOT MDBX_BUILD_CXX AND LIBCXX_FILESYSTEM)
   if(CMAKE_COMPILER_IS_ELBRUSCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 1.25.23
@@ -73,9 +84,9 @@ if(UNIX AND NOT SUBPROJECT)
   target_include_directories(test_extra_upsert_alldups PRIVATE "${PROJECT_SOURCE_DIR}")
   target_link_libraries(test_extra_upsert_alldups ${TOOL_MDBX_LIB})
 
-  add_executable(test_extra_dupfixed_addodd extra/dupfixed_addodd.c)
-  target_include_directories(test_extra_dupfixed_addodd PRIVATE "${PROJECT_SOURCE_DIR}")
-  target_link_libraries(test_extra_dupfixed_addodd ${TOOL_MDBX_LIB})
+  add_executable(test_extra_dupfix_addodd extra/dupfix_addodd.c)
+  target_include_directories(test_extra_dupfix_addodd PRIVATE "${PROJECT_SOURCE_DIR}")
+  target_link_libraries(test_extra_dupfix_addodd ${TOOL_MDBX_LIB})
 
   if(MDBX_BUILD_CXX)
     add_executable(test_extra_maindb_ordinal extra/maindb_ordinal.c++)
@@ -85,11 +96,11 @@ if(UNIX AND NOT SUBPROJECT)
       set_target_properties(test_extra_maindb_ordinal PROPERTIES
         CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
     endif()
-    add_executable(test_extra_dupfixed_multiple extra/dupfixed_multiple.c++)
-    target_include_directories(test_extra_dupfixed_multiple PRIVATE "${PROJECT_SOURCE_DIR}")
-    target_link_libraries(test_extra_dupfixed_multiple ${TOOL_MDBX_LIB})
+    add_executable(test_extra_dupfix_multiple extra/dupfix_multiple.c++)
+    target_include_directories(test_extra_dupfix_multiple PRIVATE "${PROJECT_SOURCE_DIR}")
+    target_link_libraries(test_extra_dupfix_multiple ${TOOL_MDBX_LIB})
     if(MDBX_CXX_STANDARD)
-      set_target_properties(test_extra_dupfixed_multiple PROPERTIES
+      set_target_properties(test_extra_dupfix_multiple PROPERTIES
         CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
     endif()
     add_executable(test_extra_hex_base64_base58 extra/hex_base64_base58.c++)
@@ -187,10 +198,10 @@ else()
 
   if(UNIX AND NOT SUBPROJECT)
     add_test(NAME extra_upsert_alldups COMMAND test_extra_upsert_alldups)
-    add_test(NAME extra_dupfixed_addodd COMMAND test_extra_dupfixed_addodd)
+    add_test(NAME extra_dupfix_addodd COMMAND test_extra_dupfix_addodd)
     if(MDBX_BUILD_CXX)
       add_test(NAME extra_maindb_ordinal COMMAND test_extra_maindb_ordinal)
-      add_test(NAME extra_dupfixed_multiple COMMAND test_extra_dupfixed_multiple)
+      add_test(NAME extra_dupfix_multiple COMMAND test_extra_dupfix_multiple)
       add_test(NAME extra_hex_base64_base58 COMMAND test_extra_hex_base64_base58)
       add_test(NAME extra_doubtless_positioning COMMAND test_extra_doubtless_positioning)
       if (ENABLE_MEMCHECK)

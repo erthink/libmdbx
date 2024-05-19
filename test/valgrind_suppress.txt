@@ -3,7 +3,7 @@
    Memcheck:Param
    msync(start)
    ...
-   fun:sync_locked*
+   fun:dxb_sync_locked*
 }
 {
    msync-whole-mmap-2
@@ -24,7 +24,7 @@
    Memcheck:Param
    msync(start)
    ...
-   fun:wipe_steady*
+   fun:meta_wipe_steady*
 }
 {
    msync-meta

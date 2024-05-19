@@ -1,16 +1,5 @@
-/*
- * Copyright 2017-2024 Leonid Yuriev <leo@yuriev.ru>
- * and other libmdbx authors: please see AUTHORS file.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted only as authorized by the OpenLDAP
- * Public License.
- *
- * A copy of this license is available in the file LICENSE in the
- * top-level directory of the distribution or, alternatively, at
- * <http://www.OpenLDAP.org/license.html>.
- */
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2024
+/// \copyright SPDX-License-Identifier: Apache-2.0
 
 #include "test.h++"
 
@@ -802,15 +791,7 @@ void testcase::speculum_check_cursor(const char *where, const char *stage,
                                      const MDBX_cursor_op op) const {
   MDBX_val cursor_key = {0, 0};
   MDBX_val cursor_data = {0, 0};
-  int err;
-  if (it != speculum.end() && std::next(it) == speculum.end() &&
-      op == MDBX_PREV && (config.params.table_flags & MDBX_DUPSORT)) {
-    /* Workaround for MDBX/LMDB flaw */
-    err = mdbx_cursor_get(cursor, &cursor_key, &cursor_data, MDBX_LAST);
-    if (err == MDBX_SUCCESS)
-      err = mdbx_cursor_get(cursor, &cursor_key, &cursor_data, MDBX_LAST_DUP);
-  } else
-    err = mdbx_cursor_get(cursor, &cursor_key, &cursor_data, op);
+  int err = mdbx_cursor_get(cursor, &cursor_key, &cursor_data, op);
   return speculum_check_cursor(where, stage, it, err, cursor_key, cursor_data);
 }
 
@@ -1265,14 +1246,14 @@ bool testcase::check_batch_get() {
   bool rc = true;
   MDBX_val pairs[42];
   size_t count = 0xDeadBeef;
-  MDBX_cursor_op batch_op;
   batch_err = mdbx_cursor_get_batch(batch_cursor, &count, pairs,
-                                    ARRAY_LENGTH(pairs), batch_op = MDBX_FIRST);
+                                    ARRAY_LENGTH(pairs), MDBX_FIRST);
   size_t i, n = 0;
   while (batch_err == MDBX_SUCCESS || batch_err == MDBX_RESULT_TRUE) {
     for (i = 0; i < count; i += 2) {
       mdbx::slice k, v;
-      check_err = mdbx_cursor_get(check_cursor, &k, &v, MDBX_NEXT);
+      check_err =
+          mdbx_cursor_get(check_cursor, &k, &v, n ? MDBX_NEXT : MDBX_FIRST);
       if (check_err != MDBX_SUCCESS)
         failure_perror("batch-verify: mdbx_cursor_get(MDBX_NEXT)", check_err);
       if (k != pairs[i] || v != pairs[i + 1]) {
@@ -1286,14 +1267,13 @@ bool testcase::check_batch_get() {
                           sizeof(dump_value_batch)));
         rc = false;
       }
+      ++n;
     }
-    n += i / 2;
-    batch_op = (batch_err == MDBX_RESULT_TRUE) ? MDBX_GET_CURRENT : MDBX_NEXT;
     batch_err = mdbx_cursor_get_batch(batch_cursor, &count, pairs,
-                                      ARRAY_LENGTH(pairs), batch_op);
+                                      ARRAY_LENGTH(pairs), MDBX_NEXT);
   }
   if (batch_err != MDBX_NOTFOUND) {
-    log_error("mdbx_cursor_get_batch(), op %u, err %d", batch_op, batch_err);
+    log_error("mdbx_cursor_get_batch(), err %d", batch_err);
     rc = false;
   }
 

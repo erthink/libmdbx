@@ -11,6 +11,9 @@
 #cmakedefine ENABLE_ASAN
 #cmakedefine ENABLE_UBSAN
 #cmakedefine01 MDBX_FORCE_ASSERTIONS
+#if !defined(MDBX_BUILD_TEST) && !defined(MDBX_BUILD_CXX)
+#cmakedefine01 MDBX_BUILD_CXX
+#endif
 
 /* Common */
 #cmakedefine01 MDBX_TXN_CHECKOWNER
@@ -37,7 +40,9 @@
 #cmakedefine01 MDBX_ENABLE_DBI_LOCKFREE
 
 /* Windows */
+#if !defined(MDBX_BUILD_TEST) && !defined(MDBX_WITHOUT_MSVC_CRT)
 #cmakedefine01 MDBX_WITHOUT_MSVC_CRT
+#endif
 
 /* MacOS & iOS */
 #cmakedefine01 MDBX_OSX_SPEED_INSTEADOF_DURABILITY

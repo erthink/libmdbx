@@ -1,11 +1,10 @@
 /**
 
-_libmdbx_ is an extremely fast, compact, powerful, embedded,
+_libmdbx_ (aka MDBX) is an extremely fast, compact, powerful, embeddable,
 transactional [key-value
-store](https://en.wikipedia.org/wiki/Key-value_database) database, with
-[permissive license](./LICENSE). _MDBX_ has a specific set of properties and
-capabilities, focused on creating unique lightweight solutions with
-extraordinary performance.
+store](https://en.wikipedia.org/wiki/Key-value_database), with [Apache 2.0
+license](./LICENSE). _MDBX_ has a specific set of properties and capabilities,
+focused on creating unique lightweight solutions with extraordinary performance.
 
 _libmdbx_ is superior to [LMDB](https://bit.ly/26ts7tL) in terms of features
 and reliability, not inferior in performance. In comparison to LMDB, _libmdbx_
@@ -14,60 +13,24 @@ break down. _libmdbx_ supports Linux, Windows, MacOS, OSX, iOS, Android,
 FreeBSD, DragonFly, Solaris, OpenSolaris, OpenIndiana, NetBSD, OpenBSD and other
 systems compliant with POSIX.1-2008.
 
-The origin has been migrated to
-[GitFlic](https://gitflic.ru/project/erthink/libmdbx) since on 2022-04-15
-the Github administration, without any warning nor explanation, deleted libmdbx
-along with a lot of other projects, simultaneously blocking access for many
-developers. For the same reason ~~Github~~ is blacklisted forever.
+Please visit https://libmdbx.dqdkfa.ru for more information, documentation,
+C++ API description and links to the origin git repo with the source code.
+Questions, feedback and suggestions are welcome to the Telegram' group
+https://t.me/libmdbx.
 
 _The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет хорошо._
 
+\note The origin has been migrated to
+[GitFlic](https://gitflic.ru/project/erthink/libmdbx) since on 2022-04-15 the
+Github administration, without any warning nor explanation, deleted libmdbx
+along with a lot of other projects, simultaneously blocking access for many
+developers. For the same reason ~~Github~~ is blacklisted forever.
 
 \section copyright LICENSE & COPYRIGHT
-
-\authors Copyright (c) 2015-2024, Leonid Yuriev <leo@yuriev.ru>
-and other _libmdbx_ authors: please see [AUTHORS](./AUTHORS) file.
-
-\copyright Redistribution and use in source and binary forms, with or without
-modification, are permitted only as authorized by the OpenLDAP Public License.
-
-A copy of this license is available in the file LICENSE in the
-top-level directory of the distribution or, alternatively, at
-<http://www.OpenLDAP.org/license.html>.
-
- ---
-
-This code is derived from "LMDB engine" written by
-Howard Chu (Symas Corporation), which itself derived from btree.c
-written by Martin Hedenfalk.
-
- ---
-
-Portions Copyright 2011-2015 Howard Chu, Symas Corp. All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted only as authorized by the OpenLDAP
-Public License.
-
-A copy of this license is available in the file LICENSE in the
-top-level directory of the distribution or, alternatively, at
-<http://www.OpenLDAP.org/license.html>.
-
- ---
-
-Portions Copyright (c) 2009, 2010 Martin Hedenfalk <martin@bzero.se>
-
-Permission to use, copy, modify, and distribute this software for any
-purpose with or without fee is hereby granted, provided that the above
-copyright notice and this permission notice appear in all copies.
-
-THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+\copyright SPDX-License-Identifier: Apache-2.0
+\note Please refer to the COPYRIGHT file for explanations license change,
+credits and acknowledgments.
+\author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2024
 
 *******************************************************************************/
 
@@ -98,7 +61,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 /* clang-format off */
 /**
  \file mdbx.h
- \brief The libmdbx C API header file
+ \brief The libmdbx C API header file.
 
  \defgroup c_api C API
  @{
@@ -359,6 +322,14 @@ typedef mode_t mdbx_mode_t;
 #endif
 #endif /* MDBX_DEPRECATED */
 
+#ifndef MDBX_DEPRECATED_ENUM
+#if !defined(DOXYGEN) && (!defined(_MSC_VER) || _MSC_VER >= 1930)
+#define MDBX_DEPRECATED_ENUM MDBX_DEPRECATED
+#else
+#define MDBX_DEPRECATED_ENUM /* avoid madness MSVC */
+#endif
+#endif /* MDBX_DEPRECATED_ENUM */
+
 #ifndef __dll_export
 #if defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__) ||               \
     defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)
@@ -393,7 +364,8 @@ typedef mode_t mdbx_mode_t;
 
 /** \brief Auxiliary macro for robustly define the both inline version of API
  * function and non-inline fallback dll-exported version for applications linked
- * with old version of libmdbx, with a strictly ODR-common implementation. */
+ * with old version of libmdbx, with a strictly ODR-common implementation. Thus,
+ * we emulate __extern_inline for all compilers, including non-GNU ones. */
 #if defined(LIBMDBX_INTERNALS) && !defined(LIBMDBX_NO_EXPORTS_LEGACY_API)
 #define LIBMDBX_INLINE_API(TYPE, NAME, ARGS)                                   \
   /* proto of exported which uses common impl */ LIBMDBX_API TYPE NAME ARGS;   \
@@ -888,7 +860,7 @@ enum MDBX_constants {
 /** Log level
  * \note Levels detailed than (great than) \ref MDBX_LOG_NOTICE
  * requires build libmdbx with \ref MDBX_DEBUG option. */
-enum MDBX_log_level_t {
+typedef enum MDBX_log_level {
   /** Critical conditions, i.e. assertion failures.
    * \note libmdbx always produces such messages regardless
    * of \ref MDBX_DEBUG build option. */
@@ -938,17 +910,14 @@ enum MDBX_log_level_t {
 
   /** for \ref mdbx_setup_debug() only: Don't change current settings */
   MDBX_LOG_DONTCHANGE = -1
-};
-#ifndef __cplusplus
-typedef enum MDBX_log_level_t MDBX_log_level_t;
-#endif
+} MDBX_log_level_t;
 
 /** \brief Runtime debug flags
  *
  * \details `MDBX_DBG_DUMP` and `MDBX_DBG_LEGACY_MULTIOPEN` always have an
  * effect, but `MDBX_DBG_ASSERT`, `MDBX_DBG_AUDIT` and `MDBX_DBG_JITTER` only if
  * libmdbx built with \ref MDBX_DEBUG. */
-enum MDBX_debug_flags_t {
+typedef enum MDBX_debug_flags {
   MDBX_DBG_NONE = 0,
 
   /** Enable assertion checks.
@@ -986,12 +955,8 @@ enum MDBX_debug_flags_t {
 
   /** for mdbx_setup_debug() only: Don't change current settings */
   MDBX_DBG_DONTCHANGE = -1
-};
-#ifndef __cplusplus
-typedef enum MDBX_debug_flags_t MDBX_debug_flags_t;
-#else
-DEFINE_ENUM_FLAG_OPERATORS(MDBX_debug_flags_t)
-#endif
+} MDBX_debug_flags_t;
+DEFINE_ENUM_FLAG_OPERATORS(MDBX_debug_flags)
 
 /** \brief A debug-logger callback function,
  * called before printing the message and aborting.
@@ -1086,7 +1051,7 @@ MDBX_NORETURN LIBMDBX_API void mdbx_assert_fail(const MDBX_env *env,
  * \ingroup c_opening
  * \anchor env_flags
  * \see mdbx_env_open() \see mdbx_env_set_flags() */
-enum MDBX_env_flags_t {
+typedef enum MDBX_env_flags {
   MDBX_ENV_DEFAULTS = 0,
 
   /** Extra validation of DB structure and pages content.
@@ -1210,7 +1175,7 @@ enum MDBX_env_flags_t {
 
   /** Отвязывает транзакции от потоков/threads насколько это возможно.
    *
-   * Эта опция предназначена для приложений, которые мультиплексируют множество
+   * Опция предназначена для приложений, которые мультиплексируют множество
    * пользовательских легковесных потоков выполнения по отдельным потокам
    * операционной системы, например как это происходит в средах выполнения
    * GoLang и Rust. Таким приложениям также рекомендуется сериализовать
@@ -1278,10 +1243,9 @@ enum MDBX_env_flags_t {
    * Этот флаг вступает в силу при открытии среды и не может быть изменен после.
    */
   MDBX_NOSTICKYTHREADS = UINT32_C(0x200000),
-#ifndef _MSC_VER /* avoid madness MSVC */
+
   /** \deprecated Please use \ref MDBX_NOSTICKYTHREADS instead. */
-  MDBX_NOTLS MDBX_DEPRECATED = MDBX_NOSTICKYTHREADS,
-#endif /* avoid madness MSVC */
+  MDBX_NOTLS MDBX_DEPRECATED_ENUM = MDBX_NOSTICKYTHREADS,
 
   /** Don't do readahead.
    *
@@ -1327,7 +1291,6 @@ enum MDBX_env_flags_t {
    * This flag may be changed at any time using `mdbx_env_set_flags()`. */
   MDBX_NOMEMINIT = UINT32_C(0x1000000),
 
-#ifndef _MSC_VER /* avoid madness MSVC */
   /** Aims to coalesce a Garbage Collection items.
    * \deprecated Always enabled since v0.12 and deprecated since v0.13.
    *
@@ -1339,8 +1302,7 @@ enum MDBX_env_flags_t {
    * Unallocated space and reducing the database file.
    *
    * This flag may be changed at any time using mdbx_env_set_flags(). */
-  MDBX_COALESCE MDBX_DEPRECATED = UINT32_C(0x2000000),
-#endif /* avoid madness MSVC */
+  MDBX_COALESCE MDBX_DEPRECATED_ENUM = UINT32_C(0x2000000),
 
   /** LIFO policy for recycling a Garbage Collection items.
    *
@@ -1543,19 +1505,14 @@ enum MDBX_env_flags_t {
   MDBX_UTTERLY_NOSYNC = MDBX_SAFE_NOSYNC | UINT32_C(0x100000),
 
   /** end of sync_modes @} */
-};
-#ifndef __cplusplus
-/** \ingroup c_opening */
-typedef enum MDBX_env_flags_t MDBX_env_flags_t;
-#else
-DEFINE_ENUM_FLAG_OPERATORS(MDBX_env_flags_t)
-#endif
+} MDBX_env_flags_t;
+DEFINE_ENUM_FLAG_OPERATORS(MDBX_env_flags)
 
 /** Transaction flags
  * \ingroup c_transactions
  * \anchor txn_flags
  * \see mdbx_txn_begin() \see mdbx_txn_flags() */
-enum MDBX_txn_flags_t {
+typedef enum MDBX_txn_flags {
   /** Start read-write transaction.
    *
    * Only one write transaction may be active at a time. Writes are fully
@@ -1627,18 +1584,14 @@ enum MDBX_txn_flags_t {
    * \note Transaction state flag. Returned from \ref mdbx_txn_flags()
    * but can't be used with \ref mdbx_txn_begin(). */
   MDBX_TXN_BLOCKED = MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_HAS_CHILD
-};
-#ifndef __cplusplus
-typedef enum MDBX_txn_flags_t MDBX_txn_flags_t;
-#else
-DEFINE_ENUM_FLAG_OPERATORS(MDBX_txn_flags_t)
-#endif
+} MDBX_txn_flags_t;
+DEFINE_ENUM_FLAG_OPERATORS(MDBX_txn_flags)
 
 /** \brief Database flags
  * \ingroup c_dbi
  * \anchor db_flags
  * \see mdbx_dbi_open() */
-enum MDBX_db_flags_t {
+typedef enum MDBX_db_flags {
   /** Variable length unique keys with usual byte-by-byte string comparison. */
   MDBX_DB_DEFAULTS = 0,
 
@@ -1681,19 +1634,14 @@ enum MDBX_db_flags_t {
    * sub-database will be opened with flags which it was created, and then an
    * application could determine the actual flags by \ref mdbx_dbi_flags(). */
   MDBX_DB_ACCEDE = MDBX_ACCEDE
-};
-#ifndef __cplusplus
-/** \ingroup c_dbi */
-typedef enum MDBX_db_flags_t MDBX_db_flags_t;
-#else
+} MDBX_db_flags_t;
 DEFINE_ENUM_FLAG_OPERATORS(MDBX_db_flags_t)
-#endif
 
 /** \brief Data changing flags
  * \ingroup c_crud
  * \see \ref c_crud_hints "Quick reference for Insert/Update/Delete operations"
  * \see mdbx_put() \see mdbx_cursor_put() \see mdbx_replace() */
-enum MDBX_put_flags_t {
+typedef enum MDBX_put_flags {
   /** Upsertion by default (without any other flags) */
   MDBX_UPSERT = 0,
 
@@ -1731,18 +1679,13 @@ enum MDBX_put_flags_t {
   /** Only for \ref MDBX_DUPFIXED.
    * Store multiple data items in one call. */
   MDBX_MULTIPLE = UINT32_C(0x80000)
-};
-#ifndef __cplusplus
-/** \ingroup c_crud */
-typedef enum MDBX_put_flags_t MDBX_put_flags_t;
-#else
-DEFINE_ENUM_FLAG_OPERATORS(MDBX_put_flags_t)
-#endif
+} MDBX_put_flags_t;
+DEFINE_ENUM_FLAG_OPERATORS(MDBX_put_flags)
 
 /** \brief Environment copy flags
  * \ingroup c_extra
  * \see mdbx_env_copy() \see mdbx_env_copy2fd() */
-enum MDBX_copy_flags_t {
+typedef enum MDBX_copy_flags {
   MDBX_CP_DEFAULTS = 0,
 
   /** Copy with compactification: Omit free space from copy and renumber all
@@ -1751,19 +1694,14 @@ enum MDBX_copy_flags_t {
 
   /** Force to make resizable copy, i.e. dynamic size instead of fixed */
   MDBX_CP_FORCE_DYNAMIC_SIZE = 2u
-};
-#ifndef __cplusplus
-/** \ingroup c_extra */
-typedef enum MDBX_copy_flags_t MDBX_copy_flags_t;
-#else
-DEFINE_ENUM_FLAG_OPERATORS(MDBX_copy_flags_t)
-#endif
+} MDBX_copy_flags_t;
+DEFINE_ENUM_FLAG_OPERATORS(MDBX_copy_flags)
 
 /** \brief Cursor operations
  * \ingroup c_cursors
  * This is the set of all operations for retrieving data using a cursor.
  * \see mdbx_cursor_get() */
-enum MDBX_cursor_op {
+typedef enum MDBX_cursor_op {
   /** Position at first key/data item */
   MDBX_FIRST,
 
@@ -1875,18 +1813,14 @@ enum MDBX_cursor_op {
   MDBX_TO_PAIR_EQUAL,
   MDBX_TO_PAIR_GREATER_OR_EQUAL,
   MDBX_TO_PAIR_GREATER_THAN
-};
-#ifndef __cplusplus
-/** \ingroup c_cursors */
-typedef enum MDBX_cursor_op MDBX_cursor_op;
-#endif
+} MDBX_cursor_op;
 
 /** \brief Errors and return codes
  * \ingroup c_err
  *
  * BerkeleyDB uses -30800 to -30999, we'll go under them
  * \see mdbx_strerror() \see mdbx_strerror_r() \see mdbx_liberr2str() */
-enum MDBX_error_t {
+typedef enum MDBX_error {
   /** Successful result */
   MDBX_SUCCESS = 0,
 
@@ -2062,11 +1996,7 @@ enum MDBX_error_t {
   MDBX_EREMOTE = ENOTBLK,
   MDBX_EDEADLK = EDEADLK
 #endif /* !Windows */
-};
-#ifndef __cplusplus
-/** \ingroup c_err */
-typedef enum MDBX_error_t MDBX_error_t;
-#endif
+} MDBX_error_t;
 
 /** MDBX_MAP_RESIZED
  * \ingroup c_err
@@ -2158,7 +2088,7 @@ LIBMDBX_API int mdbx_env_create(MDBX_env **penv);
 /** \brief MDBX environment extra runtime options.
  * \ingroup c_settings
  * \see mdbx_env_set_option() \see mdbx_env_get_option() */
-enum MDBX_option_t {
+typedef enum MDBX_option {
   /** \brief Controls the maximum number of named databases for the environment.
    *
    * \details By default only unnamed key-value database could used and
@@ -2323,10 +2253,11 @@ enum MDBX_option_t {
    * \details This option controls the in-process threshold of minimum page
    * fill, as used space of percentage of a page. Neighbour pages emptier than
    * this value are candidates for merging. The threshold value is specified
-   * in 1/65536 of percent, which is equivalent to the 16-dot-16 fixed point
-   * format. The specified value must be in the range from 12.5% (almost empty)
-   * to 50% (half empty) which corresponds to the range from 8192 and to 32768
-   * in units respectively.
+   * in 1/65536 points of a whole page, which is equivalent to the 16-dot-16
+   * fixed point format.
+   * The specified value must be in the range from 12.5% (almost empty page)
+   * to 50% (half empty page) which corresponds to the range from 8192 and
+   * to 32768 in units respectively.
    * \see MDBX_opt_prefer_waf_insteadof_balance */
   MDBX_opt_merge_threshold_16dot16_percent,
 
@@ -2414,11 +2345,7 @@ enum MDBX_option_t {
    *
    * \see MDBX_opt_merge_threshold_16dot16_percent */
   MDBX_opt_prefer_waf_insteadof_balance
-};
-#ifndef __cplusplus
-/** \ingroup c_settings */
-typedef enum MDBX_option_t MDBX_option_t;
-#endif
+} MDBX_option_t;
 
 /** \brief Sets the value of a extra runtime options for an environment.
  * \ingroup c_settings
@@ -2533,7 +2460,7 @@ LIBMDBX_API int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
 /** \brief Deletion modes for \ref mdbx_env_delete().
  * \ingroup c_extra
  * \see mdbx_env_delete() */
-enum MDBX_env_delete_mode_t {
+typedef enum MDBX_env_delete_mode {
   /** \brief Just delete the environment's files and directory if any.
    * \note On POSIX systems, processes already working with the database will
    * continue to work without interference until it close the environment.
@@ -2547,11 +2474,7 @@ enum MDBX_env_delete_mode_t {
   /** \brief Wait until other processes closes the environment before deletion.
    */
   MDBX_ENV_WAIT_FOR_UNUSED = 2,
-};
-#ifndef __cplusplus
-/** \ingroup c_extra */
-typedef enum MDBX_env_delete_mode_t MDBX_env_delete_mode_t;
-#endif
+} MDBX_env_delete_mode_t;
 
 /** \brief Delete the environment's files in a proper and multiprocess-safe way.
  * \ingroup c_extra
@@ -2662,7 +2585,7 @@ struct MDBX_stat {
   uint32_t ms_depth; /**< Depth (height) of the B-tree */
   uint64_t ms_branch_pages;   /**< Number of internal (non-leaf) pages */
   uint64_t ms_leaf_pages;     /**< Number of leaf pages */
-  uint64_t ms_overflow_pages; /**< Number of overflow pages */
+  uint64_t ms_overflow_pages; /**< Number of large/overflow pages */
   uint64_t ms_entries;        /**< Number of data items */
   uint64_t ms_mod_txnid; /**< Transaction ID of committed last modification */
 };
@@ -3122,7 +3045,7 @@ LIBMDBX_API int mdbx_env_resurrect_after_fork(MDBX_env *env);
  * \ingroup c_settings
  * \anchor warmup_flags
  * \see mdbx_env_warmup() */
-enum MDBX_warmup_flags_t {
+typedef enum MDBX_warmup_flags {
   /** By default \ref mdbx_env_warmup() just ask OS kernel to asynchronously
    * prefetch database pages. */
   MDBX_warmup_default = 0,
@@ -3165,12 +3088,8 @@ enum MDBX_warmup_flags_t {
 
   /** Release the lock that was performed before by \ref MDBX_warmup_lock. */
   MDBX_warmup_release = 16,
-};
-#ifndef __cplusplus
-typedef enum MDBX_warmup_flags_t MDBX_warmup_flags_t;
-#else
-DEFINE_ENUM_FLAG_OPERATORS(MDBX_warmup_flags_t)
-#endif
+} MDBX_warmup_flags_t;
+DEFINE_ENUM_FLAG_OPERATORS(MDBX_warmup_flags)
 
 /** \brief Warms up the database by loading pages into memory, optionally lock
  * ones. \ingroup c_settings
@@ -3564,7 +3483,7 @@ MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API intptr_t
 mdbx_limits_pairsize4page_max(intptr_t pagesize, MDBX_db_flags_t flags);
 
 /** \brief Returns maximal data size in bytes to fit in a leaf-page or
- * single overflow/large-page with the given page size and database flags,
+ * single large/overflow-page with the given page size and database flags,
  * or -1 if pagesize is invalid.
  * \ingroup c_statinfo
  * \see db_flags */
@@ -3740,7 +3659,7 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_env_get_pairsize4page_max(const MDBX_env *env, MDBX_db_flags_t flags);
 
 /** \brief Returns maximal data size in bytes to fit in a leaf-page or
- * single overflow/large-page for specified database flags.
+ * single large/overflow-page for specified database flags.
  * \ingroup c_statinfo
  *
  * \param [in] env    An environment handle returned by \ref mdbx_env_create().
@@ -4578,7 +4497,7 @@ LIBMDBX_API int mdbx_dbi_dupsort_depthmask(const MDBX_txn *txn, MDBX_dbi dbi,
 /** \brief DBI state bits returted by \ref mdbx_dbi_flags_ex()
  * \ingroup c_statinfo
  * \see mdbx_dbi_flags_ex() */
-enum MDBX_dbi_state_t {
+typedef enum MDBX_dbi_state {
   /** DB was written in this txn */
   MDBX_DBI_DIRTY = 0x01,
   /** Cached Named-DB record is older than txnID */
@@ -4587,13 +4506,8 @@ enum MDBX_dbi_state_t {
   MDBX_DBI_FRESH = 0x04,
   /** Named-DB handle created in this txn */
   MDBX_DBI_CREAT = 0x08,
-};
-#ifndef __cplusplus
-/** \ingroup c_statinfo */
-typedef enum MDBX_dbi_state_t MDBX_dbi_state_t;
-#else
-DEFINE_ENUM_FLAG_OPERATORS(MDBX_dbi_state_t)
-#endif
+} MDBX_dbi_state_t;
+DEFINE_ENUM_FLAG_OPERATORS(MDBX_dbi_state)
 
 /** \brief Retrieve the DB flags and status for a database handle.
  * \ingroup c_statinfo
@@ -5005,6 +4919,7 @@ LIBMDBX_API int mdbx_cursor_bind(const MDBX_txn *txn, MDBX_cursor *cursor,
  * \see mdbx_cursor_renew()
  * \see mdbx_cursor_bind()
  * \see mdbx_cursor_close()
+ * \see mdbx_cursor_reset()
  *
  * \note In contrast to LMDB, the MDBX required that any opened cursors can be
  * reused and must be freed explicitly, regardless ones was opened in a
@@ -5016,6 +4931,20 @@ LIBMDBX_API int mdbx_cursor_bind(const MDBX_txn *txn, MDBX_cursor *cursor,
  *
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_cursor_unbind(MDBX_cursor *cursor);
+
+/** \brief Сбрасывает состояние курсора.
+ * \ingroup c_cursors
+ *
+ * В результате сброса курсор становится неустановленным и не позволяет
+ * выполнять операции относительного позиционирования, получения или изменения
+ * данных, до установки на позицию не зависящую от текущей. Что позволяет
+ * приложению пресекать дальнейшие операции без предварительного
+ * позиционирования курсора.
+ *
+ * \param [in] cursor   Указатель на курсор.
+ *
+ * \returns Результат операции сканирования, либо код ошибки. */
+LIBMDBX_API int mdbx_cursor_reset(MDBX_cursor *cursor);
 
 /** \brief Create a cursor handle for the specified transaction and DBI handle.
  * \ingroup c_cursors
@@ -5196,6 +5125,21 @@ LIBMDBX_API int mdbx_cursor_compare(const MDBX_cursor *left,
  * \retval MDBX_EINVAL    An invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_get(MDBX_cursor *cursor, MDBX_val *key,
                                 MDBX_val *data, MDBX_cursor_op op);
+
+/** \brief Служебная функция для использования в утилитах.
+ * \ingroup c_extra
+ *
+ * При использовании определяемых пользователем функций сравнения (aka custom
+ * comparison functions) проверка порядка ключей может приводить к неверным
+ * результатам и возврате ошибки \ref MDBX_CORRUPTED.
+ *
+ * Эта функция отключает контроль порядка следования ключей на страницах при
+ * чтении страниц БД для этого курсора, и таким образом, позволяет прочитать
+ * данные при отсутствии/недоступности использованных функций сравнения.
+ * \see avoid_custom_comparators
+ *
+ * \returns Результат операции сканирования, либо код ошибки. */
+LIBMDBX_API int mdbx_cursor_ignord(MDBX_cursor *cursor);
 
 /** \brief Тип предикативных функций обратного вызова используемых
  * \ref mdbx_cursor_scan() и \ref mdbx_cursor_scan_from() для пробирования
@@ -5424,18 +5368,16 @@ LIBMDBX_API int mdbx_cursor_scan_from(MDBX_cursor *cursor,
  * \param [in] limit      The size of pairs buffer as the number of items,
  *                        but not a pairs.
  * \param [in] op         A cursor operation \ref MDBX_cursor_op (only
- *                        \ref MDBX_FIRST, \ref MDBX_NEXT, \ref MDBX_GET_CURRENT
- *                        are supported).
+ *                        \ref MDBX_FIRST and \ref MDBX_NEXT are supported).
  *
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
  * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
  *                               by current thread.
- * \retval MDBX_NOTFOUND         No more key-value pairs are available.
+ * \retval MDBX_NOTFOUND         No any key-value pairs are available.
  * \retval MDBX_ENODATA          The cursor is already at the end of data.
- * \retval MDBX_RESULT_TRUE      The specified limit is less than the available
- *                               key-value pairs on the current page/position
- *                               that the cursor points to.
+ * \retval MDBX_RESULT_TRUE      The returned chunk is the last one,
+ *                               and there are no pairs left.
  * \retval MDBX_EINVAL           An invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_get_batch(MDBX_cursor *cursor, size_t *count,
                                       MDBX_val *pairs, size_t limit,
@@ -6166,7 +6108,7 @@ LIBMDBX_API int mdbx_preopen_snapinfoW(const wchar_t *pathname,
  * \note Данный API еще не зафиксирован, в последующих версиях могут быть
  * незначительные доработки и изменения.
  * \see mdbx_env_chk() */
-enum MDBX_chk_flags_t {
+typedef enum MDBX_chk_flags {
   /** Режим проверки по-умолчанию, в том числе в режиме только-чтения. */
   MDBX_CHK_DEFAULTS = 0,
 
@@ -6184,18 +6126,13 @@ enum MDBX_chk_flags_t {
    * \note Требуется при проверке унаследованных БД созданных с использованием
    * нестандартных (пользовательских) функций сравнения ключей или значений. */
   MDBX_CHK_IGNORE_ORDER = 8
-};
-#ifndef __cplusplus
-/** \ingroup c_opening */
-typedef enum MDBX_chk_flags_t MDBX_chk_flags_t;
-#else
-DEFINE_ENUM_FLAG_OPERATORS(MDBX_chk_flags_t)
-#endif
+} MDBX_chk_flags_t;
+DEFINE_ENUM_FLAG_OPERATORS(MDBX_chk_flags)
 
 /** \brief Уровни логирование/детализации информации,
  * поставляемой через обратные вызовы при проверке целостности базы данных.
  * \see mdbx_env_chk() */
-enum MDBX_chk_severity {
+typedef enum MDBX_chk_severity {
   MDBX_chk_severity_prio_shift = 4,
   MDBX_chk_severity_kind_mask = 0xF,
   MDBX_chk_fatal = 0x00u,
@@ -6209,25 +6146,25 @@ enum MDBX_chk_severity {
   MDBX_chk_verbose = 0x78u,
   MDBX_chk_details = 0x89u,
   MDBX_chk_extra = 0x9Au
-};
+} MDBX_chk_severity_t;
 
 /** \brief Стадии проверки,
  * сообщаемые через обратные вызовы при проверке целостности базы данных.
  * \see mdbx_env_chk() */
-enum MDBX_chk_stage {
+typedef enum MDBX_chk_stage {
   MDBX_chk_none,
   MDBX_chk_init,
   MDBX_chk_lock,
   MDBX_chk_meta,
-  MDBX_chk_traversal_tree,
-  MDBX_chk_traversal_freedb,
+  MDBX_chk_tree,
+  MDBX_chk_gc,
   MDBX_chk_space,
-  MDBX_chk_traversal_maindb,
-  MDBX_chk_traversal_subdbs,
+  MDBX_chk_maindb,
+  MDBX_chk_subdbs,
   MDBX_chk_conclude,
   MDBX_chk_unlock,
   MDBX_chk_finalize
-};
+} MDBX_chk_stage_t;
 
 /** \brief Виртуальная строка отчета, формируемого при проверке целостности базы
  * данных. \see mdbx_env_chk() */
@@ -6251,8 +6188,8 @@ typedef struct MDBX_chk_scope {
   MDBX_chk_issue_t *issues;
   struct MDBX_chk_internal *internal;
   const void *object;
-  enum MDBX_chk_stage stage;
-  enum MDBX_chk_severity verbosity;
+  MDBX_chk_stage_t stage;
+  MDBX_chk_severity_t verbosity;
   size_t subtotal_issues;
   union {
     void *ptr;
@@ -6373,11 +6310,11 @@ typedef struct MDBX_chk_callbacks {
                          size_t entry_number, const MDBX_val *key,
                          const MDBX_val *value);
 
-  int (*stage_begin)(MDBX_chk_context_t *ctx, enum MDBX_chk_stage);
-  int (*stage_end)(MDBX_chk_context_t *ctx, enum MDBX_chk_stage, int err);
+  int (*stage_begin)(MDBX_chk_context_t *ctx, MDBX_chk_stage_t);
+  int (*stage_end)(MDBX_chk_context_t *ctx, MDBX_chk_stage_t, int err);
 
   MDBX_chk_line_t *(*print_begin)(MDBX_chk_context_t *ctx,
-                                  enum MDBX_chk_severity severity);
+                                  MDBX_chk_severity_t severity);
   void (*print_flush)(MDBX_chk_line_t *);
   void (*print_done)(MDBX_chk_line_t *);
   void (*print_chars)(MDBX_chk_line_t *, const char *str, size_t len);
@@ -6417,8 +6354,8 @@ typedef struct MDBX_chk_callbacks {
  * \returns Нулевое значение в случае успеха, иначе код ошибки. */
 LIBMDBX_API int mdbx_env_chk(MDBX_env *env, const MDBX_chk_callbacks_t *cb,
                              MDBX_chk_context_t *ctx,
-                             const enum MDBX_chk_flags_t flags,
-                             enum MDBX_chk_severity verbosity,
+                             const MDBX_chk_flags_t flags,
+                             MDBX_chk_severity_t verbosity,
                              unsigned timeout_seconds_16dot16);
 
 /** \brief Вспомогательная функция для подсчета проблем детектируемых

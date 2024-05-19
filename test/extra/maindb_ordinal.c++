@@ -1,3 +1,6 @@
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2024
+/// \copyright SPDX-License-Identifier: Apache-2.0
+
 #include "mdbx.h++"
 #include <iostream>
 #include <unistd.h>

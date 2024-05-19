@@ -1,18 +1,14 @@
-//
-// Copyright (c) 2020-2024, Leonid Yuriev <leo@yuriev.ru>.
-// SPDX-License-Identifier: Apache-2.0
-//
-// Non-inline part of the libmdbx C++ API
-//
+/// \copyright SPDX-License-Identifier: Apache-2.0
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2020-2024
+///
+/// \brief Non-inline part of the libmdbx C++ API
+///
 
-#if defined(_MSC_VER) && !defined(_CRT_SECURE_NO_WARNINGS)
-#define _CRT_SECURE_NO_WARNINGS
-#endif /* _CRT_SECURE_NO_WARNINGS */
+#include "essentials.h"
 
-#if (defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)) &&    \
-    !defined(__USE_MINGW_ANSI_STDIO)
-#define __USE_MINGW_ANSI_STDIO 1
-#endif /* MinGW */
+#if !defined(MDBX_BUILD_CXX) || MDBX_BUILD_CXX != 1
+#error "Build is misconfigured! Expecting MDBX_BUILD_CXX=1 for C++ API."
+#endif /* MDBX_BUILD_CXX*/
 
 /* Workaround for MSVC' header `extern "C"` vs `std::` redefinition bug */
 #if defined(_MSC_VER) && defined(__SANITIZE_ADDRESS__) &&                      \
@@ -21,8 +17,6 @@
 #endif /* _DISABLE_VECTOR_ANNOTATION */
 
 #include "../mdbx.h++"
-
-#include "internals.h"
 
 #include <array>
 #include <atomic>
@@ -402,6 +396,7 @@ __cold void error::throw_exception() const {
     CASE_EXCEPTION(incompatible_operation, MDBX_INCOMPATIBLE);
     CASE_EXCEPTION(internal_page_full, MDBX_PAGE_FULL);
     CASE_EXCEPTION(internal_problem, MDBX_PROBLEM);
+    CASE_EXCEPTION(key_exists, MDBX_KEYEXIST);
     CASE_EXCEPTION(key_mismatch, MDBX_EKEYMISMATCH);
     CASE_EXCEPTION(max_maps_reached, MDBX_DBS_FULL);
     CASE_EXCEPTION(max_readers_reached, MDBX_READERS_FULL);
@@ -1227,7 +1222,7 @@ env::operate_parameters::make_flags(bool accede, bool use_subdirectory) const {
     if (options.nested_write_transactions)
       flags &= ~MDBX_WRITEMAP;
     if (reclaiming.coalesce)
-      flags |= MDBX_env_flags_t(MDBX_DEPRECATED_COALESCE);
+      flags |= MDBX_COALESCE;
     if (reclaiming.lifo)
       flags |= MDBX_LIFORECLAIM;
     switch (durability) {
@@ -1272,7 +1267,7 @@ env::durability env::operate_parameters::durability_from_flags(
 
 env::reclaiming_options::reclaiming_options(MDBX_env_flags_t flags) noexcept
     : lifo((flags & MDBX_LIFORECLAIM) ? true : false),
-      coalesce((flags & MDBX_DEPRECATED_COALESCE) ? true : false) {}
+      coalesce((flags & MDBX_COALESCE) ? true : false) {}
 
 env::operate_options::operate_options(MDBX_env_flags_t flags) noexcept
     : no_sticky_threads(((flags & (MDBX_NOSTICKYTHREADS | MDBX_EXCLUSIVE)) ==
@@ -1742,21 +1737,20 @@ __cold ::std::ostream &operator<<(::std::ostream &out,
     const char *suffix;
   } static const scales[] = {
 #if MDBX_WORDBITS > 32
-    {env_managed::geometry::EiB, "EiB"},
-    {env_managed::geometry::EB, "EB"},
-    {env_managed::geometry::PiB, "PiB"},
-    {env_managed::geometry::PB, "PB"},
-    {env_managed::geometry::TiB, "TiB"},
-    {env_managed::geometry::TB, "TB"},
+      {env_managed::geometry::EiB, "EiB"},
+      {env_managed::geometry::EB, "EB"},
+      {env_managed::geometry::PiB, "PiB"},
+      {env_managed::geometry::PB, "PB"},
+      {env_managed::geometry::TiB, "TiB"},
+      {env_managed::geometry::TB, "TB"},
 #endif
-    {env_managed::geometry::GiB, "GiB"},
-    {env_managed::geometry::GB, "GB"},
-    {env_managed::geometry::MiB, "MiB"},
-    {env_managed::geometry::MB, "MB"},
-    {env_managed::geometry::KiB, "KiB"},
-    {env_managed::geometry::kB, "kB"},
-    {1, " bytes"}
-  };
+      {env_managed::geometry::GiB, "GiB"},
+      {env_managed::geometry::GB, "GB"},
+      {env_managed::geometry::MiB, "MiB"},
+      {env_managed::geometry::MB, "MB"},
+      {env_managed::geometry::KiB, "KiB"},
+      {env_managed::geometry::kB, "kB"},
+      {1, " bytes"}};
 
   for (const auto i : scales)
     if (bytes % i.one == 0)

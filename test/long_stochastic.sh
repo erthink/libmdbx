@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
+# SPDX-License-Identifier: Apache-2.0
+
 LIST=basic
 FROM=1
 UPTO=9999999

@@ -1,16 +1,5 @@
-/*
- * Copyright 2017-2024 Leonid Yuriev <leo@yuriev.ru>
- * and other libmdbx authors: please see AUTHORS file.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted only as authorized by the OpenLDAP
- * Public License.
- *
- * A copy of this license is available in the file LICENSE in the
- * top-level directory of the distribution or, alternatively, at
- * <http://www.OpenLDAP.org/license.html>.
- */
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2024
+/// \copyright SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 #include "base.h++"
@@ -41,7 +30,7 @@
 
 #if _MSC_FULL_VER < 190024215
 #pragma message(                                                               \
-        "It is recommended to use Visual Studio 2015 (MSC 19.0) or newer.")
+    "It is recommended to use Visual Studio 2015 (MSC 19.0) or newer.")
 #endif
 
 #define bswap64(v) _byteswap_uint64(v)
@@ -70,7 +59,7 @@
 #ifdef __bswap_64
 #define bswap64(v) __bswap_64(v)
 #else
-static __inline uint64_t bswap64(uint64_t v) {
+static inline uint64_t bswap64(uint64_t v) {
   return v << 56 | v >> 56 | ((v << 40) & UINT64_C(0x00ff000000000000)) |
          ((v << 24) & UINT64_C(0x0000ff0000000000)) |
          ((v << 8) & UINT64_C(0x000000ff00000000)) |
@@ -85,7 +74,7 @@ static __inline uint64_t bswap64(uint64_t v) {
 #ifdef __bswap_32
 #define bswap32(v) __bswap_32(v)
 #else
-static __inline uint32_t bswap32(uint32_t v) {
+static inline uint32_t bswap32(uint32_t v) {
   return v << 24 | v >> 24 | ((v << 8) & UINT32_C(0x00ff0000)) |
          ((v >> 8) & UINT32_C(0x0000ff00));
 }
@@ -96,7 +85,7 @@ static __inline uint32_t bswap32(uint32_t v) {
 #ifdef __bswap_16
 #define bswap16(v) __bswap_16(v)
 #else
-static __inline uint16_t bswap16(uint16_t v) { return v << 8 | v >> 8; }
+static inline uint16_t bswap16(uint16_t v) { return v << 8 | v >> 8; }
 #endif
 #endif /* bswap16 */
 
@@ -147,7 +136,7 @@ static __inline uint16_t bswap16(uint16_t v) { return v << 8 | v >> 8; }
 
 namespace unaligned {
 
-template <typename T> static __inline T load(const void *ptr) {
+template <typename T> static inline T load(const void *ptr) {
   if (MDBX_UNALIGNED_OK >= sizeof(T))
     return *(const T *)ptr;
   else {
@@ -162,7 +151,7 @@ template <typename T> static __inline T load(const void *ptr) {
   }
 }
 
-template <typename T> static __inline void store(void *ptr, const T &value) {
+template <typename T> static inline void store(void *ptr, const T &value) {
   if (MDBX_UNALIGNED_OK >= sizeof(T))
     *(T *)ptr = value;
   else {
@@ -180,22 +169,22 @@ template <typename T> static __inline void store(void *ptr, const T &value) {
 //-----------------------------------------------------------------------------
 
 #ifndef rot64
-static __inline uint64_t rot64(uint64_t v, unsigned s) {
+static inline uint64_t rot64(uint64_t v, unsigned s) {
   return (v >> s) | (v << (64 - s));
 }
 #endif /* rot64 */
 
-static __inline bool is_power2(size_t x) { return (x & (x - 1)) == 0; }
+static inline bool is_power2(size_t x) { return (x & (x - 1)) == 0; }
 
 #undef roundup2
-static __inline size_t roundup2(size_t value, size_t granularity) {
+static inline size_t roundup2(size_t value, size_t granularity) {
   assert(is_power2(granularity));
   return (value + granularity - 1) & ~(granularity - 1);
 }
 
 //-----------------------------------------------------------------------------
 
-static __inline void memory_barrier(void) {
+static inline void memory_barrier(void) {
 #if __has_extension(c_atomic) || __has_extension(cxx_atomic)
   __c11_atomic_thread_fence(__ATOMIC_SEQ_CST);
 #elif defined(__ATOMIC_SEQ_CST)
@@ -225,7 +214,7 @@ static __inline void memory_barrier(void) {
 #endif
 }
 
-static __inline void cpu_relax() {
+static inline void cpu_relax() {
 #if defined(__ia32__)
   _mm_pause();
 #elif defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS) ||               \

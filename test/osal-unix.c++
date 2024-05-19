@@ -1,16 +1,5 @@
-/*
- * Copyright 2017-2024 Leonid Yuriev <leo@yuriev.ru>
- * and other libmdbx authors: please see AUTHORS file.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted only as authorized by the OpenLDAP
- * Public License.
- *
- * A copy of this license is available in the file LICENSE in the
- * top-level directory of the distribution or, alternatively, at
- * <http://www.OpenLDAP.org/license.html>.
- */
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2024
+/// \copyright SPDX-License-Identifier: Apache-2.0
 
 #include "test.h++"
 
@@ -51,11 +40,11 @@
 
 #if __cplusplus >= 201103L
 #include <atomic>
-MDBX_MAYBE_UNUSED static __inline int atomic_decrement(std::atomic_int *p) {
+MDBX_MAYBE_UNUSED static inline int atomic_decrement(std::atomic_int *p) {
   return std::atomic_fetch_sub(p, 1) - 1;
 }
 #else
-MDBX_MAYBE_UNUSED static __inline int atomic_decrement(volatile int *p) {
+MDBX_MAYBE_UNUSED static inline int atomic_decrement(volatile int *p) {
 #if defined(__GNUC__) || defined(__clang__)
   return __sync_sub_and_fetch(p, 1);
 #elif defined(_MSC_VER)
@@ -350,8 +339,6 @@ static void handler_SIGCHLD(int signum) {
   if (signum == SIGALRM)
     ++sigalarm_head;
 }
-
-mdbx_pid_t osal_getpid(void) { return getpid(); }
 
 int osal_delay(unsigned seconds) { return sleep(seconds) ? errno : 0; }
 

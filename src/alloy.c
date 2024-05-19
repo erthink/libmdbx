@@ -1,25 +1,52 @@
-/*
- * Copyright 2015-2024 Leonid Yuriev <leo@yuriev.ru>
- * and other libmdbx authors: please see AUTHORS file.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted only as authorized by the OpenLDAP
- * Public License.
- *
- * A copy of this license is available in the file LICENSE in the
- * top-level directory of the distribution or, alternatively, at
- * <http://www.OpenLDAP.org/license.html>. */
+/// \copyright SPDX-License-Identifier: Apache-2.0
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2024
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 #include "internals.h" /* must be included first */
 
-#include "core.c"
-#include "osal.c"
-#include "version.c"
-
-#if defined(_WIN32) || defined(_WIN64)
-#include "lck-windows.c"
-#else
+#include "api-cursor.c"
+#include "api-env.c"
+#include "api-extra.c"
+#include "api-key-transform.c"
+#include "api-txn.c"
+#include "audit.c"
+#include "chk.c"
+#include "cogs.c"
+#include "coherency.c"
+#include "cold.c"
+#include "copy.c"
+#include "cursor.c"
+#include "dbi.c"
+#include "dpl.c"
+#include "dxb.c"
+#include "env-opts.c"
+#include "env.c"
+#include "gc-get.c"
+#include "gc-put.c"
+#include "global.c"
 #include "lck-posix.c"
-#endif
+#include "lck-windows.c"
+#include "lck.c"
+#include "logging_and_debug.c"
+#include "meta.c"
+#include "misc.c"
+#include "mvcc-readers.c"
+#include "node.c"
+#include "osal.c"
+#include "page-get.c"
+#include "page-iov.c"
+#include "page-ops.c"
+#include "page-search.c"
+#include "pnl.c"
+#include "range-estimate.c"
+#include "refund.c"
+#include "spill.c"
+#include "subdb.c"
+#include "tls.c"
+#include "tree.c"
+#include "txl.c"
+#include "txn.c"
+#include "utils.c"
+#include "version.c"
+#include "walk.c"
+#include "windows-import.c"
