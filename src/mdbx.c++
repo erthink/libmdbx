@@ -247,6 +247,21 @@ struct temp_buffer {
 
 } // namespace
 
+#ifndef MDBX_CXX_ENDL
+/* Манипулятор std::endl выталкивате буфферизированый вывод, что здесь не
+ * требуется.
+ *
+ * Кроме этого, при сборке libmdbx для символов по-умолчанию выключается
+ * видимость вне DSO, из-за чего обращение к std::endl иногда укачивает
+ * линковщики, если комплятор ошибочно формируют direct access к global weak
+ * symbol, коим является std::endl. */
+#if 0
+#define MDBX_CXX_ENDL ::std::endl
+#else
+#define MDBX_CXX_ENDL "\n"
+#endif
+#endif /* MDBX_CXX_ENDL */
+
 //------------------------------------------------------------------------------
 
 namespace mdbx {
@@ -663,7 +678,7 @@ char *to_hex::write_bytes(char *__restrict const dest, size_t dest_size) const {
       unsigned width = 0;
       for (const auto end = source.end_byte_ptr(); src != end; ++src) {
         if (wrap_width && width >= wrap_width) {
-          out << ::std::endl;
+          out << MDBX_CXX_ENDL;
           width = 0;
         }
         const int8_t hi = *src >> 4;
@@ -858,7 +873,7 @@ char *to_base58::write_bytes(char *__restrict const dest,
       while (MDBX_LIKELY(begin < end) && *begin == 0) {
         out.put('1');
         if (wrap_width && ++width >= wrap_width) {
-          out << ::std::endl;
+          out << MDBX_CXX_ENDL;
           width = 0;
         }
         ++begin;
@@ -872,7 +887,7 @@ char *to_base58::write_bytes(char *__restrict const dest,
         for (size_t i = 0; i < chunk.length(); ++i) {
           out.put(chunk.char_ptr()[i]);
           if (wrap_width && ++width >= wrap_width) {
-            out << ::std::endl;
+            out << MDBX_CXX_ENDL;
             width = 0;
           }
         }
@@ -1049,7 +1064,7 @@ char *to_base64::write_bytes(char *__restrict const dest,
           src += 3;
           out.write(&buf.front(), 4);
           if (wrap_width && (width += 4) >= wrap_width && left) {
-            out << ::std::endl;
+            out << MDBX_CXX_ENDL;
             width = 0;
           }
           continue;
