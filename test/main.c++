@@ -115,10 +115,14 @@ MDBX_NORETURN void usage(void) {
 void actor_params::set_defaults(const std::string &tmpdir) {
   pathname_log = "";
   loglevel =
-#if defined(NDEBUG) || defined(_WIN32) || defined(_WIN64)
+#if MDBX_DEBUG < 1
+      logging::verbose;
+#elif MDBX_DEBUG > 1
+      logging::trace;
+#elif defined(_WIN32) || defined(_WIN64) || defined(__APPLE__)
       logging::verbose;
 #else
-      logging::trace;
+      logging::debug;
 #endif
 
   pathname_db = tmpdir + "mdbx-test.db";
