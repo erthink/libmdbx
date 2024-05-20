@@ -171,7 +171,7 @@ static inline void page_wash(MDBX_txn *txn, size_t di, page_t *const mp,
                                  pgno2bytes(txn->env, npages) - PAGEHDRSZ);
 }
 
-MDBX_INTERNAL size_t page_subleaf2_reserve(const MDBX_env *const env,
+MDBX_INTERNAL size_t page_subleaf2_reserve(const MDBX_env *env,
                                            size_t host_page_room,
                                            size_t subpage_len, size_t item_len);
 

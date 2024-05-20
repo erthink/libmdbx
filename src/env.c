@@ -58,15 +58,7 @@ __cold unsigned env_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   eASSERT(env, pgno2bytes(env, 1) == pagesize);
   eASSERT(env, bytes2pgno(env, pagesize + pagesize) == 2);
   recalculate_merge_thresholds(env);
-
-  /* TODO: recalculate me_subpage_xyz values from MDBX_opt_subpage_xyz.  */
-  env->subpage_limit = env->leaf_nodemax - NODESIZE;
-  env->subpage_room_threshold = 0;
-  env->subpage_reserve_prereq = env->leaf_nodemax;
-  env->subpage_reserve_limit = env->subpage_limit / 42;
-  eASSERT(env, env->subpage_reserve_prereq >
-                   env->subpage_room_threshold + env->subpage_reserve_limit);
-  eASSERT(env, env->leaf_nodemax >= env->subpage_limit + NODESIZE);
+  recalculate_subpage_thresholds(env);
 
   const pgno_t max_pgno = bytes2pgno(env, MAX_MAPSIZE);
   if (!env->options.flags.non_auto.dp_limit) {

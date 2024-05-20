@@ -752,12 +752,35 @@ __hot int __must_check_result page_dirty(MDBX_txn *txn, page_t *mp,
   return MDBX_SUCCESS;
 }
 
-size_t page_subleaf2_reserve(const MDBX_env *const env, size_t host_page_room,
+void recalculate_subpage_thresholds(MDBX_env *env) {
+  size_t whole = env->leaf_nodemax - NODESIZE;
+  env->subpage_limit = (whole * env->options.subpage.limit + 32767) >> 16;
+  whole = env->subpage_limit;
+  env->subpage_reserve_limit =
+      (whole * env->options.subpage.reserve_limit + 32767) >> 16;
+  eASSERT(env, env->leaf_nodemax >= env->subpage_limit + NODESIZE);
+  eASSERT(env, env->subpage_limit >= env->subpage_reserve_limit);
+
+  whole = env->leaf_nodemax;
+  env->subpage_room_threshold =
+      (whole * env->options.subpage.room_threshold + 32767) >> 16;
+  env->subpage_reserve_prereq =
+      (whole * env->options.subpage.reserve_prereq + 32767) >> 16;
+  if (env->subpage_room_threshold + env->subpage_reserve_limit >
+      (intptr_t)page_space(env))
+    env->subpage_reserve_prereq = page_space(env);
+  else if (env->subpage_reserve_prereq <
+           env->subpage_room_threshold + env->subpage_reserve_limit)
+    env->subpage_reserve_prereq =
+        env->subpage_room_threshold + env->subpage_reserve_limit;
+  eASSERT(env, env->subpage_reserve_prereq >
+                   env->subpage_room_threshold + env->subpage_reserve_limit);
+}
+
+size_t page_subleaf2_reserve(const MDBX_env *env, size_t host_page_room,
                              size_t subpage_len, size_t item_len) {
   eASSERT(env, (subpage_len & 1) == 0);
-  eASSERT(env, env->subpage_reserve_prereq > env->subpage_room_threshold +
-                                                 env->subpage_reserve_limit &&
-                   env->leaf_nodemax >= env->subpage_limit + NODESIZE);
+  eASSERT(env, env->leaf_nodemax >= env->subpage_limit + NODESIZE);
   size_t reserve = 0;
   for (size_t n = 0;
        n < 5 && reserve + item_len <= env->subpage_reserve_limit &&

@@ -97,6 +97,7 @@ MDBX_INTERNAL int __must_check_result tree_rebalance(MDBX_cursor *mc);
 MDBX_INTERNAL int __must_check_result tree_propagate_key(MDBX_cursor *mc,
                                                          const MDBX_val *key);
 MDBX_INTERNAL void recalculate_merge_thresholds(MDBX_env *env);
+MDBX_INTERNAL void recalculate_subpage_thresholds(MDBX_env *env);
 
 /* subdb.c */
 MDBX_INTERNAL int __must_check_result sdb_fetch(MDBX_txn *txn, size_t dbi);

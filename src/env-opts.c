@@ -31,6 +31,26 @@ static bool default_prefer_waf_insteadof_balance(const MDBX_env *env) {
   return false;
 }
 
+static uint16_t default_subpage_limit(const MDBX_env *env) {
+  (void)env;
+  return 65535 /* 100% */;
+}
+
+static uint16_t default_subpage_room_threshold(const MDBX_env *env) {
+  (void)env;
+  return 0 /* 0% */;
+}
+
+static uint16_t default_subpage_reserve_prereq(const MDBX_env *env) {
+  (void)env;
+  return 27525 /* 42% */;
+}
+
+static uint16_t default_subpage_reserve_limit(const MDBX_env *env) {
+  (void)env;
+  return 2753 /* 4.2% */;
+}
+
 void env_options_init(MDBX_env *env) {
   env->options.rp_augment_limit = MDBX_PNL_INITIAL;
   env->options.dp_reserve_limit = MDBX_PNL_INITIAL;
@@ -50,6 +70,11 @@ void env_options_init(MDBX_env *env) {
 #endif /* Linux */
                               MDBX_WRITETHROUGH_THRESHOLD_DEFAULT;
 #endif /* Windows */
+
+  env->options.subpage.limit = default_subpage_limit(env);
+  env->options.subpage.room_threshold = default_subpage_room_threshold(env);
+  env->options.subpage.reserve_prereq = default_subpage_reserve_prereq(env);
+  env->options.subpage.reserve_limit = default_subpage_reserve_limit(env);
 }
 
 void env_options_adjust_defaults(MDBX_env *env) {
@@ -318,6 +343,54 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
       env->options.prefer_waf_insteadof_balance = value != 0;
     break;
 
+  case MDBX_opt_subpage_limit:
+    if (value == /* default */ UINT64_MAX) {
+      env->options.subpage.limit = default_subpage_limit(env);
+      recalculate_subpage_thresholds(env);
+    } else if (value > 65535)
+      err = MDBX_EINVAL;
+    else {
+      env->options.subpage.limit = (uint16_t)value;
+      recalculate_subpage_thresholds(env);
+    }
+    break;
+
+  case MDBX_opt_subpage_room_threshold:
+    if (value == /* default */ UINT64_MAX) {
+      env->options.subpage.room_threshold = default_subpage_room_threshold(env);
+      recalculate_subpage_thresholds(env);
+    } else if (value > 65535)
+      err = MDBX_EINVAL;
+    else {
+      env->options.subpage.room_threshold = (uint16_t)value;
+      recalculate_subpage_thresholds(env);
+    }
+    break;
+
+  case MDBX_opt_subpage_reserve_prereq:
+    if (value == /* default */ UINT64_MAX) {
+      env->options.subpage.reserve_prereq = default_subpage_reserve_prereq(env);
+      recalculate_subpage_thresholds(env);
+    } else if (value > 65535)
+      err = MDBX_EINVAL;
+    else {
+      env->options.subpage.reserve_prereq = (uint16_t)value;
+      recalculate_subpage_thresholds(env);
+    }
+    break;
+
+  case MDBX_opt_subpage_reserve_limit:
+    if (value == /* default */ UINT64_MAX) {
+      env->options.subpage.reserve_limit = default_subpage_reserve_limit(env);
+      recalculate_subpage_thresholds(env);
+    } else if (value > 65535)
+      err = MDBX_EINVAL;
+    else {
+      env->options.subpage.reserve_limit = (uint16_t)value;
+      recalculate_subpage_thresholds(env);
+    }
+    break;
+
   default:
     return MDBX_EINVAL;
   }
@@ -409,6 +482,22 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
 
   case MDBX_opt_prefer_waf_insteadof_balance:
     *pvalue = env->options.prefer_waf_insteadof_balance;
+    break;
+
+  case MDBX_opt_subpage_limit:
+    *pvalue = env->options.subpage.limit;
+    break;
+
+  case MDBX_opt_subpage_room_threshold:
+    *pvalue = env->options.subpage.room_threshold;
+    break;
+
+  case MDBX_opt_subpage_reserve_prereq:
+    *pvalue = env->options.subpage.reserve_prereq;
+    break;
+
+  case MDBX_opt_subpage_reserve_limit:
+    *pvalue = env->options.subpage.reserve_limit;
     break;
 
   default:
