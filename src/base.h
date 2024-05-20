@@ -88,6 +88,10 @@
 #define __has_extension(x) (0)
 #endif
 
+#ifndef __has_builtin
+#define __has_builtin(x) (0)
+#endif
+
 #if __has_feature(thread_sanitizer)
 #define __SANITIZE_THREAD__ 1
 #endif
@@ -512,7 +516,7 @@ __extern_C key_t ftok(const char *, int);
 #elif defined(_MSC_VER)
 #define __always_inline __forceinline
 #else
-#define __always_inline
+#define __always_inline __inline
 #endif
 #endif /* __always_inline */
 
