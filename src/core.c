@@ -3485,10 +3485,13 @@ __cold const char *mdbx_strerror_r(int errnum, char *buf, size_t buflen) {
   const char *msg = mdbx_liberr2str(errnum);
   if (!msg && buflen > 0 && buflen < INT_MAX) {
 #if defined(_WIN32) || defined(_WIN64)
-    const DWORD size = FormatMessageA(
+    DWORD size = FormatMessageA(
         FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
         errnum, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, (DWORD)buflen,
         NULL);
+    while (size && buf[size - 1] <= ' ')
+      --size;
+    buf[size] = 0;
     return size ? buf : "FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM) failed";
 #elif defined(_GNU_SOURCE) && defined(__GLIBC__)
     /* GNU-specific */
@@ -3539,10 +3542,13 @@ __cold const char *mdbx_strerror(int errnum) {
 const char *mdbx_strerror_r_ANSI2OEM(int errnum, char *buf, size_t buflen) {
   const char *msg = mdbx_liberr2str(errnum);
   if (!msg && buflen > 0 && buflen < INT_MAX) {
-    const DWORD size = FormatMessageA(
+    DWORD size = FormatMessageA(
         FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
         errnum, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, (DWORD)buflen,
         NULL);
+    while (size && buf[size - 1] <= ' ')
+      --size;
+    buf[size] = 0;
     if (!size)
       msg = "FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM) failed";
     else if (!CharToOemBuffA(buf, buf, size))
