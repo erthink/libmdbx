@@ -42,7 +42,16 @@ uint32_t us2fractional(uint32_t us) {
 }
 
 uint32_t fractional2us(uint32_t fractional) {
+#if !(defined(_M_ARM) || defined(_M_ARM64) || defined(_M_HYBRID_X86_ARM64))
+  /* Смеяться или плакать, но все существующие на май 2024 компиляторы Microsoft
+   * для ARM/ARM64, уже порядка 10 лет, падают на этом коде из-за внтутренней
+   * ошибке (aka ICE). */
   return uint32_t((fractional * uint64_t(USEC_PER_SEC)) >> 32);
+#else
+  static_assert(USEC_PER_SEC % 16 == 0, "WTF?");
+  /* Crutch for MSVC ARM/ARM64 compilers to avoid internal compiler error. */
+  return UInt32x32To64(fractional, USEC_PER_SEC / 16) >> 28;
+#endif
 }
 
 #ifndef MSEC_PER_SEC
