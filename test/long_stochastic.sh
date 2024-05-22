@@ -17,6 +17,7 @@ PAGESIZE=min
 DONT_CHECK_RAM=no
 EXTRA=no
 TAILLOG=0
+DELAY=0
 
 while [ -n "$1" ]
 do
@@ -40,6 +41,7 @@ do
     echo "--dont-check-ram-size  Don't check available RAM"
     echo "--extra                Iterate extra modes/flags"
     echo "--taillog              Dump tail of test log on failure"
+    echo "--delay NN             Delay NN seconds before run test"
     echo "--help                 Print this usage help and exit"
     exit -2
   ;;
@@ -157,6 +159,10 @@ do
   ;;
   --extra)
     EXTRA=yes
+  ;;
+  --delay)
+    DELAY=$(($2))
+    shift
   ;;
   *)
     echo "Unknown option '$1'"
@@ -436,6 +442,10 @@ function probe {
 }
 
 #------------------------------------------------------------------------------
+
+if [ "$DELAY" != "0" ]; then
+  sleep $DELAY
+fi
 
 count=0
 loop=0
