@@ -101,9 +101,9 @@ class maker {
     uint16_t flags{0};
     uint32_t maxlen{0};
     serial_t mask{0};
-    unsigned bits;
+    unsigned bits{0};
   } key_essentials, value_essentials;
-  unsigned value_age_bits;
+  unsigned value_age_bits{0};
   serial_t value_age_mask{0};
 
   static serial_t mk_begin(serial_t serial, const essentials &params,

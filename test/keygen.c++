@@ -266,7 +266,7 @@ void maker::setup(const config::actor_params_pod &actor,
              value_essentials.bits - essentials::value_age_minwidth ||
          mapping.split >= mapping.width)
     mapping.split -= 1;
-  if (split != mapping.width)
+  if (split != mapping.split)
     log_notice("keygen: reduce mapping-split from %u to %u", split,
                mapping.split);
 
