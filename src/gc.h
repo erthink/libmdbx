@@ -5,12 +5,22 @@
 
 #include "essentials.h"
 
+#ifndef MDBX_ENABLE_GC_EXPERIMENTAL
+#define MDBX_ENABLE_GC_EXPERIMENTAL 0
+#elif !(MDBX_ENABLE_GC_EXPERIMENTAL == 0 || MDBX_ENABLE_GC_EXPERIMENTAL == 1)
+#error MDBX_ENABLE_GC_EXPERIMENTAL must be defined as 0 or 1
+#endif /* MDBX_ENABLE_GC_EXPERIMENTAL */
+
 typedef struct gc_update_context {
-  size_t loop, reserve_adj;
+  unsigned loop;
+  pgno_t prev_first_unallocated;
+  bool dense;
+#if MDBX_ENABLE_GC_EXPERIMENTAL
+  intptr_t reserve_adj;
+#endif /* MDBX_ENABLE_GC_EXPERIMENTAL */
   size_t retired_stored;
   size_t amount, reserved, cleaned_slot, reused_slot, fill_idx;
   txnid_t cleaned_id, rid;
-  bool lifo, dense;
 #if MDBX_ENABLE_BIGFOOT
   txnid_t bigfoot;
 #endif /* MDBX_ENABLE_BIGFOOT */
@@ -22,7 +32,7 @@ typedef struct gc_update_context {
 
 static inline int gc_update_init(MDBX_txn *txn, gcu_t *ctx) {
   memset(ctx, 0, offsetof(gcu_t, cursor));
-  ctx->lifo = (txn->env->flags & MDBX_LIFORECLAIM) != 0;
+  ctx->dense = txn->txnid < MIN_TXNID;
 #if MDBX_ENABLE_BIGFOOT
   ctx->bigfoot = txn->txnid;
 #endif /* MDBX_ENABLE_BIGFOOT */
