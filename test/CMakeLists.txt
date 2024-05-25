@@ -117,6 +117,13 @@ if(UNIX AND NOT SUBPROJECT)
       set_target_properties(test_extra_doubtless_positioning PROPERTIES
         CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
     endif()
+    add_executable(test_extra_crunched_delete extra/crunched_delete.c++)
+    target_include_directories(test_extra_crunched_delete PRIVATE "${PROJECT_SOURCE_DIR}")
+    target_link_libraries(test_extra_crunched_delete ${TOOL_MDBX_LIB})
+    if(MDBX_CXX_STANDARD)
+      set_target_properties(test_extra_crunched_delete PROPERTIES
+        CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
+    endif()
   endif()
 endif()
 
@@ -207,6 +214,7 @@ else()
       if (ENABLE_MEMCHECK)
         set_tests_properties(extra_doubtless_positioning PROPERTIES TIMEOUT 10800)
       endif()
+      add_test(NAME extra_crunched_delete COMMAND test_extra_crunched_delete)
     endif()
   endif()
 
