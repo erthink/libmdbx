@@ -8371,9 +8371,7 @@ static void cursors_eot(MDBX_txn *txn, const bool merge) {
         MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6001);
         ENSURE(txn->mt_env, bk->mc_signature == MDBX_MC_LIVE);
         tASSERT(txn, mx == bk->mc_xcursor);
-        if (stage == MDBX_MC_WAIT4EOT /* Cursor was closed by user */)
-          mc->mc_signature = stage /* Promote closed state to parent txn */;
-        else if (merge) {
+        if (merge) {
           /* Restore pointers to parent txn */
           mc->mc_next = bk->mc_next;
           mc->mc_backup = bk->mc_backup;
@@ -8392,6 +8390,8 @@ static void cursors_eot(MDBX_txn *txn, const bool merge) {
         }
         bk->mc_signature = 0;
         osal_free(bk);
+        if (stage == MDBX_MC_WAIT4EOT /* Cursor was closed by user */)
+          mc->mc_signature = stage /* Promote closed state to parent txn */;
       } else {
         ENSURE(txn->mt_env, stage == MDBX_MC_LIVE);
         mc->mc_signature = MDBX_MC_READY4CLOSE /* Cursor may be reused */;
