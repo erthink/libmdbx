@@ -1232,6 +1232,8 @@ env::operate_parameters::make_flags(bool accede, bool use_subdirectory) const {
     flags |= MDBX_NORDAHEAD;
   if (options.disable_clear_memory)
     flags |= MDBX_NOMEMINIT;
+  if (options.enable_validation)
+    flags |= MDBX_VALIDATION;
 
   if (mode != readonly) {
     if (options.nested_write_transactions)

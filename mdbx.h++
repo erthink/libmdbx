@@ -3685,6 +3685,8 @@ public:
     bool disable_readahead{false};
     /// \copydoc MDBX_NOMEMINIT
     bool disable_clear_memory{false};
+    /// \copydoc MDBX_VALIDATION
+    bool enable_validation{false};
     MDBX_CXX11_CONSTEXPR operate_options() noexcept {}
     MDBX_CXX11_CONSTEXPR
     operate_options(const operate_options &) noexcept = default;
