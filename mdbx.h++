@@ -2749,7 +2749,7 @@ public:
   buffer &append(const void *src, size_t bytes) {
     if (MDBX_UNLIKELY(tailroom() < check_length(bytes)))
       MDBX_CXX20_UNLIKELY reserve_tailroom(bytes);
-    memcpy(slice_.byte_ptr() + size(), src, bytes);
+    memcpy(end_byte_ptr(), src, bytes);
     slice_.iov_len += bytes;
     return *this;
   }
@@ -2818,7 +2818,7 @@ public:
   buffer &append_u8(uint_fast8_t u8) {
     if (MDBX_UNLIKELY(tailroom() < 1))
       MDBX_CXX20_UNLIKELY reserve_tailroom(1);
-    *slice_.byte_ptr() = u8;
+    *slice_.end_byte_ptr() = uint8_t(u8);
     slice_.iov_len += 1;
     return *this;
   }
@@ -2828,7 +2828,7 @@ public:
   buffer &append_u16(uint_fast16_t u16) {
     if (MDBX_UNLIKELY(tailroom() < 2))
       MDBX_CXX20_UNLIKELY reserve_tailroom(2);
-    const auto ptr = slice_.byte_ptr();
+    const auto ptr = slice_.end_byte_ptr();
     ptr[0] = uint8_t(u16);
     ptr[1] = uint8_t(u16 >> 8);
     slice_.iov_len += 2;
@@ -2838,7 +2838,7 @@ public:
   buffer &append_u24(uint_fast32_t u24) {
     if (MDBX_UNLIKELY(tailroom() < 3))
       MDBX_CXX20_UNLIKELY reserve_tailroom(3);
-    const auto ptr = slice_.byte_ptr();
+    const auto ptr = slice_.end_byte_ptr();
     ptr[0] = uint8_t(u24);
     ptr[1] = uint8_t(u24 >> 8);
     ptr[2] = uint8_t(u24 >> 16);
@@ -2849,7 +2849,7 @@ public:
   buffer &append_u32(uint_fast32_t u32) {
     if (MDBX_UNLIKELY(tailroom() < 4))
       MDBX_CXX20_UNLIKELY reserve_tailroom(4);
-    const auto ptr = slice_.byte_ptr();
+    const auto ptr = slice_.end_byte_ptr();
     ptr[0] = uint8_t(u32);
     ptr[1] = uint8_t(u32 >> 8);
     ptr[2] = uint8_t(u32 >> 16);
@@ -2861,7 +2861,7 @@ public:
   buffer &append_u48(uint_fast64_t u48) {
     if (MDBX_UNLIKELY(tailroom() < 6))
       MDBX_CXX20_UNLIKELY reserve_tailroom(6);
-    const auto ptr = slice_.byte_ptr();
+    const auto ptr = slice_.end_byte_ptr();
     ptr[0] = uint8_t(u48);
     ptr[1] = uint8_t(u48 >> 8);
     ptr[2] = uint8_t(u48 >> 16);
@@ -2875,7 +2875,7 @@ public:
   buffer &append_u64(uint_fast64_t u64) {
     if (MDBX_UNLIKELY(tailroom() < 8))
       MDBX_CXX20_UNLIKELY reserve_tailroom(8);
-    const auto ptr = slice_.byte_ptr();
+    const auto ptr = slice_.end_byte_ptr();
     ptr[0] = uint8_t(u64);
     ptr[1] = uint8_t(u64 >> 8);
     ptr[2] = uint8_t(u64 >> 16);
