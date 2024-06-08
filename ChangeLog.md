@@ -12,6 +12,13 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 
 Новое:
 
+ - Изменение лицензии на Apache 2.0, пояснения и подробности в файле `COPYRIGHT`.
+
+ - Реструктуризация исходного кода с рефакторингом.
+
+ - Переработка курсоров для унификации поведения, более регулярного
+   кода, уменьшения количества ветвлений и машинных операций.
+
  - Перенос функционала утилиты `mdbx_chk` внутрь библиотеки в виде
    функции `mdbx_env_chk() `для проверка целостности структуры БД, в том
    числе с вовлечением логики приложения.
@@ -68,7 +75,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 
  - Опция `MDBX_opt_prefer_waf_insteadof_balance`.
 
- - TODO: Опции `MDBX_opt_subpage_limit`, `MDBX_opt_subpage_room_threshold`, `MDBX_opt_subpage_reserve_prereq`, `MDBX_opt_subpage_reserve_limit`.
+ - Опции `MDBX_opt_subpage_limit`, `MDBX_opt_subpage_room_threshold`, `MDBX_opt_subpage_reserve_prereq`, `MDBX_opt_subpage_reserve_limit`.
 
  - Управление основной блокировкой lock/unlock/upgrade/downgrade для координации пишущих транзакций.
 
@@ -99,6 +106,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
  - Опция сборки `MDBX_USE_VALGRIND` заменена на общепринятую `ENABLE_MEMCHECK`.
  - В структуре `MDBX_envinfo` серии полей вида `meta1`, `meta2` и `meta3` заменены на массивы вида `meta[3]`.
  - В шаблонных классах и функциях С++ API по-умолчанию вместо `mdbx::legacy_buffer` использован тип `mdbx::default_buffer` использующий полиморфные аллокаторы С++ 17.
+ - Удаление `DEFAULT_MAPSIZE` и изменение геометрии по-умолчанию при создании БД.
 
 
 ## v0.13.0 от 2023-04-23
