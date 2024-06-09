@@ -4552,6 +4552,19 @@ public:
   inline value_result try_update_reserve(map_handle map, const slice &key,
                                          size_t value_length);
 
+  void put(map_handle map, const pair &kv, put_mode mode) {
+    return put(map, kv.key, kv.value, mode);
+  }
+  void insert(map_handle map, const pair &kv) {
+    return insert(map, kv.key, kv.value);
+  }
+  value_result try_insert(map_handle map, const pair &kv) {
+    return try_insert(map, kv.key, kv.value);
+  }
+  void upsert(map_handle map, const pair &kv) {
+    return upsert(map, kv.key, kv.value);
+  }
+
   /// \brief Removes all values for given key.
   inline bool erase(map_handle map, const slice &key);
 
@@ -4600,6 +4613,10 @@ public:
   /// to pages of nested b+tree of multimap's values.
   inline void append(map_handle map, const slice &key, const slice &value,
                      bool multivalue_order_preserved = true);
+  inline void append(map_handle map, const pair &kv,
+                     bool multivalue_order_preserved = true) {
+    return append(map, kv.key, kv.value, multivalue_order_preserved);
+  }
 
   size_t put_multiple(map_handle map, const slice &key,
                       const size_t value_length, const void *values_array,
@@ -5096,6 +5113,7 @@ public:
 
   inline MDBX_error_t put(const slice &key, slice *value,
                           MDBX_put_flags_t flags) noexcept;
+  inline void put(const slice &key, slice value, put_mode mode);
   inline void insert(const slice &key, slice value);
   inline value_result try_insert(const slice &key, slice value);
   inline slice insert_reserve(const slice &key, size_t value_length);
@@ -5108,6 +5126,15 @@ public:
   inline bool try_update(const slice &key, const slice &value);
   inline slice update_reserve(const slice &key, size_t value_length);
   inline value_result try_update_reserve(const slice &key, size_t value_length);
+
+  void put(const pair &kv, put_mode mode) {
+    return put(kv.key, kv.value, mode);
+  }
+  void insert(const pair &kv) { return insert(kv.key, kv.value); }
+  value_result try_insert(const pair &kv) {
+    return try_insert(kv.key, kv.value);
+  }
+  void upsert(const pair &kv) { return upsert(kv.key, kv.value); }
 
   /// \brief Removes single key-value pair or all multi-values at the current
   /// cursor position.
@@ -7135,6 +7162,10 @@ inline map_handle cursor::map() const {
 inline MDBX_error_t cursor::put(const slice &key, slice *value,
                                 MDBX_put_flags_t flags) noexcept {
   return MDBX_error_t(::mdbx_cursor_put(handle_, &key, value, flags));
+}
+
+inline void cursor::put(const slice &key, slice value, put_mode mode) {
+  error::success_or_throw(put(key, &value, MDBX_put_flags_t(mode)));
 }
 
 inline void cursor::insert(const slice &key, slice value) {
