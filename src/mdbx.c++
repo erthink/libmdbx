@@ -410,6 +410,7 @@ __cold void error::throw_exception() const {
     CASE_EXCEPTION(incompatible_operation, MDBX_INCOMPATIBLE);
     CASE_EXCEPTION(internal_page_full, MDBX_PAGE_FULL);
     CASE_EXCEPTION(internal_problem, MDBX_PROBLEM);
+    CASE_EXCEPTION(key_exists, MDBX_KEYEXIST);
     CASE_EXCEPTION(key_mismatch, MDBX_EKEYMISMATCH);
     CASE_EXCEPTION(max_maps_reached, MDBX_DBS_FULL);
     CASE_EXCEPTION(max_readers_reached, MDBX_READERS_FULL);
