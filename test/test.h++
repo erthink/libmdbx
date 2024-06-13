@@ -194,16 +194,16 @@ protected:
 #if SPECULUM_CURSORS
   scoped_cursor_guard speculum_cursors[5 + 1];
   void speculum_prepare_cursors(const Item &item);
-  void speculum_check_cursor(const char *where, const char *stage,
+  bool speculum_check_cursor(const char *where, const char *stage,
                              const testcase::SET::const_iterator &it,
                              int cursor_err, const MDBX_val &cursor_key,
                              const MDBX_val &cursor_data) const;
-  void speculum_check_cursor(const char *where, const char *stage,
+  bool speculum_check_cursor(const char *where, const char *stage,
                              const testcase::SET::const_iterator &it,
                              MDBX_cursor *cursor,
                              const MDBX_cursor_op op) const;
 #endif /* SPECULUM_CURSORS */
-  void speculum_check_iterator(const char *where, const char *stage,
+  bool speculum_check_iterator(const char *where, const char *stage,
                                const testcase::SET::const_iterator &it,
                                const MDBX_val &k, const MDBX_val &v) const;
 
@@ -271,7 +271,7 @@ protected:
   void signal();
   bool should_continue(bool check_timeout_only = false) const;
 
-  void failure(const char *fmt, ...) const;
+  bool failure(const char *fmt, ...) const;
   void generate_pair(const keygen::serial_t serial, keygen::buffer &out_key,
                      keygen::buffer &out_value, keygen::serial_t data_age) {
     keyvalue_maker.pair(serial, out_key, out_value, data_age, false);

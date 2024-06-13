@@ -726,7 +726,7 @@ void testcase::verbose(const char *where, const char *stage, const MDBX_val &k,
                 mdbx_dump_val(&v, dump_value, sizeof(dump_value)));
 }
 
-void testcase::speculum_check_iterator(const char *where, const char *stage,
+bool testcase::speculum_check_iterator(const char *where, const char *stage,
                                        const testcase::SET::const_iterator &it,
                                        const MDBX_val &k,
                                        const MDBX_val &v) const {
@@ -737,16 +737,17 @@ void testcase::speculum_check_iterator(const char *where, const char *stage,
   //             mdbx_dump_val(&it_key, dump_key, sizeof(dump_key)),
   //             mdbx_dump_val(&it_data, dump_value, sizeof(dump_value)));
   if (!is_samedata(it_key, k))
-    failure("speculum-%s: %s key mismatch %s (must) != %s", where, stage,
-            mdbx_dump_val(&it_key, dump_key, sizeof(dump_key)),
-            mdbx_dump_val(&k, dump_value, sizeof(dump_value)));
+    return failure("speculum-%s: %s key mismatch %s (must) != %s", where, stage,
+                   mdbx_dump_val(&it_key, dump_key, sizeof(dump_key)),
+                   mdbx_dump_val(&k, dump_value, sizeof(dump_value)));
   if (!is_samedata(it_data, v))
-    failure("speculum-%s: %s data mismatch %s (must) != %s", where, stage,
-            mdbx_dump_val(&it_data, dump_key, sizeof(dump_key)),
-            mdbx_dump_val(&v, dump_value, sizeof(dump_value)));
+    return failure("speculum-%s: %s data mismatch %s (must) != %s", where,
+                   stage, mdbx_dump_val(&it_data, dump_key, sizeof(dump_key)),
+                   mdbx_dump_val(&v, dump_value, sizeof(dump_value)));
+  return true;
 }
 
-void testcase::failure(const char *fmt, ...) const {
+bool testcase::failure(const char *fmt, ...) const {
   va_list ap;
   va_start(ap, fmt);
   fflush(nullptr);
@@ -756,10 +757,11 @@ void testcase::failure(const char *fmt, ...) const {
   if (txn_guard)
     mdbx_txn_commit(const_cast<testcase *>(this)->txn_guard.release());
   exit(EXIT_FAILURE);
+  return false;
 }
 
 #if SPECULUM_CURSORS
-void testcase::speculum_check_cursor(const char *where, const char *stage,
+bool testcase::speculum_check_cursor(const char *where, const char *stage,
                                      const testcase::SET::const_iterator &it,
                                      int cursor_err, const MDBX_val &cursor_key,
                                      const MDBX_val &cursor_data) const {
@@ -767,25 +769,29 @@ void testcase::speculum_check_cursor(const char *where, const char *stage,
   // verbose(where, stage, it);
   if (cursor_err != MDBX_SUCCESS && cursor_err != MDBX_NOTFOUND &&
       cursor_err != MDBX_RESULT_TRUE && cursor_err != MDBX_ENODATA)
-    failure("speculum-%s: %s %s %d %s", where, stage, "cursor-get", cursor_err,
-            mdbx_strerror(cursor_err));
+    return failure("speculum-%s: %s %s %d %s", where, stage, "cursor-get",
+                   cursor_err, mdbx_strerror(cursor_err));
 
   char dump_key[32], dump_value[32];
   if (it == speculum.end() && cursor_err != MDBX_NOTFOUND)
-    failure("speculum-%s: %s extra pair {%s, %s}", where, stage,
-            mdbx_dump_val(&cursor_key, dump_key, sizeof(dump_key)),
-            mdbx_dump_val(&cursor_data, dump_value, sizeof(dump_value)));
+    return failure("speculum-%s: %s extra pair {%s, %s}", where, stage,
+                   mdbx_dump_val(&cursor_key, dump_key, sizeof(dump_key)),
+                   mdbx_dump_val(&cursor_data, dump_value, sizeof(dump_value)));
   else if (it != speculum.end() && cursor_err == MDBX_NOTFOUND) {
     MDBX_val it_key = dataview2iov(it->first);
     MDBX_val it_data = dataview2iov(it->second);
-    failure("speculum-%s: %s lack pair {%s, %s}", where, stage,
-            mdbx_dump_val(&it_key, dump_key, sizeof(dump_key)),
-            mdbx_dump_val(&it_data, dump_value, sizeof(dump_value)));
+    return failure("speculum-%s: %s lack pair {%s, %s}", where, stage,
+                   mdbx_dump_val(&it_key, dump_key, sizeof(dump_key)),
+                   mdbx_dump_val(&it_data, dump_value, sizeof(dump_value)));
   } else if (cursor_err == MDBX_SUCCESS || cursor_err == MDBX_RESULT_TRUE)
-    speculum_check_iterator(where, stage, it, cursor_key, cursor_data);
+    return speculum_check_iterator(where, stage, it, cursor_key, cursor_data);
+  else {
+    assert(it == speculum.end() && cursor_err == MDBX_NOTFOUND);
+    return true;
+  }
 }
 
-void testcase::speculum_check_cursor(const char *where, const char *stage,
+bool testcase::speculum_check_cursor(const char *where, const char *stage,
                                      const testcase::SET::const_iterator &it,
                                      MDBX_cursor *cursor,
                                      const MDBX_cursor_op op) const {
@@ -908,11 +914,10 @@ int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata,
     check_seek_cursor = speculum_cursors[seek_check].get();
     seek_check_key = akey->value;
     seek_check_data = adata->value;
-    seek_check_err = mdbx_cursor_get(
-        check_seek_cursor, &seek_check_key, &seek_check_data,
-        (config.params.table_flags & MDBX_DUPSORT) ? MDBX_GET_BOTH
-                                                   : MDBX_SET_KEY);
-    if (seek_check_err != MDBX_SUCCESS && seek_check_err != MDBX_NOTFOUND)
+    seek_check_err = mdbx_cursor_get(check_seek_cursor, &seek_check_key,
+                                     &seek_check_data, MDBX_SET_LOWERBOUND);
+    if (seek_check_err != MDBX_SUCCESS && seek_check_err != MDBX_NOTFOUND &&
+        seek_check_err != MDBX_RESULT_TRUE)
       failure("speculum-%s: %s pre-insert %d %s", "insert", "seek",
               seek_check_err, mdbx_strerror(seek_check_err));
 #endif /* SPECULUM_CURSORS */
@@ -940,7 +945,7 @@ int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata,
 
 #if SPECULUM_CURSORS
     if (insertion_result.second) {
-      if (seek_check_err != MDBX_NOTFOUND) {
+      if (seek_check_err == MDBX_SUCCESS) {
         log_error(
             "speculum.pre-insert-seek: unexpected %d {%s, %s}", seek_check_err,
             mdbx_dump_val(&seek_check_key, dump_key, sizeof(dump_key)),
