@@ -197,15 +197,19 @@ protected:
   bool speculum_check_cursor(const char *where, const char *stage,
                              const testcase::SET::const_iterator &it,
                              int cursor_err, const MDBX_val &cursor_key,
-                             const MDBX_val &cursor_data) const;
+                             const MDBX_val &cursor_data,
+                             MDBX_cursor *cursor) const;
   bool speculum_check_cursor(const char *where, const char *stage,
                              const testcase::SET::const_iterator &it,
                              MDBX_cursor *cursor,
                              const MDBX_cursor_op op) const;
+  void speculum_render(const testcase::SET::const_iterator &it,
+                       const MDBX_cursor *ref) const;
 #endif /* SPECULUM_CURSORS */
   bool speculum_check_iterator(const char *where, const char *stage,
                                const testcase::SET::const_iterator &it,
-                               const MDBX_val &k, const MDBX_val &v) const;
+                               const MDBX_val &k, const MDBX_val &v,
+                               MDBX_cursor *cursor) const;
 
   void verbose(const char *where, const char *stage,
                const testcase::SET::const_iterator &it) const;

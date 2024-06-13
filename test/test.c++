@@ -728,22 +728,26 @@ void testcase::verbose(const char *where, const char *stage, const MDBX_val &k,
 
 bool testcase::speculum_check_iterator(const char *where, const char *stage,
                                        const testcase::SET::const_iterator &it,
-                                       const MDBX_val &k,
-                                       const MDBX_val &v) const {
+                                       const MDBX_val &k, const MDBX_val &v,
+                                       MDBX_cursor *cursor) const {
   char dump_key[32], dump_value[32];
   MDBX_val it_key = dataview2iov(it->first);
   MDBX_val it_data = dataview2iov(it->second);
   // log_verbose("speculum-%s: %s expect {%s, %s}", where, stage,
   //             mdbx_dump_val(&it_key, dump_key, sizeof(dump_key)),
   //             mdbx_dump_val(&it_data, dump_value, sizeof(dump_value)));
-  if (!is_samedata(it_key, k))
+  if (!is_samedata(it_key, k)) {
+    speculum_render(it, cursor);
     return failure("speculum-%s: %s key mismatch %s (must) != %s", where, stage,
                    mdbx_dump_val(&it_key, dump_key, sizeof(dump_key)),
                    mdbx_dump_val(&k, dump_value, sizeof(dump_value)));
-  if (!is_samedata(it_data, v))
+  }
+  if (!is_samedata(it_data, v)) {
+    speculum_render(it, cursor);
     return failure("speculum-%s: %s data mismatch %s (must) != %s", where,
                    stage, mdbx_dump_val(&it_data, dump_key, sizeof(dump_key)),
                    mdbx_dump_val(&v, dump_value, sizeof(dump_value)));
+  }
   return true;
 }
 
@@ -761,32 +765,139 @@ bool testcase::failure(const char *fmt, ...) const {
 }
 
 #if SPECULUM_CURSORS
+
+static void speculum_render_cursor(const MDBX_val &ikey, const MDBX_val &ival,
+                                   const MDBX_cursor *cursor,
+                                   const MDBX_cursor *ref) {
+  scoped_cursor_guard guard(mdbx_cursor_create(nullptr));
+  if (!guard)
+    failure("mdbx_cursor_create()");
+  /* работаем с копией курсора, чтобы не влиять на состояние оригинала. */
+  int err = mdbx_cursor_copy(cursor, guard.get());
+  if (err)
+    failure("mdbx_cursor_copy(), err %d", err);
+
+  MDBX_cursor *const clone = guard.get();
+  char status[10], *s = status;
+  if (cursor == ref) {
+    *s++ = '_';
+    *s++ = '_';
+  }
+
+  if (mdbx_cursor_eof(clone) == MDBX_RESULT_TRUE)
+    *s++ = 'e';
+  if (mdbx_cursor_on_first(clone) == MDBX_RESULT_TRUE)
+    *s++ = 'F';
+  if (mdbx_cursor_on_first_dup(clone) == MDBX_RESULT_TRUE)
+    *s++ = 'f';
+  if (mdbx_cursor_on_last(clone) == MDBX_RESULT_TRUE)
+    *s++ = 'L';
+  if (mdbx_cursor_on_last_dup(clone) == MDBX_RESULT_TRUE)
+    *s++ = 'l';
+
+  MDBX_val ckey, cval;
+  if (mdbx_cursor_get(clone, &ckey, &cval, MDBX_GET_CURRENT) != MDBX_SUCCESS)
+    *s++ = '!';
+  else {
+    const int kcmp =
+        mdbx_cmp(mdbx_cursor_txn(clone), mdbx_cursor_dbi(clone), &ikey, &ckey);
+    if (kcmp < 0)
+      *s++ = '<';
+    else if (kcmp > 0)
+      *s++ = '>';
+    else {
+      *s++ = '=';
+      const int vcmp = mdbx_dcmp(mdbx_cursor_txn(clone), mdbx_cursor_dbi(clone),
+                                 &ival, &cval);
+      if (vcmp < 0)
+        *s++ = '<';
+      else if (vcmp > 0)
+        *s++ = '>';
+      else
+        *s++ = '=';
+    }
+  }
+
+  if (clone == ref) {
+    *s++ = '_';
+    *s++ = '_';
+  }
+  *s = '\0';
+
+  printf(" | %-10.10s", status);
+}
+
+void testcase::speculum_render(const testcase::SET::const_iterator &it,
+                               const MDBX_cursor *ref) const {
+  char dump_key[32], dump_value[32];
+
+  auto top = it;
+  int offset = 0;
+  while (offset > -5 && top != speculum.begin()) {
+    --top;
+    --offset;
+  }
+  printf("##  %-20.20s %-20.20s | %-10.10s | %-10.10s | %-10.10s | %-10.10s | "
+         "%-10.10s | %-10.10s |\n",
+         "k0_1_2_3_4_5_6_7_8_9", "v0_1_2_3_4_5_6_7_8_9", "prev-prev", "prev",
+         "seek", "lowerbound", "next", "next-next");
+  while (offset < 5 && top != speculum.end()) {
+    const MDBX_val ikey = dataview2iov(top->first);
+    const MDBX_val idata = dataview2iov(top->second);
+    printf("%+d) %20.20s %20.20s", offset,
+           mdbx_dump_val(&ikey, dump_key, sizeof(dump_key)),
+           mdbx_dump_val(&idata, dump_value, sizeof(dump_value)));
+
+    speculum_render_cursor(ikey, idata, speculum_cursors[prev_prev].get(), ref);
+    speculum_render_cursor(ikey, idata, speculum_cursors[prev].get(), ref);
+    speculum_render_cursor(ikey, idata, speculum_cursors[seek_check].get(),
+                           ref);
+    speculum_render_cursor(ikey, idata, speculum_cursors[lowerbound].get(),
+                           ref);
+    speculum_render_cursor(ikey, idata, speculum_cursors[next].get(), ref);
+    speculum_render_cursor(ikey, idata, speculum_cursors[next_next].get(), ref);
+
+    printf(" %s\n", "|");
+    ++top;
+    ++offset;
+  }
+}
+
 bool testcase::speculum_check_cursor(const char *where, const char *stage,
                                      const testcase::SET::const_iterator &it,
                                      int cursor_err, const MDBX_val &cursor_key,
-                                     const MDBX_val &cursor_data) const {
+                                     const MDBX_val &cursor_data,
+                                     MDBX_cursor *cursor) const {
   // verbose(where, stage, cursor_key, cursor_data, cursor_err);
   // verbose(where, stage, it);
   if (cursor_err != MDBX_SUCCESS && cursor_err != MDBX_NOTFOUND &&
-      cursor_err != MDBX_RESULT_TRUE && cursor_err != MDBX_ENODATA)
+      cursor_err != MDBX_RESULT_TRUE && cursor_err != MDBX_ENODATA) {
+    speculum_render(it, cursor);
     return failure("speculum-%s: %s %s %d %s", where, stage, "cursor-get",
                    cursor_err, mdbx_strerror(cursor_err));
+  }
 
   char dump_key[32], dump_value[32];
-  if (it == speculum.end() && cursor_err != MDBX_NOTFOUND)
+  if (it == speculum.end() && cursor_err != MDBX_NOTFOUND &&
+      cursor_err != MDBX_ENODATA) {
+    speculum_render(it, cursor);
     return failure("speculum-%s: %s extra pair {%s, %s}", where, stage,
                    mdbx_dump_val(&cursor_key, dump_key, sizeof(dump_key)),
                    mdbx_dump_val(&cursor_data, dump_value, sizeof(dump_value)));
-  else if (it != speculum.end() && cursor_err == MDBX_NOTFOUND) {
+  } else if (it != speculum.end() &&
+             (cursor_err == MDBX_NOTFOUND || cursor_err == MDBX_ENODATA)) {
+    speculum_render(it, cursor);
     MDBX_val it_key = dataview2iov(it->first);
     MDBX_val it_data = dataview2iov(it->second);
     return failure("speculum-%s: %s lack pair {%s, %s}", where, stage,
                    mdbx_dump_val(&it_key, dump_key, sizeof(dump_key)),
                    mdbx_dump_val(&it_data, dump_value, sizeof(dump_value)));
   } else if (cursor_err == MDBX_SUCCESS || cursor_err == MDBX_RESULT_TRUE)
-    return speculum_check_iterator(where, stage, it, cursor_key, cursor_data);
+    return speculum_check_iterator(where, stage, it, cursor_key, cursor_data,
+                                   cursor);
   else {
-    assert(it == speculum.end() && cursor_err == MDBX_NOTFOUND);
+    assert(it == speculum.end() &&
+           (cursor_err == MDBX_NOTFOUND || cursor_err == MDBX_ENODATA));
     return true;
   }
 }
@@ -798,7 +909,8 @@ bool testcase::speculum_check_cursor(const char *where, const char *stage,
   MDBX_val cursor_key = {0, 0};
   MDBX_val cursor_data = {0, 0};
   int err = mdbx_cursor_get(cursor, &cursor_key, &cursor_data, op);
-  return speculum_check_cursor(where, stage, it, err, cursor_key, cursor_data);
+  return speculum_check_cursor(where, stage, it, err, cursor_key, cursor_data,
+                               cursor);
 }
 
 void testcase::speculum_prepare_cursors(const Item &item) {
@@ -822,6 +934,7 @@ void testcase::speculum_prepare_cursors(const Item &item) {
       guard.reset(cursor);
     }
 
+  // mdbx_cursor_reset(speculum_cursors[seek_check].get());
   const auto cursor_lowerbound = speculum_cursors[lowerbound].get();
   const MDBX_val item_key = dataview2iov(item.first),
                  item_data = dataview2iov(item.second);
@@ -840,7 +953,7 @@ void testcase::speculum_prepare_cursors(const Item &item) {
   auto it_lowerbound = speculum.lower_bound(item);
   // verbose("prepare-cursors", "lowerbound", it_lowerbound);
   speculum_check_cursor("prepare-cursors", "lowerbound", it_lowerbound, err,
-                        lowerbound_key, lowerbound_data);
+                        lowerbound_key, lowerbound_data, cursor_lowerbound);
 
   const auto cursor_prev = speculum_cursors[prev].get();
   err = mdbx_cursor_copy(cursor_lowerbound, cursor_prev);
@@ -916,6 +1029,7 @@ int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata,
     seek_check_data = adata->value;
     seek_check_err = mdbx_cursor_get(check_seek_cursor, &seek_check_key,
                                      &seek_check_data, MDBX_SET_LOWERBOUND);
+    // speculum_render(speculum.find(item), check_seek_cursor);
     if (seek_check_err != MDBX_SUCCESS && seek_check_err != MDBX_NOTFOUND &&
         seek_check_err != MDBX_RESULT_TRUE)
       failure("speculum-%s: %s pre-insert %d %s", "insert", "seek",
@@ -959,7 +1073,8 @@ int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata,
             mdbx_dump_val(&seek_check_key, dump_key, sizeof(dump_key)),
             mdbx_dump_val(&seek_check_data, dump_value, sizeof(dump_value)));
         speculum_check_iterator("insert", "pre-seek", insertion_result.first,
-                                seek_check_key, seek_check_data);
+                                seek_check_key, seek_check_data,
+                                check_seek_cursor);
         rc = false;
       }
     }
@@ -999,6 +1114,8 @@ int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata,
         }
       }
     }
+    // speculum_render(insertion_result.first,
+    //                 speculum_cursors[seek_check].get());
 #endif /* SPECULUM_CURSORS */
   }
 
@@ -1049,6 +1166,12 @@ int testcase::remove(const keygen::buffer &akey, const keygen::buffer &adata) {
     item.second = iov2dataview(adata);
 #if SPECULUM_CURSORS
     speculum_prepare_cursors(item);
+    // MDBX_cursor *check_seek_cursor = speculum_cursors[seek_check].get();
+    // MDBX_val seek_check_key = akey->value;
+    // MDBX_val seek_check_data = adata->value;
+    // mdbx_cursor_get(check_seek_cursor, &seek_check_key, &seek_check_data,
+    //                 MDBX_SET_LOWERBOUND);
+    // speculum_render(speculum.find(item), check_seek_cursor);
 #endif /* SPECULUM_CURSORS */
   }
 
@@ -1075,6 +1198,7 @@ int testcase::remove(const keygen::buffer &akey, const keygen::buffer &adata) {
       }
 
 #if SPECULUM_CURSORS
+      speculum_render(it_found, speculum_cursors[seek_check].get());
       if (it_found != speculum.begin()) {
         const auto cursor_prev = speculum_cursors[prev].get();
         auto it_prev = it_found;
