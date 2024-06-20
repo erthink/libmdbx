@@ -523,7 +523,7 @@ typedef mode_t mdbx_mode_t;
  *  - the proper implementation of DEFINE_ENUM_FLAG_OPERATORS for C++ required
  *    the constexpr feature which is broken in most old compilers;
  *  - DEFINE_ENUM_FLAG_OPERATORS may be defined broken as in the Windows SDK. */
-#ifndef DEFINE_ENUM_FLAG_OPERATORS
+#if !defined(DEFINE_ENUM_FLAG_OPERATORS) && !defined(DOXYGEN)
 
 #ifdef __cplusplus
 #if !defined(__cpp_constexpr) || __cpp_constexpr < 200704L ||                  \
@@ -1635,7 +1635,7 @@ typedef enum MDBX_db_flags {
    * application could determine the actual flags by \ref mdbx_dbi_flags(). */
   MDBX_DB_ACCEDE = MDBX_ACCEDE
 } MDBX_db_flags_t;
-DEFINE_ENUM_FLAG_OPERATORS(MDBX_db_flags_t)
+DEFINE_ENUM_FLAG_OPERATORS(MDBX_db_flags)
 
 /** \brief Data changing flags
  * \ingroup c_crud
@@ -6379,7 +6379,7 @@ typedef struct MDBX_chk_callbacks {
  * библиотеку.
  *
  * Проверка выполняется в несколько стадий, начиная с инициализации и до
- * завершения, более подробно см \ref MDBX_chk_stage. О начале и завершении
+ * завершения, более подробно см \ref MDBX_chk_stage_t. О начале и завершении
  * каждой стадии код приложения уведомляется через соответствующие функции
  * обратного вызова, более подробно см \ref MDBX_chk_callbacks_t.
  *
