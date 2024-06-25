@@ -775,9 +775,11 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
   int err;
   DKBUF_DEBUG;
   MDBX_env *const env = mc->txn->env;
+  if (LOG_ENABLED(MDBX_LOG_DEBUG) && (flags & MDBX_RESERVE))
+    data->iov_base = nullptr;
   DEBUG("==> put db %d key [%s], size %" PRIuPTR ", data [%s] size %" PRIuPTR,
-        cursor_dbi_dbg(mc), DKEY_DEBUG(key), key->iov_len,
-        DVAL_DEBUG((flags & MDBX_RESERVE) ? nullptr : data), data->iov_len);
+        cursor_dbi_dbg(mc), DKEY_DEBUG(key), key->iov_len, DVAL_DEBUG(data),
+        data->iov_len);
 
   if ((flags & MDBX_CURRENT) != 0 && (mc->flags & z_inner) == 0) {
     if (unlikely(flags & (MDBX_APPEND | MDBX_NOOVERWRITE)))
