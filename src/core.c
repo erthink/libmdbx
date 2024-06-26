@@ -17346,9 +17346,11 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
   int err;
   DKBUF_DEBUG;
   MDBX_env *const env = mc->mc_txn->mt_env;
+  if (LOG_ENABLED(MDBX_LOG_DEBUG) && (flags & MDBX_RESERVE))
+    data->iov_base = nullptr;
   DEBUG("==> put db %d key [%s], size %" PRIuPTR ", data [%s] size %" PRIuPTR,
-        DDBI(mc), DKEY_DEBUG(key), key->iov_len,
-        DVAL_DEBUG((flags & MDBX_RESERVE) ? nullptr : data), data->iov_len);
+        DDBI(mc), DKEY_DEBUG(key), key->iov_len, DVAL_DEBUG(data),
+        data->iov_len);
 
   if ((flags & MDBX_CURRENT) != 0 && (mc->mc_flags & C_SUB) == 0) {
     if (unlikely(flags & (MDBX_APPEND | MDBX_NOOVERWRITE)))
