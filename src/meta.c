@@ -475,7 +475,7 @@ __cold int __must_check_result meta_override(MDBX_env *env, size_t target,
     osal_flush_incoherent_mmap(env->dxb_mmap.base, pgno2bytes(env, NUM_METAS),
                                globals.sys_pagesize);
   }
-  eASSERT(env, (!env->txn && !env->basal_txn) ||
+  eASSERT(env, (!env->txn && (env->flags & ENV_ACTIVE) == 0) ||
                    (env->stuck_meta == (int)target &&
                     (env->flags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) ==
                         MDBX_EXCLUSIVE));
