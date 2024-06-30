@@ -1618,13 +1618,9 @@ __cold bool txn::rename_map(const char *old_name, const char *new_name,
   }
 }
 
-#if defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L
-
-__cold bool txn::drop_map(const ::std::string_view &name,
-                          bool throw_if_absent) {
+__cold bool txn::drop_map(const ::mdbx::slice &name, bool throw_if_absent) {
   map_handle map;
-  const int err =
-      ::mdbx_dbi_open2(handle_, mdbx::slice(name), MDBX_DB_ACCEDE, &map.dbi);
+  const int err = ::mdbx_dbi_open2(handle_, name, MDBX_DB_ACCEDE, &map.dbi);
   switch (err) {
   case MDBX_SUCCESS:
     drop_map(map);
@@ -1639,11 +1635,9 @@ __cold bool txn::drop_map(const ::std::string_view &name,
   }
 }
 
-__cold bool txn::clear_map(const ::std::string_view &name,
-                           bool throw_if_absent) {
+__cold bool txn::clear_map(const ::mdbx::slice &name, bool throw_if_absent) {
   map_handle map;
-  const int err =
-      ::mdbx_dbi_open2(handle_, mdbx::slice(name), MDBX_DB_ACCEDE, &map.dbi);
+  const int err = ::mdbx_dbi_open2(handle_, name, MDBX_DB_ACCEDE, &map.dbi);
   switch (err) {
   case MDBX_SUCCESS:
     clear_map(map);
@@ -1658,12 +1652,11 @@ __cold bool txn::clear_map(const ::std::string_view &name,
   }
 }
 
-__cold bool txn::rename_map(const ::std::string_view &old_name,
-                            const ::std::string_view &new_name,
+__cold bool txn::rename_map(const ::mdbx::slice &old_name,
+                            const ::mdbx::slice &new_name,
                             bool throw_if_absent) {
   map_handle map;
-  const int err = ::mdbx_dbi_open2(handle_, mdbx::slice(old_name),
-                                   MDBX_DB_ACCEDE, &map.dbi);
+  const int err = ::mdbx_dbi_open2(handle_, old_name, MDBX_DB_ACCEDE, &map.dbi);
   switch (err) {
   case MDBX_SUCCESS:
     rename_map(map, new_name);
@@ -1681,19 +1674,9 @@ __cold bool txn::rename_map(const ::std::string_view &old_name,
 __cold bool txn::rename_map(const ::std::string &old_name,
                             const ::std::string &new_name,
                             bool throw_if_absent) {
-  return rename_map(::std::string_view(old_name), ::std::string_view(new_name),
+  return rename_map(::mdbx::slice(old_name), ::mdbx::slice(new_name),
                     throw_if_absent);
 }
-
-#else
-
-__cold bool txn::rename_map(const ::std::string &old_name,
-                            const ::std::string &new_name,
-                            bool throw_if_absent) {
-  return rename_map(old_name.c_str(), new_name.c_str(), throw_if_absent);
-}
-
-#endif /* __cpp_lib_string_view >= 201606L */
 
 //------------------------------------------------------------------------------
 

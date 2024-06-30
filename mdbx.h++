@@ -4384,11 +4384,18 @@ public:
       const ::std::string &name,
       const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
       const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single) const;
+  /// \brief Open existing key-value map.
+  inline map_handle open_map(
+      const ::mdbx::slice &name,
+      const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
+      const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single) const;
 
   /// \brief Open existing key-value map.
   inline map_handle open_map_accede(const char *name) const;
   /// \brief Open existing key-value map.
   inline map_handle open_map_accede(const ::std::string &name) const;
+  /// \brief Open existing key-value map.
+  inline map_handle open_map_accede(const ::mdbx::slice &name) const;
 
   /// \brief Create new or open existing key-value map.
   inline map_handle
@@ -4398,6 +4405,11 @@ public:
   /// \brief Create new or open existing key-value map.
   inline map_handle
   create_map(const ::std::string &name,
+             const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
+             const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single);
+  /// \brief Create new or open existing key-value map.
+  inline map_handle
+  create_map(const ::mdbx::slice &name,
              const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
              const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single);
 
@@ -4411,6 +4423,10 @@ public:
   /// \return `True` if the key-value map existed and was deleted, either
   /// `false` if the key-value map did not exist and there is nothing to delete.
   inline bool drop_map(const ::std::string &name, bool throw_if_absent = false);
+  /// \brief Drop key-value map.
+  /// \return `True` if the key-value map existed and was deleted, either
+  /// `false` if the key-value map did not exist and there is nothing to delete.
+  bool drop_map(const ::mdbx::slice &name, bool throw_if_absent = false);
 
   /// \brief Clear key-value map.
   inline void clear_map(map_handle map);
@@ -4421,11 +4437,16 @@ public:
   /// `false` if the key-value map did not exist and there is nothing to clear.
   inline bool clear_map(const ::std::string &name,
                         bool throw_if_absent = false);
+  /// \return `True` if the key-value map existed and was cleared, either
+  /// `false` if the key-value map did not exist and there is nothing to clear.
+  bool clear_map(const ::mdbx::slice &name, bool throw_if_absent = false);
 
   /// \brief Переименовывает таблицу ключ-значение.
   inline void rename_map(map_handle map, const char *new_name);
   /// \brief Переименовывает таблицу ключ-значение.
   inline void rename_map(map_handle map, const ::std::string &new_name);
+  /// \brief Переименовывает таблицу ключ-значение.
+  inline void rename_map(map_handle map, const ::mdbx::slice &new_name);
   /// \brief Переименовывает таблицу ключ-значение.
   /// \return `True` если таблица существует и была переименована, либо
   /// `false` в случае отсутствия исходной таблицы.
@@ -4436,6 +4457,11 @@ public:
   /// `false` в случае отсутствия исходной таблицы.
   bool rename_map(const ::std::string &old_name, const ::std::string &new_name,
                   bool throw_if_absent = false);
+  /// \brief Переименовывает таблицу ключ-значение.
+  /// \return `True` если таблица существует и была переименована, либо
+  /// `false` в случае отсутствия исходной таблицы.
+  bool rename_map(const ::mdbx::slice &old_name, const ::mdbx::slice &new_name,
+                  bool throw_if_absent = false);
 
 #if defined(DOXYGEN) ||                                                        \
     (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
@@ -4444,21 +4470,29 @@ public:
   inline map_handle open_map(
       const ::std::string_view &name,
       const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
-      const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single) const;
+      const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single) const {
+    return open_map(::mdbx::slice(name), key_mode, value_mode);
+  }
   /// \brief Open existing key-value map.
   inline map_handle open_map_accede(const ::std::string_view &name) const;
   /// \brief Create new or open existing key-value map.
   inline map_handle
   create_map(const ::std::string_view &name,
              const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
-             const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single);
+             const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single) {
+    return create_map(::mdbx::slice(name), key_mode, value_mode);
+  }
   /// \brief Drop key-value map.
   /// \return `True` if the key-value map existed and was deleted, either
   /// `false` if the key-value map did not exist and there is nothing to delete.
-  bool drop_map(const ::std::string_view &name, bool throw_if_absent = false);
+  bool drop_map(const ::std::string_view &name, bool throw_if_absent = false) {
+    return drop_map(::mdbx::slice(name), throw_if_absent);
+  }
   /// \return `True` if the key-value map existed and was cleared, either
   /// `false` if the key-value map did not exist and there is nothing to clear.
-  bool clear_map(const ::std::string_view &name, bool throw_if_absent = false);
+  bool clear_map(const ::std::string_view &name, bool throw_if_absent = false) {
+    return clear_map(::mdbx::slice(name), throw_if_absent);
+  }
   /// \brief Переименовывает таблицу ключ-значение.
   inline void rename_map(map_handle map, const ::std::string_view &new_name);
   /// \brief Переименовывает таблицу ключ-значение.
@@ -4466,8 +4500,10 @@ public:
   /// `false` в случае отсутствия исходной таблицы.
   bool rename_map(const ::std::string_view &old_name,
                   const ::std::string_view &new_name,
-                  bool throw_if_absent = false);
-
+                  bool throw_if_absent = false) {
+    return rename_map(::mdbx::slice(old_name), ::mdbx::slice(new_name),
+                      throw_if_absent);
+  }
 #endif /* __cpp_lib_string_view >= 201606L */
 
   using map_stat = ::MDBX_stat;
@@ -6428,6 +6464,17 @@ inline size_t txn::release_all_cursors(bool unbind) const {
 }
 
 inline ::mdbx::map_handle
+txn::open_map(const ::mdbx::slice &name, const ::mdbx::key_mode key_mode,
+              const ::mdbx::value_mode value_mode) const {
+  ::mdbx::map_handle map;
+  error::success_or_throw(::mdbx_dbi_open2(
+      handle_, name, MDBX_db_flags_t(key_mode) | MDBX_db_flags_t(value_mode),
+      &map.dbi));
+  assert(map.dbi != 0);
+  return map;
+}
+
+inline ::mdbx::map_handle
 txn::open_map(const char *name, const ::mdbx::key_mode key_mode,
               const ::mdbx::value_mode value_mode) const {
   ::mdbx::map_handle map;
@@ -6438,10 +6485,31 @@ txn::open_map(const char *name, const ::mdbx::key_mode key_mode,
   return map;
 }
 
+inline ::mdbx::map_handle
+txn::open_map_accede(const ::mdbx::slice &name) const {
+  ::mdbx::map_handle map;
+  error::success_or_throw(
+      ::mdbx_dbi_open2(handle_, name, MDBX_DB_ACCEDE, &map.dbi));
+  assert(map.dbi != 0);
+  return map;
+}
+
 inline ::mdbx::map_handle txn::open_map_accede(const char *name) const {
   ::mdbx::map_handle map;
   error::success_or_throw(
       ::mdbx_dbi_open(handle_, name, MDBX_DB_ACCEDE, &map.dbi));
+  assert(map.dbi != 0);
+  return map;
+}
+
+inline ::mdbx::map_handle txn::create_map(const ::mdbx::slice &name,
+                                          const ::mdbx::key_mode key_mode,
+                                          const ::mdbx::value_mode value_mode) {
+  ::mdbx::map_handle map;
+  error::success_or_throw(::mdbx_dbi_open2(
+      handle_, name,
+      MDBX_CREATE | MDBX_db_flags_t(key_mode) | MDBX_db_flags_t(value_mode),
+      &map.dbi));
   assert(map.dbi != 0);
   return map;
 }
@@ -6470,108 +6538,38 @@ inline void txn::rename_map(map_handle map, const char *new_name) {
   error::success_or_throw(::mdbx_dbi_rename(handle_, map, new_name));
 }
 
-#if defined(DOXYGEN) ||                                                        \
-    (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
-
-inline ::mdbx::map_handle
-txn::open_map(const ::std::string_view &name, const ::mdbx::key_mode key_mode,
-              const ::mdbx::value_mode value_mode) const {
-  ::mdbx::map_handle map;
-  error::success_or_throw(::mdbx_dbi_open2(
-      handle_, ::mdbx::slice(name),
-      MDBX_db_flags_t(key_mode) | MDBX_db_flags_t(value_mode), &map.dbi));
-  assert(map.dbi != 0);
-  return map;
-}
-
-inline ::mdbx::map_handle
-txn::open_map_accede(const ::std::string_view &name) const {
-  ::mdbx::map_handle map;
-  error::success_or_throw(
-      ::mdbx_dbi_open2(handle_, ::mdbx::slice(name), MDBX_DB_ACCEDE, &map.dbi));
-  assert(map.dbi != 0);
-  return map;
-}
-
-inline ::mdbx::map_handle txn::create_map(const ::std::string_view &name,
-                                          const ::mdbx::key_mode key_mode,
-                                          const ::mdbx::value_mode value_mode) {
-  ::mdbx::map_handle map;
-  error::success_or_throw(::mdbx_dbi_open2(
-      handle_, ::mdbx::slice(name),
-      MDBX_CREATE | MDBX_db_flags_t(key_mode) | MDBX_db_flags_t(value_mode),
-      &map.dbi));
-  assert(map.dbi != 0);
-  return map;
-}
-
-inline void txn::rename_map(map_handle map,
-                            const ::std::string_view &new_name) {
-  error::success_or_throw(
-      ::mdbx_dbi_rename2(handle_, map, ::mdbx::slice(new_name)));
+inline void txn::rename_map(map_handle map, const ::mdbx::slice &new_name) {
+  error::success_or_throw(::mdbx_dbi_rename2(handle_, map, new_name));
 }
 
 inline ::mdbx::map_handle
 txn::open_map(const ::std::string &name, const ::mdbx::key_mode key_mode,
               const ::mdbx::value_mode value_mode) const {
-  return open_map(::std::string_view(name), key_mode, value_mode);
+  return open_map(::mdbx::slice(name), key_mode, value_mode);
 }
 
 inline ::mdbx::map_handle
 txn::open_map_accede(const ::std::string &name) const {
-  return open_map_accede(::std::string_view(name));
+  return open_map_accede(::mdbx::slice(name));
 }
 
 inline ::mdbx::map_handle txn::create_map(const ::std::string &name,
                                           const ::mdbx::key_mode key_mode,
                                           const ::mdbx::value_mode value_mode) {
-  return create_map(::std::string_view(name), key_mode, value_mode);
+  return create_map(::mdbx::slice(name), key_mode, value_mode);
 }
 
 inline bool txn::drop_map(const ::std::string &name, bool throw_if_absent) {
-  return drop_map(::std::string_view(name), throw_if_absent);
+  return drop_map(::mdbx::slice(name), throw_if_absent);
 }
 
 inline bool txn::clear_map(const ::std::string &name, bool throw_if_absent) {
-  return clear_map(::std::string_view(name), throw_if_absent);
+  return clear_map(::mdbx::slice(name), throw_if_absent);
 }
 
 inline void txn::rename_map(map_handle map, const ::std::string &new_name) {
-  return rename_map(map, ::std::string_view(new_name));
+  return rename_map(map, ::mdbx::slice(new_name));
 }
-
-#else
-
-inline ::mdbx::map_handle
-txn::open_map(const ::std::string &name, const ::mdbx::key_mode key_mode,
-              const ::mdbx::value_mode value_mode) const {
-  return open_map(name.c_str(), key_mode, value_mode);
-}
-
-inline ::mdbx::map_handle
-txn::open_map_accede(const ::std::string &name) const {
-  return open_map_accede(name.c_str());
-}
-
-inline ::mdbx::map_handle txn::create_map(const ::std::string &name,
-                                          const ::mdbx::key_mode key_mode,
-                                          const ::mdbx::value_mode value_mode) {
-  return create_map(name.c_str(), key_mode, value_mode);
-}
-
-inline bool txn::drop_map(const ::std::string &name, bool throw_if_absent) {
-  return drop_map(name.c_str(), throw_if_absent);
-}
-
-inline bool txn::clear_map(const ::std::string &name, bool throw_if_absent) {
-  return clear_map(name.c_str(), throw_if_absent);
-}
-
-inline void txn::rename_map(map_handle map, const ::std::string &new_name) {
-  return rename_map(map, new_name.c_str());
-}
-
-#endif /* __cpp_lib_string_view >= 201606L */
 
 inline txn::map_stat txn::get_map_stat(map_handle map) const {
   txn::map_stat r;
