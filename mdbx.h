@@ -4553,6 +4553,8 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_dbi_state)
 
 /** \brief Retrieve the DB flags and status for a database handle.
  * \ingroup c_statinfo
+ * \see MDBX_db_flags_t
+ * \see MDBX_dbi_state_t
  *
  * \param [in] txn     A transaction handle returned by \ref mdbx_txn_begin().
  * \param [in] dbi     A database handle returned by \ref mdbx_dbi_open().
@@ -4564,7 +4566,8 @@ LIBMDBX_API int mdbx_dbi_flags_ex(const MDBX_txn *txn, MDBX_dbi dbi,
                                   unsigned *flags, unsigned *state);
 /** \brief The shortcut to calling \ref mdbx_dbi_flags_ex() with `state=NULL`
  * for discarding it result.
- * \ingroup c_statinfo */
+ * \ingroup c_statinfo
+ * \see MDBX_db_flags_t */
 LIBMDBX_INLINE_API(int, mdbx_dbi_flags,
                    (const MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags)) {
   unsigned state;
