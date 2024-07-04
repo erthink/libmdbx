@@ -3840,6 +3840,9 @@ public:
     /// \brief Returns the maximal write transaction size (i.e. limit for
     /// summary volume of dirty pages) in bytes for specified page size.
     static inline size_t transaction_size_max(intptr_t pagesize);
+
+    /// \brief Returns the maximum opened map handles, aka DBI-handles.
+    static inline size_t max_map_handles(void);
   };
 
   /// \brief Returns the minimal database size in bytes for the environment.
@@ -6124,6 +6127,8 @@ inline size_t env::limits::transaction_size_max(intptr_t pagesize) {
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_EINVAL);
   return static_cast<size_t>(result);
 }
+
+inline size_t env::limits::max_map_handles(void) { return MDBX_MAX_DBI; }
 
 inline env::operate_parameters env::get_operation_parameters() const {
   const auto flags = get_flags();
