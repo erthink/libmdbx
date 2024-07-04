@@ -131,3 +131,6 @@ MDBX_INTERNAL int dbi_open(MDBX_txn *txn, const MDBX_val *const name,
 
 MDBX_INTERNAL int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags,
                            MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp);
+
+MDBX_INTERNAL const tree_t *dbi_dig(const MDBX_txn *txn, const size_t dbi,
+                                    tree_t *fallback);

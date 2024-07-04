@@ -952,3 +952,83 @@ __cold int mdbx_dbi_stat(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest,
   stat_get(&txn->dbs[dbi], dest, bytes);
   return MDBX_SUCCESS;
 }
+
+__cold const tree_t *dbi_dig(const MDBX_txn *txn, const size_t dbi,
+                             tree_t *fallback) {
+  const MDBX_txn *dig = txn;
+  do {
+    tASSERT(txn, txn->n_dbi == dig->n_dbi);
+    const uint8_t state = dbi_state(dig, dbi);
+    if (state & DBI_LINDO)
+      switch (state & (DBI_VALID | DBI_STALE | DBI_OLDEN)) {
+      case DBI_VALID:
+      case DBI_OLDEN:
+        return dig->dbs + dbi;
+      case 0:
+        return nullptr;
+      case DBI_VALID | DBI_STALE:
+      case DBI_OLDEN | DBI_STALE:
+        break;
+      default:
+        tASSERT(txn, !!"unexpected dig->dbi_state[dbi]");
+      }
+    dig = dig->parent;
+  } while (dig);
+  return fallback;
+}
+
+__cold int mdbx_enumerate_subdb(const MDBX_txn *txn, MDBX_subdb_enum_func *func,
+                                void *ctx) {
+  if (unlikely(!func))
+    return MDBX_EINVAL;
+
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  cursor_couple_t cx;
+  rc = cursor_init(&cx.outer, txn, MAIN_DBI);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  cx.outer.next = txn->cursors[MAIN_DBI];
+  txn->cursors[MAIN_DBI] = &cx.outer;
+  for (rc = outer_first(&cx.outer, nullptr, nullptr); rc == MDBX_SUCCESS;
+       rc = outer_next(&cx.outer, nullptr, nullptr, MDBX_NEXT_NODUP)) {
+    node_t *node =
+        page_node(cx.outer.pg[cx.outer.top], cx.outer.ki[cx.outer.top]);
+    if (node_flags(node) != N_SUBDATA)
+      continue;
+    if (unlikely(node_ds(node) != sizeof(tree_t))) {
+      ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,
+            "invalid dupsort sub-tree node size", (unsigned)node_ds(node));
+      rc = MDBX_CORRUPTED;
+      break;
+    }
+
+    tree_t reside;
+    const tree_t *tree = memcpy(&reside, node_data(node), sizeof(reside));
+    const MDBX_val name = {node_key(node), node_ks(node)};
+    const MDBX_env *const env = txn->env;
+    MDBX_dbi dbi = 0;
+    for (size_t i = CORE_DBS; i < env->n_dbi; ++i) {
+      if (i >= txn->n_dbi || !(env->dbs_flags[i] & DB_VALID))
+        continue;
+      if (env->kvs[MAIN_DBI].clc.k.cmp(&name, &env->kvs[i].name))
+        continue;
+
+      tree = dbi_dig(txn, i, &reside);
+      dbi = (MDBX_dbi)i;
+      break;
+    }
+
+    MDBX_stat stat;
+    stat_get(tree, &stat, sizeof(stat));
+    rc = func(ctx, txn, &name, tree->flags, &stat, dbi);
+    if (rc != MDBX_SUCCESS)
+      break;
+  }
+  txn->cursors[MAIN_DBI] = cx.outer.next;
+
+  return (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
+}

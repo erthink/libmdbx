@@ -4443,6 +4443,46 @@ LIBMDBX_API int mdbx_dbi_rename(MDBX_txn *txn, MDBX_dbi dbi, const char *name);
 LIBMDBX_API int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi,
                                  const MDBX_val *name);
 
+/** \brief Функция обратного вызова для перечисления
+ *  пользовательских именованных таблиц.
+ *
+ * \ingroup c_statinfo
+ * \see mdbx_enumerate_subdb()
+ *
+ * \param [in] ctx       Указатель на контекст переданный аналогичным
+ *                       параметром в \ref mdbx_enumerate_subdb().
+ * \param [in] txn       Транзазакция.
+ * \param [in] name      Имя таблицы.
+ * \param [in] flags     Флаги \ref MDBX_db_flags_t.
+ * \param [in] stat      Базовая информация \ref MDBX_stat о таблице.
+ * \param [in] dbi       Отличное от 0 значение DBI-дескриптора,
+ *                       если таковой был открыт для этой таблицы.
+ *                       Либо 0 если такого открытого дескриптора нет.
+ *
+ * \returns Ноль при успехе и продолжении перечисления, при возвращении другого
+ *          значения оно будет немедленно возвращено вызывающему
+ *          без продолжения перечисления. */
+typedef int(MDBX_subdb_enum_func)(void *ctx, const MDBX_txn *txn,
+                                  const MDBX_val *name, MDBX_db_flags_t flags,
+                                  const struct MDBX_stat *stat,
+                                  MDBX_dbi dbi) MDBX_CXX17_NOEXCEPT;
+
+/** \brief Enumerate the entries in the reader lock table.
+ * \ingroup c_statinfo
+ * \see MDBX_subdb_enum_func
+ *
+ * \param [in] txn     Транзакция запущенная посредством
+ *                     \ref mdbx_txn_begin().
+ * \param [in] func    Указатель на пользовательскую функцию-перечислитель
+ *                     с сигнатурой \ref MDBX_subdb_enum_func,
+ *                     которая будет вызвана для каждой таблицы.
+ * \param [in] ctx     Указатель на некоторый контект, который будет передан
+ *                     в функцию-перечислитель как есть.
+ *
+ * \returns Ненулевое значение кода ошибки, либо 0 при успешном выполнении. */
+ LIBMDBX_API int mdbx_enumerate_subdb(const MDBX_txn *txn,
+                                     MDBX_subdb_enum_func *func, void *ctx);
+
 /** \defgroup value2key Value-to-Key functions
  * \brief Value-to-Key functions to
  * \ref avoid_custom_comparators "avoid using custom comparators"
