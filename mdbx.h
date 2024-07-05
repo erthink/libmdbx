@@ -3067,8 +3067,8 @@ LIBMDBX_INLINE_API(int, mdbx_env_close, (MDBX_env * env)) {
  * \param [in,out] env   Экземпляр среды созданный функцией
  *                       \ref mdbx_env_create().
  *
- * \returns Ненулевое значение ошибки при сбое и 0 при успешном выполнении,
- *          некоторые возможные ошибки таковы:
+ * \returns Ненулевое значение кода ошибки, либо 0 при успешном выполнении.
+ *          Некоторые возможные ошибки таковы:
  *
  * \retval MDBX_BUSY      В родительском процессе БД была открыта
  *                        в режиме \ref MDBX_EXCLUSIVE.
@@ -4424,7 +4424,7 @@ MDBX_DEPRECATED LIBMDBX_API int
 mdbx_dbi_open_ex2(MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags,
                   MDBX_dbi *dbi, MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp);
 
-/** \brief Переименовает таблицу по DBI-хендлу.
+/** \brief Переименовает таблицу по DBI-дескриптору.
  * \ingroup c_dbi
  *
  * Переименовывает пользовательскую именованную subDB связанную с передаваемым
@@ -4437,7 +4437,7 @@ mdbx_dbi_open_ex2(MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags,
  *
  * \param [in]     name  Новое имя для переименования.
  *
- * \returns Ненулевое значение ошибки при сбое и 0 при успешном выполнении. */
+ * \returns Ненулевое значение кода ошибки, либо 0 при успешном выполнении. */
 LIBMDBX_API int mdbx_dbi_rename(MDBX_txn *txn, MDBX_dbi dbi, const char *name);
 /** \copydoc mdbx_dbi_rename() */
 LIBMDBX_API int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi,
@@ -4480,7 +4480,7 @@ typedef int(MDBX_subdb_enum_func)(void *ctx, const MDBX_txn *txn,
  *                     в функцию-перечислитель как есть.
  *
  * \returns Ненулевое значение кода ошибки, либо 0 при успешном выполнении. */
- LIBMDBX_API int mdbx_enumerate_subdb(const MDBX_txn *txn,
+LIBMDBX_API int mdbx_enumerate_subdb(const MDBX_txn *txn,
                                      MDBX_subdb_enum_func *func, void *ctx);
 
 /** \defgroup value2key Value-to-Key functions
@@ -6178,7 +6178,7 @@ LIBMDBX_API int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target_meta);
  * нет препятствий к тому, чтобы другой процесс удалил БД и создал её заново с
  * другим размером страницы и/или изменением любых других параметров.
  *
- * \returns Ненулевое значение ошибки при сбое и 0 при успешном выполнении. */
+ * \returns Ненулевое значение кода ошибки, либо 0 при успешном выполнении. */
 LIBMDBX_API int mdbx_preopen_snapinfo(const char *pathname, MDBX_envinfo *info,
                                       size_t bytes);
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
