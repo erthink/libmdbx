@@ -168,26 +168,24 @@ int coherency_check_written(const MDBX_env *env, const txnid_t txnid,
                             uint64_t *timestamp) {
   const bool report = !(timestamp && *timestamp);
   const txnid_t head_txnid = meta_txnid(meta);
-  if (unlikely(head_txnid < MIN_TXNID || head_txnid < txnid)) {
-    if (report) {
-      env->lck->pgops.incoherence.weak =
-          (env->lck->pgops.incoherence.weak >= INT32_MAX)
-              ? INT32_MAX
-              : env->lck->pgops.incoherence.weak + 1;
-      WARNING("catch %s txnid %" PRIaTXN " for meta_%" PRIaPGNO " %s",
-              (head_txnid < MIN_TXNID) ? "invalid" : "unexpected", head_txnid,
-              bytes2pgno(env, ptr_dist(meta, env->dxb_mmap.base)),
-              "(workaround for incoherent flaw of unified page/buffer cache)");
+  if (likely(head_txnid >= MIN_TXNID && head_txnid >= txnid)) {
+    if (likely(
+            coherency_check(env, head_txnid, &meta->trees.gc, meta, report))) {
+      eASSERT(env, meta->trees.gc.flags == MDBX_INTEGERKEY);
+      eASSERT(env, check_sdb_flags(meta->trees.main.flags));
+      return MDBX_SUCCESS;
     }
-    return coherency_timeout(timestamp, pgno, env);
+  } else if (report) {
+    env->lck->pgops.incoherence.weak =
+        (env->lck->pgops.incoherence.weak >= INT32_MAX)
+            ? INT32_MAX
+            : env->lck->pgops.incoherence.weak + 1;
+    WARNING("catch %s txnid %" PRIaTXN " for meta_%" PRIaPGNO " %s",
+            (head_txnid < MIN_TXNID) ? "invalid" : "unexpected", head_txnid,
+            bytes2pgno(env, ptr_dist(meta, env->dxb_mmap.base)),
+            "(workaround for incoherent flaw of unified page/buffer cache)");
   }
-  if (unlikely(
-          !coherency_check(env, head_txnid, &meta->trees.gc, meta, report)))
-    return coherency_timeout(timestamp, pgno, env);
-
-  eASSERT(env, meta->trees.gc.flags == MDBX_INTEGERKEY);
-  eASSERT(env, check_sdb_flags(meta->trees.main.flags));
-  return MDBX_SUCCESS;
+  return coherency_timeout(timestamp, pgno, env);
 }
 
 bool coherency_check_meta(const MDBX_env *env, const volatile meta_t *meta,
