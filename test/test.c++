@@ -1198,7 +1198,7 @@ int testcase::remove(const keygen::buffer &akey, const keygen::buffer &adata) {
       }
 
 #if SPECULUM_CURSORS
-      speculum_render(it_found, speculum_cursors[seek_check].get());
+      // speculum_render(it_found, speculum_cursors[seek_check].get());
       if (it_found != speculum.begin()) {
         const auto cursor_prev = speculum_cursors[prev].get();
         auto it_prev = it_found;
