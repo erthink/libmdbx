@@ -109,6 +109,8 @@ typedef LSTATUS(WINAPI *MDBX_RegGetValueA)(HKEY hkey, LPCSTR lpSubKey,
                                            LPDWORD pdwType, PVOID pvData,
                                            LPDWORD pcbData);
 
+typedef long(WINAPI *MDBX_CoCreateGuid)(bin128_t *guid);
+
 NTSYSAPI ULONG RtlRandomEx(PULONG Seed);
 
 typedef BOOL(WINAPI *MDBX_SetFileIoOverlappedRange)(HANDLE FileHandle,
@@ -131,6 +133,7 @@ struct libmdbx_imports {
   MDBX_GetTickCount64 GetTickCount64;
   MDBX_RegGetValueA RegGetValueA;
   MDBX_SetFileIoOverlappedRange SetFileIoOverlappedRange;
+  MDBX_CoCreateGuid CoCreateGuid;
 };
 
 MDBX_INTERNAL void windows_import(void);

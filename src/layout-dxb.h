@@ -91,15 +91,6 @@ typedef struct geo {
   };
 } geo_t;
 
-typedef union bin128 {
-  __anonymous_struct_extension__ struct {
-    uint64_t x, y;
-  };
-  __anonymous_struct_extension__ struct {
-    uint32_t a, b, c, d;
-  };
-} bin128_t;
-
 /* Meta page content.
  * A meta page is the start point for accessing a database snapshot.
  * Pages 0-2 are meta pages. */
@@ -158,6 +149,9 @@ typedef struct meta {
    * steady sync point. Zeros mean that no relevant information is available
    * from the system. */
   bin128_t bootid;
+
+  /* GUID базы данных, начиная с v0.13.1 */
+  bin128_t dxbid;
 } meta_t;
 
 #pragma pack(1)

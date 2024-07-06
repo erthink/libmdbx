@@ -727,6 +727,7 @@ static int env_info_snap(const MDBX_env *env, const MDBX_txn *txn,
                          troika_t *const troika) {
   const size_t size_before_bootid = offsetof(MDBX_envinfo, mi_bootid);
   const size_t size_before_pgop_stat = offsetof(MDBX_envinfo, mi_pgop_stat);
+  const size_t size_before_dxbid = offsetof(MDBX_envinfo, mi_dxbid);
   if (unlikely(env->flags & ENV_FATAL_ERROR))
     return MDBX_PANIC;
 
@@ -773,6 +774,8 @@ static int env_info_snap(const MDBX_env *env, const MDBX_txn *txn,
     memcpy(&out->mi_bootid.meta[0], &meta0->bootid, 16);
     memcpy(&out->mi_bootid.meta[1], &meta1->bootid, 16);
     memcpy(&out->mi_bootid.meta[2], &meta2->bootid, 16);
+    if (likely(bytes > size_before_dxbid))
+      memcpy(&out->mi_dxbid, &meta0->dxbid, 16);
   }
 
   const volatile meta_t *txn_meta = head.ptr_v;
@@ -895,8 +898,9 @@ __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
 
   const size_t size_before_bootid = offsetof(MDBX_envinfo, mi_bootid);
   const size_t size_before_pgop_stat = offsetof(MDBX_envinfo, mi_pgop_stat);
+  const size_t size_before_dxbid = offsetof(MDBX_envinfo, mi_dxbid);
   if (unlikely(bytes != sizeof(MDBX_envinfo)) && bytes != size_before_bootid &&
-      bytes != size_before_pgop_stat)
+      bytes != size_before_pgop_stat && bytes != size_before_dxbid)
     return MDBX_EINVAL;
 
   if (txn) {
@@ -938,8 +942,9 @@ __cold int mdbx_preopen_snapinfoW(const wchar_t *pathname, MDBX_envinfo *out,
 
   const size_t size_before_bootid = offsetof(MDBX_envinfo, mi_bootid);
   const size_t size_before_pgop_stat = offsetof(MDBX_envinfo, mi_pgop_stat);
+  const size_t size_before_dxbid = offsetof(MDBX_envinfo, mi_dxbid);
   if (unlikely(bytes != sizeof(MDBX_envinfo)) && bytes != size_before_bootid &&
-      bytes != size_before_pgop_stat)
+      bytes != size_before_pgop_stat && bytes != size_before_dxbid)
     return MDBX_EINVAL;
 
   memset(out, 0, bytes);
@@ -993,8 +998,11 @@ __cold int mdbx_preopen_snapinfoW(const wchar_t *pathname, MDBX_envinfo *out,
   const unsigned n = 0;
   out->mi_recent_txnid = constmeta_txnid(&header);
   out->mi_meta_sign[n] = unaligned_peek_u64(4, &header.sign);
-  if (likely(bytes > size_before_bootid))
+  if (likely(bytes > size_before_bootid)) {
     memcpy(&out->mi_bootid.meta[n], &header.bootid, 16);
+    if (likely(bytes > size_before_dxbid))
+      memcpy(&out->mi_dxbid, &header.dxbid, 16);
+  }
 
 bailout:
   env_close(&env, false);

@@ -147,6 +147,11 @@ void windows_import(void) {
   if (hAdvapi32dll) {
     MDBX_IMPORT(hAdvapi32dll, RegGetValueA);
   }
+
+  const HINSTANCE hOle32dll = GetModuleHandleA("ole32.dll");
+  if (hOle32dll) {
+    MDBX_IMPORT(hOle32dll, CoCreateGuid);
+  }
 }
 
 #undef MDBX_IMPORT

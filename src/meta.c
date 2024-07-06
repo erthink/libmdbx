@@ -332,8 +332,8 @@ int meta_sync(const MDBX_env *env, const meta_ptr_t head) {
   return rc;
 }
 
-__cold static page_t *meta_model(const MDBX_env *env, page_t *model,
-                                 size_t num) {
+__cold static page_t *meta_model(const MDBX_env *env, page_t *model, size_t num,
+                                 const bin128_t *guid) {
   ENSURE(env, is_powerof2(env->ps));
   ENSURE(env, env->ps >= MDBX_MIN_PAGESIZE);
   ENSURE(env, env->ps <= MDBX_MAX_PAGESIZE);
@@ -373,6 +373,7 @@ __cold static page_t *meta_model(const MDBX_env *env, page_t *model,
   model_meta->trees.gc.flags = MDBX_INTEGERKEY;
   model_meta->trees.gc.root = P_INVALID;
   model_meta->trees.main.root = P_INVALID;
+  memcpy(&model_meta->dxbid, guid, sizeof(model_meta->dxbid));
   meta_set_txnid(env, model_meta, MIN_TXNID + num);
   unaligned_poke_u64(4, model_meta->sign, meta_sign_calculate(model_meta));
   eASSERT(env, coherency_check_meta(env, model_meta, true));
@@ -380,10 +381,11 @@ __cold static page_t *meta_model(const MDBX_env *env, page_t *model,
 }
 
 __cold meta_t *meta_init_triplet(const MDBX_env *env, void *buffer) {
+  const bin128_t guid = osal_guid(env);
   page_t *page0 = (page_t *)buffer;
-  page_t *page1 = meta_model(env, page0, 0);
-  page_t *page2 = meta_model(env, page1, 1);
-  meta_model(env, page2, 2);
+  page_t *page1 = meta_model(env, page0, 0, &guid);
+  page_t *page2 = meta_model(env, page1, 1, &guid);
+  meta_model(env, page2, 2, &guid);
   return page_meta(page2);
 }
 
@@ -394,7 +396,8 @@ __cold int __must_check_result meta_override(MDBX_env *env, size_t target,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
   page_t *const page = env->page_auxbuf;
-  meta_model(env, page, target);
+  meta_model(env, page, target,
+             &((target == 0 && shape) ? shape : METAPAGE(env, 0))->dxbid);
   meta_t *const model = page_meta(page);
   meta_set_txnid(env, model, txnid);
   if (txnid)
@@ -430,6 +433,12 @@ __cold int __must_check_result meta_override(MDBX_env *env, size_t target,
       }
     }
   }
+
+  if (target == 0 && (model->dxbid.x | model->dxbid.y) == 0) {
+    const bin128_t guid = osal_guid(env);
+    memcpy(&model->dxbid, &guid, sizeof(model->dxbid));
+  }
+
   meta_sign_as_steady(model);
   rc = meta_validate(env, model, page, (pgno_t)target, nullptr);
   if (unlikely(MDBX_IS_ERROR(rc)))

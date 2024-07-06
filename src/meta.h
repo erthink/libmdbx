@@ -83,7 +83,12 @@ static inline meta_ptr_t meta_tail(const MDBX_env *env,
   return r;
 }
 
+static inline bool meta_is_used(const troika_t *troika, unsigned n) {
+  return n == troika->recent || n == troika->prefer_steady;
+}
+
 static inline bool meta_bootid_match(const meta_t *meta) {
+
   return memcmp(&meta->bootid, &globals.bootid, 16) == 0 &&
          (globals.bootid.x | globals.bootid.y) != 0;
 }

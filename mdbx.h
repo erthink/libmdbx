@@ -2745,6 +2745,11 @@ struct MDBX_envinfo {
     uint64_t
         fsync; /**< Number of explicit fsync-to-disk operations (not a pages) */
   } mi_pgop_stat;
+
+  /* GUID of the database DXB file. */
+  struct {
+    uint64_t x, y;
+  } mi_dxbid;
 };
 #ifndef __cplusplus
 /** \ingroup c_statinfo */

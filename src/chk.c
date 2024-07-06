@@ -1590,13 +1590,23 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
     return chk_error_rc(scope, err, "env_info");
 
   MDBX_chk_line_t *line =
-      chk_puts(chk_line_begin(scope, MDBX_chk_info), "current boot-id ");
+      chk_puts(chk_line_begin(scope, MDBX_chk_info -
+                                         (1 << MDBX_chk_severity_prio_shift)),
+               "dxb-id ");
+  if (chk->envinfo.mi_dxbid.x | chk->envinfo.mi_dxbid.y)
+    line = chk_print(line, "%016" PRIx64 "-%016" PRIx64,
+                     chk->envinfo.mi_dxbid.x, chk->envinfo.mi_dxbid.y);
+  else
+    line = chk_puts(line, "is absent");
+  chk_line_end(line);
+
+  line = chk_puts(chk_line_begin(scope, MDBX_chk_info), "current boot-id ");
   if (chk->envinfo.mi_bootid.current.x | chk->envinfo.mi_bootid.current.y)
     line = chk_print(line, "%016" PRIx64 "-%016" PRIx64,
                      chk->envinfo.mi_bootid.current.x,
                      chk->envinfo.mi_bootid.current.y);
   else
-    line = chk_puts(line, "unavailable");
+    line = chk_puts(line, "is unavailable");
   chk_line_end(line);
 
   err = osal_filesize(env->lazy_fd, &env->dxb_mmap.filesize);

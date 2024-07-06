@@ -839,6 +839,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   meta.trees.gc = txn->dbs[FREE_DBI];
   meta.trees.main = txn->dbs[MAIN_DBI];
   meta.canary = txn->canary;
+  memcpy(&meta.dxbid, &head.ptr_c->dxbid, sizeof(meta.dxbid));
 
   txnid_t commit_txnid = txn->txnid;
 #if MDBX_ENABLE_BIGFOOT

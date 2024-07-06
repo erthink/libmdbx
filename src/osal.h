@@ -576,6 +576,17 @@ MDBX_INTERNAL void osal_dtor(void);
 MDBX_INTERNAL int osal_mb2w(const char *const src, wchar_t **const pdst);
 #endif /* Windows */
 
+typedef union bin128 {
+  __anonymous_struct_extension__ struct {
+    uint64_t x, y;
+  };
+  __anonymous_struct_extension__ struct {
+    uint32_t a, b, c, d;
+  };
+} bin128_t;
+
+MDBX_INTERNAL bin128_t osal_guid(const MDBX_env *);
+
 /*----------------------------------------------------------------------------*/
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint64_t
