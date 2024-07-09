@@ -8,7 +8,7 @@
 #include "essentials.h"
 
 /* The version number for a database's lockfile format. */
-#define MDBX_LOCK_VERSION 5
+#define MDBX_LOCK_VERSION 6
 
 #if MDBX_LOCKING == MDBX_LOCKING_WIN32FILES
 
@@ -158,6 +158,12 @@ typedef struct reader_slot {
    * NOTE: We currently don't check for stale records.
    * We simply re-init the table when we know that we're the only process
    * opening the lock file. */
+
+  /* Псевдо thread_id для пометки вытесненных читающих транзакций. */
+#define MDBX_TID_TXN_OUSTED (UINT64_MAX - 1)
+
+  /* Псевдо thread_id для пометки припаркованных читающих транзакций. */
+#define MDBX_TID_TXN_PARKED UINT64_MAX
 
   /* The thread ID of the thread owning this txn. */
   mdbx_atomic_uint64_t tid;

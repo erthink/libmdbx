@@ -864,7 +864,7 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
 
 int mdbx_dbi_flags_ex(const MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
                       unsigned *state) {
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR);
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR - MDBX_TXN_PARKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 

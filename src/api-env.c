@@ -1350,8 +1350,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
             begin +
             atomic_load32(&env->lck_mmap.lck->rdt_length, mo_AcquireRelease);
         for (const reader_slot_t *reader = begin; reader < end; ++reader) {
-          if (reader->pid.weak == env->pid && reader->tid.weak &&
-              reader->tid.weak != CurrentTid) {
+          if (reader->pid.weak == env->pid && reader->tid.weak != CurrentTid) {
             /* At least one thread may don't use SRWL */
             rc = MDBX_EPERM;
             break;

@@ -453,8 +453,8 @@ static void take_gcprof(MDBX_txn *txn, MDBX_commit_latency *latency) {
 }
 
 int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
-  STATIC_ASSERT(MDBX_TXN_FINISHED ==
-                MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD - MDBX_TXN_ERROR);
+  STATIC_ASSERT(MDBX_TXN_FINISHED == MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD -
+                                         MDBX_TXN_ERROR - MDBX_TXN_PARKED);
   const uint64_t ts_0 = latency ? osal_monotime() : 0;
   uint64_t ts_1 = 0, ts_2 = 0, ts_3 = 0, ts_4 = 0, ts_5 = 0, gc_cputime = 0;
 
@@ -919,7 +919,6 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
   }
 #endif /* MDBX_ENV_CHECKPID */
 
-  const uintptr_t tid = osal_thread_self();
   flags |= env->flags & (MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP);
   if (flags & MDBX_TXN_RDONLY) {
     eASSERT(env, (flags & ~(txn_ro_begin_flags | MDBX_WRITEMAP |
@@ -949,7 +948,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
                    r->txnid.weak < SAFE64_INVALID_THRESHOLD))
         return MDBX_BAD_RSLOT;
     } else if (env->lck_mmap.lck) {
-      bsr_t brs = mvcc_bind_slot(env, tid);
+      bsr_t brs = mvcc_bind_slot(env);
       if (unlikely(brs.err != MDBX_SUCCESS))
         return brs.err;
       r = brs.rslot;
@@ -968,7 +967,11 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
       txn->flags = MDBX_TXN_RDONLY | MDBX_TXN_FINISHED;
       return MDBX_SUCCESS;
     }
-    txn->owner = tid;
+    txn->owner = (uintptr_t)r->tid.weak;
+    if ((env->flags & MDBX_NOSTICKYTHREADS) == 0 && env->txn &&
+        unlikely(env->basal_txn->owner == txn->owner) &&
+        (globals.runtime_flags & MDBX_DBG_LEGACY_OVERLAP) == 0)
+      return MDBX_TXN_OVERLAPPING;
 
     /* Seek & fetch the last meta */
     uint64_t timestamp = 0;
@@ -980,7 +983,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
               ? /* regular */ meta_recent(env, &troika)
               : /* recovery mode */ meta_ptr(env, env->stuck_meta);
       if (likely(r)) {
-        safe64_reset(&r->txnid, false);
+        safe64_reset(&r->txnid, true);
         atomic_store32(&r->snapshot_pages_used,
                        head.ptr_v->geometry.first_unallocated, mo_Relaxed);
         atomic_store64(
@@ -1014,7 +1017,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
           rc = MDBX_PROBLEM;
           txn->txnid = INVALID_TXNID;
           if (likely(r))
-            safe64_reset(&r->txnid, false);
+            safe64_reset(&r->txnid, true);
           goto bailout;
         }
         timestamp = 0;
@@ -1029,7 +1032,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
       if (unlikely(rc != MDBX_RESULT_TRUE)) {
         txn->txnid = INVALID_TXNID;
         if (likely(r))
-          safe64_reset(&r->txnid, false);
+          safe64_reset(&r->txnid, true);
         goto bailout;
       }
     }
@@ -1037,7 +1040,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
     if (unlikely(txn->txnid < MIN_TXNID || txn->txnid > MAX_TXNID)) {
       ERROR("%s", "environment corrupted by died writer, must shutdown!");
       if (likely(r))
-        safe64_reset(&r->txnid, false);
+        safe64_reset(&r->txnid, true);
       txn->txnid = INVALID_TXNID;
       rc = MDBX_CORRUPTED;
       goto bailout;
@@ -1050,6 +1053,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
   } else {
     eASSERT(env, (flags & ~(txn_rw_begin_flags | MDBX_TXN_SPILLS |
                             MDBX_WRITEMAP | MDBX_NOSTICKYTHREADS)) == 0);
+    const uintptr_t tid = osal_thread_self();
     if (unlikely(txn->owner == tid ||
                  /* not recovery mode */ env->stuck_meta >= 0))
       return MDBX_BUSY;
@@ -1165,7 +1169,8 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
 
   if (unlikely(env->dbs_flags[MAIN_DBI] !=
                (DB_VALID | txn->dbs[MAIN_DBI].flags))) {
-    const bool need_txn_lock = env->basal_txn && env->basal_txn->owner != tid;
+    const bool need_txn_lock =
+        env->basal_txn && env->basal_txn->owner != osal_thread_self();
     bool should_unlock = false;
     if (need_txn_lock) {
       rc = lck_txn_lock(env, true);
@@ -1330,7 +1335,7 @@ bailout:
   return rc;
 }
 
-int txn_end(MDBX_txn *txn, const unsigned mode) {
+int txn_end(MDBX_txn *txn, unsigned mode) {
   MDBX_env *env = txn->env;
   static const char *const names[] = TXN_END_NAMES;
 
@@ -1349,14 +1354,27 @@ int txn_end(MDBX_txn *txn, const unsigned mode) {
       reader_slot_t *slot = txn->to.reader;
       eASSERT(env, slot->pid.weak == env->pid);
       if (likely(!(txn->flags & MDBX_TXN_FINISHED))) {
-        ENSURE(env, txn->txnid >=
-                        /* paranoia is appropriate here */ env->lck
-                            ->cached_oldest.weak);
-        eASSERT(env, txn->txnid == slot->txnid.weak &&
-                         slot->txnid.weak >= env->lck->cached_oldest.weak);
+        if (likely((txn->flags & MDBX_TXN_PARKED) == 0)) {
+          ENSURE(env, txn->txnid >=
+                          /* paranoia is appropriate here */ env->lck
+                              ->cached_oldest.weak);
+          eASSERT(env, txn->txnid == slot->txnid.weak &&
+                           slot->txnid.weak >= env->lck->cached_oldest.weak);
+        } else {
+          if ((mode & TXN_END_OUSTED) == 0 &&
+              safe64_read(&slot->tid) == MDBX_TID_TXN_OUSTED)
+            mode += TXN_END_OUSTED;
+          do {
+            safe64_reset(&slot->txnid, false);
+            atomic_store64(&slot->tid, txn->owner, mo_AcquireRelease);
+            atomic_yield();
+          } while (
+              unlikely(safe64_read(&slot->txnid) < SAFE64_INVALID_THRESHOLD ||
+                       safe64_read(&slot->tid) != txn->owner));
+        }
         dxb_sanitize_tail(env, nullptr);
         atomic_store32(&slot->snapshot_pages_used, 0, mo_Relaxed);
-        safe64_reset(&slot->txnid, false);
+        safe64_reset(&slot->txnid, true);
         atomic_store32(&env->lck->rdt_refresh_flag, true, mo_Relaxed);
       } else {
         eASSERT(env, slot->pid.weak == env->pid);
@@ -1373,7 +1391,9 @@ int txn_end(MDBX_txn *txn, const unsigned mode) {
       imports.srwl_ReleaseShared(&env->remap_guard);
 #endif
     txn->n_dbi = 0; /* prevent further DBI activity */
-    txn->flags = MDBX_TXN_RDONLY | MDBX_TXN_FINISHED;
+    txn->flags = (mode & TXN_END_OUSTED)
+                     ? MDBX_TXN_RDONLY | MDBX_TXN_FINISHED | MDBX_TXN_OUSTED
+                     : MDBX_TXN_RDONLY | MDBX_TXN_FINISHED;
     txn->owner = 0;
   } else if (!(txn->flags & MDBX_TXN_FINISHED)) {
     ENSURE(env,
@@ -1483,16 +1503,17 @@ int mdbx_txn_renew(MDBX_txn *txn) {
   if (unlikely((txn->flags & MDBX_TXN_RDONLY) == 0))
     return MDBX_EINVAL;
 
-  int rc;
   if (unlikely(txn->owner != 0 || !(txn->flags & MDBX_TXN_FINISHED))) {
-    rc = mdbx_txn_reset(txn);
+    int rc = mdbx_txn_reset(txn);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
 
-  rc = txn_renew(txn, MDBX_TXN_RDONLY);
+  int rc = txn_renew(txn, MDBX_TXN_RDONLY);
   if (rc == MDBX_SUCCESS) {
-    tASSERT(txn, txn->owner == osal_thread_self());
+    tASSERT(txn, txn->owner == (txn->flags & MDBX_NOSTICKYTHREADS)
+                     ? 0
+                     : osal_thread_self());
     DEBUG("renew txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO
           "/%" PRIaPGNO,
           txn->txnid, (txn->flags & MDBX_TXN_RDONLY) ? 'r' : 'w', (void *)txn,
@@ -1550,12 +1571,7 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
 
     flags |= parent->flags & (txn_rw_begin_flags | MDBX_TXN_SPILLS |
                               MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP);
-  } else if (flags & MDBX_TXN_RDONLY) {
-    if ((env->flags & MDBX_NOSTICKYTHREADS) == 0 && env->txn &&
-        unlikely(env->basal_txn->owner == osal_thread_self()) &&
-        (globals.runtime_flags & MDBX_DBG_LEGACY_OVERLAP) == 0)
-      return MDBX_TXN_OVERLAPPING;
-  } else {
+  } else if ((flags & MDBX_TXN_RDONLY) == 0) {
     /* Reuse preallocated write txn. However, do not touch it until
      * txn_renew() succeeds, since it currently may be active. */
     txn = env->basal_txn;
@@ -1789,8 +1805,10 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
 
     info->txn_reader_lag = head.txnid - info->txn_id;
     info->txn_space_dirty = info->txn_space_retired = 0;
-    uint64_t reader_snapshot_pages_retired;
+    uint64_t reader_snapshot_pages_retired = 0;
     if (txn->to.reader &&
+        ((txn->flags & MDBX_TXN_PARKED) == 0 ||
+         safe64_read(&txn->to.reader->tid) != MDBX_TID_TXN_OUSTED) &&
         head_retired >
             (reader_snapshot_pages_retired = atomic_load64(
                  &txn->to.reader->snapshot_pages_retired, mo_Relaxed))) {
@@ -1808,19 +1826,21 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
         retry:
           if (atomic_load32(&lck->rdt[i].pid, mo_AcquireRelease)) {
             jitter4testing(true);
+            const uint64_t snap_tid = safe64_read(&lck->rdt[i].tid);
             const txnid_t snap_txnid = safe64_read(&lck->rdt[i].txnid);
             const uint64_t snap_retired = atomic_load64(
                 &lck->rdt[i].snapshot_pages_retired, mo_AcquireRelease);
             if (unlikely(snap_retired !=
                          atomic_load64(&lck->rdt[i].snapshot_pages_retired,
                                        mo_Relaxed)) ||
-                snap_txnid != safe64_read(&lck->rdt[i].txnid))
+                snap_txnid != safe64_read(&lck->rdt[i].txnid) ||
+                snap_tid != safe64_read(&lck->rdt[i].tid))
               goto retry;
             if (snap_txnid <= txn->txnid) {
               retired_next_reader = 0;
               break;
             }
-            if (snap_txnid < next_reader) {
+            if (snap_txnid < next_reader && snap_tid >= MDBX_TID_TXN_OUSTED) {
               next_reader = snap_txnid;
               retired_next_reader = pgno2bytes(
                   env, (pgno_t)(snap_retired -
@@ -1885,7 +1905,7 @@ uint64_t mdbx_txn_id(const MDBX_txn *txn) {
   return txn->txnid;
 }
 
-int mdbx_txn_flags(const MDBX_txn *txn) {
+MDBX_txn_flags_t mdbx_txn_flags(const MDBX_txn *txn) {
   STATIC_ASSERT(
       (MDBX_TXN_INVALID &
        (MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_DIRTY | MDBX_TXN_SPILLS |
@@ -1894,7 +1914,12 @@ int mdbx_txn_flags(const MDBX_txn *txn) {
   if (unlikely(!txn || txn->signature != txn_signature))
     return MDBX_TXN_INVALID;
   assert(0 == (int)(txn->flags & MDBX_TXN_INVALID));
-  return txn->flags;
+
+  MDBX_txn_flags_t flags = txn->flags;
+  if (F_ISSET(flags, MDBX_TXN_PARKED | MDBX_TXN_RDONLY) && txn->to.reader &&
+      safe64_read(&txn->to.reader->tid) == MDBX_TID_TXN_OUSTED)
+    flags |= MDBX_TXN_OUSTED;
+  return flags;
 }
 
 int mdbx_txn_reset(MDBX_txn *txn) {
@@ -1945,4 +1970,56 @@ int mdbx_txn_abort(MDBX_txn *txn) {
   }
 
   return txn_abort(txn);
+}
+
+int mdbx_txn_park(MDBX_txn *txn, bool autounpark) {
+  STATIC_ASSERT(MDBX_TXN_BLOCKED > MDBX_TXN_ERROR);
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+  if (unlikely((txn->flags & MDBX_TXN_RDONLY) == 0))
+    return MDBX_TXN_INVALID;
+
+  if (unlikely((txn->flags & MDBX_TXN_ERROR))) {
+    rc = txn_end(txn, TXN_END_RESET | TXN_END_UPDATE);
+    return rc ? rc : MDBX_OUSTED;
+  }
+
+  return txn_park(txn, autounpark);
+}
+
+int mdbx_txn_unpark(MDBX_txn *txn, bool restart_if_ousted) {
+  STATIC_ASSERT(MDBX_TXN_BLOCKED > MDBX_TXN_PARKED + MDBX_TXN_ERROR);
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_PARKED - MDBX_TXN_ERROR);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+  if (unlikely(!F_ISSET(txn->flags, MDBX_TXN_RDONLY | MDBX_TXN_PARKED)))
+    return MDBX_SUCCESS;
+
+  rc = txn_unpark(txn);
+  if (likely(rc != MDBX_OUSTED) || !restart_if_ousted)
+    return rc;
+
+  tASSERT(txn, txn->flags & MDBX_TXN_FINISHED);
+  rc = txn_renew(txn, MDBX_TXN_RDONLY);
+  return (rc == MDBX_SUCCESS) ? MDBX_RESULT_TRUE : rc;
+}
+
+int txn_check_badbits_parked(const MDBX_txn *txn, int bad_bits) {
+  tASSERT(txn, (bad_bits & MDBX_TXN_PARKED) && (txn->flags & bad_bits));
+  /* Здесь осознано заложено отличие в поведении припаркованных транзакций:
+   *  - некоторые функции (например mdbx_env_info_ex()), допускают
+   *    использование поломанных транзакций (с флагом MDBX_TXN_ERROR), но
+   *    не могут работать с припаркованными транзакциями (требуют распарковки).
+   *  - но при распарковке поломанные транзакции завершаются.
+   *  - получается что транзакцию можно припарковать, потом поломать вызвав
+   *    mdbx_txn_break(), но далее любое её использование приведет к завершению
+   *    при распарковке. */
+  if ((txn->flags & (bad_bits | MDBX_TXN_AUTOUNPARK)) !=
+      (MDBX_TXN_PARKED | MDBX_TXN_AUTOUNPARK))
+    return MDBX_BAD_TXN;
+
+  tASSERT(txn, bad_bits == MDBX_TXN_BLOCKED ||
+                   bad_bits == MDBX_TXN_BLOCKED - MDBX_TXN_ERROR);
+  return mdbx_txn_unpark((MDBX_txn *)txn, false);
 }

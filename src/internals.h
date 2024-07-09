@@ -154,7 +154,8 @@ enum txn_flags {
   txn_ro_begin_flags = MDBX_TXN_RDONLY | MDBX_TXN_RDONLY_PREPARE,
   txn_rw_begin_flags = MDBX_TXN_NOMETASYNC | MDBX_TXN_NOSYNC | MDBX_TXN_TRY,
   txn_shrink_allowed = UINT32_C(0x40000000),
-  txn_gc_drained = 0x20 /* GC was depleted up to oldest reader */,
+  txn_parked = MDBX_TXN_PARKED,
+  txn_gc_drained = 0x40 /* GC was depleted up to oldest reader */,
   txn_state_flags = MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_DIRTY |
                     MDBX_TXN_SPILLS | MDBX_TXN_HAS_CHILD | MDBX_TXN_INVALID |
                     txn_gc_drained

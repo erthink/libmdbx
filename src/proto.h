@@ -12,7 +12,7 @@ MDBX_INTERNAL int audit_ex(MDBX_txn *txn, size_t retired_stored,
                            bool dont_filter_gc);
 
 /* mvcc-readers.c */
-MDBX_INTERNAL bsr_t mvcc_bind_slot(MDBX_env *env, const uintptr_t tid);
+MDBX_INTERNAL bsr_t mvcc_bind_slot(MDBX_env *env);
 MDBX_MAYBE_UNUSED MDBX_INTERNAL pgno_t mvcc_largest_this(MDBX_env *env,
                                                          pgno_t largest);
 MDBX_INTERNAL txnid_t mvcc_shapshot_oldest(MDBX_env *const env,
@@ -56,10 +56,13 @@ MDBX_INTERNAL bool txn_refund(MDBX_txn *txn);
 MDBX_INTERNAL txnid_t txn_snapshot_oldest(const MDBX_txn *const txn);
 MDBX_INTERNAL int txn_abort(MDBX_txn *txn);
 MDBX_INTERNAL int txn_renew(MDBX_txn *txn, unsigned flags);
+MDBX_INTERNAL int txn_park(MDBX_txn *txn, bool autounpark);
+MDBX_INTERNAL int txn_unpark(MDBX_txn *txn);
+MDBX_INTERNAL int txn_check_badbits_parked(const MDBX_txn *txn, int bad_bits);
 
 #define TXN_END_NAMES                                                          \
-  {"committed", "empty-commit", "abort",          "reset",                     \
-   "reset-tmp", "fail-begin",   "fail-beginchild"}
+  {"committed", "empty-commit", "abort",           "reset",                    \
+   "reset-tmp", "fail-begin",   "fail-beginchild", "ousted"}
 enum {
   /* txn_end operation number, for logging */
   TXN_END_COMMITTED,
@@ -69,6 +72,7 @@ enum {
   TXN_END_RESET_TMP,
   TXN_END_FAIL_BEGIN,
   TXN_END_FAIL_BEGINCHILD,
+  TXN_END_OUSTED,
 
   TXN_END_OPMASK = 0x0F /* mask for txn_end() operation number */,
   TXN_END_UPDATE = 0x10 /* update env state (DBIs) */,
@@ -76,7 +80,7 @@ enum {
   TXN_END_EOTDONE = 0x40 /* txn's cursors already closed */,
   TXN_END_SLOT = 0x80 /* release any reader slot if NOSTICKYTHREADS */
 };
-MDBX_INTERNAL int txn_end(MDBX_txn *txn, const unsigned mode);
+MDBX_INTERNAL int txn_end(MDBX_txn *txn, unsigned mode);
 MDBX_INTERNAL int txn_write(MDBX_txn *txn, iov_ctx_t *ctx);
 
 /* env.c */

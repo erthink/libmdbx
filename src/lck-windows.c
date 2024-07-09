@@ -240,7 +240,8 @@ osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
         atomic_load32(&env->lck_mmap.lck->rdt_length, mo_AcquireRelease);
     const uintptr_t WriteTxnOwner = env->basal_txn ? env->basal_txn->owner : 0;
     for (const reader_slot_t *reader = begin; reader < end; ++reader) {
-      if (reader->pid.weak != env->pid || !reader->tid.weak) {
+      if (reader->pid.weak != env->pid || !reader->tid.weak ||
+          reader->tid.weak >= MDBX_TID_TXN_OUSTED) {
       skip_lck:
         continue;
       }

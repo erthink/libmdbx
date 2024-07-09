@@ -1556,34 +1556,54 @@ typedef enum MDBX_txn_flags {
   MDBX_TXN_INVALID = INT32_MIN,
 
   /** Transaction is finished or never began.
-   * \note Transaction state flag. Returned from \ref mdbx_txn_flags()
+   * \note This is a transaction state flag. Returned from \ref mdbx_txn_flags()
    * but can't be used with \ref mdbx_txn_begin(). */
   MDBX_TXN_FINISHED = 0x01,
 
   /** Transaction is unusable after an error.
-   * \note Transaction state flag. Returned from \ref mdbx_txn_flags()
+   * \note This is a transaction state flag. Returned from \ref mdbx_txn_flags()
    * but can't be used with \ref mdbx_txn_begin(). */
   MDBX_TXN_ERROR = 0x02,
 
   /** Transaction must write, even if dirty list is empty.
-   * \note Transaction state flag. Returned from \ref mdbx_txn_flags()
+   * \note This is a transaction state flag. Returned from \ref mdbx_txn_flags()
    * but can't be used with \ref mdbx_txn_begin(). */
   MDBX_TXN_DIRTY = 0x04,
 
   /** Transaction or a parent has spilled pages.
-   * \note Transaction state flag. Returned from \ref mdbx_txn_flags()
+   * \note This is a transaction state flag. Returned from \ref mdbx_txn_flags()
    * but can't be used with \ref mdbx_txn_begin(). */
   MDBX_TXN_SPILLS = 0x08,
 
   /** Transaction has a nested child transaction.
-   * \note Transaction state flag. Returned from \ref mdbx_txn_flags()
+   * \note This is a transaction state flag. Returned from \ref mdbx_txn_flags()
    * but can't be used with \ref mdbx_txn_begin(). */
   MDBX_TXN_HAS_CHILD = 0x10,
 
-  /** Most operations on the transaction are currently illegal.
-   * \note Transaction state flag. Returned from \ref mdbx_txn_flags()
+  /** Transaction is parked by \ref mdbx_txn_park().
+   * \note This is a transaction state flag. Returned from \ref mdbx_txn_flags()
    * but can't be used with \ref mdbx_txn_begin(). */
-  MDBX_TXN_BLOCKED = MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_HAS_CHILD
+  MDBX_TXN_PARKED = 0x20,
+
+  /** Transaction is parked by \ref mdbx_txn_park() with `autounpark=true`,
+   * and therefore it can be used without explicitly calling
+   * \ref mdbx_txn_unpark() first.
+   * \note This is a transaction state flag. Returned from \ref mdbx_txn_flags()
+   * but can't be used with \ref mdbx_txn_begin(). */
+  MDBX_TXN_AUTOUNPARK = 0x40,
+
+  /** The transaction was blocked using the \ref mdbx_txn_park() function,
+   * and then ousted by a write transaction because
+   * this transaction was interfered with garbage recycling.
+   * \note This is a transaction state flag. Returned from \ref mdbx_txn_flags()
+   * but can't be used with \ref mdbx_txn_begin(). */
+  MDBX_TXN_OUSTED = 0x80,
+
+  /** Most operations on the transaction are currently illegal.
+   * \note This is a transaction state flag. Returned from \ref mdbx_txn_flags()
+   * but can't be used with \ref mdbx_txn_begin(). */
+  MDBX_TXN_BLOCKED =
+      MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_HAS_CHILD | MDBX_TXN_PARKED
 } MDBX_txn_flags_t;
 DEFINE_ENUM_FLAG_OPERATORS(MDBX_txn_flags)
 
@@ -1962,8 +1982,11 @@ typedef enum MDBX_error {
    *  corresponding DBI-handle could be (re)used */
   MDBX_DANGLING_DBI = -30412,
 
+  /** Транзакция была асинхронно отменена/вытеснена */
+  MDBX_OUSTED = -30411,
+
   /* The last of MDBX-added error codes */
-  MDBX_LAST_ADDED_ERRCODE = MDBX_DANGLING_DBI,
+  MDBX_LAST_ADDED_ERRCODE = MDBX_OUSTED,
 
 #if defined(_WIN32) || defined(_WIN64)
   MDBX_ENODATA = ERROR_HANDLE_EOF,
@@ -3972,7 +3995,8 @@ mdbx_txn_env(const MDBX_txn *txn);
  *
  * \returns A transaction flags, valid if input is an valid transaction,
  *          otherwise \ref MDBX_TXN_INVALID. */
-MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int mdbx_txn_flags(const MDBX_txn *txn);
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API MDBX_txn_flags_t
+mdbx_txn_flags(const MDBX_txn *txn);
 
 /** \brief Return the transaction's ID.
  * \ingroup c_statinfo
@@ -4190,8 +4214,8 @@ LIBMDBX_API int mdbx_txn_break(MDBX_txn *txn);
  * transaction soon, and also locking overhead if \ref MDBX_NOSTICKYTHREADS is
  * in use. The reader table lock is released, but the table slot stays tied to
  * its thread or \ref MDBX_txn. Use \ref mdbx_txn_abort() to discard a reset
- * handle, and to free its lock table slot if \ref MDBX_NOSTICKYTHREADS is in
- * use.
+ * handle, and to free its lock table slot if \ref MDBX_NOSTICKYTHREADS
+ * is in use.
  *
  * Cursors opened within the transaction must not be used again after this
  * call, except with \ref mdbx_cursor_renew() and \ref mdbx_cursor_close().
@@ -4215,6 +4239,93 @@ LIBMDBX_API int mdbx_txn_break(MDBX_txn *txn);
  *                               by current thread.
  * \retval MDBX_EINVAL           Transaction handle is NULL. */
 LIBMDBX_API int mdbx_txn_reset(MDBX_txn *txn);
+
+/** \brief Переводит читающую транзакцию в "припаркованное" состояние.
+ * \ingroup c_transactions
+ *
+ * Выполняющиеся читающие транзакции не позволяют перерабатывать старые
+ * MVCC-снимки данных, начиная с самой старой используемой/читаемой версии и все
+ * последующие. Припаркованная же транзакция может быть вытеснена транзакцией
+ * записи, если будет мешать переработке мусора (старых MVCC-снимков данных).
+ * А если вытеснения не произойдет, то восстановление (перевод в рабочее
+ * состояние и продолжение выполнение) читающей транзакции будет существенно
+ * дешевле. Таким образом, парковка транзакций позволяет предотвратить
+ * негативные последствия связанные с остановкой переработки мусора,
+ * одновременно сохранив накладные расходы на минимальном уровне.
+ *
+ * Для продолжения выполнения (чтения и/или использования данных) припаркованная
+ * транзакция должна быть восстановлена посредством \ref mdbx_txn_unpark().
+ * Для удобства использования и предотвращения лишних вызовов API, посредством
+ * параметра `autounpark`, предусмотрена возможность автоматической
+ * «распарковки» при использовании припаркованной транзакции в функциях API
+ * предполагающих чтение данных.
+ *
+ * \warning До восстановления/распарковки транзакции, вне зависимости от
+ * аргумента `autounpark`, нельзя допускать разыменования указателей полученных
+ * ранее при чтении данных в рамках припаркованной транзакции, так как
+ * MVCC-снимок в котором размещены эти данные не удерживается и может
+ * переработан в любой момент.
+ *
+ * Припаркованная транзакция без "распарковки" может быть прервана, сброшена
+ * или перезапущена в любой момент посредством \ref mdbx_txn_abort(),
+ * \ref mdbx_txn_reset() и \ref mdbx_txn_renew(), соответственно.
+ *
+ * \see long-lived-read
+ * \see mdbx_txn_unpark()
+ * \see mdbx_txn_flags()
+ *
+ * \param [in] txn          Транзакция чтения запущенная посредством
+ *                          \ref mdbx_txn_begin().
+ *
+ * \param [in] autounpark   Позволяет включить автоматическую
+ *                          распарковку/восстановление транзакции при вызове
+ *                          функций API предполагающих чтение данных.
+ *
+ * \returns Ненулевое значение кода ошибки, либо 0 при успешном выполнении. */
+LIBMDBX_API int mdbx_txn_park(MDBX_txn *txn, bool autounpark);
+
+/** \brief Распарковывает ранее припаркованную читающую транзакцию.
+ * \ingroup c_transactions
+ *
+ * Функция пытается восстановить ранее припаркованную транзакцию. Если
+ * припаркованная транзакция была вытеснена ради переработки старых
+ * MVCC-снимков, то в зависимости от аргумента `restart_if_ousted` выполняется
+ * её перезапуск аналогично \ref mdbx_txn_renew(), либо транзакция сбрасывается
+ * и возвращается код ошибки \ref MDBX_OUSTED.
+ *
+ * \see long-lived-read
+ * \see mdbx_txn_park()
+ * \see mdbx_txn_flags()
+ *
+ * \param [in] txn     Транзакция чтения запущенная посредством
+ *                     \ref mdbx_txn_begin() и затем припаркованная
+ *                     посредством \ref mdbx_txn_park.
+ *
+ * \param [in] restart_if_ousted   Позволяет сразу выполнить перезапуск
+ *                                 транзакции, если она была вынестена.
+ *
+ * \returns Ненулевое значение кода ошибки, либо 0 при успешном выполнении.
+ * Некоторые специфичекие коды результата:
+ *
+ * \retval MDBX_SUCCESS      Припаркованная транзакция успешно восстановлена,
+ *                           либо она не была припаркована.
+ *
+ * \retval MDBX_OUSTED       Читающая транзакция была вытеснена пишущей
+ *                           транзакцией ради переработки старых MVCC-снимков,
+ *                           а аргумент `restart_if_ousted` был задан `false`.
+ *                           Транзакция сбрасывается в состояние аналогичное
+ *                           после вызова \ref mdbx_txn_reset(), но экземпляр
+ *                           (хендл) не освобождается и может быть использован
+ *                           повторно посредством \ref mdbx_txn_renew(), либо
+ *                           освобожден посредством \ref mdbx_txn_abort().
+ *
+ * \retval MDBX_RESULT_TRUE  Читающая транзакция была вынеснена, но теперь
+ *                           перезапущена для чтения другого (последнего)
+ *                           MVCC-снимка, так как restart_if_ousted` был задан
+ *                           `true`.
+ *
+ * \retval MDBX_BAD_TXN      Транзакция уже завершена, либо не была запущена. */
+LIBMDBX_API int mdbx_txn_unpark(MDBX_txn *txn, bool restart_if_ousted);
 
 /** \brief Renew a read-only transaction.
  * \ingroup c_transactions
