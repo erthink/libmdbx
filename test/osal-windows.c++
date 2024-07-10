@@ -175,6 +175,10 @@ bool actor_config::osal_deserialize(const char *str, const char *end,
 typedef std::pair<HANDLE, actor_status> child;
 static std::unordered_map<mdbx_pid_t, child> children;
 
+bool osal_multiactor_mode(void) {
+  return hProgressActiveEvent || hProgressPassiveEvent;
+}
+
 bool osal_progress_push(bool active) {
   if (!children.empty()) {
     if (!SetEvent(active ? hProgressActiveEvent : hProgressPassiveEvent))

@@ -394,7 +394,7 @@ int main(int argc, char *const argv[]) {
       continue;
     }
     if (config::parse_option(argc, argv, narg, "repeat", params.nrepeat,
-                             config::no_scale))
+                             config::entropy))
       continue;
     if (config::parse_option(argc, argv, narg, "threads", params.nthreads,
                              config::no_scale, 1, 64))
@@ -443,7 +443,7 @@ int main(int argc, char *const argv[]) {
                              params.keygen.mesh, 0, 64))
       continue;
     if (config::parse_option(argc, argv, narg, "prng-seed", params.prng_seed,
-                             config::no_scale)) {
+                             config::entropy)) {
       prng_seed(params.prng_seed);
       continue;
     }

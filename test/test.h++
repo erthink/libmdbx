@@ -254,6 +254,8 @@ protected:
   void cursor_renew();
   void txn_inject_writefault(void);
   void txn_inject_writefault(MDBX_txn *txn);
+  bool txn_probe_parking();
+
   void fetch_canary();
   void update_canary(uint64_t increment);
   bool checkdata(const char *step, MDBX_dbi handle, MDBX_val key2check,
@@ -275,7 +277,7 @@ protected:
   void signal();
   bool should_continue(bool check_timeout_only = false) const;
 
-  bool failure(const char *fmt, ...) const;
+  bool MDBX_PRINTF_ARGS(2, 3) failure(const char *fmt, ...) const;
   void generate_pair(const keygen::serial_t serial, keygen::buffer &out_key,
                      keygen::buffer &out_value, keygen::serial_t data_age) {
     keyvalue_maker.pair(serial, out_key, out_value, data_age, false);

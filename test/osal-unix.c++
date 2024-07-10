@@ -320,6 +320,8 @@ static void handler_SIGUSR(int signum) {
   }
 }
 
+bool osal_multiactor_mode(void) { return overlord_pid != 0; }
+
 bool osal_progress_push(bool active) {
   if (overlord_pid) {
     if (kill(overlord_pid, active ? SIGUSR1 : SIGUSR2))

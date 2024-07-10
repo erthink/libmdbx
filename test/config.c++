@@ -137,8 +137,16 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
   if (strcmp(value_cstr, "rnd") == 0 || strcmp(value_cstr, "rand") == 0 ||
       strcmp(value_cstr, "random") == 0) {
     value = minval;
-    if (maxval > minval)
-      value += (prng32() + UINT64_C(44263400549519813)) % (maxval - minval);
+    if (maxval > minval) {
+      uint64_t salt = (scale != entropy)
+                          ? prng64() ^ UINT64_C(44263400549519813)
+                          : (chrono::now_monotonic().fixedpoint ^
+                             UINT64_C(0xD85794512ED321FD)) *
+                                    UINT64_C(0x9120038359EAF3) ^
+                                chrono::now_realtime().fixedpoint *
+                                    UINT64_C(0x2FE5232BDC8E5F);
+      value += salt % (maxval - minval);
+    }
     if (scale == intkey)
       value &= ~3u;
     return true;

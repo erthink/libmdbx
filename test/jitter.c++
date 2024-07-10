@@ -164,6 +164,9 @@ bool testcase_jitter::run() {
           failure_perror("mdbx_env_set_geometry-1", err);
       }
     }
+    if (flipcoin()) {
+      // err =
+    }
     txn_end(flipcoin());
 
     if (global::config::geometry_jitter) {

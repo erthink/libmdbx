@@ -212,6 +212,9 @@ void testcase::txn_begin(bool readonly, MDBX_txn_flags_t flags) {
     log_trace("== counter %u, env_warmup(flags %u), rc %d", counter,
               warmup_flags, err);
   }
+
+  if (readonly && flipcoin())
+    txn_probe_parking();
 }
 
 int testcase::breakable_commit() {
@@ -267,6 +270,9 @@ void testcase::txn_end(bool abort) {
   log_trace(">> txn_end(%s)", abort ? "abort" : "commit");
   assert(txn_guard);
 
+  if (flipcoin())
+    txn_probe_parking();
+
   MDBX_txn *txn = txn_guard.release();
   if (abort) {
     int err = mdbx_txn_abort(txn);
@@ -321,6 +327,13 @@ int testcase::breakable_restart() {
   int rc = MDBX_SUCCESS;
   if (txn_guard)
     rc = breakable_commit();
+  if (flipcoin()) {
+    txn_begin(true);
+    txn_probe_parking();
+    int err = mdbx_txn_abort(txn_guard.release());
+    if (unlikely(err != MDBX_SUCCESS))
+      failure_perror("mdbx_txn_abort()", err);
+  }
   txn_begin(false, MDBX_TXN_READWRITE);
   if (cursor_guard)
     cursor_renew();
@@ -1425,4 +1438,84 @@ bool testcase::check_batch_get() {
   mdbx_cursor_close(check_cursor);
   mdbx_cursor_close(batch_cursor);
   return rc;
+}
+
+bool testcase::txn_probe_parking() {
+  MDBX_txn_flags_t state =
+      mdbx_txn_flags(txn_guard.get()) &
+      (MDBX_TXN_RDONLY | MDBX_TXN_PARKED | MDBX_TXN_AUTOUNPARK |
+       MDBX_TXN_OUSTED | MDBX_TXN_BLOCKED);
+  if (state != MDBX_TXN_RDONLY)
+    return true;
+
+  const bool autounpark = flipcoin();
+  int err = mdbx_txn_park(txn_guard.get(), autounpark);
+  if (err != MDBX_SUCCESS)
+    failure("mdbx_txn_park(), err %d", err);
+
+  MDBX_txn_info txn_info;
+  if (flipcoin()) {
+    err = mdbx_txn_info(txn_guard.get(), &txn_info, flipcoin());
+    if (err != MDBX_SUCCESS)
+      failure("mdbx_txn_info(1), state 0x%x, err %d",
+              state = mdbx_txn_flags(txn_guard.get()), err);
+  }
+
+  if (osal_multiactor_mode() && !mode_readonly()) {
+    while (flipcoin() &&
+           ((state = mdbx_txn_flags(txn_guard.get())) & MDBX_TXN_OUSTED) == 0)
+      osal_udelay(4242);
+  }
+
+  if (flipcoin()) {
+    err = mdbx_txn_info(txn_guard.get(), &txn_info, flipcoin());
+    if (err != MDBX_SUCCESS)
+      failure("mdbx_txn_info(2), state 0x%x, err %d",
+              state = mdbx_txn_flags(txn_guard.get()), err);
+  }
+
+  if (flipcoin()) {
+    MDBX_envinfo env_info;
+    err = mdbx_env_info_ex(db_guard.get(), txn_guard.get(), &env_info,
+                           sizeof(env_info));
+    if (!autounpark) {
+      if (err != MDBX_BAD_TXN)
+        failure("mdbx_env_info_ex(autounpark=%s), flags 0x%x, unexpected err "
+                "%d, must %d",
+                autounpark ? "true" : "false", state, err, MDBX_BAD_TXN);
+    } else if (err != MDBX_SUCCESS) {
+      if (err != MDBX_OUSTED ||
+          ((state = mdbx_txn_flags(txn_guard.get())) & MDBX_TXN_OUSTED) == 0)
+        failure("mdbx_env_info_ex(autounpark=%s), flags 0x%x, err %d",
+                autounpark ? "true" : "false", state, err);
+      else {
+        err = mdbx_txn_renew(txn_guard.get());
+        if (err != MDBX_SUCCESS)
+          failure("mdbx_txn_renew(), state 0x%x, err %d",
+                  state = mdbx_txn_flags(txn_guard.get()), err);
+      }
+    }
+  }
+
+  const bool autorestart = flipcoin();
+  err = mdbx_txn_unpark(txn_guard.get(), autorestart);
+  if (MDBX_IS_ERROR(err)) {
+    if (err != MDBX_OUSTED || autorestart)
+      failure("mdbx_txn_unpark(autounpark=%s, autorestart=%s), err %d",
+              autounpark ? "true" : "false", autorestart ? "true" : "false",
+              err);
+    else {
+      err = mdbx_txn_renew(txn_guard.get());
+      if (err != MDBX_SUCCESS)
+        failure("mdbx_txn_renew(), state 0x%x, err %d",
+                state = mdbx_txn_flags(txn_guard.get()), err);
+    }
+  }
+
+  state = mdbx_txn_flags(txn_guard.get()) &
+          (MDBX_TXN_RDONLY | MDBX_TXN_PARKED | MDBX_TXN_AUTOUNPARK |
+           MDBX_TXN_OUSTED | MDBX_TXN_BLOCKED);
+  if (state != MDBX_TXN_RDONLY)
+    failure("unexpected txn-state 0x%x", state);
+  return state == MDBX_TXN_RDONLY;
 }

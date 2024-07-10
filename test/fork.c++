@@ -28,7 +28,7 @@ public:
 bool testcase_smoke4fork::open_dbi() {
   if (!dbi || dbi_invalid) {
     if (dbi_stable ||
-        (mdbx_txn_flags(txn_guard.get()) & int(MDBX_TXN_RDONLY)) == 0) {
+        (mdbx_txn_flags(txn_guard.get()) & MDBX_TXN_RDONLY) == 0) {
       dbi = db_table_open(!dbi_stable);
       dbi_invalid = false;
     }
