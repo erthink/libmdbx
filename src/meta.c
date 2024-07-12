@@ -392,9 +392,6 @@ __cold meta_t *meta_init_triplet(const MDBX_env *env, void *buffer) {
 __cold int __must_check_result meta_override(MDBX_env *env, size_t target,
                                              txnid_t txnid,
                                              const meta_t *shape) {
-  int rc = env_page_auxbuffer(env);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
   page_t *const page = env->page_auxbuf;
   meta_model(env, page, target,
              &((target == 0 && shape) ? shape : METAPAGE(env, 0))->dxbid);
@@ -440,7 +437,7 @@ __cold int __must_check_result meta_override(MDBX_env *env, size_t target,
   }
 
   meta_sign_as_steady(model);
-  rc = meta_validate(env, model, page, (pgno_t)target, nullptr);
+  int rc = meta_validate(env, model, page, (pgno_t)target, nullptr);
   if (unlikely(MDBX_IS_ERROR(rc)))
     return MDBX_PROBLEM;
 

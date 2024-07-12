@@ -10,10 +10,16 @@ bool env_txn0_owned(const MDBX_env *env) {
 }
 
 int env_page_auxbuffer(MDBX_env *env) {
-  return env->page_auxbuf ? MDBX_SUCCESS
-                          : osal_memalign_alloc(globals.sys_pagesize,
-                                                env->ps * (size_t)NUM_METAS,
-                                                &env->page_auxbuf);
+  const int err =
+      env->page_auxbuf
+          ? MDBX_SUCCESS
+          : osal_memalign_alloc(globals.sys_pagesize,
+                                env->ps * (size_t)NUM_METAS, &env->page_auxbuf);
+  if (likely(err == MDBX_SUCCESS)) {
+    memset(env->page_auxbuf, -1, env->ps * (size_t)2);
+    memset(ptr_disp(env->page_auxbuf, env->ps * (size_t)2), 0, env->ps);
+  }
+  return err;
 }
 
 __cold unsigned env_setup_pagesize(MDBX_env *env, const size_t pagesize) {
@@ -22,11 +28,8 @@ __cold unsigned env_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   ENSURE(env, is_powerof2(pagesize));
   ENSURE(env, pagesize >= MDBX_MIN_PAGESIZE);
   ENSURE(env, pagesize <= MDBX_MAX_PAGESIZE);
+  ENSURE(env, !env->page_auxbuf && env->ps != pagesize);
   env->ps = (unsigned)pagesize;
-  if (env->page_auxbuf) {
-    osal_memalign_free(env->page_auxbuf);
-    env->page_auxbuf = nullptr;
-  }
 
   STATIC_ASSERT(MAX_GC1OVPAGE(MDBX_MIN_PAGESIZE) > 4);
   STATIC_ASSERT(MAX_GC1OVPAGE(MDBX_MAX_PAGESIZE) < PAGELIST_LIMIT);

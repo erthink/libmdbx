@@ -530,12 +530,7 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
         base + bitmap_bytes +
         env->max_dbi * (sizeof(txn->dbs[0]) + sizeof(txn->cursors[0]) +
                         sizeof(txn->dbi_seqs[0]) + sizeof(txn->dbi_state[0]));
-    rc = env_page_auxbuffer(env);
-    if (unlikely(rc != MDBX_SUCCESS))
-      goto bailout;
 
-    memset(env->page_auxbuf, -1, env->ps * (size_t)2);
-    memset(ptr_disp(env->page_auxbuf, env->ps * (size_t)2), 0, env->ps);
     txn = osal_calloc(1, size);
     if (unlikely(!txn)) {
       rc = MDBX_ENOMEM;

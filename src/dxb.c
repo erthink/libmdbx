@@ -641,6 +641,12 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc,
 
   if (env->ps != header.pagesize)
     env_setup_pagesize(env, header.pagesize);
+  if ((env->flags & MDBX_RDONLY) == 0) {
+    err = env_page_auxbuffer(env);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+  }
+
   const size_t used_bytes = pgno2bytes(env, header.geometry.first_unallocated);
   const size_t used_aligned2os_bytes =
       ceil_powerof2(used_bytes, globals.sys_pagesize);
