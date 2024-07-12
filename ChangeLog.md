@@ -38,6 +38,16 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
    использования блокировок, управляемый опцией сборки
    `MDBX_ENABLE_DBI_LOCKFREE`, которая включена по-умолчанию.
 
+- Поддержка "парковки" читающих транзакций с их вытеснением ради
+  переработки старых MVCC-снимков и предотвращения проблем вызываемых
+  приостановкой переработки мусора. Механизм парковки и вытеснения
+  припаркованных транзакций является как дополнением, так и более простой
+  в использовании альтернативой обратному вызову
+  [Handle-Slow-Readers](https://libmdbx.dqdkfa.ru/group__c__err.html#ga2cb11b56414c282fe06dd942ae6cade6).
+  Для удобства функции `mdbx_txn_park()` и `mdbx_txn_unpack()` имеют
+  дополнительные аргументы, позволяющие запросить автоматическую
+  "распарковку" припаркованных и перезапуск вытесненных транзакций.
+
  - Расширение API позиционирования курсоров более удобными и очевидными
    операциями по аналогии условиям `<`, `<=`, `==`, `>=`, `>` как для
    ключей, так и для пар ключ-значение.
@@ -65,6 +75,9 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
  - Функция `mdbx_preopen_snapinfo()` для получения информации о БД без
    её открытия.
 
+ - Функция `mdbx_enumerate_subdb()` для получение информации
+   об именованных пользовательских таблицах.
+
  - Поддержка функций логирования обратного вызова без функционала
    `vprintf()`, что существенно облегчает использование логирования в
    привязках к другим языкам программирования.
@@ -75,12 +88,16 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 
  - Опция `MDBX_opt_prefer_waf_insteadof_balance`.
 
- - Опции `MDBX_opt_subpage_limit`, `MDBX_opt_subpage_room_threshold`, `MDBX_opt_subpage_reserve_prereq`, `MDBX_opt_subpage_reserve_limit`.
+ - Опции `MDBX_opt_subpage_limit`, `MDBX_opt_subpage_room_threshold`,
+   `MDBX_opt_subpage_reserve_prereq`, `MDBX_opt_subpage_reserve_limit`.
 
  - Управление основной блокировкой lock/unlock/upgrade/downgrade для координации пишущих транзакций.
 
  - Функции `mdbx_limits_keysize_min()` и `mdbx_limits_valsize_min()` для
    получения нижней границы длины ключей и значений.
+
+ - Для идентификации БД добавлен UUID доступный в поле `mi_dxbid` структуры `MDBX_envinfo`,
+   получаемой посредством `mdbx_env_info_ex()`.
 
  - Расширение и доработка C++ API:
 
@@ -97,7 +114,8 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
      - добавлены статические методы `buffer::hex()`, `base64()`, `base58()`;
      - для транзакций и курсоров добавлены методы `get_/set_context`;
      - добавлен метод `cursor::clone()`;
-     - поддержка base58 переработана и приведена в соответствии с черновиком RFC, в текущем понимании теперь это одна из самых высокопроизводительных реализаций;
+     - поддержка base58 переработана и приведена в соответствии с черновиком RFC,
+       в текущем понимании теперь это одна из самых высокопроизводительных реализаций base58;
      - переработка `to_hex()` и `from_hex()`.
 
 Нарушение совместимости:
