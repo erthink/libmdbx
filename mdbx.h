@@ -4270,9 +4270,10 @@ LIBMDBX_API int mdbx_txn_reset(MDBX_txn *txn);
  * или перезапущена в любой момент посредством \ref mdbx_txn_abort(),
  * \ref mdbx_txn_reset() и \ref mdbx_txn_renew(), соответственно.
  *
- * \see long-lived-read
  * \see mdbx_txn_unpark()
  * \see mdbx_txn_flags()
+ * \see mdbx_env_set_hsr()
+ * \see <a href="intro.html#long-lived-read">Long-lived read transactions</a>
  *
  * \param [in] txn          Транзакция чтения запущенная посредством
  *                          \ref mdbx_txn_begin().
@@ -4293,9 +4294,9 @@ LIBMDBX_API int mdbx_txn_park(MDBX_txn *txn, bool autounpark);
  * её перезапуск аналогично \ref mdbx_txn_renew(), либо транзакция сбрасывается
  * и возвращается код ошибки \ref MDBX_OUSTED.
  *
- * \see long-lived-read
  * \see mdbx_txn_park()
  * \see mdbx_txn_flags()
+ * \see <a href="intro.html#long-lived-read">Long-lived read transactions</a>
  *
  * \param [in] txn     Транзакция чтения запущенная посредством
  *                     \ref mdbx_txn_begin() и затем припаркованная
@@ -6127,6 +6128,7 @@ LIBMDBX_API int mdbx_thread_unregister(const MDBX_env *env);
  * with a "long-lived" read transactions.
  * \see mdbx_env_set_hsr()
  * \see mdbx_env_get_hsr()
+ * \see mdbx_txn_park()
  * \see <a href="intro.html#long-lived-read">Long-lived read transactions</a>
  *
  * Using this callback you can choose how to resolve the situation:
@@ -6201,6 +6203,7 @@ typedef int(MDBX_hsr_func)(const MDBX_env *env, const MDBX_txn *txn,
  *
  * \see MDBX_hsr_func
  * \see mdbx_env_get_hsr()
+ * \see mdbx_txn_park()
  * \see <a href="intro.html#long-lived-read">Long-lived read transactions</a>
  *
  * \param [in] env             An environment handle returned
@@ -6216,6 +6219,7 @@ LIBMDBX_API int mdbx_env_set_hsr(MDBX_env *env, MDBX_hsr_func *hsr_callback);
  * recycled.
  * \see MDBX_hsr_func
  * \see mdbx_env_set_hsr()
+ * \see mdbx_txn_park()
  * \see <a href="intro.html#long-lived-read">Long-lived read transactions</a>
  *
  * \param [in] env   An environment handle returned by \ref mdbx_env_create().

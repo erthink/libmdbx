@@ -35,11 +35,12 @@ or debugging of a client application while retaining an active read
 transaction. LMDB this results in `MDB_MAP_FULL` error and subsequent write
 performance degradation.
 
-MDBX mostly solve "long-lived" readers issue by using the
+MDBX mostly solve "long-lived" readers issue by offering to use a
+transaction parking-and-ousting approach by \ref mdbx_txn_park(),
 Handle-Slow-Readers \ref MDBX_hsr_func callback which allows to abort
 long-lived read transactions, and using the \ref MDBX_LIFORECLAIM mode
 which addresses subsequent performance degradation. The "next" version
-of libmdbx (\ref MithrilDB) will completely solve this.
+of libmdbx (aka \ref MithrilDB) will completely solve this.
 
 - Avoid suspending a process with active transactions. These would then be
   "long-lived" as above.
