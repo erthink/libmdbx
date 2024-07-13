@@ -1026,9 +1026,11 @@ __cold int mdbx_enumerate_subdb(const MDBX_txn *txn, MDBX_subdb_enum_func *func,
     stat_get(tree, &stat, sizeof(stat));
     rc = func(ctx, txn, &name, tree->flags, &stat, dbi);
     if (rc != MDBX_SUCCESS)
-      break;
+      goto bailout;
   }
-  txn->cursors[MAIN_DBI] = cx.outer.next;
+  rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
 
-  return (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
+ bailout:
+  txn->cursors[MAIN_DBI] = cx.outer.next;
+  return rc;
 }
