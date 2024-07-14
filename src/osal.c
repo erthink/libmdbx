@@ -3513,6 +3513,10 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages,
 #include <sys/random.h>
 #endif /* sys/random.h */
 
+#if defined(_WIN32) || defined(_WIN64)
+#include <wincrypt.h>
+#endif /* Windows */
+
 MDBX_INTERNAL bin128_t osal_guid(const MDBX_env *env) {
   struct {
     uint64_t begin, end, cputime;
