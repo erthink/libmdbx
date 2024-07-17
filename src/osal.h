@@ -93,7 +93,7 @@ typedef CRITICAL_SECTION osal_fastmutex_t;
 /* *INDENT-OFF* */
 /* clang-format off */
 #define __try
-#define __except(COND) if (false)
+#define __except(COND) if (/* (void)(COND), */ false)
 /* *INDENT-ON* */
 /* clang-format on */
 #endif /* stub for MSVC's __try/__except */

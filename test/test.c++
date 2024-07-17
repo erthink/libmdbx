@@ -634,21 +634,184 @@ bool testcase::checkdata(const char *step, MDBX_dbi handle, MDBX_val key2check,
 
 //-----------------------------------------------------------------------------
 
-bool test_execute(const actor_config &config_const) {
-  const mdbx_pid_t pid = osal_getpid();
-  actor_config config = config_const;
+#ifdef _MSC_VER
 
-  if (global::singlemode) {
-    logging::setup(format("single_%s", testcase2str(config.testcase)));
-  } else {
-    logging::setup((logging::loglevel)config.params.loglevel,
-                   format("child_%u.%u", config.actor_id, config.space_id));
-    log_trace(">> wait4barrier");
-    osal_wait4barrier();
-    log_trace("<< wait4barrier");
+#include "dbghelp.h"
+#pragma comment(lib, "Dbghelp.lib")
+
+static void dump_stack(CONTEXT *ctx, FILE *out) {
+  const int MaxNameLen = 256;
+
+  BOOL result;
+  HANDLE process;
+  HANDLE thread;
+  HMODULE hModule;
+  STACKFRAME64 stack;
+  ULONG frame;
+  DWORD64 displacement;
+  DWORD disp;
+
+  char buffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME * sizeof(TCHAR)];
+  char module[MaxNameLen];
+  PSYMBOL_INFO pSymbol = (PSYMBOL_INFO)buffer;
+
+  // On x64, StackWalk64 modifies the context record, that could
+  // cause crashes, so we create a copy to prevent it
+  CONTEXT ctxCopy;
+  memcpy(&ctxCopy, ctx, sizeof(CONTEXT));
+  memset(&stack, 0, sizeof(STACKFRAME64));
+
+  process = GetCurrentProcess();
+  thread = GetCurrentThread();
+  displacement = 0;
+#if defined(_M_IX86)
+  stack.AddrPC.Offset = (*ctx).Eip;
+  stack.AddrPC.Mode = AddrModeFlat;
+  stack.AddrStack.Offset = (*ctx).Esp;
+  stack.AddrStack.Mode = AddrModeFlat;
+  stack.AddrFrame.Offset = (*ctx).Ebp;
+  stack.AddrFrame.Mode = AddrModeFlat;
+#endif /* _M_IX86 */
+
+  SymInitialize(process, NULL, TRUE);
+
+  for (frame = 0;; frame++) {
+    // get next call from stack
+    result = StackWalk64(
+#if defined(_M_AMD64)
+        IMAGE_FILE_MACHINE_AMD64
+#elif defined(_M_ARM64)
+        IMAGE_FILE_MACHINE_ARM64
+#elif defined(_M_ARM)
+        IMAGE_FILE_MACHINE_ARM
+#elif defined(_M_IX86)
+        IMAGE_FILE_MACHINE_I386
+#else
+#error "FIXME"
+#endif
+        ,
+        process, thread, &stack, &ctxCopy, NULL, SymFunctionTableAccess64,
+        SymGetModuleBase64, NULL);
+
+    if (!result)
+      break;
+
+    // get symbol name for address
+    pSymbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+    pSymbol->MaxNameLen = MAX_SYM_NAME;
+    SymFromAddr(process, (ULONG64)stack.AddrPC.Offset, &displacement, pSymbol);
+
+    IMAGEHLP_LINE64 line;
+    line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+
+    // try to get line
+    if (SymGetLineFromAddr64(process, stack.AddrPC.Offset, &disp, &line)) {
+      fprintf(out, "\tat %s in %s: line: %lu: address: 0x%0" PRIx64 "\n",
+              pSymbol->Name, line.FileName, line.LineNumber, pSymbol->Address);
+    } else {
+      // failed to get line
+      fprintf(out, "\tat %s, address 0x%0" PRIx64 ".\n", pSymbol->Name,
+              pSymbol->Address);
+      hModule = NULL;
+      lstrcpyA(module, "");
+      GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                        (LPCTSTR)(stack.AddrPC.Offset), &hModule);
+
+      // at least print module name
+      if (hModule != NULL)
+        GetModuleFileNameA(hModule, module, MaxNameLen);
+
+      fprintf(out, "in %s\n", module);
+    }
   }
+  fflush(stderr);
+}
 
+static LONG seh_filter(struct _EXCEPTION_POINTERS *ExInfo, FILE *out) {
+  const char *caption = "";
+  switch (ExInfo->ExceptionRecord->ExceptionCode) {
+  case EXCEPTION_BREAKPOINT:
+    caption = "BREAKPOINT";
+    break;
+  case EXCEPTION_SINGLE_STEP:
+    caption = "SINGLE STEPT";
+    break;
+  case STATUS_CONTROL_C_EXIT:
+    caption = "CONTROL-C";
+    break;
+  case /* STATUS_INTERRUPTED */ 0xC0000515L:
+    caption = "INTERRUPTED";
+    break;
+  case EXCEPTION_ACCESS_VIOLATION:
+    caption = "ACCESS VIOLATION";
+    break;
+  case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
+    caption = "ARRAY BOUNDS EXCEEDED";
+    break;
+  case EXCEPTION_DATATYPE_MISALIGNMENT:
+    caption = "MISALIGNMENT";
+    break;
+  case EXCEPTION_STACK_OVERFLOW:
+    caption = "STACK OVERFLOW";
+    break;
+  case EXCEPTION_INVALID_DISPOSITION:
+    caption = "INVALID DISPOSITION";
+    break;
+  case EXCEPTION_ILLEGAL_INSTRUCTION:
+    caption = "ILLEGAL INSTRUCTION";
+    break;
+  case EXCEPTION_NONCONTINUABLE_EXCEPTION:
+    caption = "NONCONTINUABLE EXCEPTION";
+    break;
+  case /* STATUS_STACK_BUFFER_OVERRUN, STATUS_BUFFER_OVERFLOW_PREVENTED */
+      0xC0000409L:
+    caption = "BUFFER OVERRUN";
+    break;
+  case /* STATUS_ASSERTION_FAILURE */ 0xC0000420L:
+    caption = "ASSERTION FAILURE";
+    break;
+  case /* STATUS_HEAP_CORRUPTION */ 0xC0000374L:
+    caption = "HEAP CORRUPTION";
+    break;
+  case /* STATUS_CONTROL_STACK_VIOLATION */ 0xC00001B2L:
+    caption = "CONTROL STACK VIOLATION";
+    break;
+  case EXCEPTION_FLT_DIVIDE_BY_ZERO:
+    caption = "FLT DIVIDE BY ZERO";
+    break;
+  default:
+    caption = "(unknown)";
+    break;
+  }
+  PVOID CodeAdress = ExInfo->ExceptionRecord->ExceptionAddress;
+  fprintf(out, "****************************************************\n");
+  fprintf(out, "*** A Program Fault occurred:\n");
+  fprintf(out, "*** Error code %08X: %s\n",
+          ExInfo->ExceptionRecord->ExceptionCode, caption);
+  fprintf(out, "****************************************************\n");
+  fprintf(out, "***   Address: %08zX\n", (intptr_t)CodeAdress);
+  fprintf(out, "***     Flags: %08X\n",
+          ExInfo->ExceptionRecord->ExceptionFlags);
+  dump_stack(ExInfo->ContextRecord, out);
+  return EXCEPTION_EXECUTE_HANDLER;
+}
+#endif /* _MSC_VER */
+
+static bool execute_thunk(const actor_config *const_config,
+                          const mdbx_pid_t pid) {
+  actor_config config = *const_config;
   try {
+    if (global::singlemode) {
+      logging::setup(format("single_%s", testcase2str(config.testcase)));
+    } else {
+      logging::setup((logging::loglevel)config.params.loglevel,
+                     format("child_%u.%u", config.actor_id, config.space_id));
+      log_trace(">> wait4barrier");
+      osal_wait4barrier();
+      log_trace("<< wait4barrier");
+    }
+
     std::unique_ptr<testcase> test(registry::create_actor(config, pid));
     size_t iter = 0;
     do {
@@ -684,6 +847,19 @@ bool test_execute(const actor_config &config_const) {
     failure("***** Exception: %s *****", pipets.what());
     return false;
   }
+}
+
+bool test_execute(const actor_config &config) {
+#ifdef _MSC_VER
+  __try {
+#endif
+    return execute_thunk(&config, osal_getpid());
+#ifdef _MSC_VER
+  } __except (seh_filter(GetExceptionInformation(), stderr)) {
+    fprintf(stderr, "Exception \n");
+    return false;
+  }
+#endif
 }
 
 //-----------------------------------------------------------------------------
