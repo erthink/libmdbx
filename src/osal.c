@@ -872,12 +872,12 @@ osal_ioring_write(osal_ioring_t *ior, mdbx_filehandle_t fd) {
       } else {
         r.err = (int)GetLastError();
         if (unlikely(r.err != ERROR_IO_PENDING)) {
-          ERROR("%s: fd %p, item %p (%zu), pgno %u, bytes %zu, offset %" PRId64
-                ", err %d",
+          void *data = Ptr64ToPtr(item->sgv[0].Buffer);
+          ERROR("%s: fd %p, item %p (%zu), addr %p pgno %u, bytes %zu,"
+                " offset %" PRId64 ", err %d",
                 "WriteFileGather", fd, __Wpedantic_format_voidptr(item),
-                item - ior->pool, ((page_t *)item->single.iov_base)->pgno,
-                bytes, item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32),
-                r.err);
+                item - ior->pool, data, ((page_t *)data)->pgno, bytes,
+                item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32), r.err);
           goto bailout_rc;
         }
         assert(wait_for > ior->event_pool + ior->event_stack);
@@ -894,22 +894,23 @@ osal_ioring_write(osal_ioring_t *ior, mdbx_filehandle_t fd) {
         r.err = (int)GetLastError();
         switch (r.err) {
         default:
-          ERROR("%s: fd %p, item %p (%zu), pgno %u, bytes %zu, offset %" PRId64
-                ", err %d",
+          ERROR("%s: fd %p, item %p (%zu), addr %p pgno %u, bytes %zu,"
+                " offset %" PRId64 ", err %d",
                 "WriteFileEx", fd, __Wpedantic_format_voidptr(item),
-                item - ior->pool, ((page_t *)item->single.iov_base)->pgno,
-                bytes, item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32),
-                r.err);
+                item - ior->pool, item->single.iov_base,
+                ((page_t *)item->single.iov_base)->pgno, bytes,
+                item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32), r.err);
           goto bailout_rc;
         case ERROR_NOT_FOUND:
         case ERROR_USER_MAPPED_FILE:
         case ERROR_LOCK_VIOLATION:
-          WARNING(
-              "%s: fd %p, item %p (%zu), pgno %u, bytes %zu, offset %" PRId64
-              ", err %d",
-              "WriteFileEx", fd, __Wpedantic_format_voidptr(item),
-              item - ior->pool, ((page_t *)item->single.iov_base)->pgno, bytes,
-              item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32), r.err);
+          WARNING("%s: fd %p, item %p (%zu), addr %p pgno %u, bytes %zu,"
+                  " offset %" PRId64 ", err %d",
+                  "WriteFileEx", fd, __Wpedantic_format_voidptr(item),
+                  item - ior->pool, item->single.iov_base,
+                  ((page_t *)item->single.iov_base)->pgno, bytes,
+                  item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32),
+                  r.err);
           SleepEx(0, true);
           goto retry;
         case ERROR_INVALID_USER_BUFFER:
@@ -927,10 +928,11 @@ osal_ioring_write(osal_ioring_t *ior, mdbx_filehandle_t fd) {
       if (!WriteFile(fd, item->single.iov_base, (DWORD)bytes, &written,
                      &item->ov)) {
         r.err = (int)GetLastError();
-        ERROR("%s: fd %p, item %p (%zu), pgno %u, bytes %zu, offset %" PRId64
-              ", err %d",
+        ERROR("%s: fd %p, item %p (%zu), addr %p pgno %u, bytes %zu,"
+              " offset %" PRId64 ", err %d",
               "WriteFile", fd, __Wpedantic_format_voidptr(item),
-              item - ior->pool, ((page_t *)item->single.iov_base)->pgno, bytes,
+              item - ior->pool, item->single.iov_base,
+              ((page_t *)item->single.iov_base)->pgno, bytes,
               item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32), r.err);
         goto bailout_rc;
       } else if (unlikely(written != bytes)) {
@@ -984,7 +986,9 @@ osal_ioring_write(osal_ioring_t *ior, mdbx_filehandle_t fd) {
     assert(ior->async_waiting == ior->async_completed);
     for (ior_item_t *item = ior->pool; item <= ior->last;) {
       size_t i = 1, bytes = item->single.iov_len - ior_WriteFile_flag;
+      void *data = item->single.iov_base;
       if (bytes & ior_WriteFile_flag) {
+        data = Ptr64ToPtr(item->sgv[0].Buffer);
         bytes = ior->pagesize;
         /* Zap: Reading invalid data from 'item->sgv' */
         MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6385);
@@ -995,11 +999,10 @@ osal_ioring_write(osal_ioring_t *ior, mdbx_filehandle_t fd) {
         if (!HasOverlappedIoCompleted(&item->ov)) {
           DWORD written = 0;
           if (unlikely(!GetOverlappedResult(fd, &item->ov, &written, true))) {
-            ERROR("%s: item %p (%zu), pgno %u, bytes %zu, offset %" PRId64
-                  ", err %d",
+            ERROR("%s: item %p (%zu), addr %p pgno %u, bytes %zu,"
+                  " offset %" PRId64 ", err %d",
                   "GetOverlappedResult", __Wpedantic_format_voidptr(item),
-                  item - ior->pool, ((page_t *)item->single.iov_base)->pgno,
-                  bytes,
+                  item - ior->pool, data, ((page_t *)data)->pgno, bytes,
                   item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32),
                   (int)GetLastError());
             goto bailout_geterr;
@@ -1017,10 +1020,10 @@ osal_ioring_write(osal_ioring_t *ior, mdbx_filehandle_t fd) {
         if ((r.err & 0x80000000) &&
             GetOverlappedResult(nullptr, &item->ov, &written, true))
           r.err = (int)GetLastError();
-        ERROR("%s: item %p (%zu), pgno %u, bytes %zu, offset %" PRId64
-              ", err %d",
+        ERROR("%s: item %p (%zu), addr %p pgno %u, bytes %zu,"
+              " offset %" PRId64 ", err %d",
               "Result", __Wpedantic_format_voidptr(item), item - ior->pool,
-              ((page_t *)item->single.iov_base)->pgno, bytes,
+              data, ((page_t *)data)->pgno, bytes,
               item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32),
               (int)GetLastError());
         goto bailout_rc;
