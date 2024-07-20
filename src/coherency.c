@@ -158,6 +158,16 @@ __hot int coherency_check_head(MDBX_txn *txn, const meta_ptr_t head,
                                 *timestamp == 0)))
     return coherency_timeout(timestamp, -1, txn->env);
 
+  if (unlikely(txn->dbs[FREE_DBI].flags != MDBX_INTEGERKEY)) {
+    if ((txn->dbs[FREE_DBI].flags & DB_PERSISTENT_FLAGS) != MDBX_INTEGERKEY ||
+        unaligned_peek_u64(4, &head.ptr_c->magic_and_version) ==
+            MDBX_DATA_MAGIC) {
+      ERROR("unexpected/invalid db-flags 0x%u for GC/FreeDB",
+            txn->dbs[FREE_DBI].flags);
+      return MDBX_INCOMPATIBLE;
+    }
+    txn->dbs[FREE_DBI].flags &= DB_PERSISTENT_FLAGS;
+  }
   tASSERT(txn, txn->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
   tASSERT(txn, check_sdb_flags(txn->dbs[MAIN_DBI].flags));
   return MDBX_SUCCESS;

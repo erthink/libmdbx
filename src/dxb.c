@@ -626,7 +626,8 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc,
           pv2pages(header.geometry.shrink_pv),
           unaligned_peek_u64(4, header.txnid_a), durable_caption(&header));
 
-  if (unlikely(header.trees.gc.flags != MDBX_INTEGERKEY)) {
+  if (unlikely((header.trees.gc.flags & DB_PERSISTENT_FLAGS) !=
+               MDBX_INTEGERKEY)) {
     ERROR("unexpected/invalid db-flags 0x%u for GC/FreeDB",
           header.trees.gc.flags);
     return MDBX_INCOMPATIBLE;
@@ -1055,7 +1056,8 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc,
         meta_t *const meta = METAPAGE(env, n);
         if (unlikely(unaligned_peek_u64(4, &meta->magic_and_version) !=
                      MDBX_DATA_MAGIC) ||
-            (meta->dxbid.x | meta->dxbid.y) == 0) {
+            (meta->dxbid.x | meta->dxbid.y) == 0 ||
+            (meta->gc_flags & ~DB_PERSISTENT_FLAGS)) {
           const txnid_t txnid =
               meta_is_used(&troika, n) ? constmeta_txnid(meta) : 0;
           NOTICE("%s %s"
