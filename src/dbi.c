@@ -1030,7 +1030,7 @@ __cold int mdbx_enumerate_subdb(const MDBX_txn *txn, MDBX_subdb_enum_func *func,
   }
   rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
 
- bailout:
+bailout:
   txn->cursors[MAIN_DBI] = cx.outer.next;
   return rc;
 }
