@@ -766,11 +766,10 @@ MDBX_INTERNAL_FUNC int osal_ioring_add(osal_ioring_t *ior, const size_t offset,
     item->sgv[0].Buffer = PtrToPtr64(data);
     for (size_t i = 1; i < segments; ++i) {
       data = ptr_disp(data, ior->pagesize);
-      item->sgv[slots_used].Buffer = PtrToPtr64(data);
+      item->sgv[i].Buffer = PtrToPtr64(data);
     }
-    item->sgv[slots_used].Buffer = 0;
+    item->sgv[slots_used = segments].Buffer = 0;
     assert((item->single.iov_len & ior_WriteFile_flag) == 0);
-    slots_used = segments;
   }
   ior->last_bytes = bytes;
   ior_last_sgvcnt(ior, item) = slots_used;
