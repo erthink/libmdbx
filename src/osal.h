@@ -226,20 +226,20 @@ typedef struct osal_mmap {
 typedef struct ior_item {
 #if defined(_WIN32) || defined(_WIN64)
   OVERLAPPED ov;
-#define ior_svg_gap4terminator 1
+#define ior_sgv_gap4terminator 1
 #define ior_sgv_element FILE_SEGMENT_ELEMENT
 #else
   size_t offset;
 #if MDBX_HAVE_PWRITEV
   size_t sgvcnt;
-#define ior_svg_gap4terminator 0
+#define ior_sgv_gap4terminator 0
 #define ior_sgv_element struct iovec
 #endif /* MDBX_HAVE_PWRITEV */
 #endif /* !Windows */
   union {
     MDBX_val single;
 #if defined(ior_sgv_element)
-    ior_sgv_element sgv[1 + ior_svg_gap4terminator];
+    ior_sgv_element sgv[1 + ior_sgv_gap4terminator];
 #endif /* ior_sgv_element */
   };
 } ior_item_t;
