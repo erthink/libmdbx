@@ -3612,19 +3612,26 @@ __cold void debug_log(int level, const char *function, int line,
   va_end(args);
 }
 
-/* Dump a key in ascii or hexadecimal. */
-const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
+/* Dump a val in ascii or hexadecimal. */
+const char *mdbx_dump_val(const MDBX_val *val, char *const buf,
                           const size_t bufsize) {
-  if (!key)
+  if (!val)
     return "<null>";
-  if (!key->iov_len)
+  if (!val->iov_len)
     return "<empty>";
   if (!buf || bufsize < 4)
     return nullptr;
 
+  if (!val->iov_base) {
+    int len = snprintf(buf, bufsize, "<nullptr.%zu>", val->iov_len);
+    assert(len > 0 && (size_t)len < bufsize);
+    (void)len;
+    return buf;
+  }
+
   bool is_ascii = true;
-  const uint8_t *const data = key->iov_base;
-  for (size_t i = 0; i < key->iov_len; i++)
+  const uint8_t *const data = val->iov_base;
+  for (size_t i = 0; i < val->iov_len; i++)
     if (data[i] < ' ' || data[i] > '~') {
       is_ascii = false;
       break;
@@ -3633,14 +3640,14 @@ const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
   if (is_ascii) {
     int len =
         snprintf(buf, bufsize, "%.*s",
-                 (key->iov_len > INT_MAX) ? INT_MAX : (int)key->iov_len, data);
+                 (val->iov_len > INT_MAX) ? INT_MAX : (int)val->iov_len, data);
     assert(len > 0 && (size_t)len < bufsize);
     (void)len;
   } else {
     char *const detent = buf + bufsize - 2;
     char *ptr = buf;
     *ptr++ = '<';
-    for (size_t i = 0; i < key->iov_len && ptr < detent; i++) {
+    for (size_t i = 0; i < val->iov_len && ptr < detent; i++) {
       const char hex[16] = {'0', '1', '2', '3', '4', '5', '6', '7',
                             '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
       *ptr++ = hex[data[i] >> 4];
