@@ -9164,9 +9164,10 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
       }
 #endif /* Windows */
     } else {
-      if (unlikely(txn->mt_dbs[FREE_DBI].md_flags != MDBX_INTEGERKEY)) {
-        ERROR("unexpected/invalid db-flags 0x%u for GC/FreeDB",
-              txn->mt_dbs[FREE_DBI].md_flags);
+      if (unlikely((txn->mt_dbs[FREE_DBI].md_flags & DB_PERSISTENT_FLAGS) !=
+                   MDBX_INTEGERKEY)) {
+        ERROR("unexpected/invalid db-flags 0x%x for %s",
+              txn->mt_dbs[FREE_DBI].md_flags, "GC/FreeDB");
         rc = MDBX_INCOMPATIBLE;
         goto bailout;
       }
@@ -12424,12 +12425,12 @@ static int validate_meta(MDBX_env *env, MDBX_meta *const meta,
                  meta->mm_dbs[FREE_DBI].md_entries ||
                  meta->mm_dbs[FREE_DBI].md_leaf_pages ||
                  meta->mm_dbs[FREE_DBI].md_overflow_pages)) {
-      WARNING("meta[%u] has false-empty %s, skip it", meta_number, "GC");
+      WARNING("meta[%u] has false-empty %s, skip it", meta_number, "GC/FreeDB");
       return MDBX_CORRUPTED;
     }
   } else if (unlikely(meta->mm_dbs[FREE_DBI].md_root >= meta->mm_geo.next)) {
     WARNING("meta[%u] has invalid %s-root %" PRIaPGNO ", skip it", meta_number,
-            "GC", meta->mm_dbs[FREE_DBI].md_root);
+            "GC/FreeDB", meta->mm_dbs[FREE_DBI].md_root);
     return MDBX_CORRUPTED;
   }
 
@@ -12451,7 +12452,7 @@ static int validate_meta(MDBX_env *env, MDBX_meta *const meta,
 
   if (unlikely(meta->mm_dbs[FREE_DBI].md_mod_txnid > txnid)) {
     WARNING("meta[%u] has wrong md_mod_txnid %" PRIaTXN " for %s, skip it",
-            meta_number, meta->mm_dbs[FREE_DBI].md_mod_txnid, "GC");
+            meta_number, meta->mm_dbs[FREE_DBI].md_mod_txnid, "GC/FreeDB");
     return MDBX_CORRUPTED;
   }
 
@@ -12459,6 +12460,13 @@ static int validate_meta(MDBX_env *env, MDBX_meta *const meta,
     WARNING("meta[%u] has wrong md_mod_txnid %" PRIaTXN " for %s, skip it",
             meta_number, meta->mm_dbs[MAIN_DBI].md_mod_txnid, "MainDB");
     return MDBX_CORRUPTED;
+  }
+
+  if (unlikely((meta->mm_dbs[FREE_DBI].md_flags & DB_PERSISTENT_FLAGS) !=
+               MDBX_INTEGERKEY)) {
+    WARNING("meta[%u] has unexpected/invalid db-flags 0x%x for %s", meta_number,
+            meta->mm_dbs[FREE_DBI].md_flags, "GC/FreeDB");
+    return MDBX_INCOMPATIBLE;
   }
 
   return MDBX_SUCCESS;
