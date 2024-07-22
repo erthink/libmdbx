@@ -14574,7 +14574,7 @@ __cold static int __must_check_result override_meta(MDBX_env *env,
     osal_flush_incoherent_mmap(env->me_map, pgno2bytes(env, NUM_METAS),
                                env->me_os_psize);
   }
-  eASSERT(env, (!env->me_txn && (env->me_flags & MDBX_ENV_ACTIVE) == 0) ||
+  eASSERT(env, (!env->me_txn && !env->me_txn0) ||
                    (env->me_stuck_meta == (int)target &&
                     (env->me_flags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) ==
                         MDBX_EXCLUSIVE));
