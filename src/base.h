@@ -505,7 +505,7 @@ __extern_C key_t ftok(const char *, int);
 
 #ifndef container_of
 #define container_of(ptr, type, member)                                        \
-  ((type *)((char *)(ptr)-offsetof(type, member)))
+  ((type *)((char *)(ptr) - offsetof(type, member)))
 #endif /* container_of */
 
 /*----------------------------------------------------------------------------*/

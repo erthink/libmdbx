@@ -428,7 +428,7 @@ node_largedata_pgno(const MDBX_node *const __restrict node) {
  *                                 max(DATALEN_NO_OVERFLOW, sizeof(MDBX_db));
  */
 
-#define PAGEROOM(pagesize) ((pagesize)-PAGEHDRSZ)
+#define PAGEROOM(pagesize) ((pagesize) - PAGEHDRSZ)
 #define EVEN_FLOOR(n) ((n) & ~(size_t)1)
 #define BRANCH_NODE_MAX(pagesize)                                              \
   (EVEN_FLOOR((PAGEROOM(pagesize) - sizeof(indx_t) - NODESIZE) / (3 - 1) -     \
@@ -3187,9 +3187,9 @@ static __always_inline int __must_check_result dpl_append(MDBX_txn *txn,
       STATIC_ASSERT(sizeof(MDBX_dp) == sizeof(__uint128_t));
       ((__uint128_t *)i)[1] = *(volatile __uint128_t *)i;
 #else
-      i[1].ptr = i->ptr;
-      i[1].pgno = i->pgno;
-      i[1].npages = i->npages;
+    i[1].ptr = i->ptr;
+    i[1].pgno = i->pgno;
+    i[1].npages = i->npages;
 #endif
       --i;
     }
@@ -3787,7 +3787,9 @@ MDBX_MAYBE_UNUSED static bool cursor_is_tracked(const MDBX_cursor *mc) {
     }                                                                          \
     tracked->mc_next = *tracking_head;                                         \
     *tracking_head = tracked;                                                  \
-    { act; }                                                                   \
+    {                                                                          \
+      act;                                                                     \
+    }                                                                          \
     *tracking_head = tracked->mc_next;                                         \
   } while (0)
 

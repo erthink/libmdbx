@@ -1647,21 +1647,20 @@ __cold ::std::ostream &operator<<(::std::ostream &out,
     const char *suffix;
   } static const scales[] = {
 #if MDBX_WORDBITS > 32
-    {env_managed::geometry::EiB, "EiB"},
-    {env_managed::geometry::EB, "EB"},
-    {env_managed::geometry::PiB, "PiB"},
-    {env_managed::geometry::PB, "PB"},
-    {env_managed::geometry::TiB, "TiB"},
-    {env_managed::geometry::TB, "TB"},
+      {env_managed::geometry::EiB, "EiB"},
+      {env_managed::geometry::EB, "EB"},
+      {env_managed::geometry::PiB, "PiB"},
+      {env_managed::geometry::PB, "PB"},
+      {env_managed::geometry::TiB, "TiB"},
+      {env_managed::geometry::TB, "TB"},
 #endif
-    {env_managed::geometry::GiB, "GiB"},
-    {env_managed::geometry::GB, "GB"},
-    {env_managed::geometry::MiB, "MiB"},
-    {env_managed::geometry::MB, "MB"},
-    {env_managed::geometry::KiB, "KiB"},
-    {env_managed::geometry::kB, "kB"},
-    {1, " bytes"}
-  };
+      {env_managed::geometry::GiB, "GiB"},
+      {env_managed::geometry::GB, "GB"},
+      {env_managed::geometry::MiB, "MiB"},
+      {env_managed::geometry::MB, "MB"},
+      {env_managed::geometry::KiB, "KiB"},
+      {env_managed::geometry::kB, "kB"},
+      {1, " bytes"}};
 
   for (const auto i : scales)
     if (bytes % i.one == 0)

@@ -34,7 +34,7 @@
 
 #define IP_PRINTF_ARG_HOST(addr)                                               \
   (int)((addr) >> 24), (int)((addr) >> 16 & 0xff), (int)((addr) >> 8 & 0xff),  \
-      (int)((addr)&0xff)
+      (int)((addr) & 0xff)
 
 char opt_db_path[PATH_MAX] = "./mdbx_bench2";
 static MDBX_env *env;

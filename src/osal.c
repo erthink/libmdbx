@@ -3398,16 +3398,15 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages,
 #elif defined(HW_USERMEM) || defined(HW_PHYSMEM64) || defined(HW_MEMSIZE) ||   \
     defined(HW_PHYSMEM)
     size_t ram, len = sizeof(ram);
-    static const int mib[] = {
-      CTL_HW,
+    static const int mib[] = {CTL_HW,
 #if defined(HW_USERMEM)
-      HW_USERMEM
+                              HW_USERMEM
 #elif defined(HW_PHYSMEM64)
-      HW_PHYSMEM64
+                              HW_PHYSMEM64
 #elif defined(HW_MEMSIZE)
-      HW_MEMSIZE
+                              HW_MEMSIZE
 #else
-      HW_PHYSMEM
+                              HW_PHYSMEM
 #endif
     };
     if (sysctl(
@@ -3448,12 +3447,11 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages,
 #elif defined(VM_TOTAL) || defined(VM_METER)
     struct vmtotal info;
     size_t len = sizeof(info);
-    static const int mib[] = {
-      CTL_VM,
+    static const int mib[] = {CTL_VM,
 #if defined(VM_TOTAL)
-      VM_TOTAL
+                              VM_TOTAL
 #elif defined(VM_METER)
-      VM_METER
+                              VM_METER
 #endif
     };
     if (sysctl(

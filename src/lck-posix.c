@@ -691,16 +691,16 @@ __cold MDBX_INTERNAL_FUNC int osal_lck_init(MDBX_env *env,
       if LCK already opened/used inside current process */
         ;
 
-    /* FIXME: Unfortunately, there is no other reliable way but to long testing
-     * on each platform. On the other hand, behavior like FreeBSD is incorrect
-     * and we can expect it to be rare. Moreover, even on FreeBSD without
-     * additional in-process initialization, the probability of an problem
-     * occurring is vanishingly small, and the symptom is a return of EINVAL
-     * while locking a mutex. In other words, in the worst case, the problem
-     * results in an EINVAL error at the start of the transaction, but NOT data
-     * loss, nor database corruption, nor other fatal troubles. Thus, the code
-     * below I am inclined to think the workaround for erroneous platforms (like
-     * FreeBSD), rather than a defect of libmdbx. */
+  /* FIXME: Unfortunately, there is no other reliable way but to long testing
+   * on each platform. On the other hand, behavior like FreeBSD is incorrect
+   * and we can expect it to be rare. Moreover, even on FreeBSD without
+   * additional in-process initialization, the probability of an problem
+   * occurring is vanishingly small, and the symptom is a return of EINVAL
+   * while locking a mutex. In other words, in the worst case, the problem
+   * results in an EINVAL error at the start of the transaction, but NOT data
+   * loss, nor database corruption, nor other fatal troubles. Thus, the code
+   * below I am inclined to think the workaround for erroneous platforms (like
+   * FreeBSD), rather than a defect of libmdbx. */
 #if defined(__FreeBSD__)
   /* seems that shared mutexes on FreeBSD required in-process initialization */
   (void)global_uniqueness_flag;

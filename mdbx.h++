@@ -2255,14 +2255,16 @@ public:
 
   buffer(const char *c_str, bool make_reference,
          const allocator_type &allocator = allocator_type())
-      : buffer(::mdbx::slice(c_str), make_reference, allocator) {}
+      : buffer(::mdbx::slice(c_str), make_reference, allocator){}
 
 #if defined(DOXYGEN) ||                                                        \
     (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
-  template <class CHAR, class T>
-  buffer(const ::std::basic_string_view<CHAR, T> &view, bool make_reference,
-         const allocator_type &allocator = allocator_type())
-      : buffer(::mdbx::slice(view), make_reference, allocator) {}
+        template <class CHAR, class T>
+        buffer(const ::std::basic_string_view<CHAR, T> &view,
+               bool make_reference,
+               const allocator_type &allocator = allocator_type())
+      : buffer(::mdbx::slice(view), make_reference, allocator) {
+  }
 #endif /* __cpp_lib_string_view >= 201606L */
 
   MDBX_CXX20_CONSTEXPR
@@ -2288,15 +2290,16 @@ public:
 
   MDBX_CXX20_CONSTEXPR
   buffer(const char *c_str, const allocator_type &allocator = allocator_type())
-      : buffer(::mdbx::slice(c_str), allocator) {}
+      : buffer(::mdbx::slice(c_str), allocator){}
 
 #if defined(DOXYGEN) ||                                                        \
     (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
-  template <class CHAR, class T>
-  MDBX_CXX20_CONSTEXPR
-  buffer(const ::std::basic_string_view<CHAR, T> &view,
-         const allocator_type &allocator = allocator_type())
-      : buffer(::mdbx::slice(view), allocator) {}
+        template <class CHAR, class T>
+        MDBX_CXX20_CONSTEXPR
+        buffer(const ::std::basic_string_view<CHAR, T> &view,
+               const allocator_type &allocator = allocator_type())
+      : buffer(::mdbx::slice(view), allocator) {
+  }
 #endif /* __cpp_lib_string_view >= 201606L */
 
   buffer(size_t head_room, size_t tail_room,

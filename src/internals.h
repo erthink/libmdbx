@@ -90,8 +90,8 @@
 #endif
 #if _MSC_VER > 1914
 #pragma warning(                                                               \
-        disable : 5105) /* winbase.h(9531): warning C5105: macro expansion     \
-                           producing 'defined' has undefined behavior */
+    disable : 5105) /* winbase.h(9531): warning C5105: macro expansion         \
+                       producing 'defined' has undefined behavior */
 #endif
 #if _MSC_VER > 1930
 #pragma warning(disable : 6235) /* <expression> is always a constant */
@@ -120,8 +120,8 @@
 #pragma warning(disable : 4204) /* nonstandard extension used: non-constant    \
                                    aggregate initializer */
 #pragma warning(                                                               \
-        disable : 4505) /* unreferenced local function has been removed */
-#endif                  /* _MSC_VER (warnings) */
+    disable : 4505) /* unreferenced local function has been removed */
+#endif              /* _MSC_VER (warnings) */
 
 #if defined(__GNUC__) && __GNUC__ < 9
 #pragma GCC diagnostic ignored "-Wattributes"
@@ -684,7 +684,7 @@ typedef struct MDBX_page {
 #define P_LOOSE 0x4000u      /* page was dirtied then freed, can be reused */
 #define P_FROZEN 0x8000u     /* used for retire page with known status */
 #define P_ILL_BITS                                                             \
-  ((uint16_t) ~(P_BRANCH | P_LEAF | P_LEAF2 | P_OVERFLOW | P_SPILLED))
+  ((uint16_t)~(P_BRANCH | P_LEAF | P_LEAF2 | P_OVERFLOW | P_SPILLED))
   uint16_t mp_flags;
   union {
     uint32_t mp_pages; /* number of overflow pages */
@@ -1303,8 +1303,8 @@ struct MDBX_cursor {
 #define C_SUB 0x04         /* Cursor is a sub-cursor */
 #define C_DEL 0x08         /* last op was a cursor_del */
 #define C_UNTRACK 0x10     /* Un-track cursor when closing */
-#define C_GCU                                                                                  \
-  0x20 /* Происходит подготовка к обновлению GC, поэтому \
+#define C_GCU                                                                  \
+  0x20 /* Происходит подготовка к обновлению GC, поэтому                     \
         * можно брать страницы из GC даже для FREE_DBI */
   uint8_t mc_flags;
 
