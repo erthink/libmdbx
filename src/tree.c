@@ -324,7 +324,7 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
     const size_t dbi = cursor_dbi(csrc);
     cASSERT(csrc, csrc->top == cdst->top);
     if (fromleft) {
-      /* If we're adding on the left, bump others up */
+      /* Перемещаем с левой страницы нв правую, нужно сдвинуть ki на +1 */
       for (m2 = csrc->txn->cursors[dbi]; m2; m2 = m2->next) {
         m3 = (csrc->flags & z_inner) ? &m2->subcur->cursor : m2;
         if (!is_related(csrc, m3))
@@ -351,7 +351,7 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
         }
       }
     } else {
-      /* Adding on the right, bump others down */
+      /* Перемещаем с правой страницы на левую, нужно сдвинуть ki на -1 */
       for (m2 = csrc->txn->cursors[dbi]; m2; m2 = m2->next) {
         m3 = (csrc->flags & z_inner) ? &m2->subcur->cursor : m2;
         if (!is_related(csrc, m3))
