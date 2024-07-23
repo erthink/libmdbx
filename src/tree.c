@@ -855,7 +855,7 @@ int tree_rebalance(MDBX_cursor *mc) {
   const size_t right_room = right ? page_room(right) : 0;
   const size_t left_nkeys = left ? page_numkeys(left) : 0;
   const size_t right_nkeys = right ? page_numkeys(right) : 0;
-  bool involve = false;
+  bool involve = !(left && right);
 retry:
   cASSERT(mc, mc->top > 0);
   if (left_room > room_threshold && left_room >= right_room &&
