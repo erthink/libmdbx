@@ -4357,11 +4357,18 @@ public:
 
   //----------------------------------------------------------------------------
 
-  /// \brief Reset a read-only transaction.
+  /// \brief Reset read-only transaction.
   inline void reset_reading();
 
-  /// \brief Renew a read-only transaction.
+  /// \brief Renew read-only transaction.
   inline void renew_reading();
+
+  /// \brief Park read-only transaction.
+  inline void park_reading(bool autounpark = true);
+
+  /// \brief Resume parked read-only transaction.
+  /// \returns True if transaction was restarted while `restart_if_ousted=true`.
+  inline bool unpark_reading(bool restart_if_ousted = true);
 
   /// \brief Start nested write transaction.
   txn_managed start_nested();
@@ -6448,6 +6455,14 @@ inline void txn::reset_reading() {
 
 inline void txn::renew_reading() {
   error::success_or_throw(::mdbx_txn_renew(handle_));
+}
+
+inline void txn::park_reading(bool autounpark) {
+  error::success_or_throw(::mdbx_txn_park(handle_, autounpark));
+}
+
+inline bool txn::unpark_reading(bool restart_if_ousted) {
+  return error::boolean_or_throw(::mdbx_txn_unpark(handle_, restart_if_ousted));
 }
 
 inline txn::info txn::get_info(bool scan_reader_lock_table) const {
