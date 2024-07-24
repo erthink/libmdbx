@@ -1982,7 +1982,8 @@ typedef enum MDBX_error {
    *  corresponding DBI-handle could be (re)used */
   MDBX_DANGLING_DBI = -30412,
 
-  /** Транзакция была асинхронно отменена/вытеснена */
+  /** The parked read transaction was outed for the sake of
+   * recycling old MVCC snapshots. */
   MDBX_OUSTED = -30411,
 
   /* The last of MDBX-added error codes */

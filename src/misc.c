@@ -168,6 +168,9 @@ __cold const char *mdbx_liberr2str(int errnum) {
   case MDBX_DANGLING_DBI:
     return "MDBX_DANGLING_DBI: Some cursors and/or other resources should be"
            " closed before subDb or corresponding DBI-handle could be (re)used";
+  case MDBX_OUSTED:
+    return "MDBX_OUSTED: The parked read transaction was outed for the sake"
+           " of recycling old MVCC snapshots";
   default:
     return nullptr;
   }
