@@ -544,13 +544,13 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta,
   if (unlikely(meta->trees.gc.flags != MDBX_INTEGERKEY) &&
       ((meta->trees.gc.flags & DB_PERSISTENT_FLAGS) != MDBX_INTEGERKEY ||
        magic_and_version == MDBX_DATA_MAGIC)) {
-    WARNING("meta[%u] has invalid %s flags 0x%u, skip it", meta_number,
+    WARNING("meta[%u] has invalid %s flags 0x%x, skip it", meta_number,
             "GC/FreeDB", meta->trees.gc.flags);
     return MDBX_INCOMPATIBLE;
   }
 
   if (unlikely(!check_sdb_flags(meta->trees.main.flags))) {
-    WARNING("meta[%u] has invalid %s flags 0x%u, skip it", meta_number,
+    WARNING("meta[%u] has invalid %s flags 0x%x, skip it", meta_number,
             "MainDB", meta->trees.main.flags);
     return MDBX_INCOMPATIBLE;
   }

@@ -628,8 +628,8 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc,
 
   if (unlikely((header.trees.gc.flags & DB_PERSISTENT_FLAGS) !=
                MDBX_INTEGERKEY)) {
-    ERROR("unexpected/invalid db-flags 0x%u for GC/FreeDB",
-          header.trees.gc.flags);
+    ERROR("unexpected/invalid db-flags 0x%x for %s", header.trees.gc.flags,
+          "GC/FreeDB");
     return MDBX_INCOMPATIBLE;
   }
   env->dbs_flags[FREE_DBI] = DB_VALID | MDBX_INTEGERKEY;

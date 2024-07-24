@@ -1222,8 +1222,8 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
   }
 
   if (unlikely(txn->dbs[FREE_DBI].flags != MDBX_INTEGERKEY)) {
-    ERROR("unexpected/invalid db-flags 0x%u for GC/FreeDB",
-          txn->dbs[FREE_DBI].flags);
+    ERROR("unexpected/invalid db-flags 0x%x for %s", txn->dbs[FREE_DBI].flags,
+          "GC/FreeDB");
     rc = MDBX_INCOMPATIBLE;
     goto bailout;
   }

@@ -162,8 +162,8 @@ __hot int coherency_check_head(MDBX_txn *txn, const meta_ptr_t head,
     if ((txn->dbs[FREE_DBI].flags & DB_PERSISTENT_FLAGS) != MDBX_INTEGERKEY ||
         unaligned_peek_u64(4, &head.ptr_c->magic_and_version) ==
             MDBX_DATA_MAGIC) {
-      ERROR("unexpected/invalid db-flags 0x%u for GC/FreeDB",
-            txn->dbs[FREE_DBI].flags);
+      ERROR("unexpected/invalid db-flags 0x%x for %s", txn->dbs[FREE_DBI].flags,
+            "GC/FreeDB");
       return MDBX_INCOMPATIBLE;
     }
     txn->dbs[FREE_DBI].flags &= DB_PERSISTENT_FLAGS;
