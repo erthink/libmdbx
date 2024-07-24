@@ -559,7 +559,7 @@ typedef mode_t mdbx_mode_t;
   }                                                                            \
   MDBX_NOSANITIZE_ENUM MDBX_CXX01_CONSTEXPR ENUM operator&(unsigned a,         \
                                                            ENUM b) {           \
-    return ENUM(a & unsigned(b));                                              \
+    return ENUM(a &unsigned(b));                                               \
   }                                                                            \
   MDBX_NOSANITIZE_ENUM MDBX_CXX14_CONSTEXPR ENUM &operator&=(ENUM &a,          \
                                                              ENUM b) {         \

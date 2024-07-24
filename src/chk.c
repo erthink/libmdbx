@@ -580,8 +580,8 @@ static void histogram_acc(const size_t n, struct MDBX_chk_histogram *p) {
         // использованы еще не все слоты, добавляем интервал
         assert(i < size);
         if (p->ranges[i].count) {
-          assert(i < last);
           // раздвигаем
+          assert(i < last);
 #ifdef __COVERITY__
           if (i < last) /* avoid Coverity false-positive issue */
 #endif                  /* __COVERITY__ */
