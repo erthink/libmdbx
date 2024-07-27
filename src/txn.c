@@ -1361,9 +1361,9 @@ int txn_end(MDBX_txn *txn, unsigned mode) {
           eASSERT(env, txn->txnid == slot->txnid.weak &&
                            slot->txnid.weak >= env->lck->cached_oldest.weak);
         } else {
-          if ((mode & TXN_END_OUSTED) == 0 &&
+          if ((mode & TXN_END_OPMASK) != TXN_END_OUSTED &&
               safe64_read(&slot->tid) == MDBX_TID_TXN_OUSTED)
-            mode += TXN_END_OUSTED;
+            mode = (mode & TXN_END_OPMASK) | TXN_END_OUSTED;
           do {
             safe64_reset(&slot->txnid, false);
             atomic_store64(&slot->tid, txn->owner, mo_AcquireRelease);
@@ -1391,9 +1391,9 @@ int txn_end(MDBX_txn *txn, unsigned mode) {
       imports.srwl_ReleaseShared(&env->remap_guard);
 #endif
     txn->n_dbi = 0; /* prevent further DBI activity */
-    txn->flags = (mode & TXN_END_OUSTED)
-                     ? MDBX_TXN_RDONLY | MDBX_TXN_FINISHED | MDBX_TXN_OUSTED
-                     : MDBX_TXN_RDONLY | MDBX_TXN_FINISHED;
+    txn->flags = ((mode & TXN_END_OPMASK) != TXN_END_OUSTED)
+                     ? MDBX_TXN_RDONLY | MDBX_TXN_FINISHED
+                     : MDBX_TXN_RDONLY | MDBX_TXN_FINISHED | MDBX_TXN_OUSTED;
     txn->owner = 0;
   } else if (!(txn->flags & MDBX_TXN_FINISHED)) {
     ENSURE(env,
