@@ -71,8 +71,14 @@ static int reader_list_func(void *ctx, int num, int slot, mdbx_pid_t pid,
            "pid", (int)sizeof(size_t) * 2, "thread", "txnid", "lag", "used",
            "retained");
 
-  printf(" %3d)\t[%d]\t%6" PRIdSIZE " %*" PRIxPTR, num, slot, (size_t)pid,
-         (int)sizeof(size_t) * 2, (uintptr_t)thread);
+  if (thread < (mdbx_tid_t)((intptr_t)MDBX_TID_TXN_OUSTED))
+    printf(" %3d)\t[%d]\t%6" PRIdSIZE " %*" PRIxPTR, num, slot, (size_t)pid,
+           (int)sizeof(size_t) * 2, (uintptr_t)thread);
+  else
+    printf(" %3d)\t[%d]\t%6" PRIdSIZE " %sed", num, slot, (size_t)pid,
+           ((uintptr_t)thread == (uintptr_t)MDBX_TID_TXN_PARKED) ? "park"
+                                                                 : "oust");
+
   if (txnid)
     printf(" %20" PRIu64 " %10" PRIu64 " %12.1fM %12.1fM\n", txnid, lag,
            bytes_used / 1048576.0, bytes_retained / 1048576.0);
