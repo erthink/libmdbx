@@ -165,7 +165,11 @@ bool testcase_jitter::run() {
       }
     }
     if (flipcoin()) {
-      // err =
+      uint64_t unused;
+      err = mdbx_dbi_sequence(txn_guard.get(), MAIN_DBI, &unused,
+                              mode_readonly() ? 0 : 1);
+      if (err)
+        failure_perror("mdbx_dbi_sequence()", err);
     }
     txn_end(flipcoin());
 
