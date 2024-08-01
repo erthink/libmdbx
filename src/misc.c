@@ -60,9 +60,48 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
       return MDBX_RESULT_TRUE;
 
     tASSERT(txn, new > dbs->sequence);
+    if ((txn->dbi_state[dbi] & DBI_DIRTY) == 0) {
+      txn->flags |= MDBX_TXN_DIRTY;
+      txn->dbi_state[dbi] |= DBI_DIRTY;
+      if (unlikely(dbi == MAIN_DBI) && txn->dbs[MAIN_DBI].root != P_INVALID) {
+        /* LY: Временная подпорка для coherency_check(), которую в перспективе
+         * следует заменить вместе с переделкой установки mod_txnid.
+         *
+         * Суть проблемы:
+         *  - coherency_check() в качестве одного из критериев "когерентности"
+         *    проверяет условие meta.maindb.mod_txnid == maindb.root->txnid;
+         *  - при обновлении maindb.sequence высталяется DBI_DIRTY, что приведет
+         *    к обновлению meta.maindb.mod_txnid = current_txnid;
+         *  - однако, если в само дерево maindb обновление не вносились и оно
+         *    не пустое, то корневая страницы останеться с прежним txnid и из-за
+         *    этого ложно сработает coherency_check().
+         *
+         * Временное (текущее) решение: Принудительно обновляем корневую
+         * страницу в описанной выше ситуации. Это устраняет проблему, но и
+         * не создает рисков регресса.
+         *
+         * FIXME: Итоговое решение, которое предстоит реализовать:
+         *  - изменить семантику установки/обновления mod_txnid, привязав его
+         *    строго к изменению b-tree, но не атрибутов;
+         *  - обновлять mod_txnid при фиксации вложенных транзакций;
+         *  - для dbi-хендлов пользовательских subDb (видимо) можно оставить
+         *    DBI_DIRTY в качестве признака необходимости обновления записи
+         *    subDb в MainDB, при этом взводить DBI_DIRTY вместе с обновлением
+         *    mod_txnid, в том числе при обновлении sequence.
+         *  - для MAIN_DBI при обновлении sequence не следует взводить DBI_DIRTY
+         *    и/или обновлять mod_txnid, а только взводить MDBX_TXN_DIRTY.
+         *  - альтернативно, можно перераспределить флажки-признаки dbi_state,
+         *    чтобы различать состояние dirty-tree и dirty-attributes. */
+        cursor_couple_t cx;
+        rc = cursor_init(&cx.outer, txn, MAIN_DBI);
+        if (unlikely(rc != MDBX_SUCCESS))
+          return rc;
+        rc = tree_search(&cx.outer, nullptr, Z_MODIFY | Z_ROOTONLY);
+        if (unlikely(rc != MDBX_SUCCESS))
+          return rc;
+      }
+    }
     dbs->sequence = new;
-    txn->flags |= MDBX_TXN_DIRTY;
-    txn->dbi_state[dbi] |= DBI_DIRTY;
   }
 
   return MDBX_SUCCESS;
