@@ -103,6 +103,10 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 
  - Добавление в API функций `mdbx_cursor_unbind()` и `mdbx_txn_release_all_cursors()`.
 
+ - Добавление в API функций `mdbx_txn_copy2pathname()` и `mdbx_txn_copy2fd()`.
+
+ - Добавление в утилиту `mdbx_copy` опций `-d` и `-p`.
+
  - Расширение и доработка C++ API:
 
      - добавлен тип `mdbx::cursor::estimation_result`, а поведение методов
@@ -120,7 +124,10 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
      - добавлен метод `cursor::clone()`;
      - поддержка base58 переработана и приведена в соответствии с черновиком RFC,
        в текущем понимании теперь это одна из самых высокопроизводительных реализаций base58;
-     - переработка `to_hex()` и `from_hex()`.
+     - переработка `to_hex()` и `from_hex()`;
+     - добавлены перегрузи со `std::string_view` для методов `open_map`/`create_map`/`drop_map`/`clear_map`/`rename_map()`;
+     - добавлены перегрузки методов put/insert/upsert для `mdbx::pair`;
+     - добавлены методы принимающие имена таблиц/subDb через `mdbx::slice`.
 
 Нарушение совместимости:
 
