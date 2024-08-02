@@ -8,6 +8,7 @@
 typedef struct compacting_context {
   MDBX_env *env;
   MDBX_txn *txn;
+  MDBX_copy_flags_t flags;
   pgno_t first_unallocated;
   osal_condpair_t condpair;
   volatile unsigned head;
@@ -80,7 +81,11 @@ __cold static int compacting_toggle_write_buffers(ctx_t *ctx) {
   ctx->head += 1;
   osal_condpair_signal(&ctx->condpair, true);
   while (!ctx->error && ctx->head - ctx->tail == 2 /* both buffers in use */) {
+    if (ctx->flags & MDBX_CP_THROTTLE_MVCC)
+      mdbx_txn_park(ctx->txn, false);
     int err = osal_condpair_wait(&ctx->condpair, false);
+    if (err == MDBX_SUCCESS && (ctx->flags & MDBX_CP_THROTTLE_MVCC) != 0)
+      err = mdbx_txn_unpark(ctx->txn, false);
     if (err != MDBX_SUCCESS)
       ctx->error = err;
   }
@@ -362,7 +367,7 @@ __cold static void meta_make_sizeable(meta_t *meta) {
   }
 }
 
-__cold static int copy_with_compacting(MDBX_env *env, MDBX_txn *read_txn,
+__cold static int copy_with_compacting(MDBX_env *env, MDBX_txn *txn,
                                        mdbx_filehandle_t fd, uint8_t *buffer,
                                        const bool dest_is_pipe,
                                        const MDBX_copy_flags_t flags) {
@@ -370,36 +375,40 @@ __cold static int copy_with_compacting(MDBX_env *env, MDBX_txn *read_txn,
   uint8_t *const data_buffer =
       buffer + ceil_powerof2(meta_bytes, globals.sys_pagesize);
   meta_t *const meta = meta_init_triplet(env, buffer);
-  meta_set_txnid(env, meta, read_txn->txnid);
+  meta_set_txnid(env, meta, txn->txnid);
 
   if (flags & MDBX_CP_FORCE_DYNAMIC_SIZE)
     meta_make_sizeable(meta);
 
   /* copy canary sequences if present */
-  if (read_txn->canary.v) {
-    meta->canary = read_txn->canary;
+  if (txn->canary.v) {
+    meta->canary = txn->canary;
     meta->canary.v = constmeta_txnid(meta);
   }
 
-  if (read_txn->dbs[MAIN_DBI].root == P_INVALID) {
+  if (txn->dbs[MAIN_DBI].root == P_INVALID) {
     /* When the DB is empty, handle it specially to
      * fix any breakage like page leaks from ITS#8174. */
-    meta->trees.main.flags = read_txn->dbs[MAIN_DBI].flags;
+    meta->trees.main.flags = txn->dbs[MAIN_DBI].flags;
     compacting_fixup_meta(env, meta);
     if (dest_is_pipe) {
+      if (flags & MDBX_CP_THROTTLE_MVCC)
+        mdbx_txn_park(txn, false);
       int rc = osal_write(fd, buffer, meta_bytes);
+      if (likely(rc == MDBX_SUCCESS) && (flags & MDBX_CP_THROTTLE_MVCC) != 0)
+        rc = mdbx_txn_unpark(txn, false);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
     }
   } else {
     /* Count free pages + GC pages. */
     cursor_couple_t couple;
-    int rc = cursor_init(&couple.outer, read_txn, FREE_DBI);
+    int rc = cursor_init(&couple.outer, txn, FREE_DBI);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
-    pgno_t gc_npages = read_txn->dbs[FREE_DBI].branch_pages +
-                       read_txn->dbs[FREE_DBI].leaf_pages +
-                       read_txn->dbs[FREE_DBI].large_pages;
+    pgno_t gc_npages = txn->dbs[FREE_DBI].branch_pages +
+                       txn->dbs[FREE_DBI].leaf_pages +
+                       txn->dbs[FREE_DBI].large_pages;
     MDBX_val key, data;
     rc = outer_first(&couple.outer, &key, &data);
     while (rc == MDBX_SUCCESS) {
@@ -410,7 +419,7 @@ __cold static int copy_with_compacting(MDBX_env *env, MDBX_txn *read_txn,
               "invalid GC-record length", data.iov_len);
         return MDBX_CORRUPTED;
       }
-      if (unlikely(!pnl_check(pnl, read_txn->geo.first_unallocated))) {
+      if (unlikely(!pnl_check(pnl, txn->geo.first_unallocated))) {
         ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED,
               "invalid GC-record content");
         return MDBX_CORRUPTED;
@@ -421,9 +430,8 @@ __cold static int copy_with_compacting(MDBX_env *env, MDBX_txn *read_txn,
     if (unlikely(rc != MDBX_NOTFOUND))
       return rc;
 
-    meta->geometry.first_unallocated =
-        read_txn->geo.first_unallocated - gc_npages;
-    meta->trees.main = read_txn->dbs[MAIN_DBI];
+    meta->geometry.first_unallocated = txn->geo.first_unallocated - gc_npages;
+    meta->trees.main = txn->dbs[MAIN_DBI];
 
     ctx_t ctx;
     memset(&ctx, 0, sizeof(ctx));
@@ -437,16 +445,21 @@ __cold static int copy_with_compacting(MDBX_env *env, MDBX_txn *read_txn,
     ctx.first_unallocated = NUM_METAS;
     ctx.env = env;
     ctx.fd = fd;
-    ctx.txn = read_txn;
+    ctx.txn = txn;
+    ctx.flags = flags;
 
     osal_thread_t thread;
     int thread_err = osal_thread_create(&thread, compacting_write_thread, &ctx);
     if (likely(thread_err == MDBX_SUCCESS)) {
       if (dest_is_pipe) {
         if (!meta->trees.main.mod_txnid)
-          meta->trees.main.mod_txnid = read_txn->txnid;
+          meta->trees.main.mod_txnid = txn->txnid;
         compacting_fixup_meta(env, meta);
+        if (flags & MDBX_CP_THROTTLE_MVCC)
+          mdbx_txn_park(txn, false);
         rc = osal_write(fd, buffer, meta_bytes);
+        if (likely(rc == MDBX_SUCCESS) && (flags & MDBX_CP_THROTTLE_MVCC) != 0)
+          rc = mdbx_txn_unpark(txn, false);
       }
       if (likely(rc == MDBX_SUCCESS))
         rc = compacting_walk_tree(&ctx, &meta->trees.main);
@@ -495,6 +508,9 @@ __cold static int copy_with_compacting(MDBX_env *env, MDBX_txn *read_txn,
       compacting_fixup_meta(env, meta);
   }
 
+  if (flags & MDBX_CP_THROTTLE_MVCC)
+    mdbx_txn_park(txn, false);
+
   /* Extend file if required */
   if (meta->geometry.now != meta->geometry.first_unallocated) {
     const size_t whole_size = pgno2bytes(env, meta->geometry.now);
@@ -516,45 +532,77 @@ __cold static int copy_with_compacting(MDBX_env *env, MDBX_txn *read_txn,
   return MDBX_SUCCESS;
 }
 
-__cold static int copy_asis(MDBX_env *env, MDBX_txn *read_txn,
-                            mdbx_filehandle_t fd, uint8_t *buffer,
-                            const bool dest_is_pipe,
+//----------------------------------------------------------------------------
+
+__cold static int copy_asis(MDBX_env *env, MDBX_txn *txn, mdbx_filehandle_t fd,
+                            uint8_t *buffer, const bool dest_is_pipe,
                             const MDBX_copy_flags_t flags) {
-  int rc = txn_end(read_txn, TXN_END_RESET_TMP);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  /* Temporarily block writers until we snapshot the meta pages */
-  rc = lck_txn_lock(env, false);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  rc = txn_renew(read_txn, MDBX_TXN_RDONLY);
-  if (unlikely(rc != MDBX_SUCCESS)) {
-    lck_txn_unlock(env);
-    return rc;
+  bool should_unlock = false;
+  if ((txn->flags & MDBX_TXN_RDONLY) != 0 && (flags & MDBX_CP_RENEW_TXN) != 0) {
+    /* Try temporarily block writers until we snapshot the meta pages */
+    int err = lck_txn_lock(env, true);
+    if (likely(err == MDBX_SUCCESS))
+      should_unlock = true;
+    else if (unlikely(err != MDBX_BUSY))
+      return err;
   }
 
   jitter4testing(false);
+  int rc = MDBX_SUCCESS;
   const size_t meta_bytes = pgno2bytes(env, NUM_METAS);
-  const troika_t troika = meta_tap(env);
+  troika_t troika = meta_tap(env);
   /* Make a snapshot of meta-pages,
    * but writing ones after the data was flushed */
+retry_snap_meta:
   memcpy(buffer, env->dxb_mmap.base, meta_bytes);
-  meta_t *const headcopy = /* LY: get pointer to the snapshot copy */
-      ptr_disp(buffer,
-               ptr_dist(meta_recent(env, &troika).ptr_c, env->dxb_mmap.base));
-  lck_txn_unlock(env);
+  const meta_ptr_t recent = meta_recent(env, &troika);
+  meta_t *headcopy = /* LY: get pointer to the snapshot copy */
+      ptr_disp(buffer, ptr_dist(recent.ptr_c, env->dxb_mmap.base));
+  jitter4testing(false);
+  if (txn->flags & MDBX_TXN_RDONLY) {
+    if (recent.txnid != txn->txnid) {
+      if (flags & MDBX_CP_RENEW_TXN)
+        rc = mdbx_txn_renew(txn);
+      else {
+        rc = MDBX_MVCC_RETARDED;
+        for (size_t n = 0; n < NUM_METAS; ++n) {
+          meta_t *const meta = page_meta(ptr_disp(buffer, pgno2bytes(env, n)));
+          if (troika.txnid[n] == txn->txnid &&
+              ((/* is_steady */ (troika.fsm >> n) & 1) || rc != MDBX_SUCCESS)) {
+            rc = MDBX_SUCCESS;
+            headcopy = meta;
+          } else if (troika.txnid[n] > txn->txnid)
+            meta_set_txnid(env, meta, 0);
+        }
+      }
+    }
+    if (should_unlock)
+      lck_txn_unlock(env);
+    else {
+      troika_t snap = meta_tap(env);
+      if (memcmp(&troika, &snap, sizeof(troika_t)) && rc == MDBX_SUCCESS) {
+        troika = snap;
+        goto retry_snap_meta;
+      }
+    }
+  }
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
+  if (txn->flags & MDBX_TXN_RDONLY)
+    eASSERT(env, meta_txnid(headcopy) == txn->txnid);
   if (flags & MDBX_CP_FORCE_DYNAMIC_SIZE)
     meta_make_sizeable(headcopy);
   /* Update signature to steady */
   meta_sign_as_steady(headcopy);
 
   /* Copy the data */
-  const size_t whole_size = pgno_align2os_bytes(env, read_txn->geo.end_pgno);
-  const size_t used_size = pgno2bytes(env, read_txn->geo.first_unallocated);
+  const size_t whole_size = pgno_align2os_bytes(env, txn->geo.end_pgno);
+  const size_t used_size = pgno2bytes(env, txn->geo.first_unallocated);
   jitter4testing(false);
+
+  if (flags & MDBX_CP_THROTTLE_MVCC)
+    mdbx_txn_park(txn, false);
 
   if (dest_is_pipe)
     rc = osal_write(fd, buffer, meta_bytes);
@@ -570,7 +618,14 @@ __cold static int copy_asis(MDBX_env *env, MDBX_txn *read_txn,
     /* avoid use copyfilerange_unavailable() to ecryptfs due bugs */
     not_the_same_filesystem = true;
 #endif /* MDBX_USE_COPYFILERANGE */
+
   for (size_t offset = meta_bytes; rc == MDBX_SUCCESS && offset < used_size;) {
+    if (flags & MDBX_CP_THROTTLE_MVCC) {
+      rc = mdbx_txn_unpark(txn, false);
+      if (unlikely(rc != MDBX_SUCCESS))
+        break;
+    }
+
 #if MDBX_USE_SENDFILE
     static bool sendfile_unavailable;
     if (dest_is_pipe && likely(!sendfile_unavailable)) {
@@ -579,6 +634,8 @@ __cold static int copy_asis(MDBX_env *env, MDBX_txn *read_txn,
           sendfile(fd, env->lazy_fd, &in_offset, used_size - offset);
       if (likely(written > 0)) {
         offset = in_offset;
+        if (flags & MDBX_CP_THROTTLE_MVCC)
+          rc = mdbx_txn_park(txn, false);
         continue;
       }
       rc = MDBX_ENODATA;
@@ -596,6 +653,8 @@ __cold static int copy_asis(MDBX_env *env, MDBX_txn *read_txn,
           env->lazy_fd, &in_offset, fd, &out_offset, used_size - offset, 0);
       if (likely(bytes_copied > 0)) {
         offset = in_offset;
+        if (flags & MDBX_CP_THROTTLE_MVCC)
+          rc = mdbx_txn_park(txn, false);
         continue;
       }
       rc = MDBX_ENODATA;
@@ -619,6 +678,8 @@ __cold static int copy_asis(MDBX_env *env, MDBX_txn *read_txn,
                              : used_size - offset;
     /* copy to avoid EFAULT in case swapped-out */
     memcpy(data_buffer, ptr_disp(env->dxb_mmap.base, offset), chunk);
+    if (flags & MDBX_CP_THROTTLE_MVCC)
+      mdbx_txn_park(txn, false);
     rc = osal_write(fd, data_buffer, chunk);
     offset += chunk;
   }
@@ -644,11 +705,22 @@ __cold static int copy_asis(MDBX_env *env, MDBX_txn *read_txn,
   return rc;
 }
 
-__cold int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
-                            MDBX_copy_flags_t flags) {
-  int rc = check_env(env, true);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+//----------------------------------------------------------------------------
+
+__cold static int copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd,
+                          MDBX_copy_flags_t flags) {
+  if (unlikely(txn->flags & MDBX_TXN_DIRTY))
+    return MDBX_BAD_TXN;
+
+  int rc = MDBX_SUCCESS;
+  if (txn->flags & MDBX_TXN_RDONLY) {
+    if (flags & MDBX_CP_THROTTLE_MVCC) {
+      rc = mdbx_txn_park(txn, true);
+      if (unlikely(rc != MDBX_SUCCESS))
+        return rc;
+    }
+  } else if (unlikely(flags & (MDBX_CP_THROTTLE_MVCC | MDBX_CP_RENEW_TXN)))
+    return MDBX_EINVAL;
 
   const int dest_is_pipe = osal_is_pipe(fd);
   if (MDBX_IS_ERROR(dest_is_pipe))
@@ -660,6 +732,7 @@ __cold int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
       return rc;
   }
 
+  MDBX_env *const env = txn->env;
   const size_t buffer_size =
       pgno_align2os_bytes(env, NUM_METAS) +
       ceil_powerof2(((flags & MDBX_CP_COMPACT)
@@ -672,15 +745,6 @@ __cold int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  MDBX_txn *read_txn = nullptr;
-  /* Do the lock/unlock of the reader mutex before starting the
-   * write txn. Otherwise other read txns could block writers. */
-  rc = mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &read_txn);
-  if (unlikely(rc != MDBX_SUCCESS)) {
-    osal_memalign_free(buffer);
-    return rc;
-  }
-
   if (!dest_is_pipe) {
     /* Firstly write a stub to meta-pages.
      * Now we sure to incomplete copy will not be used. */
@@ -688,22 +752,31 @@ __cold int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
     rc = osal_write(fd, buffer, pgno2bytes(env, NUM_METAS));
   }
 
+  if (likely(rc == MDBX_SUCCESS))
+    rc = mdbx_txn_unpark(txn, false);
   if (likely(rc == MDBX_SUCCESS)) {
     memset(buffer, 0, pgno2bytes(env, NUM_METAS));
     rc = ((flags & MDBX_CP_COMPACT) ? copy_with_compacting : copy_asis)(
-        env, read_txn, fd, buffer, dest_is_pipe, flags);
+        env, txn, fd, buffer, dest_is_pipe, flags);
+
+    if (likely(rc == MDBX_SUCCESS))
+      rc = mdbx_txn_unpark(txn, false);
   }
-  mdbx_txn_abort(read_txn);
+
+  if (flags & MDBX_CP_THROTTLE_MVCC)
+    mdbx_txn_park(txn, true);
+  else if (flags & MDBX_CP_DISPOSE_TXN)
+    mdbx_txn_reset(txn);
 
   if (!dest_is_pipe) {
-    if (likely(rc == MDBX_SUCCESS))
+    if (likely(rc == MDBX_SUCCESS) && (flags & MDBX_CP_DONT_FLUSH) == 0)
       rc = osal_fsync(fd, MDBX_SYNC_DATA | MDBX_SYNC_SIZE);
 
     /* Write actual meta */
     if (likely(rc == MDBX_SUCCESS))
       rc = osal_pwrite(fd, buffer, pgno2bytes(env, NUM_METAS), 0);
 
-    if (likely(rc == MDBX_SUCCESS))
+    if (likely(rc == MDBX_SUCCESS) && (flags & MDBX_CP_DONT_FLUSH) == 0)
       rc = osal_fsync(fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
   }
 
@@ -711,38 +784,20 @@ __cold int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
   return rc;
 }
 
-__cold int mdbx_env_copy(MDBX_env *env, const char *dest_path,
-                         MDBX_copy_flags_t flags) {
-#if defined(_WIN32) || defined(_WIN64)
-  wchar_t *dest_pathW = nullptr;
-  int rc = osal_mb2w(dest_path, &dest_pathW);
-  if (likely(rc == MDBX_SUCCESS)) {
-    rc = mdbx_env_copyW(env, dest_pathW, flags);
-    osal_free(dest_pathW);
-  }
-  return rc;
-}
-
-__cold int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest_path,
-                          MDBX_copy_flags_t flags) {
-#endif /* Windows */
-
-  int rc = check_env(env, true);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  if (unlikely(!dest_path))
+__cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path,
+                                MDBX_copy_flags_t flags) {
+  if (unlikely(!dest_path || *dest_path == '\0'))
     return MDBX_EINVAL;
 
   /* The destination path must exist, but the destination file must not.
    * We don't want the OS to cache the writes, since the source data is
    * already in the OS cache. */
-  mdbx_filehandle_t newfd;
-  rc = osal_openfile(MDBX_OPEN_COPY, env, dest_path, &newfd,
+  mdbx_filehandle_t newfd = INVALID_HANDLE_VALUE;
+  int rc = osal_openfile(MDBX_OPEN_COPY, txn->env, dest_path, &newfd,
 #if defined(_WIN32) || defined(_WIN64)
-                     (mdbx_mode_t)-1
+                         (mdbx_mode_t)-1
 #else
-                     S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP
+                         S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP
 #endif
   );
 
@@ -767,7 +822,7 @@ __cold int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest_path,
 #endif /* Windows / POSIX */
 
   if (rc == MDBX_SUCCESS)
-    rc = mdbx_env_copy2fd(env, newfd, flags);
+    rc = copy2fd(txn, newfd, flags);
 
   if (newfd != INVALID_HANDLE_VALUE) {
     int err = osal_closefile(newfd);
@@ -776,6 +831,96 @@ __cold int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest_path,
     if (rc != MDBX_SUCCESS)
       (void)osal_removefile(dest_path);
   }
+  return rc;
+}
 
+//----------------------------------------------------------------------------
+
+__cold int mdbx_txn_copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd,
+                            MDBX_copy_flags_t flags) {
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  rc = copy2fd(txn, fd, flags);
+  if (flags & MDBX_CP_DISPOSE_TXN)
+    mdbx_txn_abort(txn);
+  return rc;
+}
+
+__cold int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
+                            MDBX_copy_flags_t flags) {
+  if (unlikely(flags & (MDBX_CP_DISPOSE_TXN | MDBX_CP_RENEW_TXN)))
+    return MDBX_EINVAL;
+
+  int rc = check_env(env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  MDBX_txn *txn = nullptr;
+  rc = mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  rc = copy2fd(txn, fd, flags | MDBX_CP_DISPOSE_TXN | MDBX_CP_RENEW_TXN);
+  mdbx_txn_abort(txn);
+  return rc;
+}
+
+__cold int mdbx_txn_copy2pathname(MDBX_txn *txn, const char *dest_path,
+                                  MDBX_copy_flags_t flags) {
+#if defined(_WIN32) || defined(_WIN64)
+  wchar_t *dest_pathW = nullptr;
+  int rc = osal_mb2w(dest_path, &dest_pathW);
+  if (likely(rc == MDBX_SUCCESS)) {
+    rc = mdbx_txn_copy2pathnameW(txn, dest_pathW, flags);
+    osal_free(dest_pathW);
+  }
+  return rc;
+}
+
+__cold int mdbx_txn_copy2pathnameW(MDBX_txn *txn, const wchar_t *dest_path,
+                                   MDBX_copy_flags_t flags) {
+#endif /* Windows */
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  rc = copy2pathname(txn, dest_path, flags);
+  if (flags & MDBX_CP_DISPOSE_TXN)
+    mdbx_txn_abort(txn);
+  return rc;
+}
+
+__cold int mdbx_env_copy(MDBX_env *env, const char *dest_path,
+                         MDBX_copy_flags_t flags) {
+#if defined(_WIN32) || defined(_WIN64)
+  wchar_t *dest_pathW = nullptr;
+  int rc = osal_mb2w(dest_path, &dest_pathW);
+  if (likely(rc == MDBX_SUCCESS)) {
+    rc = mdbx_env_copyW(env, dest_pathW, flags);
+    osal_free(dest_pathW);
+  }
+  return rc;
+}
+
+__cold int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest_path,
+                          MDBX_copy_flags_t flags) {
+#endif /* Windows */
+  if (unlikely(flags & (MDBX_CP_DISPOSE_TXN | MDBX_CP_RENEW_TXN)))
+    return MDBX_EINVAL;
+
+  int rc = check_env(env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  MDBX_txn *txn = nullptr;
+  rc = mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  rc = copy2pathname(txn, dest_path,
+                     flags | MDBX_CP_DISPOSE_TXN | MDBX_CP_RENEW_TXN);
+  mdbx_txn_abort(txn);
   return rc;
 }

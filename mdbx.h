@@ -1713,7 +1713,24 @@ typedef enum MDBX_copy_flags {
   MDBX_CP_COMPACT = 1u,
 
   /** Force to make resizable copy, i.e. dynamic size instead of fixed */
-  MDBX_CP_FORCE_DYNAMIC_SIZE = 2u
+  MDBX_CP_FORCE_DYNAMIC_SIZE = 2u,
+
+  /** Don't explicitly flush the written data to an output media */
+  MDBX_CP_DONT_FLUSH = 4u,
+
+  /** Use read transaction parking during copying MVCC-snapshot
+   *  \see mdbx_txn_park() */
+  MDBX_CP_THROTTLE_MVCC = 8u,
+
+  /** Abort/dispose passed transaction after copy
+   *  \see mdbx_txn_copy2fd() \see mdbx_txn_copy2pathname() */
+  MDBX_CP_DISPOSE_TXN = 16u,
+
+  /** Enable renew/restart read transaction in case it use outdated
+   *  MVCC shapshot, otherwise the \ref MDBX_MVCC_RETARDED will be returned
+   *  \see mdbx_txn_copy2fd() \see mdbx_txn_copy2pathname() */
+  MDBX_CP_RENEW_TXN = 32u
+
 } MDBX_copy_flags_t;
 DEFINE_ENUM_FLAG_OPERATORS(MDBX_copy_flags)
 
@@ -1986,8 +2003,12 @@ typedef enum MDBX_error {
    * recycling old MVCC snapshots. */
   MDBX_OUSTED = -30411,
 
+  /** MVCC snapshot used by read transaction is outdated and could not be
+   *  copied since corresponding meta-pages was overwritten. */
+  MDBX_MVCC_RETARDED = -30410,
+
   /* The last of MDBX-added error codes */
-  MDBX_LAST_ADDED_ERRCODE = MDBX_OUSTED,
+  MDBX_LAST_ADDED_ERRCODE = MDBX_MVCC_RETARDED,
 
 #if defined(_WIN32) || defined(_WIN64)
   MDBX_ENODATA = ERROR_HANDLE_EOF,
@@ -2582,6 +2603,8 @@ LIBMDBX_API int mdbx_env_deleteW(const wchar_t *pathname,
  * transaction. See long-lived transactions under \ref restrictions section.
  *
  * \note On Windows the \ref mdbx_env_copyW() is recommended to use.
+ * \see mdbx_env_copy2fd()
+ * \see mdbx_txn_copy2pathname()
  *
  * \param [in] env    An environment handle returned by mdbx_env_create().
  *                    It must have already been opened successfully.
@@ -2608,12 +2631,56 @@ LIBMDBX_API int mdbx_env_deleteW(const wchar_t *pathname,
 LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *dest,
                               MDBX_copy_flags_t flags);
 
+/** \brief Copy an MDBX environment by given read transaction to the specified
+ * path, with options.
+ * \ingroup c_extra
+ *
+ * This function may be used to make a backup of an existing environment.
+ * No lockfile is created, since it gets recreated at need.
+ * \note This call can trigger significant file size growth if run in
+ * parallel with write transactions, because it employs a read-only
+ * transaction. See long-lived transactions under \ref restrictions section.
+ *
+ * \note On Windows the \ref mdbx_txn_copy2pathnameW() is recommended to use.
+ * \see mdbx_txn_copy2fd()
+ * \see mdbx_env_copy()
+ *
+ * \param [in] txn    A transaction handle returned by \ref mdbx_txn_begin().
+ * \param [in] dest   The pathname of a file in which the copy will reside.
+ *                    This file must not be already exist, but parent directory
+ *                    must be writable.
+ * \param [in] flags  Specifies options for this operation. This parameter
+ *                    must be bitwise OR'ing together any of the constants
+ *                    described here:
+ *
+ *  - \ref MDBX_CP_DEFAULTS
+ *      Perform copy as-is without compaction, etc.
+ *
+ *  - \ref MDBX_CP_COMPACT
+ *      Perform compaction while copying: omit free pages and sequentially
+ *      renumber all pages in output. This option consumes little bit more
+ *      CPU for processing, but may running quickly than the default, on
+ *      account skipping free pages.
+ *
+ *  - \ref MDBX_CP_FORCE_DYNAMIC_SIZE
+ *      Force to make resizable copy, i.e. dynamic size instead of fixed.
+ *
+ * \returns A non-zero error value on failure and 0 on success. */
+LIBMDBX_API int mdbx_txn_copy2pathname(MDBX_txn *txn, const char *dest,
+                                       MDBX_copy_flags_t flags);
+
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
 /** \copydoc mdbx_env_copy()
  * \note Available only on Windows.
  * \see mdbx_env_copy() */
 LIBMDBX_API int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest,
                                MDBX_copy_flags_t flags);
+
+/** \copydoc mdbx_txn_copy2pathname()
+ * \note Available only on Windows.
+ * \see mdbx_txn_copy2pathname() */
+LIBMDBX_API int mdbx_txn_copy2pathnameW(MDBX_txn *txn, const wchar_t *dest,
+                                        MDBX_copy_flags_t flags);
 #endif /* Windows */
 
 /** \brief Copy an environment to the specified file descriptor, with
@@ -2623,6 +2690,7 @@ LIBMDBX_API int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest,
  * This function may be used to make a backup of an existing environment.
  * No lockfile is created, since it gets recreated at need.
  * \see mdbx_env_copy()
+ * \see mdbx_txn_copy2fd()
  *
  * \note This call can trigger significant file size growth if run in
  *       parallel with write transactions, because it employs a read-only
@@ -2640,6 +2708,32 @@ LIBMDBX_API int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest,
  *
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
+                                 MDBX_copy_flags_t flags);
+
+/** \brief Copy an environment by given read transaction to the specified file
+ * descriptor, with options.
+ * \ingroup c_extra
+ *
+ * This function may be used to make a backup of an existing environment.
+ * No lockfile is created, since it gets recreated at need.
+ * \see mdbx_txn_copy2pathname()
+ * \see mdbx_env_copy2fd()
+ *
+ * \note This call can trigger significant file size growth if run in
+ *       parallel with write transactions, because it employs a read-only
+ *       transaction. See long-lived transactions under \ref restrictions
+ *       section.
+ *
+ * \note Fails if the environment has suffered a page leak and the destination
+ *       file descriptor is associated with a pipe, socket, or FIFO.
+ *
+ * \param [in] txn     A transaction handle returned by \ref mdbx_txn_begin().
+ * \param [in] fd      The file descriptor to write the copy to. It must have
+ *                     already been opened for Write access.
+ * \param [in] flags   Special options for this operation. \see mdbx_env_copy()
+ *
+ * \returns A non-zero error value on failure and 0 on success. */
+LIBMDBX_API int mdbx_txn_copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd,
                                  MDBX_copy_flags_t flags);
 
 /** \brief Statistics for a database in the environment
