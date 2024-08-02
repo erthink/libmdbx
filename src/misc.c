@@ -210,6 +210,10 @@ __cold const char *mdbx_liberr2str(int errnum) {
   case MDBX_OUSTED:
     return "MDBX_OUSTED: The parked read transaction was outed for the sake"
            " of recycling old MVCC snapshots";
+  case MDBX_MVCC_RETARDED:
+    return "MDBX_MVCC_RETARDED: MVCC snapshot used by read transaction"
+           " is outdated and could not be copied"
+           " since corresponding meta-pages was overwritten";
   default:
     return nullptr;
   }

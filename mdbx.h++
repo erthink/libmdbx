@@ -583,6 +583,7 @@ MDBX_DECLARE_EXCEPTION(transaction_overlapping);
 MDBX_DECLARE_EXCEPTION(duplicated_lck_file);
 MDBX_DECLARE_EXCEPTION(dangling_map_id);
 MDBX_DECLARE_EXCEPTION(transaction_ousted);
+MDBX_DECLARE_EXCEPTION(mvcc_retarded);
 #undef MDBX_DECLARE_EXCEPTION
 
 [[noreturn]] LIBMDBX_API void throw_too_small_target_buffer();

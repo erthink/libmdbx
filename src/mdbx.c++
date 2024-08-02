@@ -340,6 +340,7 @@ DEFINE_EXCEPTION(transaction_overlapping)
 DEFINE_EXCEPTION(duplicated_lck_file)
 DEFINE_EXCEPTION(dangling_map_id)
 DEFINE_EXCEPTION(transaction_ousted)
+DEFINE_EXCEPTION(mvcc_retarded)
 #undef DEFINE_EXCEPTION
 
 __cold const char *error::what() const noexcept {
@@ -429,6 +430,7 @@ __cold void error::throw_exception() const {
     CASE_EXCEPTION(duplicated_lck_file, MDBX_DUPLICATED_CLK);
     CASE_EXCEPTION(dangling_map_id, MDBX_DANGLING_DBI);
     CASE_EXCEPTION(transaction_ousted, MDBX_OUSTED);
+    CASE_EXCEPTION(mvcc_retarded, MDBX_MVCC_RETARDED);
 #undef CASE_EXCEPTION
   default:
     if (is_mdbx_error())
