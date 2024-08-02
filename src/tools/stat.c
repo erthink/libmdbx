@@ -76,8 +76,8 @@ static int reader_list_func(void *ctx, int num, int slot, mdbx_pid_t pid,
            (int)sizeof(size_t) * 2, (uintptr_t)thread);
   else
     printf(" %3d)\t[%d]\t%6" PRIdSIZE " %sed", num, slot, (size_t)pid,
-           ((uintptr_t)thread == (uintptr_t)MDBX_TID_TXN_PARKED) ? "park"
-                                                                 : "oust");
+           (thread == (mdbx_tid_t)((uintptr_t)MDBX_TID_TXN_PARKED)) ? "park"
+                                                                    : "oust");
 
   if (txnid)
     printf(" %20" PRIu64 " %10" PRIu64 " %12.1fM %12.1fM\n", txnid, lag,
