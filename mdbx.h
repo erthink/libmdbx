@@ -1719,16 +1719,16 @@ typedef enum MDBX_copy_flags {
   MDBX_CP_DONT_FLUSH = 4u,
 
   /** Use read transaction parking during copying MVCC-snapshot
-   *  \see mdbx_txn_park() */
+   * \see mdbx_txn_park() */
   MDBX_CP_THROTTLE_MVCC = 8u,
 
   /** Abort/dispose passed transaction after copy
-   *  \see mdbx_txn_copy2fd() \see mdbx_txn_copy2pathname() */
+   * \see mdbx_txn_copy2fd() \see mdbx_txn_copy2pathname() */
   MDBX_CP_DISPOSE_TXN = 16u,
 
   /** Enable renew/restart read transaction in case it use outdated
-   *  MVCC shapshot, otherwise the \ref MDBX_MVCC_RETARDED will be returned
-   *  \see mdbx_txn_copy2fd() \see mdbx_txn_copy2pathname() */
+   * MVCC shapshot, otherwise the \ref MDBX_MVCC_RETARDED will be returned
+   * \see mdbx_txn_copy2fd() \see mdbx_txn_copy2pathname() */
   MDBX_CP_RENEW_TXN = 32u
 
 } MDBX_copy_flags_t;
