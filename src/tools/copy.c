@@ -39,10 +39,13 @@ static void signal_handler(int sig) {
 static void usage(const char *prog) {
   fprintf(
       stderr,
-      "usage: %s [-V] [-q] [-c] [-u|U] src_path [dest_path]\n"
+      "usage: %s [-V] [-q] [-c] [-d] [-p] [-u|U] src_path [dest_path]\n"
       "  -V\t\tprint version and exit\n"
       "  -q\t\tbe quiet\n"
       "  -c\t\tenable compactification (skip unused pages)\n"
+      "  -d\t\tenforce copy to be a dynamic size DB\n"
+      "  -p\t\tusing transaction parking/ousting during copying MVCC-snapshot\n"
+      "    \t\tto avoid stopping recycling and overflowing the DB\n"
       "  -u\t\twarmup database before copying\n"
       "  -U\t\twarmup and try lock database pages in memory before copying\n"
       "  src_path\tsource database\n"
@@ -66,6 +69,10 @@ int main(int argc, char *argv[]) {
       flags |= MDBX_NOSUBDIR;
     else if (argv[1][1] == 'c' && argv[1][2] == '\0')
       cpflags |= MDBX_CP_COMPACT;
+    else if (argv[1][1] == 'd' && argv[1][2] == '\0')
+      cpflags |= MDBX_CP_FORCE_DYNAMIC_SIZE;
+    else if (argv[1][1] == 'p' && argv[1][2] == '\0')
+      cpflags |= MDBX_CP_THROTTLE_MVCC;
     else if (argv[1][1] == 'q' && argv[1][2] == '\0')
       quiet = true;
     else if (argv[1][1] == 'u' && argv[1][2] == '\0')
