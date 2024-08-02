@@ -362,6 +362,7 @@ __cold const char *error::what() const noexcept {
     ERROR_CASE(MDBX_EINTR);
     ERROR_CASE(MDBX_ENOFILE);
     ERROR_CASE(MDBX_EREMOTE);
+    ERROR_CASE(MDBX_EDEADLK);
 #undef ERROR_CASE
   default:
     return "SYSTEM";
