@@ -39,7 +39,7 @@ __hot int tree_search(MDBX_cursor *mc, const MDBX_val *key, int flags) {
 
   const size_t dbi = cursor_dbi(mc);
   if (unlikely(*cursor_dbi_state(mc) & DBI_STALE)) {
-    err = sdb_fetch(mc->txn, dbi);
+    err = tbl_fetch(mc->txn, dbi);
     if (unlikely(err != MDBX_SUCCESS))
       goto bailout;
   }

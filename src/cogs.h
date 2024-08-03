@@ -207,7 +207,7 @@ flags_db2sub(uint16_t db_flags) {
   return sub_flags;
 }
 
-static inline bool check_sdb_flags(unsigned flags) {
+static inline bool check_table_flags(unsigned flags) {
   switch (flags & ~(MDBX_REVERSEKEY | MDBX_INTEGERKEY)) {
   default:
     NOTICE("invalid db-flags 0x%x", flags);

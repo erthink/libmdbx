@@ -5,13 +5,13 @@
 
 #include "essentials.h"
 
-typedef struct walk_sdb {
+typedef struct walk_tbl {
   MDBX_val name;
   tree_t *internal, *nested;
-} walk_sdb_t;
+} walk_tbl_t;
 
 typedef int walk_func(const size_t pgno, const unsigned number, void *const ctx,
-                      const int deep, const walk_sdb_t *table,
+                      const int deep, const walk_tbl_t *table,
                       const size_t page_size, const page_type_t page_type,
                       const MDBX_error_t err, const size_t nentries,
                       const size_t payload_bytes, const size_t header_bytes,

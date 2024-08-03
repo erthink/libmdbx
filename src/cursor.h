@@ -391,7 +391,7 @@ MDBX_MAYBE_UNUSED static inline void
 cursor_inner_refresh(const MDBX_cursor *mc, const page_t *mp, unsigned ki) {
   cASSERT(mc, is_leaf(mp));
   const node_t *node = page_node(mp, ki);
-  if ((node_flags(node) & (N_DUPDATA | N_SUBDATA)) == N_DUPDATA)
+  if ((node_flags(node) & (N_DUP | N_TREE)) == N_DUP)
     mc->subcur->cursor.pg[0] = node_data(node);
 }
 

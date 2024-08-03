@@ -293,12 +293,12 @@ int mdbx_cursor_compare(const MDBX_cursor *l, const MDBX_cursor *r,
   if (is_pointed(&l->subcur->cursor)) {
     const page_t *mp = l->pg[l->top];
     const node_t *node = page_node(mp, l->ki[l->top]);
-    assert(node_flags(node) & N_DUPDATA);
+    assert(node_flags(node) & N_DUP);
   }
   if (is_pointed(&r->subcur->cursor)) {
     const page_t *mp = r->pg[r->top];
     const node_t *node = page_node(mp, r->ki[r->top]);
-    assert(node_flags(node) & N_DUPDATA);
+    assert(node_flags(node) & N_DUP);
   }
 #endif /* MDBX_DEBUG */
 
@@ -342,7 +342,7 @@ int mdbx_cursor_count(const MDBX_cursor *mc, size_t *countp) {
     if (!inner_hollow(mc)) {
       const page_t *mp = mc->pg[mc->top];
       const node_t *node = page_node(mp, mc->ki[mc->top]);
-      cASSERT(mc, node_flags(node) & N_DUPDATA);
+      cASSERT(mc, node_flags(node) & N_DUP);
       *countp = unlikely(mc->subcur->nested_tree.items > PTRDIFF_MAX)
                     ? PTRDIFF_MAX
                     : (size_t)mc->subcur->nested_tree.items;

@@ -103,7 +103,7 @@ __hot int __must_check_result node_add_leaf(MDBX_cursor *mc, size_t indx,
   page_t *largepage = nullptr;
 
   size_t node_bytes;
-  if (unlikely(flags & N_BIGDATA)) {
+  if (unlikely(flags & N_BIG)) {
     /* Data already on large/overflow page. */
     STATIC_ASSERT(sizeof(pgno_t) % 2 == 0);
     node_bytes =
@@ -116,7 +116,7 @@ __hot int __must_check_result node_add_leaf(MDBX_cursor *mc, size_t indx,
             mc->tree->flags);
       return MDBX_PROBLEM;
     }
-    if (unlikely(flags & (N_DUPDATA | N_SUBDATA))) {
+    if (unlikely(flags & (N_DUP | N_TREE))) {
       ERROR("Unexpected target %s flags 0x%x for large data-item", "node",
             flags);
       return MDBX_PROBLEM;
@@ -130,7 +130,7 @@ __hot int __must_check_result node_add_leaf(MDBX_cursor *mc, size_t indx,
     DEBUG("allocated %u large/overflow page(s) %" PRIaPGNO "for %" PRIuPTR
           " data bytes",
           largepage->pages, largepage->pgno, data->iov_len);
-    flags |= N_BIGDATA;
+    flags |= N_BIG;
     node_bytes =
         node_size_len(key->iov_len, 0) + sizeof(pgno_t) + sizeof(indx_t);
     cASSERT(mc, node_bytes == leaf_size(mc->txn->env, key, data));
@@ -166,7 +166,7 @@ __hot int __must_check_result node_add_leaf(MDBX_cursor *mc, size_t indx,
 
   void *nodedata = node_data(node);
   if (likely(largepage == nullptr)) {
-    if (unlikely(flags & N_BIGDATA)) {
+    if (unlikely(flags & N_BIG)) {
       memcpy(nodedata, data->iov_base, sizeof(pgno_t));
       return MDBX_SUCCESS;
     }
@@ -208,8 +208,7 @@ __hot void node_del(MDBX_cursor *mc, size_t ksize) {
   cASSERT(mc, !is_branch(mp) || hole || node_ks(node) == 0);
   size_t hole_size = NODESIZE + node_ks(node);
   if (is_leaf(mp))
-    hole_size +=
-        (node_flags(node) & N_BIGDATA) ? sizeof(pgno_t) : node_ds(node);
+    hole_size += (node_flags(node) & N_BIG) ? sizeof(pgno_t) : node_ds(node);
   hole_size = EVEN_CEIL(hole_size);
 
   const indx_t hole_offset = mp->entries[hole];
@@ -239,7 +238,7 @@ __hot void node_del(MDBX_cursor *mc, size_t ksize) {
 
 __noinline int node_read_bigdata(MDBX_cursor *mc, const node_t *node,
                                  MDBX_val *data, const page_t *mp) {
-  cASSERT(mc, node_flags(node) == N_BIGDATA && data->iov_len == node_ds(node));
+  cASSERT(mc, node_flags(node) == N_BIG && data->iov_len == node_ds(node));
 
   pgr_t lp = page_get_large(mc, node_largedata_pgno(node), mp->txnid);
   if (unlikely((lp.err != MDBX_SUCCESS))) {

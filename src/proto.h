@@ -104,8 +104,8 @@ MDBX_INTERNAL void recalculate_merge_thresholds(MDBX_env *env);
 MDBX_INTERNAL void recalculate_subpage_thresholds(MDBX_env *env);
 
 /* table.c */
-MDBX_INTERNAL int __must_check_result sdb_fetch(MDBX_txn *txn, size_t dbi);
-MDBX_INTERNAL int __must_check_result sdb_setup(const MDBX_env *env,
+MDBX_INTERNAL int __must_check_result tbl_fetch(MDBX_txn *txn, size_t dbi);
+MDBX_INTERNAL int __must_check_result tbl_setup(const MDBX_env *env,
                                                 kvx_t *const kvx,
                                                 const tree_t *const db);
 

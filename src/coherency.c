@@ -30,7 +30,7 @@ static bool coherency_check(const MDBX_env *env, const txnid_t txnid,
       unlikely(freedb_root_pgno >= last_pgno)) {
     if (report)
       WARNING(
-          "catch invalid %sdb root %" PRIaPGNO " for meta_txnid %" PRIaTXN
+          "catch invalid %s-db root %" PRIaPGNO " for meta_txnid %" PRIaTXN
           " %s",
           "free", freedb_root_pgno, txnid,
           (env->stuck_meta < 0)
@@ -42,7 +42,7 @@ static bool coherency_check(const MDBX_env *env, const txnid_t txnid,
       unlikely(maindb_root_pgno >= last_pgno)) {
     if (report)
       WARNING(
-          "catch invalid %sdb root %" PRIaPGNO " for meta_txnid %" PRIaTXN
+          "catch invalid %s-db root %" PRIaPGNO " for meta_txnid %" PRIaTXN
           " %s",
           "main", maindb_root_pgno, txnid,
           (env->stuck_meta < 0)
@@ -55,7 +55,7 @@ static bool coherency_check(const MDBX_env *env, const txnid_t txnid,
                 likely(magic_and_version == MDBX_DATA_MAGIC)))) {
     if (report)
       WARNING(
-          "catch invalid %sdb.mod_txnid %" PRIaTXN " for meta_txnid %" PRIaTXN
+          "catch invalid %s-db.mod_txnid %" PRIaTXN " for meta_txnid %" PRIaTXN
           " %s",
           "free", freedb_mod_txnid, txnid,
           (env->stuck_meta < 0)
@@ -68,7 +68,7 @@ static bool coherency_check(const MDBX_env *env, const txnid_t txnid,
                 likely(magic_and_version == MDBX_DATA_MAGIC)))) {
     if (report)
       WARNING(
-          "catch invalid %sdb.mod_txnid %" PRIaTXN " for meta_txnid %" PRIaTXN
+          "catch invalid %s-db.mod_txnid %" PRIaTXN " for meta_txnid %" PRIaTXN
           " %s",
           "main", maindb_mod_txnid, txnid,
           (env->stuck_meta < 0)
@@ -83,7 +83,7 @@ static bool coherency_check(const MDBX_env *env, const txnid_t txnid,
     if (unlikely(root_txnid != freedb_mod_txnid)) {
       if (report)
         WARNING("catch invalid root_page %" PRIaPGNO " mod_txnid %" PRIaTXN
-                " for %sdb.mod_txnid %" PRIaTXN " %s",
+                " for %s-db.mod_txnid %" PRIaTXN " %s",
                 freedb_root_pgno, root_txnid, "free", freedb_mod_txnid,
                 (env->stuck_meta < 0) ? "(workaround for incoherent flaw of "
                                         "unified page/buffer cache)"
@@ -98,7 +98,7 @@ static bool coherency_check(const MDBX_env *env, const txnid_t txnid,
     if (unlikely(root_txnid != maindb_mod_txnid)) {
       if (report)
         WARNING("catch invalid root_page %" PRIaPGNO " mod_txnid %" PRIaTXN
-                " for %sdb.mod_txnid %" PRIaTXN " %s",
+                " for %s-db.mod_txnid %" PRIaTXN " %s",
                 maindb_root_pgno, root_txnid, "main", maindb_mod_txnid,
                 (env->stuck_meta < 0) ? "(workaround for incoherent flaw of "
                                         "unified page/buffer cache)"
@@ -169,7 +169,7 @@ __hot int coherency_check_head(MDBX_txn *txn, const meta_ptr_t head,
     txn->dbs[FREE_DBI].flags &= DB_PERSISTENT_FLAGS;
   }
   tASSERT(txn, txn->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
-  tASSERT(txn, check_sdb_flags(txn->dbs[MAIN_DBI].flags));
+  tASSERT(txn, check_table_flags(txn->dbs[MAIN_DBI].flags));
   return MDBX_SUCCESS;
 }
 
@@ -182,7 +182,7 @@ int coherency_check_written(const MDBX_env *env, const txnid_t txnid,
     if (likely(
             coherency_check(env, head_txnid, &meta->trees.gc, meta, report))) {
       eASSERT(env, meta->trees.gc.flags == MDBX_INTEGERKEY);
-      eASSERT(env, check_sdb_flags(meta->trees.main.flags));
+      eASSERT(env, check_table_flags(meta->trees.main.flags));
       return MDBX_SUCCESS;
     }
   } else if (report) {

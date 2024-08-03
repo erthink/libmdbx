@@ -315,10 +315,10 @@ static __always_inline int couple_init(cursor_couple_t *couple,
   }
 
   if (unlikely(*dbi_state & DBI_STALE))
-    return sdb_fetch(couple->outer.txn, cursor_dbi(&couple->outer));
+    return tbl_fetch(couple->outer.txn, cursor_dbi(&couple->outer));
 
   if (unlikely(kvx->clc.k.lmax == 0))
-    return sdb_setup(txn->env, kvx, tree);
+    return tbl_setup(txn->env, kvx, tree);
 
   return MDBX_SUCCESS;
 }
@@ -357,7 +357,7 @@ int cursor_dupsort_setup(MDBX_cursor *mc, const node_t *node,
   default:
     ERROR("invalid node flags %u", flags);
     goto bailout;
-  case N_DUPDATA | N_SUBDATA:
+  case N_DUP | N_TREE:
     if (!MDBX_DISABLE_VALIDATION && unlikely(node_ds(node) != sizeof(tree_t))) {
       ERROR("invalid nested-db record size (%zu, expect %zu)", node_ds(node),
             sizeof(tree_t));
@@ -373,7 +373,7 @@ int cursor_dupsort_setup(MDBX_cursor *mc, const node_t *node,
     }
     mx->cursor.top_and_flags = z_fresh_mark | z_inner;
     break;
-  case N_DUPDATA:
+  case N_DUP:
     if (!MDBX_DISABLE_VALIDATION && unlikely(node_ds(node) <= PAGEHDRSZ)) {
       ERROR("invalid nested-page size %zu", node_ds(node));
       goto bailout;
@@ -548,12 +548,12 @@ static __always_inline int cursor_bring(const bool inner, const bool tend2first,
   }
 
   const node_t *__restrict node = page_node(mp, ki);
-  if (!inner && (node_flags(node) & N_DUPDATA)) {
+  if (!inner && (node_flags(node) & N_DUP)) {
     int err = cursor_dupsort_setup(mc, node, mp);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
     MDBX_ANALYSIS_ASSUME(mc->subcur != nullptr);
-    if (node_flags(node) & N_SUBDATA) {
+    if (node_flags(node) & N_TREE) {
       err = tend2first ? inner_first(&mc->subcur->cursor, data)
                        : inner_last(&mc->subcur->cursor, data);
       if (unlikely(err != MDBX_SUCCESS))
@@ -800,7 +800,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
 
     if (mc->subcur) {
       node_t *node = page_node(mc->pg[mc->top], mc->ki[mc->top]);
-      if (node_flags(node) & N_DUPDATA) {
+      if (node_flags(node) & N_DUP) {
         cASSERT(mc, inner_pointed(mc));
         /* Если за ключом более одного значения, либо если размер данных
          * отличается, то вместо обновления требуется удаление и
@@ -1021,7 +1021,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
     node_t *const node = page_node(mc->pg[mc->top], mc->ki[mc->top]);
 
     /* Large/Overflow page overwrites need special handling */
-    if (unlikely(node_flags(node) & N_BIGDATA)) {
+    if (unlikely(node_flags(node) & N_BIG)) {
       const size_t dpages = (node_size(key, data) > env->leaf_nodemax)
                                 ? largechunk_npages(env, data->iov_len)
                                 : 0;
@@ -1108,7 +1108,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
         mp->pgno = mc->pg[mc->top]->pgno;
 
         /* Was a single item before, must convert now */
-        if (!(node_flags(node) & N_DUPDATA)) {
+        if (!(node_flags(node) & N_DUP)) {
           /* does data match? */
           if (flags & MDBX_APPENDDUP) {
             const int cmp = mc->clc->v.cmp(data, &old_data);
@@ -1160,9 +1160,9 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
           cASSERT(mc, (xdata.iov_len & 1) == 0);
           fp->upper = (uint16_t)(xdata.iov_len - PAGEHDRSZ);
           old_data.iov_len = xdata.iov_len; /* pretend olddata is fp */
-        } else if (node_flags(node) & N_SUBDATA) {
+        } else if (node_flags(node) & N_TREE) {
           /* Data is on sub-DB, just store it */
-          flags |= N_DUPDATA | N_SUBDATA;
+          flags |= N_DUP | N_TREE;
           goto dupsort_put;
         } else {
           /* Data is on sub-page */
@@ -1257,7 +1257,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
             fp->txnid = mc->txn->front_txnid;
             fp->pgno = mp->pgno;
             mc->subcur->cursor.pg[0] = fp;
-            flags |= N_DUPDATA;
+            flags |= N_DUP;
             goto dupsort_put;
           }
           xdata.iov_len = old_data.iov_len + growth;
@@ -1296,7 +1296,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
           cASSERT(mc, env->ps > old_data.iov_len);
           growth = env->ps - (unsigned)old_data.iov_len;
           cASSERT(mc, (growth & 1) == 0);
-          flags |= N_DUPDATA | N_SUBDATA;
+          flags |= N_DUP | N_TREE;
           nested_dupdb.root = mp->pgno;
           nested_dupdb.sequence = 0;
           nested_dupdb.mod_txnid = mc->txn->txnid;
@@ -1331,12 +1331,12 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
         if (!insert_key)
           node_del(mc, 0);
         ref_data = &xdata;
-        flags |= N_DUPDATA;
+        flags |= N_DUP;
         goto insert_node;
       }
 
-      /* MDBX passes N_SUBDATA in 'flags' to write a DB record */
-      if (unlikely((node_flags(node) ^ flags) & N_SUBDATA))
+      /* MDBX passes N_TREE in 'flags' to write a DB record */
+      if (unlikely((node_flags(node) ^ flags) & N_TREE))
         return MDBX_INCOMPATIBLE;
 
     current:
@@ -1388,8 +1388,7 @@ insert_node:;
   } else {
     /* There is room already in this leaf page. */
     if (is_dupfix_leaf(mc->pg[mc->top])) {
-      cASSERT(mc, !(naf & (N_BIGDATA | N_SUBDATA | N_DUPDATA)) &&
-                      ref_data->iov_len == 0);
+      cASSERT(mc, !(naf & (N_BIG | N_TREE | N_DUP)) && ref_data->iov_len == 0);
       rc = node_add_dupfix(mc, mc->ki[mc->top], key);
     } else
       rc = node_add_leaf(mc, mc->ki[mc->top], key, ref_data, naf);
@@ -1414,7 +1413,7 @@ insert_node:;
      * storing the user data in the keys field, so there are strict
      * size limits on dupdata. The actual data fields of the child
      * DB are all zero size. */
-    if (flags & N_DUPDATA) {
+    if (flags & N_DUP) {
       MDBX_val empty;
     dupsort_put:
       empty.iov_len = 0;
@@ -1452,7 +1451,7 @@ insert_node:;
           goto dupsort_error;
         mx->cursor.tree->items = 1;
       }
-      if (!(node_flags(node) & N_SUBDATA) || sub_root) {
+      if (!(node_flags(node) & N_TREE) || sub_root) {
         page_t *const mp = mc->pg[mc->top];
         const intptr_t nkeys = page_numkeys(mp);
         const size_t dbi = cursor_dbi(mc);
@@ -1486,7 +1485,7 @@ insert_node:;
       inner_flags |=
           (flags & MDBX_APPENDDUP) >> SHIFT_MDBX_APPENDDUP_TO_MDBX_APPEND;
       rc = cursor_put(&mc->subcur->cursor, data, &empty, inner_flags);
-      if (flags & N_SUBDATA) {
+      if (flags & N_TREE) {
         void *db = node_data(node);
         mc->subcur->nested_tree.mod_txnid = mc->txn->txnid;
         memcpy(db, &mc->subcur->nested_tree, sizeof(tree_t));
@@ -1613,12 +1612,12 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
     goto del_key;
 
   node_t *node = page_node(mp, mc->ki[mc->top]);
-  if (node_flags(node) & N_DUPDATA) {
+  if (node_flags(node) & N_DUP) {
     if (flags & (MDBX_ALLDUPS | /* for compatibility */ MDBX_NODUPDATA)) {
       /* will subtract the final entry later */
       mc->tree->items -= mc->subcur->nested_tree.items - 1;
     } else {
-      if (!(node_flags(node) & N_SUBDATA)) {
+      if (!(node_flags(node) & N_TREE)) {
         page_t *sp = node_data(node);
         cASSERT(mc, is_subpage(sp));
         sp->txnid = mp->txnid;
@@ -1629,7 +1628,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
         return rc;
       /* If sub-DB still has entries, we're done */
       if (mc->subcur->nested_tree.items) {
-        if (node_flags(node) & N_SUBDATA) {
+        if (node_flags(node) & N_TREE) {
           /* update table info */
           mc->subcur->nested_tree.mod_txnid = mc->txn->txnid;
           memcpy(node_data(node), &mc->subcur->nested_tree, sizeof(tree_t));
@@ -1651,7 +1650,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
             }
             if (m2->ki[mc->top] != mc->ki[mc->top]) {
               inner = page_node(mp, m2->ki[mc->top]);
-              if (node_flags(inner) & N_SUBDATA)
+              if (node_flags(inner) & N_TREE)
                 continue;
             }
             m2->subcur->cursor.pg[0] = node_data(inner);
@@ -1665,7 +1664,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
       /* otherwise fall thru and delete the sub-DB */
     }
 
-    if ((node_flags(node) & N_SUBDATA) && mc->subcur->cursor.tree->height) {
+    if ((node_flags(node) & N_TREE) && mc->subcur->cursor.tree->height) {
       /* add all the child DB's pages to the free list */
       rc = tree_drop(&mc->subcur->cursor, false);
       if (unlikely(rc != MDBX_SUCCESS))
@@ -1674,13 +1673,13 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
     inner_gone(mc);
   } else {
     cASSERT(mc, !inner_pointed(mc));
-    /* MDBX passes N_SUBDATA in 'flags' to delete a DB record */
-    if (unlikely((node_flags(node) ^ flags) & N_SUBDATA))
+    /* MDBX passes N_TREE in 'flags' to delete a DB record */
+    if (unlikely((node_flags(node) ^ flags) & N_TREE))
       return MDBX_INCOMPATIBLE;
   }
 
   /* add large/overflow pages to free list */
-  if (node_flags(node) & N_BIGDATA) {
+  if (node_flags(node) & N_BIG) {
     pgr_t lp = page_get_large(mc, node_largedata_pgno(node), mp->txnid);
     if (unlikely((rc = lp.err) || (rc = page_retire(mc, lp.page))))
       goto fail;
@@ -1758,19 +1757,19 @@ del_key:
          /* уже переместились вправо */ m3->pg[top] != mp)) {
       node = page_node(m3->pg[m3->top], m3->ki[m3->top]);
       /* Если это dupsort-узел, то должен быть валидный вложенный курсор. */
-      if (node_flags(node) & N_DUPDATA) {
+      if (node_flags(node) & N_DUP) {
         /* Тут три варианта событий:
-         * 1) Вложенный курсор уже инициализирован, у узла есть флаг N_SUBDATA,
+         * 1) Вложенный курсор уже инициализирован, у узла есть флаг N_TREE,
          *    соответственно дубликаты вынесены в отдельное дерево с корнем
          *    в отдельной странице = ничего корректировать не требуется.
-         * 2) Вложенный курсор уже инициализирован, у узла нет флага N_SUBDATA,
+         * 2) Вложенный курсор уже инициализирован, у узла нет флага N_TREE,
          *    соответственно дубликаты размещены на вложенной sub-странице.
          * 3) Курсор стоял на удалённом элементе, который имел одно значение,
          *    а после удаления переместился на следующий элемент с дубликатами.
          *    В этом случае вложенный курсор не инициализирован и тепеь его
          *    нужно установить на первый дубликат. */
         if (is_pointed(&m3->subcur->cursor)) {
-          if ((node_flags(node) & N_SUBDATA) == 0) {
+          if ((node_flags(node) & N_TREE) == 0) {
             cASSERT(m3, m3->subcur->cursor.top == 0 &&
                             m3->subcur->nested_tree.height == 1);
             m3->subcur->cursor.pg[0] = node_data(node);
@@ -1779,7 +1778,7 @@ del_key:
           rc = cursor_dupsort_setup(m3, node, m3->pg[m3->top]);
           if (unlikely(rc != MDBX_SUCCESS))
             goto fail;
-          if (node_flags(node) & N_SUBDATA) {
+          if (node_flags(node) & N_TREE) {
             rc = inner_first(&m3->subcur->cursor, nullptr);
             if (unlikely(rc != MDBX_SUCCESS))
               goto fail;
@@ -1999,13 +1998,13 @@ got_node:
     return ret;
   }
 
-  if (node_flags(node) & N_DUPDATA) {
+  if (node_flags(node) & N_DUP) {
     ret.err = cursor_dupsort_setup(mc, node, mp);
     if (unlikely(ret.err != MDBX_SUCCESS))
       return ret;
     if (op >= MDBX_SET) {
       MDBX_ANALYSIS_ASSUME(mc->subcur != nullptr);
-      if (node_flags(node) & N_SUBDATA) {
+      if (node_flags(node) & N_TREE) {
         ret.err = inner_first(&mc->subcur->cursor, data);
         if (unlikely(ret.err != MDBX_SUCCESS))
           return ret;
@@ -2117,7 +2116,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       get_key_optional(node, key);
       if (!data)
         return MDBX_SUCCESS;
-      if (node_flags(node) & N_DUPDATA) {
+      if (node_flags(node) & N_DUP) {
         if (!MDBX_DISABLE_VALIDATION && unlikely(!mc->subcur))
           return unexpected_dupsort(mc);
         mc = &mc->subcur->cursor;
@@ -2248,7 +2247,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     else {
       node_t *node = page_node(mc->pg[mc->top], mc->ki[mc->top]);
       get_key_optional(node, key);
-      if ((node_flags(node) & N_DUPDATA) == 0)
+      if ((node_flags(node) & N_DUP) == 0)
         return node_read(mc, node, data, mc->pg[mc->top]);
       else if (MDBX_DISABLE_VALIDATION || likely(mc->subcur))
         return ((op == MDBX_FIRST_DUP) ? inner_first

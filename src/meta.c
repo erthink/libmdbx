@@ -549,7 +549,7 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta,
     return MDBX_INCOMPATIBLE;
   }
 
-  if (unlikely(!check_sdb_flags(meta->trees.main.flags))) {
+  if (unlikely(!check_table_flags(meta->trees.main.flags))) {
     WARNING("meta[%u] has invalid %s flags 0x%x, skip it", meta_number,
             "MainDB", meta->trees.main.flags);
     return MDBX_INCOMPATIBLE;

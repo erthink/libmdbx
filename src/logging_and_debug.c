@@ -135,9 +135,9 @@ __cold const char *pagetype_caption(const uint8_t type, char buf4unknown[16]) {
 __cold static const char *leafnode_type(node_t *n) {
   static const char *const tp[2][2] = {{"", ": DB"},
                                        {": sub-page", ": sub-DB"}};
-  return (node_flags(n) & N_BIGDATA)
+  return (node_flags(n) & N_BIG)
              ? ": large page"
-             : tp[!!(node_flags(n) & N_DUPDATA)][!!(node_flags(n) & N_SUBDATA)];
+             : tp[!!(node_flags(n) & N_DUP)][!!(node_flags(n) & N_TREE)];
 }
 
 /* Display all the keys in the page. */
@@ -197,7 +197,7 @@ __cold void page_list(page_t *mp) {
               DKEY(&key));
       total += nsize;
     } else {
-      if (node_flags(node) & N_BIGDATA)
+      if (node_flags(node) & N_BIG)
         nsize += sizeof(pgno_t);
       else
         nsize += node_ds(node);

@@ -189,11 +189,10 @@ __cold static int compacting_walk(ctx_t *ctx, MDBX_cursor *mc,
     page_t *mp = mc->pg[mc->top];
     const size_t nkeys = page_numkeys(mp);
     if (is_leaf(mp)) {
-      if (!(mc->flags &
-            z_inner) /* may have nested N_SUBDATA or N_BIGDATA nodes */) {
+      if (!(mc->flags & z_inner) /* may have nested N_TREE or N_BIG nodes */) {
         for (size_t i = 0; i < nkeys; i++) {
           node_t *node = page_node(mp, i);
-          if (node_flags(node) == N_BIGDATA) {
+          if (node_flags(node) == N_BIG) {
             /* Need writable leaf */
             if (mp != leaf) {
               mc->pg[mc->top] = leaf;
@@ -213,7 +212,7 @@ __cold static int compacting_walk(ctx_t *ctx, MDBX_cursor *mc,
                                      npages);
             if (unlikely(rc != MDBX_SUCCESS))
               goto bailout;
-          } else if (node_flags(node) & N_SUBDATA) {
+          } else if (node_flags(node) & N_TREE) {
             if (!MDBX_DISABLE_VALIDATION &&
                 unlikely(node_ds(node) != sizeof(tree_t))) {
               ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,
@@ -232,7 +231,7 @@ __cold static int compacting_walk(ctx_t *ctx, MDBX_cursor *mc,
             }
 
             tree_t *nested = nullptr;
-            if (node_flags(node) & N_DUPDATA) {
+            if (node_flags(node) & N_DUP) {
               rc = cursor_dupsort_setup(mc, node, mp);
               if (likely(rc == MDBX_SUCCESS)) {
                 nested = &mc->subcur->nested_tree;

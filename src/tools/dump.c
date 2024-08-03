@@ -100,7 +100,7 @@ static void error(const char *func, int rc) {
 }
 
 /* Dump in BDB-compatible format */
-static int dump_sdb(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
+static int dump_tbl(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
   unsigned flags;
   int rc = mdbx_dbi_flags(txn, dbi, &flags);
   if (unlikely(rc != MDBX_SUCCESS)) {
@@ -450,7 +450,7 @@ int main(int argc, char *argv[]) {
         if (list) {
           printf("%s\n", subname);
         } else {
-          err = dump_sdb(txn, sub_dbi, subname);
+          err = dump_tbl(txn, sub_dbi, subname);
           if (unlikely(err != MDBX_SUCCESS)) {
             if (!rescue)
               break;
@@ -488,7 +488,7 @@ int main(int argc, char *argv[]) {
     cursor = nullptr;
 
     if (have_raw && (!count /* || rescue */))
-      err = dump_sdb(txn, MAIN_DBI, nullptr);
+      err = dump_tbl(txn, MAIN_DBI, nullptr);
     else if (!count) {
       if (!quiet)
         fprintf(stderr, "%s: %s does not contain multiple databases\n", prog,
@@ -496,7 +496,7 @@ int main(int argc, char *argv[]) {
       err = MDBX_NOTFOUND;
     }
   } else {
-    err = dump_sdb(txn, dbi, subname);
+    err = dump_tbl(txn, dbi, subname);
   }
 
   switch (err) {

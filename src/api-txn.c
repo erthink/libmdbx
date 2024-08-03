@@ -63,16 +63,16 @@ __cold int mdbx_dbi_dupsort_depthmask(const MDBX_txn *txn, MDBX_dbi dbi,
     const tree_t *db = node_data(node);
     const unsigned flags = node_flags(node);
     switch (flags) {
-    case N_BIGDATA:
+    case N_BIG:
     case 0:
       /* single-value entry, deep = 0 */
       *mask |= 1 << 0;
       break;
-    case N_DUPDATA:
+    case N_DUP:
       /* single sub-page, deep = 1 */
       *mask |= 1 << 1;
       break;
-    case N_DUPDATA | N_SUBDATA:
+    case N_DUP | N_TREE:
       /* sub-tree */
       *mask |= 1 << UNALIGNED_PEEK_16(db, tree_t, height);
       break;
@@ -332,7 +332,7 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
       /* LY: allows update (explicit overwrite) only for unique keys */
       node_t *node =
           page_node(cx.outer.pg[cx.outer.top], cx.outer.ki[cx.outer.top]);
-      if (node_flags(node) & N_DUPDATA) {
+      if (node_flags(node) & N_DUP) {
         tASSERT(txn, inner_pointed(&cx.outer) &&
                          cx.outer.subcur->nested_tree.items > 1);
         rc = MDBX_EMULTIVAL;
@@ -445,7 +445,7 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
         if (flags & MDBX_CURRENT) {
           /* disallow update/delete for multi-values */
           node_t *node = page_node(page, cx.outer.ki[cx.outer.top]);
-          if (node_flags(node) & N_DUPDATA) {
+          if (node_flags(node) & N_DUP) {
             tASSERT(txn, inner_pointed(&cx.outer) &&
                              cx.outer.subcur->nested_tree.items > 1);
             if (cx.outer.subcur->nested_tree.items > 1) {

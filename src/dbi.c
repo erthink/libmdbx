@@ -281,7 +281,7 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags,
     else {
       eASSERT(env, env->dbs_flags[dbi] & DB_VALID);
       if (txn->dbi_state[dbi] & DBI_STALE) {
-        int err = sdb_fetch(txn, dbi);
+        int err = tbl_fetch(txn, dbi);
         if (unlikely(err == MDBX_SUCCESS))
           return err;
       }
@@ -306,7 +306,7 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags,
       env->kvs[dbi].clc.v.cmp = datacmp ? datacmp : builtin_datacmp(user_flags);
       txn->dbs[dbi].flags = db_flags;
       txn->dbs[dbi].dupfix_size = 0;
-      if (unlikely(sdb_setup(env, &env->kvs[dbi], &txn->dbs[dbi]))) {
+      if (unlikely(tbl_setup(env, &env->kvs[dbi], &txn->dbs[dbi]))) {
         txn->dbi_state[dbi] = DBI_LINDO;
         txn->flags |= MDBX_TXN_ERROR;
         return MDBX_PROBLEM;
@@ -379,7 +379,7 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi,
     env->kvs[MAIN_DBI].clc.v.cmp = builtin_datacmp(main_flags);
     txn->dbs[MAIN_DBI].flags = main_flags;
     txn->dbs[MAIN_DBI].dupfix_size = 0;
-    int err = sdb_setup(env, &env->kvs[MAIN_DBI], &txn->dbs[MAIN_DBI]);
+    int err = tbl_setup(env, &env->kvs[MAIN_DBI], &txn->dbs[MAIN_DBI]);
     if (unlikely(err != MDBX_SUCCESS)) {
       txn->dbi_state[MAIN_DBI] = DBI_LINDO;
       txn->flags |= MDBX_TXN_ERROR;
@@ -459,7 +459,7 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi,
     /* make sure this is actually a table */
     node_t *node =
         page_node(cx.outer.pg[cx.outer.top], cx.outer.ki[cx.outer.top]);
-    if (unlikely((node_flags(node) & (N_DUPDATA | N_SUBDATA)) != N_SUBDATA))
+    if (unlikely((node_flags(node) & (N_DUP | N_TREE)) != N_TREE))
       return MDBX_INCOMPATIBLE;
     if (!MDBX_DISABLE_VALIDATION && unlikely(body.iov_len != sizeof(tree_t))) {
       ERROR("%s/%d: %s %zu", "MDBX_CORRUPTED", MDBX_CORRUPTED,
@@ -489,8 +489,8 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi,
     txn->dbs[slot].flags = user_flags & DB_PERSISTENT_FLAGS;
     cx.outer.next = txn->cursors[MAIN_DBI];
     txn->cursors[MAIN_DBI] = &cx.outer;
-    rc = cursor_put_checklen(&cx.outer, &name, &body,
-                             N_SUBDATA | MDBX_NOOVERWRITE);
+    rc =
+        cursor_put_checklen(&cx.outer, &name, &body, N_TREE | MDBX_NOOVERWRITE);
     txn->cursors[MAIN_DBI] = cx.outer.next;
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
@@ -541,7 +541,7 @@ int dbi_open(MDBX_txn *txn, const MDBX_val *const name, unsigned user_flags,
   *dbi = 0;
 
   if (user_flags != MDBX_ACCEDE &&
-      unlikely(!check_sdb_flags(user_flags & ~MDBX_CREATE)))
+      unlikely(!check_table_flags(user_flags & ~MDBX_CREATE)))
     return MDBX_EINVAL;
 
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
@@ -695,11 +695,11 @@ dbi_rename_locked(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val new_name) {
 
   MDBX_val data = {&txn->dbs[dbi], sizeof(tree_t)};
   pair.err = cursor_put_checklen(&cx.outer, &new_name, &data,
-                                 N_SUBDATA | MDBX_NOOVERWRITE);
+                                 N_TREE | MDBX_NOOVERWRITE);
   if (likely(pair.err == MDBX_SUCCESS)) {
     pair.err = cursor_seek(&cx.outer, &old_name, nullptr, MDBX_SET).err;
     if (likely(pair.err == MDBX_SUCCESS))
-      pair.err = cursor_del(&cx.outer, N_SUBDATA);
+      pair.err = cursor_del(&cx.outer, N_TREE);
     if (likely(pair.err == MDBX_SUCCESS)) {
       pair.defer = env->kvs[dbi].name.iov_base;
       env->kvs[dbi].name = new_name;
@@ -813,7 +813,7 @@ __cold int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
     if (likely(rc == MDBX_SUCCESS)) {
       cx.outer.next = txn->cursors[MAIN_DBI];
       txn->cursors[MAIN_DBI] = &cx.outer;
-      rc = cursor_del(&cx.outer, N_SUBDATA);
+      rc = cursor_del(&cx.outer, N_TREE);
       txn->cursors[MAIN_DBI] = cx.outer.next;
       if (likely(rc == MDBX_SUCCESS)) {
         tASSERT(txn, txn->dbi_state[MAIN_DBI] & DBI_DIRTY);
@@ -943,7 +943,7 @@ __cold int mdbx_dbi_stat(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest,
     return MDBX_BAD_TXN;
 
   if (unlikely(txn->dbi_state[dbi] & DBI_STALE)) {
-    rc = sdb_fetch((MDBX_txn *)txn, dbi);
+    rc = tbl_fetch((MDBX_txn *)txn, dbi);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
@@ -997,7 +997,7 @@ __cold int mdbx_enumerate_tables(const MDBX_txn *txn,
        rc = outer_next(&cx.outer, nullptr, nullptr, MDBX_NEXT_NODUP)) {
     node_t *node =
         page_node(cx.outer.pg[cx.outer.top], cx.outer.ki[cx.outer.top]);
-    if (node_flags(node) != N_SUBDATA)
+    if (node_flags(node) != N_TREE)
       continue;
     if (unlikely(node_ds(node) != sizeof(tree_t))) {
       ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,

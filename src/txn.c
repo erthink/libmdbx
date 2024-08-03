@@ -702,7 +702,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
       /* Может быть mod_txnid > front после коммита вложенных тразакций */
       db->mod_txnid = txn->txnid;
       MDBX_val data = {db, sizeof(tree_t)};
-      rc = cursor_put(&cx.outer, &env->kvs[i].name, &data, N_SUBDATA);
+      rc = cursor_put(&cx.outer, &env->kvs[i].name, &data, N_TREE);
       if (unlikely(rc != MDBX_SUCCESS)) {
         txn->cursors[MAIN_DBI] = cx.outer.next;
         goto fail;
@@ -1049,7 +1049,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
            txn->txnid >=
                /* paranoia is appropriate here */ env->lck->cached_oldest.weak);
     tASSERT(txn, txn->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
-    tASSERT(txn, check_sdb_flags(txn->dbs[MAIN_DBI].flags));
+    tASSERT(txn, check_table_flags(txn->dbs[MAIN_DBI].flags));
   } else {
     eASSERT(env, (flags & ~(txn_rw_begin_flags | MDBX_TXN_SPILLS |
                             MDBX_WRITEMAP | MDBX_NOSTICKYTHREADS)) == 0);
@@ -1107,7 +1107,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
     }
 
     tASSERT(txn, txn->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
-    tASSERT(txn, check_sdb_flags(txn->dbs[MAIN_DBI].flags));
+    tASSERT(txn, check_table_flags(txn->dbs[MAIN_DBI].flags));
     txn->flags = flags;
     txn->nested = nullptr;
     txn->tw.loose_pages = nullptr;
@@ -1145,7 +1145,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
 
   /* Setup db info */
   tASSERT(txn, txn->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
-  tASSERT(txn, check_sdb_flags(txn->dbs[MAIN_DBI].flags));
+  tASSERT(txn, check_table_flags(txn->dbs[MAIN_DBI].flags));
   VALGRIND_MAKE_MEM_UNDEFINED(txn->dbi_state, env->max_dbi);
 #if MDBX_ENABLE_DBI_SPARSE
   txn->n_dbi = CORE_DBS;
@@ -1196,7 +1196,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
                    txn->dbs[MAIN_DBI].flags);
           env->dbs_flags[MAIN_DBI] = DB_POISON;
           atomic_store32(&env->dbi_seqs[MAIN_DBI], seq, mo_AcquireRelease);
-          rc = sdb_setup(env, &env->kvs[MAIN_DBI], &txn->dbs[MAIN_DBI]);
+          rc = tbl_setup(env, &env->kvs[MAIN_DBI], &txn->dbs[MAIN_DBI]);
           if (likely(rc == MDBX_SUCCESS)) {
             seq = dbi_seq_next(env, MAIN_DBI);
             env->dbs_flags[MAIN_DBI] = DB_VALID | txn->dbs[MAIN_DBI].flags;
@@ -1229,7 +1229,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
   }
 
   tASSERT(txn, txn->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
-  tASSERT(txn, check_sdb_flags(txn->dbs[MAIN_DBI].flags));
+  tASSERT(txn, check_table_flags(txn->dbs[MAIN_DBI].flags));
   if (unlikely(env->flags & ENV_FATAL_ERROR)) {
     WARNING("%s", "environment had fatal error, must shutdown!");
     rc = MDBX_PANIC;

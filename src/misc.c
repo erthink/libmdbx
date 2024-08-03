@@ -42,7 +42,7 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
     return rc;
 
   if (unlikely(txn->dbi_state[dbi] & DBI_STALE)) {
-    rc = sdb_fetch(txn, dbi);
+    rc = tbl_fetch(txn, dbi);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }

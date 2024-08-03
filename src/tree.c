@@ -77,14 +77,14 @@ int tree_drop(MDBX_cursor *mc, const bool may_have_tables) {
         cASSERT(mc, mc->top + 1 == mc->tree->height);
         for (size_t i = 0; i < nkeys; i++) {
           node_t *node = page_node(mp, i);
-          if (node_flags(node) & N_BIGDATA) {
+          if (node_flags(node) & N_BIG) {
             rc = page_retire_ex(mc, node_largedata_pgno(node), nullptr, 0);
             if (unlikely(rc != MDBX_SUCCESS))
               goto bailout;
             if (!(may_have_tables | mc->tree->large_pages))
               goto pop;
-          } else if (node_flags(node) & N_SUBDATA) {
-            if (unlikely((node_flags(node) & N_DUPDATA) == 0)) {
+          } else if (node_flags(node) & N_TREE) {
+            if (unlikely((node_flags(node) & N_DUP) == 0)) {
               rc = /* disallowing implicit table deletion */ MDBX_INCOMPATIBLE;
               goto bailout;
             }
@@ -105,8 +105,7 @@ int tree_drop(MDBX_cursor *mc, const bool may_have_tables) {
                                        : P_BRANCH);
         for (size_t i = 0; i < nkeys; i++) {
           node_t *node = page_node(mp, i);
-          tASSERT(txn, (node_flags(node) &
-                        (N_BIGDATA | N_SUBDATA | N_DUPDATA)) == 0);
+          tASSERT(txn, (node_flags(node) & (N_BIG | N_TREE | N_DUP)) == 0);
           const pgno_t pgno = node_pgno(node);
           rc = page_retire_ex(mc, pgno, nullptr, pagetype);
           if (unlikely(rc != MDBX_SUCCESS))
@@ -1240,8 +1239,8 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
             node_t *node = ptr_disp(mp, tmp_ki_copy->entries[i] + PAGEHDRSZ);
             size = NODESIZE + node_ks(node) + sizeof(indx_t);
             if (is_leaf(mp))
-              size += (node_flags(node) & N_BIGDATA) ? sizeof(pgno_t)
-                                                     : node_ds(node);
+              size +=
+                  (node_flags(node) & N_BIG) ? sizeof(pgno_t) : node_ds(node);
             size = EVEN_CEIL(size);
           }
 
@@ -1385,7 +1384,7 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
       rc = node_add_leaf(mc, 0, newkey, newdata, naf);
     } break;
     case P_LEAF | P_DUPFIX: {
-      cASSERT(mc, (naf & (N_BIGDATA | N_SUBDATA | N_DUPDATA)) == 0);
+      cASSERT(mc, (naf & (N_BIG | N_TREE | N_DUP)) == 0);
       cASSERT(mc, newpgno == 0 || newpgno == P_INVALID);
       rc = node_add_dupfix(mc, 0, newkey);
     } break;
@@ -1456,7 +1455,7 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
         rc = node_add_leaf(mc, n, &rkey, rdata, flags);
       } break;
       /* case P_LEAF | P_DUPFIX: {
-        cASSERT(mc, (nflags & (N_BIGDATA | N_SUBDATA | N_DUPDATA)) == 0);
+        cASSERT(mc, (nflags & (N_BIG | N_TREE | N_DUP)) == 0);
         cASSERT(mc, gno == 0);
         rc = mdbx_node_add_dupfix(mc, n, &rkey);
       } break; */
@@ -1568,7 +1567,7 @@ done:
       rc = cursor_check_updating(mc);
     if (unlikely(naf & MDBX_RESERVE)) {
       node_t *node = page_node(mc->pg[mc->top], mc->ki[mc->top]);
-      if (!(node_flags(node) & N_BIGDATA))
+      if (!(node_flags(node) & N_BIG))
         newdata->iov_base = node_data(node);
     }
 #if MDBX_ENABLE_PGOP_STAT

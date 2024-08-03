@@ -3,8 +3,8 @@
 
 #include "internals.h"
 
-int sdb_setup(const MDBX_env *env, kvx_t *const kvx, const tree_t *const db) {
-  if (unlikely(!check_sdb_flags(db->flags))) {
+int tbl_setup(const MDBX_env *env, kvx_t *const kvx, const tree_t *const db) {
+  if (unlikely(!check_table_flags(db->flags))) {
     ERROR("incompatible or invalid db.flags (0x%x) ", db->flags);
     return MDBX_INCOMPATIBLE;
   }
@@ -31,7 +31,7 @@ int sdb_setup(const MDBX_env *env, kvx_t *const kvx, const tree_t *const db) {
   return MDBX_SUCCESS;
 }
 
-int sdb_fetch(MDBX_txn *txn, size_t dbi) {
+int tbl_fetch(MDBX_txn *txn, size_t dbi) {
   cursor_couple_t couple;
   int rc = cursor_init(&couple.outer, txn, MAIN_DBI);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -54,7 +54,7 @@ int sdb_fetch(MDBX_txn *txn, size_t dbi) {
     rc = MDBX_NOTFOUND;
     goto bailout;
   }
-  if (unlikely((node_flags(nsr.node) & (N_DUPDATA | N_SUBDATA)) != N_SUBDATA)) {
+  if (unlikely((node_flags(nsr.node) & (N_DUP | N_TREE)) != N_TREE)) {
     NOTICE("dbi %zu refs to not a named table `%*s` for txn %" PRIaTXN " (%s)",
            dbi, (int)kvx->name.iov_len, (const char *)kvx->name.iov_base,
            txn->txnid, "wrong flags");
@@ -95,7 +95,7 @@ int sdb_fetch(MDBX_txn *txn, size_t dbi) {
     return MDBX_CORRUPTED;
   }
 #endif /* !MDBX_DISABLE_VALIDATION */
-  rc = sdb_setup(txn->env, kvx, db);
+  rc = tbl_setup(txn->env, kvx, db);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 

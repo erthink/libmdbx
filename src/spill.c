@@ -99,7 +99,7 @@ static size_t spill_cursor_keep(const MDBX_txn *const txn,
     tASSERT(txn, is_leaf(mp));
     if (!mc->subcur || mc->ki[mc->top] >= page_numkeys(mp))
       break;
-    if (!(node_flags(page_node(mp, mc->ki[mc->top])) & N_SUBDATA))
+    if (!(node_flags(page_node(mp, mc->ki[mc->top])) & N_TREE))
       break;
     mc = &mc->subcur->cursor;
   }

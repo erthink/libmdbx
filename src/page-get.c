@@ -244,17 +244,17 @@ __cold int page_check(const MDBX_cursor *const mc, const page_t *const mp) {
         rc =
             bad_page(mp, "invalid node[%zu] flags (%u)\n", i, node_flags(node));
         break;
-      case N_BIGDATA /* data on large-page */:
+      case N_BIG /* data on large-page */:
       case 0 /* usual */:
-      case N_SUBDATA /* sub-db */:
-      case N_SUBDATA | N_DUPDATA /* dupsorted sub-tree */:
-      case N_DUPDATA /* short sub-page */:
+      case N_TREE /* sub-db */:
+      case N_TREE | N_DUP /* dupsorted sub-tree */:
+      case N_DUP /* short sub-page */:
         break;
       }
 
       const size_t dsize = node_ds(node);
       const char *const data = node_data(node);
-      if (node_flags(node) & N_BIGDATA) {
+      if (node_flags(node) & N_BIG) {
         if (unlikely(end_of_page < data + sizeof(pgno_t))) {
           rc = bad_page(
               mp, "node-%s(%zu of %zu, %zu bytes) beyond (%zu) page-end\n",
@@ -311,20 +311,20 @@ __cold int page_check(const MDBX_cursor *const mc, const page_t *const mp) {
           continue;
         }
         break;
-      case N_SUBDATA /* sub-db */:
+      case N_TREE /* sub-db */:
         if (unlikely(dsize != sizeof(tree_t))) {
           rc = bad_page(mp, "invalid sub-db record size (%zu)\n", dsize);
           continue;
         }
         break;
-      case N_SUBDATA | N_DUPDATA /* dupsorted sub-tree */:
+      case N_TREE | N_DUP /* dupsorted sub-tree */:
         if (unlikely(dsize != sizeof(tree_t))) {
           rc = bad_page(mp, "invalid nested-db record size (%zu, expect %zu)\n",
                         dsize, sizeof(tree_t));
           continue;
         }
         break;
-      case N_DUPDATA /* short sub-page */:
+      case N_DUP /* short sub-page */:
         if (unlikely(dsize <= PAGEHDRSZ)) {
           rc = bad_page(mp, "invalid nested/sub-page record size (%zu)\n",
                         dsize);

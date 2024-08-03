@@ -1134,7 +1134,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending,
                     troika_t *const troika) {
   eASSERT(env, ((env->flags ^ flags) & MDBX_WRITEMAP) == 0);
   eASSERT(env, pending->trees.gc.flags == MDBX_INTEGERKEY);
-  eASSERT(env, check_sdb_flags(pending->trees.main.flags));
+  eASSERT(env, check_table_flags(pending->trees.main.flags));
   const meta_t *const meta0 = METAPAGE(env, 0);
   const meta_t *const meta1 = METAPAGE(env, 1);
   const meta_t *const meta2 = METAPAGE(env, 2);
@@ -1433,7 +1433,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending,
       target->trees.gc = pending->trees.gc;
       target->trees.main = pending->trees.main;
       eASSERT(env, target->trees.gc.flags == MDBX_INTEGERKEY);
-      eASSERT(env, check_sdb_flags(target->trees.main.flags));
+      eASSERT(env, check_table_flags(target->trees.main.flags));
       target->canary = pending->canary;
       memcpy(target->pages_retired, pending->pages_retired, 8);
       jitter4testing(true);
@@ -1488,7 +1488,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending,
 #endif /* MDBX_ENABLE_PGOP_STAT */
     const meta_t undo_meta = *target;
     eASSERT(env, pending->trees.gc.flags == MDBX_INTEGERKEY);
-    eASSERT(env, check_sdb_flags(pending->trees.main.flags));
+    eASSERT(env, check_table_flags(pending->trees.main.flags));
     rc = osal_pwrite(env->fd4meta, pending, sizeof(meta_t),
                      ptr_dist(target, env->dxb_mmap.base));
     if (unlikely(rc != MDBX_SUCCESS)) {

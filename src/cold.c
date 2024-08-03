@@ -193,7 +193,7 @@ __cold static int stat_acc(const MDBX_txn *txn, MDBX_stat *st, size_t bytes) {
       const page_t *mp = cx.outer.pg[cx.outer.top];
       for (size_t i = 0; i < page_numkeys(mp); i++) {
         const node_t *node = page_node(mp, i);
-        if (node_flags(node) != N_SUBDATA)
+        if (node_flags(node) != N_TREE)
           continue;
         if (unlikely(node_ds(node) != sizeof(tree_t))) {
           ERROR("%s/%d: %s %zu", "MDBX_CORRUPTED", MDBX_CORRUPTED,

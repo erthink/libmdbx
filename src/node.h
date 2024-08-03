@@ -6,7 +6,7 @@
 #include "essentials.h"
 
 /* valid flags for mdbx_node_add() */
-#define NODE_ADD_FLAGS (N_DUPDATA | N_SUBDATA | MDBX_RESERVE | MDBX_APPEND)
+#define NODE_ADD_FLAGS (N_DUP | N_TREE | MDBX_RESERVE | MDBX_APPEND)
 
 /* Get the page number pointed to by a branch node */
 MDBX_NOTHROW_PURE_FUNCTION static inline pgno_t
@@ -81,7 +81,7 @@ node_size(const MDBX_val *key, const MDBX_val *value) {
 
 MDBX_NOTHROW_PURE_FUNCTION static inline pgno_t
 node_largedata_pgno(const node_t *const __restrict node) {
-  assert(node_flags(node) & N_BIGDATA);
+  assert(node_flags(node) & N_BIG);
   return peek_pgno(node_data(node));
 }
 
@@ -96,7 +96,7 @@ static inline int __must_check_result node_read(MDBX_cursor *mc,
                                                 const page_t *mp) {
   data->iov_len = node_ds(node);
   data->iov_base = node_data(node);
-  if (likely(node_flags(node) != N_BIGDATA))
+  if (likely(node_flags(node) != N_BIG))
     return MDBX_SUCCESS;
   return node_read_bigdata(mc, node, data, mp);
 }
