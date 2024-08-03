@@ -1,7 +1,7 @@
 ChangeLog
 =========
 
-English version [by Google](https://gitflic-ru.translate.goog/project/erthink/libmdbx/blob?file=ChangeLog.md&_x_tr_sl=ru&_x_tr_tl=en)
+English version [by liar Google](https://gitflic-ru.translate.goog/project/erthink/libmdbx/blob?file=ChangeLog.md&_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
 ## v0.13.1 (в процессе подготовки выпуска)
@@ -44,7 +44,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
    припаркованных транзакций является как дополнением, так и более простой
    в использовании альтернативой обратному вызову
    [Handle-Slow-Readers](https://libmdbx.dqdkfa.ru/group__c__err.html#ga2cb11b56414c282fe06dd942ae6cade6).
-   Для удобства функции `mdbx_txn_park()` и `mdbx_txn_unpack()` имеют
+   Для удобства функции `mdbx_txn_park()` и `mdbx_txn_unpark()` имеют
    дополнительные аргументы, позволяющие запросить автоматическую
    "распарковку" припаркованных и перезапуск вытесненных транзакций.
 
@@ -109,19 +109,19 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 
  - Расширение и доработка C++ API:
 
-     - добавлен тип `mdbx::cursor::estimation_result`, а поведение методов
-      `cursor::estimate()` унифицировано с `cursor::move()`;
+     - добавлен тип `mdbx::cursor::estimate_result`, а поведение методов
+      `mdbx::cursor::estimate()` унифицировано с `mdbx::cursor::move()`;
      - для предотвращения незаметного неверного использования API, для инициализации
-       возвращаемых по ссылке срезов, вместо пустых срезов задействован `slice::invalid()`;
+       возвращаемых по ссылке срезов, вместо пустых срезов задействован `mdbx::slice::invalid()`;
      - добавлены дополнительные C++ операторы преобразования к типам C API;
      - для совместимости со старыми стандартами C++ и старыми версиями STL перенесены
-       в public классы `buffer::move_assign_alloc` и `buffer::copy_assign_alloc`;
+       в public классы `mdbx::buffer::move_assign_alloc` и `mdbx::buffer::copy_assign_alloc`;
      - добавлен тип `mdbx::default_buffer`;
-     - для срезов и буферов добавлены методы `hex_decode()`, `base64_decode()`, `base58_decode()`;
+     - для срезов и буферов добавлены методы `mdbx::buffer::hex_decode()`, `mdbx::buffer::base64_decode()`, `mdbx::buffer::base58_decode()`;
      - добавлен тип `mdbx::comparator` и функций `mdbx::default_comparator()`;
-     - добавлены статические методы `buffer::hex()`, `base64()`, `base58()`;
+     - добавлены статические методы `mdbx::buffer::hex()`, `mdbx::buffer::base64()`, `mdbx::buffer::base58()`;
      - для транзакций и курсоров добавлены методы `get_/set_context`;
-     - добавлен метод `cursor::clone()`;
+     - добавлен метод `mdbx::cursor::clone()`;
      - поддержка base58 переработана и приведена в соответствии с черновиком RFC,
        в текущем понимании теперь это одна из самых высокопроизводительных реализаций base58;
      - переработка `to_hex()` и `from_hex()`;
@@ -335,7 +335,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 
  - Из разрабатываемой версии перенесены не-нарушающие совместимости доработки C++ API:
 
-     - добавлен тип `mdbx::cursor::estimation_result`, а поведение методов
+     - добавлен тип `mdbx::cursor::estimate_result`, а поведение методов
       `cursor::estimate()` унифицировано с `cursor::move()`;
      - для предотвращения незаметного неверного использования API, для инициализации
        возвращаемых по ссылке срезов, вместо пустых срезов задействован `slice::invalid()`;
