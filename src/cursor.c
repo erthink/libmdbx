@@ -860,7 +860,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
       }
     } else {
       csr_t csr =
-          /* olddata may not be updated in case DUPFIX-page of dupfix-subDB */
+          /* olddata may not be updated in case DUPFIX-page of dupfix-table */
           cursor_seek(mc, (MDBX_val *)key, &old_data, MDBX_SET);
       rc = csr.err;
       exact = csr.exact;
@@ -878,7 +878,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
           eASSERT(env,
                   data->iov_len == 0 && (old_data.iov_len == 0 ||
                                          /* olddata may not be updated in case
-                                            DUPFIX-page of dupfix-subDB */
+                                            DUPFIX-page of dupfix-table */
                                          (mc->tree->flags & MDBX_DUPFIXED)));
           return MDBX_SUCCESS;
         }
@@ -1630,7 +1630,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
       /* If sub-DB still has entries, we're done */
       if (mc->subcur->nested_tree.items) {
         if (node_flags(node) & N_SUBDATA) {
-          /* update subDB info */
+          /* update table info */
           mc->subcur->nested_tree.mod_txnid = mc->txn->txnid;
           memcpy(node_data(node), &mc->subcur->nested_tree, sizeof(tree_t));
         } else {

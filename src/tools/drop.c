@@ -46,7 +46,7 @@ static void usage(void) {
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"
           "  -d\t\tdelete the specified database, don't just empty it\n"
-          "  -s name\tdrop the specified named subDB\n"
+          "  -s name\tdrop the specified named table\n"
           "  \t\tby default empty the main DB\n",
           prog);
   exit(EXIT_FAILURE);

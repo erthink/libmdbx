@@ -11,7 +11,7 @@ typedef struct walk_sdb {
 } walk_sdb_t;
 
 typedef int walk_func(const size_t pgno, const unsigned number, void *const ctx,
-                      const int deep, const walk_sdb_t *subdb,
+                      const int deep, const walk_sdb_t *table,
                       const size_t page_size, const page_type_t page_type,
                       const MDBX_error_t err, const size_t nentries,
                       const size_t payload_bytes, const size_t header_bytes,

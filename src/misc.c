@@ -84,9 +84,9 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
          *  - изменить семантику установки/обновления mod_txnid, привязав его
          *    строго к изменению b-tree, но не атрибутов;
          *  - обновлять mod_txnid при фиксации вложенных транзакций;
-         *  - для dbi-хендлов пользовательских subDb (видимо) можно оставить
+         *  - для dbi-хендлов пользовательских table (видимо) можно оставить
          *    DBI_DIRTY в качестве признака необходимости обновления записи
-         *    subDb в MainDB, при этом взводить DBI_DIRTY вместе с обновлением
+         *    table в MainDB, при этом взводить DBI_DIRTY вместе с обновлением
          *    mod_txnid, в том числе при обновлении sequence.
          *  - для MAIN_DBI при обновлении sequence не следует взводить DBI_DIRTY
          *    и/или обновлять mod_txnid, а только взводить MDBX_TXN_DIRTY.
@@ -163,7 +163,7 @@ __cold const char *mdbx_liberr2str(int errnum) {
       "MDBX_BAD_TXN: Transaction is not valid for requested operation,"
       " e.g. had errored and be must aborted, has a child, or is invalid",
       "MDBX_BAD_VALSIZE: Invalid size or alignment of key or data"
-      " for target database, either invalid subDB name",
+      " for target database, either invalid table name",
       "MDBX_BAD_DBI: The specified DBI-handle is invalid"
       " or changed by another thread/transaction",
       "MDBX_PROBLEM: Unexpected internal error, transaction should be aborted",
@@ -206,7 +206,7 @@ __cold const char *mdbx_liberr2str(int errnum) {
            " please keep one and remove unused other";
   case MDBX_DANGLING_DBI:
     return "MDBX_DANGLING_DBI: Some cursors and/or other resources should be"
-           " closed before subDb or corresponding DBI-handle could be (re)used";
+           " closed before table or corresponding DBI-handle could be (re)used";
   case MDBX_OUSTED:
     return "MDBX_OUSTED: The parked read transaction was outed for the sake"
            " of recycling old MVCC snapshots";

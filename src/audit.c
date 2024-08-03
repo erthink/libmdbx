@@ -81,7 +81,7 @@ __cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored,
   ctx.used = NUM_METAS + audit_db_used(dbi_dig(txn, FREE_DBI, nullptr)) +
              audit_db_used(dbi_dig(txn, MAIN_DBI, nullptr));
 
-  rc = mdbx_enumerate_subdb(txn, audit_dbi, &ctx);
+  rc = mdbx_enumerate_tables(txn, audit_dbi, &ctx);
   tASSERT(txn, rc == MDBX_SUCCESS);
 
   for (size_t dbi = CORE_DBS; dbi < txn->n_dbi; ++dbi) {

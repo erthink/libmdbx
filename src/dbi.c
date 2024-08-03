@@ -88,7 +88,7 @@ __noinline int dbi_import(MDBX_txn *txn, const size_t dbi) {
     if (parent) {
       /* вложенная пишущая транзакция */
       int rc = dbi_check(parent, dbi);
-      /* копируем состояние subDB очищая new-флаги. */
+      /* копируем состояние table очищая new-флаги. */
       eASSERT(env, txn->dbi_seqs == parent->dbi_seqs);
       txn->dbi_state[dbi] =
           parent->dbi_state[dbi] & ~(DBI_FRESH | DBI_CREAT | DBI_DIRTY);
@@ -259,15 +259,15 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags,
 
   /* Если dbi уже использовался, то корректными считаем четыре варианта:
    * 1) user_flags равны MDBX_DB_ACCEDE
-   *   = предполагаем что пользователь открывает существующую subDb,
+   *   = предполагаем что пользователь открывает существующую table,
    *     при этом код проверки не позволит установить другие компараторы.
    * 2) user_flags нулевые, а оба компаратора пустые/нулевые или равны текущим
-   *   = предполагаем что пользователь открывает существующую subDb
+   *   = предполагаем что пользователь открывает существующую table
    *     старым способом с нулевыми с флагами по-умолчанию.
    * 3) user_flags совпадают, а компараторы не заданы или те же
-   *    = предполагаем что пользователь открывает subDb указывая все параметры;
-   * 4) user_flags отличаются, но subDb пустая и задан флаг MDBX_CREATE
-   *    = предполагаем что пользователь пересоздает subDb;
+   *    = предполагаем что пользователь открывает table указывая все параметры;
+   * 4) user_flags отличаются, но table пустая и задан флаг MDBX_CREATE
+   *    = предполагаем что пользователь пересоздает table;
    */
   if ((user_flags & ~MDBX_CREATE) !=
       (unsigned)(env->dbs_flags[dbi] & DB_PERSISTENT_FLAGS)) {
@@ -291,7 +291,7 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags,
       if (unlikely(txn->dbs[dbi].leaf_pages))
         return /* FIXME: return extended info */ MDBX_INCOMPATIBLE;
 
-      /* Пересоздаём subDB если там пусто */
+      /* Пересоздаём table если там пусто */
       if (unlikely(txn->cursors[dbi]))
         return MDBX_DANGLING_DBI;
       env->dbs_flags[dbi] = DB_POISON;
@@ -463,7 +463,7 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi,
       return MDBX_INCOMPATIBLE;
     if (!MDBX_DISABLE_VALIDATION && unlikely(body.iov_len != sizeof(tree_t))) {
       ERROR("%s/%d: %s %zu", "MDBX_CORRUPTED", MDBX_CORRUPTED,
-            "invalid subDb node size", body.iov_len);
+            "invalid table node size", body.iov_len);
       return MDBX_CORRUPTED;
     }
     memcpy(&txn->dbs[slot], body.iov_base, sizeof(tree_t));
@@ -977,8 +977,8 @@ __cold const tree_t *dbi_dig(const MDBX_txn *txn, const size_t dbi,
   return fallback;
 }
 
-__cold int mdbx_enumerate_subdb(const MDBX_txn *txn, MDBX_subdb_enum_func *func,
-                                void *ctx) {
+__cold int mdbx_enumerate_tables(const MDBX_txn *txn,
+                                 MDBX_table_enum_func *func, void *ctx) {
   if (unlikely(!func))
     return MDBX_EINVAL;
 

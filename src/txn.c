@@ -685,7 +685,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
         txn->dbs[FREE_DBI].root);
 
   if (txn->n_dbi > CORE_DBS) {
-    /* Update subDB root pointers */
+    /* Update table root pointers */
     cursor_couple_t cx;
     rc = cursor_init(&cx.outer, txn, MAIN_DBI);
     if (unlikely(rc != MDBX_SUCCESS))

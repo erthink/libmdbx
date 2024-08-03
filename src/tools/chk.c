@@ -55,7 +55,7 @@ MDBX_env *env;
 MDBX_txn *txn;
 unsigned verbose = 0;
 bool quiet;
-MDBX_val only_subdb;
+MDBX_val only_table;
 int stuck_meta = -1;
 MDBX_chk_context_t chk;
 bool turn_meta = false;
@@ -95,7 +95,7 @@ static bool silently(enum MDBX_chk_severity severity) {
       chk.scope ? chk.scope->verbosity >> MDBX_chk_severity_prio_shift
                 : verbose + (MDBX_chk_result >> MDBX_chk_severity_prio_shift);
   int prio = (severity >> MDBX_chk_severity_prio_shift);
-  if (chk.scope && chk.scope->stage == MDBX_chk_subdbs && verbose < 2)
+  if (chk.scope && chk.scope->stage == MDBX_chk_tables && verbose < 2)
     prio += 1;
   return quiet || cutoff < ((prio > 0) ? prio : 0);
 }
@@ -270,14 +270,14 @@ static void scope_pop(MDBX_chk_context_t *ctx, MDBX_chk_scope_t *scope,
   flush();
 }
 
-static MDBX_chk_user_subdb_cookie_t *subdb_filter(MDBX_chk_context_t *ctx,
+static MDBX_chk_user_table_cookie_t *table_filter(MDBX_chk_context_t *ctx,
                                                   const MDBX_val *name,
                                                   MDBX_db_flags_t flags) {
   (void)ctx;
   (void)flags;
-  return (!only_subdb.iov_base ||
-          (only_subdb.iov_len == name->iov_len &&
-           memcmp(only_subdb.iov_base, name->iov_base, name->iov_len) == 0))
+  return (!only_table.iov_base ||
+          (only_table.iov_len == name->iov_len &&
+           memcmp(only_table.iov_base, name->iov_base, name->iov_len) == 0))
              ? (void *)(intptr_t)-1
              : nullptr;
 }
@@ -344,7 +344,7 @@ static void print_format(MDBX_chk_line_t *line, const char *fmt, va_list args) {
 static const MDBX_chk_callbacks_t cb = {.check_break = check_break,
                                         .scope_push = scope_push,
                                         .scope_pop = scope_pop,
-                                        .subdb_filter = subdb_filter,
+                                        .table_filter = table_filter,
                                         .stage_begin = stage_begin,
                                         .stage_end = stage_end,
                                         .print_begin = print_begin,
@@ -357,7 +357,7 @@ static void usage(char *prog) {
   fprintf(
       stderr,
       "usage: %s "
-      "[-V] [-v] [-q] [-c] [-0|1|2] [-w] [-d] [-i] [-s subdb] [-u|U] dbpath\n"
+      "[-V] [-v] [-q] [-c] [-0|1|2] [-w] [-d] [-i] [-s table] [-u|U] dbpath\n"
       "  -V\t\tprint version and exit\n"
       "  -v\t\tmore verbose, could be repeated upto 9 times for extra details\n"
       "  -q\t\tbe quiet\n"
@@ -365,7 +365,7 @@ static void usage(char *prog) {
       "  -w\t\twrite-mode checking\n"
       "  -d\t\tdisable page-by-page traversal of B-tree\n"
       "  -i\t\tignore wrong order errors (for custom comparators case)\n"
-      "  -s subdb\tprocess a specific subdatabase only\n"
+      "  -s table\tprocess a specific subdatabase only\n"
       "  -u\t\twarmup database before checking\n"
       "  -U\t\twarmup and try lock database pages in memory before checking\n"
       "  -0|1|2\tforce using specific meta-page 0, or 2 for checking\n"
@@ -380,7 +380,7 @@ static int conclude(MDBX_chk_context_t *ctx) {
   if (ctx->result.total_problems == 1 && ctx->result.problems_meta == 1 &&
       (chk_flags &
        (MDBX_CHK_SKIP_BTREE_TRAVERSAL | MDBX_CHK_SKIP_KV_TRAVERSAL)) == 0 &&
-      (env_flags & MDBX_RDONLY) == 0 && !only_subdb.iov_base &&
+      (env_flags & MDBX_RDONLY) == 0 && !only_table.iov_base &&
       stuck_meta < 0 && ctx->result.steady_txnid < ctx->result.recent_txnid) {
     const size_t step_lineno =
         print(MDBX_chk_resolution,
@@ -399,7 +399,7 @@ static int conclude(MDBX_chk_context_t *ctx) {
   if (turn_meta && stuck_meta >= 0 &&
       (chk_flags &
        (MDBX_CHK_SKIP_BTREE_TRAVERSAL | MDBX_CHK_SKIP_KV_TRAVERSAL)) == 0 &&
-      !only_subdb.iov_base &&
+      !only_table.iov_base &&
       (env_flags & (MDBX_RDONLY | MDBX_EXCLUSIVE)) == MDBX_EXCLUSIVE) {
     const bool successful_check =
         (err | ctx->result.total_problems | ctx->result.problems_meta) == 0;
@@ -529,11 +529,11 @@ int main(int argc, char *argv[]) {
       chk_flags |= MDBX_CHK_SKIP_BTREE_TRAVERSAL;
       break;
     case 's':
-      if (only_subdb.iov_base && strcmp(only_subdb.iov_base, optarg))
+      if (only_table.iov_base && strcmp(only_table.iov_base, optarg))
         usage(prog);
       else {
-        only_subdb.iov_base = optarg;
-        only_subdb.iov_len = strlen(optarg);
+        only_table.iov_base = optarg;
+        only_table.iov_len = strlen(optarg);
       }
       break;
     case 'i':
@@ -574,7 +574,7 @@ int main(int argc, char *argv[]) {
           "write-mode must be enabled to turn to the specified meta-page.");
       rc = EXIT_INTERRUPTED;
     }
-    if (only_subdb.iov_base || (chk_flags & (MDBX_CHK_SKIP_BTREE_TRAVERSAL |
+    if (only_table.iov_base || (chk_flags & (MDBX_CHK_SKIP_BTREE_TRAVERSAL |
                                              MDBX_CHK_SKIP_KV_TRAVERSAL))) {
       error_fmt(
           "whole database checking with b-tree traversal are required to turn "

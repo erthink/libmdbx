@@ -3537,8 +3537,8 @@ enum put_mode {
 /// instances, but does not destroys the represented underlying object from the
 /// own class destructor.
 ///
-/// An environment supports multiple key-value sub-databases (aka key-value
-/// spaces or tables), all residing in the same shared-memory map.
+/// An environment supports multiple key-value tables (aka key-value
+/// maps, spaces or sub-databases), all residing in the same shared-memory map.
 class LIBMDBX_API_TYPE env {
   friend class txn;
 
@@ -4101,7 +4101,7 @@ public:
   /// environment is busy by other thread or none of the thresholds are reached.
   bool poll_sync_to_disk() { return sync_to_disk(false, true); }
 
-  /// \brief Close a key-value map (aka sub-database) handle. Normally
+  /// \brief Close a key-value map (aka table) handle. Normally
   /// unnecessary.
   ///
   /// Closing a database handle is not necessary, but lets \ref txn::open_map()
@@ -4519,12 +4519,12 @@ public:
 #endif /* __cpp_lib_string_view >= 201606L */
 
   using map_stat = ::MDBX_stat;
-  /// \brief Returns statistics for a sub-database.
+  /// \brief Returns statistics for a table.
   inline map_stat get_map_stat(map_handle map) const;
   /// \brief Returns depth (bitmask) information of nested dupsort (multi-value)
   /// B+trees for given database.
   inline uint32_t get_tree_deepmask(map_handle map) const;
-  /// \brief Returns information about key-value map (aka sub-database) handle.
+  /// \brief Returns information about key-value map (aka table) handle.
   inline map_handle::info get_handle_info(map_handle map) const;
 
   using canary = ::MDBX_canary;
@@ -4536,39 +4536,39 @@ public:
   inline canary get_canary() const;
 
   /// Reads sequence generator associated with a key-value map (aka
-  /// sub-database).
+  /// table).
   inline uint64_t sequence(map_handle map) const;
   /// \brief Reads and increment sequence generator associated with a key-value
-  /// map (aka sub-database).
+  /// map (aka table).
   inline uint64_t sequence(map_handle map, uint64_t increment);
 
   /// \brief Compare two keys according to a particular key-value map (aka
-  /// sub-database).
+  /// table).
   inline int compare_keys(map_handle map, const slice &a,
                           const slice &b) const noexcept;
   /// \brief Compare two values according to a particular key-value map (aka
-  /// sub-database).
+  /// table).
   inline int compare_values(map_handle map, const slice &a,
                             const slice &b) const noexcept;
   /// \brief Compare keys of two pairs according to a particular key-value map
-  /// (aka sub-database).
+  /// (aka table).
   inline int compare_keys(map_handle map, const pair &a,
                           const pair &b) const noexcept;
   /// \brief Compare values of two pairs according to a particular key-value map
-  /// (aka sub-database).
+  /// (aka table).
   inline int compare_values(map_handle map, const pair &a,
                             const pair &b) const noexcept;
 
-  /// \brief Get value by key from a key-value map (aka sub-database).
+  /// \brief Get value by key from a key-value map (aka table).
   inline slice get(map_handle map, const slice &key) const;
   /// \brief Get first of multi-value and values count by key from a key-value
-  /// multimap (aka sub-database).
+  /// multimap (aka table).
   inline slice get(map_handle map, slice key, size_t &values_count) const;
-  /// \brief Get value by key from a key-value map (aka sub-database).
+  /// \brief Get value by key from a key-value map (aka table).
   inline slice get(map_handle map, const slice &key,
                    const slice &value_at_absence) const;
   /// \brief Get first of multi-value and values count by key from a key-value
-  /// multimap (aka sub-database).
+  /// multimap (aka table).
   inline slice get(map_handle map, slice key, size_t &values_count,
                    const slice &value_at_absence) const;
   /// \brief Get value for equal or great key from a database.

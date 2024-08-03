@@ -160,7 +160,7 @@ $ cc --version
 [MVCC](https://en.wikipedia.org/wiki/Multiversion_concurrency_control)
 and [CoW](https://en.wikipedia.org/wiki/Copy-on-write).
 
-- Multiple key-value sub-databases within a single datafile.
+- Multiple key-value tables/sub-databases within a single datafile.
 
 - Range lookups, including range query estimation.
 
@@ -204,7 +204,7 @@ transaction journal. No crash recovery needed. No maintenance is required.
 - **Value size**: minimum `0`, maximum `2146435072` (`0x7FF00000`) bytes for maps, ≈½ pagesize for multimaps (`2022` bytes for default 4K pagesize, `32742` bytes for 64K pagesize).
 - **Write transaction size**: up to `1327217884` pages (`4.944272` TiB for default 4K pagesize, `79.108351` TiB for 64K pagesize).
 - **Database size**: up to `2147483648` pages (≈`8.0` TiB for default 4K pagesize, ≈`128.0` TiB for 64K pagesize).
-- **Maximum sub-databases**: `32765`.
+- **Maximum tables/sub-databases**: `32765`.
 
 ## Gotchas
 
@@ -298,7 +298,7 @@ and/or optimize query execution plans.
 11. Ability to determine whether the particular data is on a dirty page
 or not, that allows to avoid copy-out before updates.
 
-12. Extended information of whole-database, sub-databases, transactions, readers enumeration.
+12. Extended information of whole-database, tables/sub-databases, transactions, readers enumeration.
    > _libmdbx_ provides a lot of information, including dirty and leftover pages
    > for a write transaction, reading lag and holdover space for read transactions.
 
@@ -321,7 +321,7 @@ pair, to the first, to the last, or not set to anything.
 ## Other fixes and specifics
 
 1. Fixed more than 10 significant errors, in particular: page leaks,
-wrong sub-database statistics, segfault in several conditions,
+wrong table/sub-database statistics, segfault in several conditions,
 nonoptimal page merge strategy, updating an existing record with
 a change in data size (including for multimap), etc.
 

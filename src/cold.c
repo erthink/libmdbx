@@ -187,7 +187,7 @@ __cold static int stat_acc(const MDBX_txn *txn, MDBX_stat *st, size_t bytes) {
   if (!(txn->dbs[MAIN_DBI].flags & MDBX_DUPSORT) &&
       txn->dbs[MAIN_DBI].items /* TODO: use `md_subs` field */) {
 
-    /* scan and account not opened named subDBs */
+    /* scan and account not opened named tables */
     err = tree_search(&cx.outer, nullptr, Z_FIRST);
     while (err == MDBX_SUCCESS) {
       const page_t *mp = cx.outer.pg[cx.outer.top];
@@ -197,7 +197,7 @@ __cold static int stat_acc(const MDBX_txn *txn, MDBX_stat *st, size_t bytes) {
           continue;
         if (unlikely(node_ds(node) != sizeof(tree_t))) {
           ERROR("%s/%d: %s %zu", "MDBX_CORRUPTED", MDBX_CORRUPTED,
-                "invalid subDb node size", node_ds(node));
+                "invalid table node size", node_ds(node));
           return MDBX_CORRUPTED;
         }
 

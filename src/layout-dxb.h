@@ -191,7 +191,7 @@ typedef enum page_type {
  *
  * P_SUBP sub-pages are small leaf "pages" with duplicate data.
  * A node with flag N_DUPDATA but not N_SUBDATA contains a sub-page.
- * (Duplicate data can also go in sub-databases, which use normal pages.)
+ * (Duplicate data can also go in tables, which use normal pages.)
  *
  * P_META pages contain meta_t, the start point of an MDBX snapshot.
  *
@@ -225,7 +225,7 @@ typedef struct page {
  * Leaf node flags describe node contents.  N_BIGDATA says the node's
  * data part is the page number of an overflow page with actual data.
  * N_DUPDATA and N_SUBDATA can be combined giving duplicate data in
- * a sub-page/sub-database, and named databases (just N_SUBDATA). */
+ * a sub-page/table, and named databases (just N_SUBDATA). */
 typedef struct node {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
   union {
@@ -255,7 +255,7 @@ typedef struct node {
 
 typedef enum node_flags {
   N_BIGDATA = 0x01 /* data put on large page */,
-  N_SUBDATA = 0x02 /* data is a sub-database */,
+  N_SUBDATA = 0x02 /* data is a table */,
   N_DUPDATA = 0x04 /* data has duplicates */
 } node_flags_t;
 

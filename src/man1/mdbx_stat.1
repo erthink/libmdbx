@@ -21,7 +21,7 @@ mdbx_stat \- MDBX environment status tool
 .BR \-r [ r ]]
 [\c
 .BR \-a \ |
-.BI \-s \ subdb\fR]
+.BI \-s \ table\fR]
 .BR \ dbpath
 [\c
 .BR \-n ]
@@ -61,10 +61,10 @@ table and clear them. The reader table will be printed again
 after the check is performed.
 .TP
 .BR \-a
-Display the status of all of the subdatabases in the environment.
+Display the status of all of the tables in the environment.
 .TP
-.BR \-s \ subdb
-Display the status of a specific subdatabase.
+.BR \-s \ table
+Display the status of a specific table.
 .TP
 .BR \-n
 Display the status of an MDBX database which does not use subdirectories.

@@ -47,15 +47,15 @@ static void print_stat(MDBX_stat *ms) {
 
 static void usage(const char *prog) {
   fprintf(stderr,
-          "usage: %s [-V] [-q] [-e] [-f[f[f]]] [-r[r]] [-a|-s name] dbpath\n"
+          "usage: %s [-V] [-q] [-e] [-f[f[f]]] [-r[r]] [-a|-s table] dbpath\n"
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"
           "  -p\t\tshow statistics of page operations for current session\n"
           "  -e\t\tshow whole DB info\n"
           "  -f\t\tshow GC info\n"
           "  -r\t\tshow readers\n"
-          "  -a\t\tprint stat of main DB and all subDBs\n"
-          "  -s name\tprint stat of only the specified named subDB\n"
+          "  -a\t\tprint stat of main DB and all tables\n"
+          "  -s table\tprint stat of only the specified named table\n"
           "  \t\tby default print stat of only the main DB\n",
           prog);
   exit(EXIT_FAILURE);
@@ -104,7 +104,7 @@ int main(int argc, char *argv[]) {
   MDBX_envinfo mei;
   prog = argv[0];
   char *envname;
-  char *subname = nullptr;
+  char *table = nullptr;
   bool alldbs = false, envinfo = false, pgop = false;
   int freinfo = 0, rdrinfo = 0;
 
@@ -143,7 +143,7 @@ int main(int argc, char *argv[]) {
       pgop = true;
       break;
     case 'a':
-      if (subname)
+      if (table)
         usage(prog);
       alldbs = true;
       break;
@@ -161,7 +161,7 @@ int main(int argc, char *argv[]) {
     case 's':
       if (alldbs)
         usage(prog);
-      subname = optarg;
+      table = optarg;
       break;
     default:
       usage(prog);
@@ -199,7 +199,7 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  if (alldbs || subname) {
+  if (alldbs || table) {
     rc = mdbx_env_set_maxdbs(env, 2);
     if (unlikely(rc != MDBX_SUCCESS)) {
       error("mdbx_env_set_maxdbs", rc);
@@ -327,7 +327,7 @@ int main(int argc, char *argv[]) {
       } else
         printf("  No stale readers.\n");
     }
-    if (!(subname || alldbs || freinfo))
+    if (!(table || alldbs || freinfo))
       goto txn_abort;
   }
 
@@ -450,7 +450,7 @@ int main(int argc, char *argv[]) {
       printf("  GC: %" PRIaPGNO " pages\n", pages);
   }
 
-  rc = mdbx_dbi_open(txn, subname, MDBX_DB_ACCEDE, &dbi);
+  rc = mdbx_dbi_open(txn, table, MDBX_DB_ACCEDE, &dbi);
   if (unlikely(rc != MDBX_SUCCESS)) {
     error("mdbx_dbi_open", rc);
     goto txn_abort;
@@ -462,7 +462,7 @@ int main(int argc, char *argv[]) {
     error("mdbx_dbi_stat", rc);
     goto txn_abort;
   }
-  printf("Status of %s\n", subname ? subname : "Main DB");
+  printf("Status of %s\n", table ? table : "Main DB");
   print_stat(&mst);
 
   if (alldbs) {
@@ -476,16 +476,16 @@ int main(int argc, char *argv[]) {
     MDBX_val key;
     while (MDBX_SUCCESS ==
            (rc = mdbx_cursor_get(cursor, &key, nullptr, MDBX_NEXT_NODUP))) {
-      MDBX_dbi subdbi;
+      MDBX_dbi xdbi;
       if (memchr(key.iov_base, '\0', key.iov_len))
         continue;
-      subname = osal_malloc(key.iov_len + 1);
-      memcpy(subname, key.iov_base, key.iov_len);
-      subname[key.iov_len] = '\0';
-      rc = mdbx_dbi_open(txn, subname, MDBX_DB_ACCEDE, &subdbi);
+      table = osal_malloc(key.iov_len + 1);
+      memcpy(table, key.iov_base, key.iov_len);
+      table[key.iov_len] = '\0';
+      rc = mdbx_dbi_open(txn, table, MDBX_DB_ACCEDE, &xdbi);
       if (rc == MDBX_SUCCESS)
-        printf("Status of %s\n", subname);
-      osal_free(subname);
+        printf("Status of %s\n", table);
+      osal_free(table);
       if (unlikely(rc != MDBX_SUCCESS)) {
         if (rc == MDBX_INCOMPATIBLE)
           continue;
@@ -493,14 +493,14 @@ int main(int argc, char *argv[]) {
         goto txn_abort;
       }
 
-      rc = mdbx_dbi_stat(txn, subdbi, &mst, sizeof(mst));
+      rc = mdbx_dbi_stat(txn, xdbi, &mst, sizeof(mst));
       if (unlikely(rc != MDBX_SUCCESS)) {
         error("mdbx_dbi_stat", rc);
         goto txn_abort;
       }
       print_stat(&mst);
 
-      rc = mdbx_dbi_close(env, subdbi);
+      rc = mdbx_dbi_close(env, xdbi);
       if (unlikely(rc != MDBX_SUCCESS)) {
         error("mdbx_dbi_close", rc);
         goto txn_abort;

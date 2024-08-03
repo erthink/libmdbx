@@ -138,7 +138,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git" AND
     EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/sort.h" AND
     EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/spill.c" AND
     EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/spill.h" AND
-    EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/subdb.c" AND
+    EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/table.c" AND
     EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/tls.c" AND
     EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/tls.h" AND
     EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/tools/chk.c" AND
@@ -749,7 +749,7 @@ else()
       "${MDBX_SOURCE_DIR}/sort.h"
       "${MDBX_SOURCE_DIR}/spill.c"
       "${MDBX_SOURCE_DIR}/spill.h"
-      "${MDBX_SOURCE_DIR}/subdb.c"
+      "${MDBX_SOURCE_DIR}/table.c"
       "${MDBX_SOURCE_DIR}/tls.c"
       "${MDBX_SOURCE_DIR}/tls.h"
       "${MDBX_SOURCE_DIR}/tree.c"

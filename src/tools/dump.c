@@ -215,16 +215,16 @@ static void usage(void) {
   fprintf(
       stderr,
       "usage: %s "
-      "[-V] [-q] [-f file] [-l] [-p] [-r] [-a|-s subdb] [-u|U] "
+      "[-V] [-q] [-f file] [-l] [-p] [-r] [-a|-s table] [-u|U] "
       "dbpath\n"
       "  -V\t\tprint version and exit\n"
       "  -q\t\tbe quiet\n"
       "  -f\t\twrite to file instead of stdout\n"
-      "  -l\t\tlist subDBs and exit\n"
+      "  -l\t\tlist tables and exit\n"
       "  -p\t\tuse printable characters\n"
       "  -r\t\trescue mode (ignore errors to dump corrupted DB)\n"
-      "  -a\t\tdump main DB and all subDBs\n"
-      "  -s name\tdump only the specified named subDB\n"
+      "  -a\t\tdump main DB and all tables\n"
+      "  -s name\tdump only the specified named table\n"
       "  -u\t\twarmup database before dumping\n"
       "  -U\t\twarmup and try lock database pages in memory before dumping\n"
       "  \t\tby default dump only the main DB\n",

@@ -75,7 +75,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
  - Функция `mdbx_preopen_snapinfo()` для получения информации о БД без
    её открытия.
 
- - Функция `mdbx_enumerate_subdb()` для получение информации
+ - Функция `mdbx_enumerate_tables()` для получение информации
    об именованных пользовательских таблицах.
 
  - Поддержка функций логирования обратного вызова без функционала
@@ -131,6 +131,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 
 Нарушение совместимости:
 
+ - Использование термина "таблица" вместо "subDb".
  - Опция `MDBX_COALESCE` объявлена устаревшей, так как соответствующий функционал всегда включен начиная с предыдущей версии 0.12.
  - Опция `MDBX_NOTLS` объявлена устаревшей и заменена на `MDBX_NOSTICKYTHREADS`.
  - Опция сборки `MDBX_USE_VALGRIND` заменена на общепринятую `ENABLE_MEMCHECK`.

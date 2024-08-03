@@ -96,7 +96,7 @@ typedef struct clc {
   size_t lmin, lmax;  /* min/max length constraints */
 } clc_t;
 
-/* Вспомогательная информация о subDB.
+/* Вспомогательная информация о table.
  *
  * Совокупность потребностей:
  * 1. Для транзакций и основного курсора нужны все поля.
@@ -136,7 +136,7 @@ typedef struct clc2 {
 
 struct kvx {
   clc2_t clc;
-  MDBX_val name; /* имя subDB */
+  MDBX_val name; /* имя table */
 };
 
 /* Non-shared DBI state flags inside transaction */

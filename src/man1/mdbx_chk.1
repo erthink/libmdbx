@@ -22,7 +22,7 @@ mdbx_chk \- MDBX checking tool
 [\c
 .BR \-i ]
 [\c
-.BI \-s \ subdb\fR]
+.BI \-s \ table\fR]
 .BR \ dbpath
 .SH DESCRIPTION
 The
@@ -69,8 +69,8 @@ pages.
 Ignore wrong order errors, which will likely false-positive if custom
 comparator(s) was used.
 .TP
-.BR \-s \ subdb
-Verify and show info only for a specific subdatabase.
+.BR \-s \ table
+Verify and show info only for a specific table.
 .TP
 .BR \-0 | \-1 | \-2
 Using specific meta-page 0, or 2 for checking.

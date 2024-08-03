@@ -105,7 +105,7 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_sdb_t *sdb, const pgno_t pgno,
     case N_SUBDATA /* sub-db */: {
       if (unlikely(node_data_size != sizeof(tree_t))) {
         ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,
-              "invalid subDb node size", (unsigned)node_data_size);
+              "invalid table node size", (unsigned)node_data_size);
         assert(err == MDBX_CORRUPTED);
         err = MDBX_CORRUPTED;
       }
@@ -227,11 +227,11 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_sdb_t *sdb, const pgno_t pgno,
       } else {
         tree_t aligned_db;
         memcpy(&aligned_db, node_data(node), sizeof(aligned_db));
-        walk_sdb_t subdb = {{node_key(node), node_ks(node)}, nullptr, nullptr};
-        subdb.internal = &aligned_db;
+        walk_sdb_t table = {{node_key(node), node_ks(node)}, nullptr, nullptr};
+        table.internal = &aligned_db;
         assert(err == MDBX_SUCCESS);
         ctx->deep += 1;
-        err = walk_sdb(ctx, &subdb);
+        err = walk_sdb(ctx, &table);
         ctx->deep -= 1;
       }
       break;

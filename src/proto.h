@@ -96,14 +96,14 @@ MDBX_INTERNAL int __must_check_result env_page_auxbuffer(MDBX_env *env);
 MDBX_INTERNAL unsigned env_setup_pagesize(MDBX_env *env, const size_t pagesize);
 
 /* tree.c */
-MDBX_INTERNAL int tree_drop(MDBX_cursor *mc, const bool may_have_subDBs);
+MDBX_INTERNAL int tree_drop(MDBX_cursor *mc, const bool may_have_tables);
 MDBX_INTERNAL int __must_check_result tree_rebalance(MDBX_cursor *mc);
 MDBX_INTERNAL int __must_check_result tree_propagate_key(MDBX_cursor *mc,
                                                          const MDBX_val *key);
 MDBX_INTERNAL void recalculate_merge_thresholds(MDBX_env *env);
 MDBX_INTERNAL void recalculate_subpage_thresholds(MDBX_env *env);
 
-/* subdb.c */
+/* table.c */
 MDBX_INTERNAL int __must_check_result sdb_fetch(MDBX_txn *txn, size_t dbi);
 MDBX_INTERNAL int __must_check_result sdb_setup(const MDBX_env *env,
                                                 kvx_t *const kvx,

@@ -599,7 +599,7 @@ int mdbx_cursor_get_batch(MDBX_cursor *mc, size_t *count, MDBX_val *pairs,
     return MDBX_BAD_DBI;
 
   if (unlikely(mc->subcur))
-    return MDBX_INCOMPATIBLE /* must be a non-dupsort subDB */;
+    return MDBX_INCOMPATIBLE /* must be a non-dupsort table */;
 
   switch (op) {
   case MDBX_NEXT:

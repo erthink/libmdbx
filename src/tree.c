@@ -49,15 +49,15 @@ void recalculate_merge_thresholds(MDBX_env *env) {
                               : bytes / 4 /* 25 % */));
 }
 
-int tree_drop(MDBX_cursor *mc, const bool may_have_subDBs) {
+int tree_drop(MDBX_cursor *mc, const bool may_have_tables) {
   MDBX_txn *txn = mc->txn;
   int rc = tree_search(mc, nullptr, Z_FIRST);
   if (likely(rc == MDBX_SUCCESS)) {
-    /* DUPSORT sub-DBs have no large-pages/subDBs. Omit scanning leaves.
+    /* DUPSORT sub-DBs have no large-pages/tables. Omit scanning leaves.
      * This also avoids any P_DUPFIX pages, which have no nodes.
      * Also if the DB doesn't have sub-DBs and has no large/overflow
      * pages, omit scanning leaves. */
-    if (!(may_have_subDBs | mc->tree->large_pages))
+    if (!(may_have_tables | mc->tree->large_pages))
       cursor_pop(mc);
 
     rc = pnl_need(&txn->tw.retired_pages, (size_t)mc->tree->branch_pages +
@@ -81,11 +81,11 @@ int tree_drop(MDBX_cursor *mc, const bool may_have_subDBs) {
             rc = page_retire_ex(mc, node_largedata_pgno(node), nullptr, 0);
             if (unlikely(rc != MDBX_SUCCESS))
               goto bailout;
-            if (!(may_have_subDBs | mc->tree->large_pages))
+            if (!(may_have_tables | mc->tree->large_pages))
               goto pop;
           } else if (node_flags(node) & N_SUBDATA) {
             if (unlikely((node_flags(node) & N_DUPDATA) == 0)) {
-              rc = /* disallowing implicit subDB deletion */ MDBX_INCOMPATIBLE;
+              rc = /* disallowing implicit table deletion */ MDBX_INCOMPATIBLE;
               goto bailout;
             }
             rc = cursor_dupsort_setup(mc, node, mp);

@@ -39,10 +39,10 @@ MDBX_MAYBE_UNUSED MDBX_INTERNAL bool pv2pages_verify(void);
  *       LEAF_NODE_MAX = even_floor(PAGESPACE / 2 - sizeof(indx_t));
  *       DATALEN_NO_OVERFLOW = LEAF_NODE_MAX - NODESIZE - KEYLEN_MAX;
  *
- *  - SubDatabase-node must fit into one leaf-page:
- *       SUBDB_NAME_MAX = LEAF_NODE_MAX - node_hdr_len - sizeof(tree_t);
+ *  - Table-node must fit into one leaf-page:
+ *       TABLE_NAME_MAX = LEAF_NODE_MAX - node_hdr_len - sizeof(tree_t);
  *
- *  - Dupsort values itself are a keys in a dupsort-subdb and couldn't be longer
+ *  - Dupsort values itself are a keys in a dupsort-table and couldn't be longer
  *    than the KEYLEN_MAX. But dupsort node must not great than LEAF_NODE_MAX,
  *    since dupsort value couldn't be placed on a large/overflow page:
  *       DUPSORT_DATALEN_MAX = min(KEYLEN_MAX,
