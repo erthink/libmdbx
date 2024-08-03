@@ -2628,6 +2628,24 @@ LIBMDBX_API int mdbx_env_deleteW(const wchar_t *pathname,
  *  - \ref MDBX_CP_FORCE_DYNAMIC_SIZE
  *      Force to make resizable copy, i.e. dynamic size instead of fixed.
  *
+ *  - \ref MDBX_CP_DONT_FLUSH
+ *      Don't explicitly flush the written data to an output media to reduce
+ *      the time of the operation and the duration of the transaction.
+ *
+ *  - \ref MDBX_CP_THROTTLE_MVCC
+ *      Use read transaction parking during copying MVCC-snapshot
+ *      to avoid stopping recycling and overflowing the database.
+ *      This allows the writing transaction to oust the read
+ *      transaction used to copy the database if copying takes so long
+ *      that it will interfere with the recycling old MVCC snapshots
+ *      and may lead to an overflow of the database.
+ *      However, if the reading transaction is ousted the copy will
+ *      be aborted until successful completion. Thus, this option
+ *      allows copy the database without interfering with write
+ *      transactions and a threat of database overflow, but at the cost
+ *      that copying will be aborted to prevent such conditions.
+ *      \see mdbx_txn_park()
+ *
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *dest,
                               MDBX_copy_flags_t flags);
@@ -2665,6 +2683,24 @@ LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *dest,
  *
  *  - \ref MDBX_CP_FORCE_DYNAMIC_SIZE
  *      Force to make resizable copy, i.e. dynamic size instead of fixed.
+ *
+ *  - \ref MDBX_CP_DONT_FLUSH
+ *      Don't explicitly flush the written data to an output media to reduce
+ *      the time of the operation and the duration of the transaction.
+ *
+ *  - \ref MDBX_CP_THROTTLE_MVCC
+ *      Use read transaction parking during copying MVCC-snapshot
+ *      to avoid stopping recycling and overflowing the database.
+ *      This allows the writing transaction to oust the read
+ *      transaction used to copy the database if copying takes so long
+ *      that it will interfere with the recycling old MVCC snapshots
+ *      and may lead to an overflow of the database.
+ *      However, if the reading transaction is ousted the copy will
+ *      be aborted until successful completion. Thus, this option
+ *      allows copy the database without interfering with write
+ *      transactions and a threat of database overflow, but at the cost
+ *      that copying will be aborted to prevent such conditions.
+ *      \see mdbx_txn_park()
  *
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_txn_copy2pathname(MDBX_txn *txn, const char *dest,
