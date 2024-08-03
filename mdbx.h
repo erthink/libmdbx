@@ -2587,6 +2587,7 @@ LIBMDBX_API int mdbx_env_delete(const char *pathname,
 
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
 /** \copydoc mdbx_env_delete()
+ * \ingroup c_extra
  * \note Available only on Windows.
  * \see mdbx_env_delete() */
 LIBMDBX_API int mdbx_env_deleteW(const wchar_t *pathname,
@@ -2671,12 +2672,14 @@ LIBMDBX_API int mdbx_txn_copy2pathname(MDBX_txn *txn, const char *dest,
 
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
 /** \copydoc mdbx_env_copy()
+ * \ingroup c_extra
  * \note Available only on Windows.
  * \see mdbx_env_copy() */
 LIBMDBX_API int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest,
                                MDBX_copy_flags_t flags);
 
 /** \copydoc mdbx_txn_copy2pathname()
+ * \ingroup c_extra
  * \note Available only on Windows.
  * \see mdbx_txn_copy2pathname() */
 LIBMDBX_API int mdbx_txn_copy2pathnameW(MDBX_txn *txn, const wchar_t *dest,
@@ -3342,6 +3345,7 @@ LIBMDBX_API int mdbx_env_get_path(const MDBX_env *env, const char **dest);
 
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
 /** \copydoc mdbx_env_get_path()
+ * \ingroup c_statinfo
  * \note Available only on Windows.
  * \see mdbx_env_get_path() */
 LIBMDBX_API int mdbx_env_get_pathW(const MDBX_env *env, const wchar_t **dest);
@@ -4609,15 +4613,17 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a,
  *                               by current thread. */
 LIBMDBX_API int mdbx_dbi_open(MDBX_txn *txn, const char *name,
                               MDBX_db_flags_t flags, MDBX_dbi *dbi);
-/** \copydoc mdbx_dbi_open() */
+/** \copydoc mdbx_dbi_open()
+ * \ingroup c_dbi */
 LIBMDBX_API int mdbx_dbi_open2(MDBX_txn *txn, const MDBX_val *name,
                                MDBX_db_flags_t flags, MDBX_dbi *dbi);
 
-/** \deprecated Please
- * \ref avoid_custom_comparators "avoid using custom comparators" and use
- * \ref mdbx_dbi_open() instead.
- *
+/** \brief Open or Create a named table in the environment
+ * with using custom comparison functions.
  * \ingroup c_dbi
+ *
+ * \deprecated Please \ref avoid_custom_comparators
+ * "avoid using custom comparators" and use \ref mdbx_dbi_open() instead.
  *
  * \param [in] txn    transaction handle returned by \ref mdbx_txn_begin().
  * \param [in] name   The name of the database to open. If only a single
@@ -4631,7 +4637,8 @@ LIBMDBX_API int mdbx_dbi_open2(MDBX_txn *txn, const MDBX_val *name,
 MDBX_DEPRECATED LIBMDBX_API int
 mdbx_dbi_open_ex(MDBX_txn *txn, const char *name, MDBX_db_flags_t flags,
                  MDBX_dbi *dbi, MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp);
-/** \copydoc mdbx_dbi_open_ex() */
+/** \copydoc mdbx_dbi_open_ex()
+ * \ingroup c_dbi */
 MDBX_DEPRECATED LIBMDBX_API int
 mdbx_dbi_open_ex2(MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags,
                   MDBX_dbi *dbi, MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp);
@@ -4651,7 +4658,8 @@ mdbx_dbi_open_ex2(MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags,
  *
  * \returns Ненулевое значение кода ошибки, либо 0 при успешном выполнении. */
 LIBMDBX_API int mdbx_dbi_rename(MDBX_txn *txn, MDBX_dbi dbi, const char *name);
-/** \copydoc mdbx_dbi_rename() */
+/** \copydoc mdbx_dbi_rename()
+ * \ingroup c_dbi */
 LIBMDBX_API int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi,
                                  const MDBX_val *name);
 
@@ -6355,6 +6363,7 @@ LIBMDBX_API int mdbx_env_open_for_recovery(MDBX_env *env, const char *pathname,
 
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
 /** \copydoc mdbx_env_open_for_recovery()
+ * \ingroup c_extra
  * \note Available only on Windows.
  * \see mdbx_env_open_for_recovery() */
 LIBMDBX_API int mdbx_env_open_for_recoveryW(MDBX_env *env,
@@ -6405,6 +6414,7 @@ LIBMDBX_API int mdbx_preopen_snapinfo(const char *pathname, MDBX_envinfo *info,
                                       size_t bytes);
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
 /** \copydoc mdbx_preopen_snapinfo()
+ * \ingroup c_opening
  * \note Available only on Windows.
  * \see mdbx_preopen_snapinfo() */
 LIBMDBX_API int mdbx_preopen_snapinfoW(const wchar_t *pathname,
