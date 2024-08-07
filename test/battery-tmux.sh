@@ -24,7 +24,7 @@ for ps in min 4k max; do
 			fi
 		done
 		for n in 0 1 2 3 4 5 6 7; do
-			CMD="${TEST} --delay $((3 + n * 7)) --page-size ${ps} --from ${from} --dir ${PREFIX}page-${ps}.from-${from}.${n}-extra"
+			CMD="${TEST} --delay $((3 + n * 7)) --extra --page-size ${ps} --from ${from} --dir ${PREFIX}page-${ps}.from-${from}.${n}-extra"
 			if [ $n -eq 0 ]; then
 				tmux new-window -t mdbx:$((++W)) -n "page-${ps}.from-${from}-extra" -k -d "$CMD"
 				tmux select-layout -E tiled
