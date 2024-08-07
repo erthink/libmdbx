@@ -9188,7 +9188,7 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
   }
 bailout:
   tASSERT(txn, rc != MDBX_SUCCESS);
-  txn_end(txn, MDBX_END_SLOT | MDBX_END_FAIL_BEGIN);
+  txn_end(txn, MDBX_END_SLOT | MDBX_END_EOTDONE | MDBX_END_FAIL_BEGIN);
   return rc;
 }
 
