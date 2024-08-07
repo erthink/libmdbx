@@ -11,6 +11,7 @@ For the same reason ~~Github~~ is blacklisted forever.
 
 So currently most of the links are broken due to noted malicious ~~Github~~ sabotage.
 
+ - Внутри `txn_renew()` вынести проверку когерентности mmap за/после изменение размера.
  - [Migration guide from LMDB to MDBX](https://libmdbx.dqdkfa.ru/dead-github/issues/199).
  - [Support for RAW devices](https://libmdbx.dqdkfa.ru/dead-github/issues/124).
  - [Support MessagePack for Keys & Values](https://libmdbx.dqdkfa.ru/dead-github/issues/115).

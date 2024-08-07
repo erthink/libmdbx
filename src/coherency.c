@@ -76,7 +76,13 @@ static bool coherency_check(const MDBX_env *env, const txnid_t txnid,
               : "(wagering meta)");
     ok = false;
   }
-  if (likely(freedb_root && freedb_mod_txnid)) {
+
+  /* Проверяем отметки внутри корневых страниц только если сами страницы
+   * в пределах текущего отображения. Иначе возможны SIGSEGV до переноса
+   * вызова coherency_check_head() после dxb_resize() внутри txn_renew(). */
+  if (likely(freedb_root && freedb_mod_txnid &&
+             (size_t)ptr_dist(env->dxb_mmap.base, freedb_root) <
+                 env->dxb_mmap.limit)) {
     VALGRIND_MAKE_MEM_DEFINED(freedb_root, sizeof(freedb_root->txnid));
     MDBX_ASAN_UNPOISON_MEMORY_REGION(freedb_root, sizeof(freedb_root->txnid));
     const txnid_t root_txnid = freedb_root->txnid;
@@ -91,7 +97,9 @@ static bool coherency_check(const MDBX_env *env, const txnid_t txnid,
       ok = false;
     }
   }
-  if (likely(maindb_root && maindb_mod_txnid)) {
+  if (likely(maindb_root && maindb_mod_txnid &&
+             (size_t)ptr_dist(env->dxb_mmap.base, maindb_root) <
+                 env->dxb_mmap.limit)) {
     VALGRIND_MAKE_MEM_DEFINED(maindb_root, sizeof(maindb_root->txnid));
     MDBX_ASAN_UNPOISON_MEMORY_REGION(maindb_root, sizeof(maindb_root->txnid));
     const txnid_t root_txnid = maindb_root->txnid;
