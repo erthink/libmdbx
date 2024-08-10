@@ -152,18 +152,20 @@ __cold int coherency_timeout(uint64_t *timestamp, intptr_t pgno,
 
 /* check with timeout as the workaround
  * for https://libmdbx.dqdkfa.ru/dead-github/issues/269 */
-__hot int coherency_check_head(MDBX_txn *txn, const meta_ptr_t head,
+__hot int coherency_fetch_head(MDBX_txn *txn, const meta_ptr_t head,
                                uint64_t *timestamp) {
   /* Copy the DB info and flags */
-  txn->geo = head.ptr_v->geometry;
+  txn->txnid = head.txnid;
+  txn->geo = head.ptr_c->geometry;
   memcpy(txn->dbs, &head.ptr_c->trees, sizeof(head.ptr_c->trees));
   STATIC_ASSERT(sizeof(head.ptr_c->trees) == CORE_DBS * sizeof(tree_t));
   VALGRIND_MAKE_MEM_UNDEFINED(txn->dbs + CORE_DBS,
                               txn->env->max_dbi - CORE_DBS);
-  txn->canary = head.ptr_v->canary;
+  txn->canary = head.ptr_c->canary;
 
   if (unlikely(!coherency_check(txn->env, head.txnid, txn->dbs, head.ptr_v,
-                                *timestamp == 0)))
+                                *timestamp == 0) ||
+               txn->txnid != meta_txnid(head.ptr_v)))
     return coherency_timeout(timestamp, -1, txn->env);
 
   if (unlikely(txn->dbs[FREE_DBI].flags != MDBX_INTEGERKEY)) {

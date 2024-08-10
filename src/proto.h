@@ -113,7 +113,7 @@ MDBX_INTERNAL int __must_check_result tbl_setup(const MDBX_env *env,
 MDBX_INTERNAL bool coherency_check_meta(const MDBX_env *env,
                                         const volatile meta_t *meta,
                                         bool report);
-MDBX_INTERNAL int coherency_check_head(MDBX_txn *txn, const meta_ptr_t head,
+MDBX_INTERNAL int coherency_fetch_head(MDBX_txn *txn, const meta_ptr_t head,
                                        uint64_t *timestamp);
 MDBX_INTERNAL int coherency_check_written(const MDBX_env *env,
                                           const txnid_t txnid,

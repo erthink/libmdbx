@@ -1274,7 +1274,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
       uint64_t timestamp = 0;
       while ("workaround for "
              "https://libmdbx.dqdkfa.ru/dead-github/issues/269") {
-        rc = coherency_check_head(env->basal_txn, head, &timestamp);
+        rc = coherency_fetch_head(env->basal_txn, head, &timestamp);
         if (likely(rc == MDBX_SUCCESS))
           break;
         if (unlikely(rc != MDBX_RESULT_TRUE))

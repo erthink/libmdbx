@@ -982,7 +982,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
           likely(env->stuck_meta < 0)
               ? /* regular */ meta_recent(env, &troika)
               : /* recovery mode */ meta_ptr(env, env->stuck_meta);
-      if (likely(r)) {
+      if (likely(r != nullptr)) {
         safe64_reset(&r->txnid, true);
         atomic_store32(&r->snapshot_pages_used,
                        head.ptr_v->geometry.first_unallocated, mo_Relaxed);
@@ -1005,46 +1005,57 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
       }
       jitter4testing(true);
 
-      /* Snap the state from current meta-head */
-      txn->txnid = head.txnid;
-      if (likely(env->stuck_meta < 0) &&
-          unlikely(meta_should_retry(env, &troika) ||
-                   head.txnid < atomic_load64(&env->lck->cached_oldest,
-                                              mo_AcquireRelease))) {
-        if (unlikely(++loop > 42)) {
-          ERROR("bailout waiting for valid snapshot (%s)",
-                "metapages are too volatile");
-          rc = MDBX_PROBLEM;
-          txn->txnid = INVALID_TXNID;
-          if (likely(r))
-            safe64_reset(&r->txnid, true);
-          goto bailout;
+      if (unlikely(meta_should_retry(env, &troika))) {
+      retry:
+        if (likely(++loop < 42)) {
+          timestamp = 0;
+          continue;
         }
-        timestamp = 0;
-        continue;
+        ERROR("bailout waiting for valid snapshot (%s)",
+              "meta-pages are too volatile");
+        rc = MDBX_PROBLEM;
+        goto read_failed;
       }
 
-      rc = coherency_check_head(txn, head, &timestamp);
+      /* Snap the state from current meta-head */
+      rc = coherency_fetch_head(txn, head, &timestamp);
       jitter4testing(false);
-      if (likely(rc == MDBX_SUCCESS))
-        break;
-
-      if (unlikely(rc != MDBX_RESULT_TRUE)) {
-        txn->txnid = INVALID_TXNID;
-        if (likely(r))
-          safe64_reset(&r->txnid, true);
-        goto bailout;
+      if (unlikely(rc != MDBX_SUCCESS)) {
+        if (rc == MDBX_RESULT_TRUE)
+          goto retry;
+        else
+          goto read_failed;
       }
+
+      const uint64_t snap_oldest =
+          atomic_load64(&env->lck->cached_oldest, mo_AcquireRelease);
+      if (unlikely(txn->txnid < snap_oldest)) {
+        if (env->stuck_meta < 0)
+          goto retry;
+        ERROR("target meta-page %i is referenced to an obsolete MVCC-snapshot "
+              "%" PRIaTXN " < cached-oldest %" PRIaTXN,
+              env->stuck_meta, txn->txnid, snap_oldest);
+        rc = MDBX_MVCC_RETARDED;
+        goto read_failed;
+      }
+
+      if (likely(r != nullptr) &&
+          unlikely(txn->txnid != atomic_load64(&r->txnid, mo_Relaxed)))
+        goto retry;
+      break;
     }
 
     if (unlikely(txn->txnid < MIN_TXNID || txn->txnid > MAX_TXNID)) {
       ERROR("%s", "environment corrupted by died writer, must shutdown!");
-      if (likely(r))
-        safe64_reset(&r->txnid, true);
-      txn->txnid = INVALID_TXNID;
       rc = MDBX_CORRUPTED;
+    read_failed:
+      txn->txnid = INVALID_TXNID;
+      if (likely(r != nullptr))
+        safe64_reset(&r->txnid, true);
       goto bailout;
     }
+
+    tASSERT(txn, rc == MDBX_SUCCESS);
     ENSURE(env,
            txn->txnid >=
                /* paranoia is appropriate here */ env->lck->cached_oldest.weak);
@@ -1092,14 +1103,14 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
     const meta_ptr_t head = meta_recent(env, &txn->tw.troika);
     uint64_t timestamp = 0;
     while ("workaround for https://libmdbx.dqdkfa.ru/dead-github/issues/269") {
-      rc = coherency_check_head(txn, head, &timestamp);
+      rc = coherency_fetch_head(txn, head, &timestamp);
       if (likely(rc == MDBX_SUCCESS))
         break;
       if (unlikely(rc != MDBX_RESULT_TRUE))
         goto bailout;
     }
-    eASSERT(env, meta_txnid(head.ptr_v) == head.txnid);
-    txn->txnid = safe64_txnid_next(head.txnid);
+    eASSERT(env, meta_txnid(head.ptr_v) == txn->txnid);
+    txn->txnid = safe64_txnid_next(txn->txnid);
     if (unlikely(txn->txnid > MAX_TXNID)) {
       rc = MDBX_TXN_FULL;
       ERROR("txnid overflow, raise %d", rc);
