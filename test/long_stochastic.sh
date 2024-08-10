@@ -36,6 +36,7 @@ do
     echo "--loops NN             Stop after the NN loops"
     echo "--dir PATH             Specifies directory for test DB and other files (it will be cleared)"
     echo "--db-upto-mb NN        Limits upper size of test DB to the NN megabytes"
+    echo "--db-upto-gb NN        --''--''--''--''--''--''--''--''--  NN gigabytes"
     echo "--no-geometry-jitter   Disable jitter for geometry upper-size"
     echo "--pagesize NN          Use specified page size (256 is minimal and used by default)"
     echo "--dont-check-ram-size  Don't check available RAM"
@@ -114,6 +115,14 @@ do
     DB_UPTO_MB=$(($2))
     if [ -z "$DB_UPTO_MB" -o "$DB_UPTO_MB" -lt 1 -o "$DB_UPTO_MB" -gt 4194304 ]; then
       echo "Invalid value '$DB_UPTO_MB' for --db-upto-mb option"
+      exit -2
+    fi
+    shift
+  ;;
+  --db-upto-gb)
+    DB_UPTO_MB=$(($2 * 1024))
+    if [ -z "$DB_UPTO_MB" -o "$DB_UPTO_MB" -lt 1 -o "$DB_UPTO_MB" -gt 4194304 ]; then
+      echo "Invalid value '$2' for --db-upto-gb option"
       exit -2
     fi
     shift
