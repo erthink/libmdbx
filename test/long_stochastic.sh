@@ -264,6 +264,7 @@ case ${UNAME} in
   ;;
 esac
 
+ulimit -c unlimited || echo "failed set unlimited core-dump size" >&2
 rm -f ${TESTDB_DIR}/*
 
 ###############################################################################
