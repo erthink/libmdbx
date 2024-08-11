@@ -3,7 +3,7 @@
 # Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 # SPDX-License-Identifier: Apache-2.0
 
-TEST="./test/long_stochastic.sh --skip-make"
+TEST="./test/long_stochastic.sh --skip-make --db-upto-gb 32"
 PREFIX="/dev/shm/mdbxtest-"
 
 tmux kill-session -t mdbx
