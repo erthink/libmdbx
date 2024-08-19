@@ -611,7 +611,8 @@ retry:
                                                        MDBX_ENABLE_REFUND));
   tASSERT(txn, dpl_check(txn));
   if (unlikely(/* paranoia */ ctx->loop > ((MDBX_DEBUG > 0) ? 12 : 42))) {
-    ERROR("too more loops %u, bailout", ctx->loop);
+    ERROR("txn #%" PRIaTXN " too more loops %u, bailout", txn->txnid,
+          ctx->loop);
     rc = MDBX_PROBLEM;
     goto bailout;
   }
