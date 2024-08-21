@@ -279,12 +279,14 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags,
     } else if ((user_flags & MDBX_CREATE) == 0)
       return /* FIXME: return extended info */ MDBX_INCOMPATIBLE;
     else {
-      eASSERT(env, env->dbs_flags[dbi] & DB_VALID);
       if (txn->dbi_state[dbi] & DBI_STALE) {
+        eASSERT(env, env->dbs_flags[dbi] & DB_VALID);
         int err = tbl_fetch(txn, dbi);
         if (unlikely(err == MDBX_SUCCESS))
           return err;
       }
+      eASSERT(env, ((env->dbs_flags[dbi] ^ txn->dbs[dbi].flags) &
+                    DB_PERSISTENT_FLAGS) == 0);
       eASSERT(env,
               (txn->dbi_state[dbi] & (DBI_LINDO | DBI_VALID | DBI_STALE)) ==
                   (DBI_LINDO | DBI_VALID));
@@ -295,7 +297,7 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags,
       if (unlikely(txn->cursors[dbi]))
         return MDBX_DANGLING_DBI;
       env->dbs_flags[dbi] = DB_POISON;
-      atomic_store32(&env->dbi_seqs[dbi], dbi_seq_next(env, MAIN_DBI),
+      atomic_store32(&env->dbi_seqs[dbi], dbi_seq_next(env, dbi),
                      mo_AcquireRelease);
 
       const uint32_t seq = dbi_seq_next(env, dbi);
