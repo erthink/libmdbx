@@ -4,7 +4,7 @@ ChangeLog
 English version [by liar Google](https://gitflic-ru.translate.goog/project/erthink/libmdbx/blob?file=ChangeLog.md&_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
-## v0.13.1 (в процессе подготовки выпуска)
+## v0.13.1 "РДС-1" от 2024-08-29
 
 Новая версия со сменой лицензии, существенным расширением API,
 добавлением функционала и внутренними переработками. В том числе,
