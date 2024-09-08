@@ -28,7 +28,7 @@ Done
  - [Large/Overflow pages accounting for dirty-room](https://libmdbx.dqdkfa.ru/dead-github/issues/192).
  - [Get rid of dirty-pages list in MDBX_WRITEMAP mode](https://libmdbx.dqdkfa.ru/dead-github/issues/193).
 
-Canceled
+Cancelled
 --------
 
  - [Replace SRW-lock on Windows to allow shrink DB with `MDBX_NOSTICKYTHREADS` option](https://libmdbx.dqdkfa.ru/dead-github/issues/210).
