@@ -123,11 +123,7 @@
 /** Enables chunking long list of retired pages during huge transactions commit
  * to avoid use sequences of pages. */
 #ifndef MDBX_ENABLE_BIGFOOT
-#if MDBX_WORDBITS >= 64 || defined(DOXYGEN)
 #define MDBX_ENABLE_BIGFOOT 1
-#else
-#define MDBX_ENABLE_BIGFOOT 0
-#endif
 #elif !(MDBX_ENABLE_BIGFOOT == 0 || MDBX_ENABLE_BIGFOOT == 1)
 #error MDBX_ENABLE_BIGFOOT must be defined as 0 or 1
 #endif /* MDBX_ENABLE_BIGFOOT */
