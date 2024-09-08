@@ -7099,6 +7099,11 @@ inline cursor::move_result cursor::lower_bound(const slice &key,
   return move(key_lowerbound, key, throw_notfound);
 }
 
+inline cursor::move_result cursor::upper_bound(const slice &key,
+                                               bool throw_notfound) {
+  return move(key_greater_than, key, throw_notfound);
+}
+
 inline cursor::move_result cursor::find_multivalue(const slice &key,
                                                    const slice &value,
                                                    bool throw_notfound) {
@@ -7109,6 +7114,12 @@ inline cursor::move_result cursor::lower_bound_multivalue(const slice &key,
                                                           const slice &value,
                                                           bool throw_notfound) {
   return move(multi_exactkey_lowerboundvalue, key, value, throw_notfound);
+}
+
+inline cursor::move_result cursor::upper_bound_multivalue(const slice &key,
+                                                          const slice &value,
+                                                          bool throw_notfound) {
+  return move(multi_exactkey_value_greater, key, value, throw_notfound);
 }
 
 inline bool cursor::seek(const slice &key) {
