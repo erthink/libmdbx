@@ -3486,8 +3486,8 @@ MDBX_CXX01_CONSTEXPR_ENUM bool is_msgpack(value_mode mode) noexcept {
   return mode == value_mode::msgpack;
 }
 
-/// \brief A handle for an individual database (key-value spaces) in the
-/// environment.
+/// \brief A handle for an individual table (aka key-value space, maps or
+/// sub-database) in the environment.
 /// \see txn::open_map() \see txn::create_map()
 /// \see txn::clear_map() \see txn::drop_map()
 /// \see txn::get_handle_info() \see txn::get_map_stat()
@@ -3537,8 +3537,9 @@ enum put_mode {
 /// instances, but does not destroys the represented underlying object from the
 /// own class destructor.
 ///
-/// An environment supports multiple key-value tables (aka key-value
-/// maps, spaces or sub-databases), all residing in the same shared-memory map.
+/// An environment supports multiple key-value tables (aka key-value maps,
+/// spaces or sub-databases), all residing in the same shared-memory mapped
+/// file.
 class LIBMDBX_API_TYPE env {
   friend class txn;
 
@@ -3699,7 +3700,7 @@ public:
 
   /// \brief Operate parameters.
   struct LIBMDBX_API_TYPE operate_parameters {
-    /// \brief The maximum number of named databases for the environment.
+    /// \brief The maximum number of named tables/maps for the environment.
     /// Zero means default value.
     unsigned max_maps{0};
     /// \brief The maximum number of threads/reader slots for the environment.
@@ -3774,24 +3775,24 @@ public:
     /// \brief Returns the maximal database size in bytes for specified page
     /// size.
     static inline size_t dbsize_max(intptr_t pagesize);
-    /// \brief Returns the minimal key size in bytes for specified database
+    /// \brief Returns the minimal key size in bytes for specified table
     /// flags.
     static inline size_t key_min(MDBX_db_flags_t flags) noexcept;
     /// \brief Returns the minimal key size in bytes for specified keys mode.
     static inline size_t key_min(key_mode mode) noexcept;
     /// \brief Returns the maximal key size in bytes for specified page size and
-    /// database flags.
+    /// table flags.
     static inline size_t key_max(intptr_t pagesize, MDBX_db_flags_t flags);
     /// \brief Returns the maximal key size in bytes for specified page size and
     /// keys mode.
     static inline size_t key_max(intptr_t pagesize, key_mode mode);
     /// \brief Returns the maximal key size in bytes for given environment and
-    /// database flags.
+    /// table flags.
     static inline size_t key_max(const env &, MDBX_db_flags_t flags);
     /// \brief Returns the maximal key size in bytes for given environment and
     /// keys mode.
     static inline size_t key_max(const env &, key_mode mode);
-    /// \brief Returns the minimal values size in bytes for specified database
+    /// \brief Returns the minimal values size in bytes for specified table
     /// flags.
     static inline size_t value_min(MDBX_db_flags_t flags) noexcept;
     /// \brief Returns the minimal values size in bytes for specified values
@@ -3799,41 +3800,41 @@ public:
     static inline size_t value_min(value_mode) noexcept;
 
     /// \brief Returns the maximal value size in bytes for specified page size
-    /// and database flags.
+    /// and table flags.
     static inline size_t value_max(intptr_t pagesize, MDBX_db_flags_t flags);
     /// \brief Returns the maximal value size in bytes for specified page size
     /// and values mode.
     static inline size_t value_max(intptr_t pagesize, value_mode);
     /// \brief Returns the maximal value size in bytes for given environment and
-    /// database flags.
+    /// table flags.
     static inline size_t value_max(const env &, MDBX_db_flags_t flags);
     /// \brief Returns the maximal value size in bytes for specified page size
     /// and values mode.
     static inline size_t value_max(const env &, value_mode);
 
     /// \brief Returns maximal size of key-value pair to fit in a single page
-    /// for specified size and database flags.
+    /// for specified size and table flags.
     static inline size_t pairsize4page_max(intptr_t pagesize,
                                            MDBX_db_flags_t flags);
     /// \brief Returns maximal size of key-value pair to fit in a single page
     /// for specified page size and values mode.
     static inline size_t pairsize4page_max(intptr_t pagesize, value_mode);
     /// \brief Returns maximal size of key-value pair to fit in a single page
-    /// for given environment and database flags.
+    /// for given environment and table flags.
     static inline size_t pairsize4page_max(const env &, MDBX_db_flags_t flags);
     /// \brief Returns maximal size of key-value pair to fit in a single page
     /// for specified page size and values mode.
     static inline size_t pairsize4page_max(const env &, value_mode);
 
     /// \brief Returns maximal data size in bytes to fit in a leaf-page or
-    /// single large/overflow-page for specified size and database flags.
+    /// single large/overflow-page for specified size and table flags.
     static inline size_t valsize4page_max(intptr_t pagesize,
                                           MDBX_db_flags_t flags);
     /// \brief Returns maximal data size in bytes to fit in a leaf-page or
     /// single large/overflow-page for specified page size and values mode.
     static inline size_t valsize4page_max(intptr_t pagesize, value_mode);
     /// \brief Returns maximal data size in bytes to fit in a leaf-page or
-    /// single large/overflow-page for given environment and database flags.
+    /// single large/overflow-page for given environment and table flags.
     static inline size_t valsize4page_max(const env &, MDBX_db_flags_t flags);
     /// \brief Returns maximal data size in bytes to fit in a leaf-page or
     /// single large/overflow-page for specified page size and values mode.
@@ -3960,7 +3961,7 @@ public:
   /// \see extra_runtime_option::max_readers
   inline unsigned max_readers() const;
 
-  /// \brief Returns the maximum number of named databases for the environment.
+  /// \brief Returns the maximum number of named tables for the environment.
   /// \see extra_runtime_option::max_maps
   inline unsigned max_maps() const;
 
@@ -4104,7 +4105,7 @@ public:
   /// \brief Close a key-value map (aka table) handle. Normally
   /// unnecessary.
   ///
-  /// Closing a database handle is not necessary, but lets \ref txn::open_map()
+  /// Closing a table handle is not necessary, but lets \ref txn::open_map()
   /// reuse the handle value. Usually it's better to set a bigger
   /// \ref env::operate_parameters::max_maps, unless that value would be
   /// large.
@@ -4115,8 +4116,8 @@ public:
   /// of libmdbx (\ref MithrilDB) will solve this issue.
   ///
   /// Handles should only be closed if no other threads are going to reference
-  /// the database handle or one of its cursors any further. Do not close a
-  /// handle if an existing transaction has modified its database. Doing so can
+  /// the table handle or one of its cursors any further. Do not close a
+  /// handle if an existing transaction has modified its table. Doing so can
   /// cause misbehavior from database corruption to errors like
   /// \ref MDBX_BAD_DBI (since the DB name is gone).
   inline void close_map(const map_handle &);
@@ -4205,8 +4206,8 @@ public:
 /// object from the own class destructor, but disallows copying and assignment
 /// for instances.
 ///
-/// An environment supports multiple key-value databases (aka key-value spaces
-/// or tables), all residing in the same shared-memory map.
+/// An environment supports multiple key-value tables (aka key-value spaces
+/// or maps), all residing in the same shared-memory mapped file.
 class LIBMDBX_API_TYPE env_managed : public env {
   using inherited = env;
   /// delegated constructor for RAII
@@ -4262,7 +4263,7 @@ public:
 
   /// \brief Explicitly closes the environment and release the memory map.
   ///
-  /// Only a single thread may call this function. All transactions, databases,
+  /// Only a single thread may call this function. All transactions, tables,
   /// and cursors must already be closed before calling this function. Attempts
   /// to use any such handles after calling this function will cause a
   /// `SIGSEGV`. The environment handle will be freed and must not be used again
@@ -4522,7 +4523,7 @@ public:
   /// \brief Returns statistics for a table.
   inline map_stat get_map_stat(map_handle map) const;
   /// \brief Returns depth (bitmask) information of nested dupsort (multi-value)
-  /// B+trees for given database.
+  /// B+trees for given table.
   inline uint32_t get_tree_deepmask(map_handle map) const;
   /// \brief Returns information about key-value map (aka table) handle.
   inline map_handle::info get_handle_info(map_handle map) const;
@@ -4571,11 +4572,11 @@ public:
   /// multimap (aka table).
   inline slice get(map_handle map, slice key, size_t &values_count,
                    const slice &value_at_absence) const;
-  /// \brief Get value for equal or great key from a database.
+  /// \brief Get value for equal or great key from a table.
   /// \return Bundle of key-value pair and boolean flag,
   /// which will be `true` if the exact key was found and `false` otherwise.
   inline pair_result get_equal_or_great(map_handle map, const slice &key) const;
-  /// \brief Get value for equal or great key from a database.
+  /// \brief Get value for equal or great key from a table.
   /// \return Bundle of key-value pair and boolean flag,
   /// which will be `true` if the exact key was found and `false` otherwise.
   inline pair_result get_equal_or_great(map_handle map, const slice &key,
