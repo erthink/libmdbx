@@ -220,7 +220,8 @@ Thus syncing data to disk might be a bottleneck for write intensive workload.
 but read transactions prevents recycling an old retired/freed pages, since it read ones. Thus altering of data during a parallel
 long-lived read operation will increase the process work set, may exhaust entire free database space,
 the database can grow quickly, and result in performance degradation.
-Try to avoid long running read transactions.
+Try to avoid long running read transactions, otherwise use [transaction parking](https://libmdbx.dqdkfa.ru/group__c__transactions.html#ga2c2c97730ff35cadcedfbd891ac9b12f)
+and/or [Handle-Slow-Readers callback](https://libmdbx.dqdkfa.ru/group__c__err.html#ga2cb11b56414c282fe06dd942ae6cade6).
 
 5. _libmdbx_ is extraordinarily fast and provides minimal overhead for data access,
 so you should reconsider using brute force techniques and double check your code.
@@ -278,45 +279,43 @@ the user's point of view.
 5. The same database format for 32- and 64-bit builds.
    > _libmdbx_ database format depends only on the [endianness](https://en.wikipedia.org/wiki/Endianness) but not on the [bitness](https://en.wiktionary.org/wiki/bitness).
 
-6. LIFO policy for Garbage Collection recycling. This can significantly increase write performance due write-back disk cache up to several times in a best case scenario.
+6. The "Big Foot" feature than solves speific performance issues with huge transactions and extra-large page-number-lists.
+
+7. LIFO policy for Garbage Collection recycling. This can significantly increase write performance due write-back disk cache up to several times in a best case scenario.
    > LIFO means that for reuse will be taken the latest becomes unused pages.
    > Therefore the loop of database pages circulation becomes as short as possible.
    > In other words, the set of pages, that are (over)written in memory and on disk during a series of write transactions, will be as small as possible.
    > Thus creates ideal conditions for the battery-backed or flash-backed disk cache efficiency.
 
-7. Fast estimation of range query result volume, i.e. how many items can
+8. Parking of read transactions with ousting and auto-restart, [Handle-Slow-Readers callback](https://libmdbx.dqdkfa.ru/group__c__err.html#ga2cb11b56414c282fe06dd942ae6cade6) to resolve an issues due to long-lived read transactions.
+
+9. Fast estimation of range query result volume, i.e. how many items can
 be found between a `KEY1` and a `KEY2`. This is a prerequisite for build
 and/or optimize query execution plans.
    > _libmdbx_ performs a rough estimate based on common B-tree pages of the paths from root to corresponding keys.
 
-8. Database integrity check API both with standalone `mdbx_chk` utility.
+10. Database integrity check API both with standalone `mdbx_chk` utility.
 
-9. Support for opening databases in the exclusive mode, including on a network share.
-
-10. Zero-length for keys and values.
-
-11. Ability to determine whether the particular data is on a dirty page
-or not, that allows to avoid copy-out before updates.
+11. Support for opening databases in the exclusive mode, including on a network share.
 
 12. Extended information of whole-database, tables/sub-databases, transactions, readers enumeration.
    > _libmdbx_ provides a lot of information, including dirty and leftover pages
    > for a write transaction, reading lag and holdover space for read transactions.
 
-13. Extended update and delete operations.
-   > _libmdbx_ allows one _at once_ with getting previous value
-   > and addressing the particular item from multi-value with the same key.
+13. Support of Zero-length for keys and values.
 
 14. Useful runtime options for tuning engine to application's requirements and use cases specific.
 
 15. Automated steady sync-to-disk upon several thresholds and/or timeout via cheap polling.
 
-16. Sequence generation and three persistent 64-bit markers.
+16. Ability to determine whether the particular data is on a dirty page
+or not, that allows to avoid copy-out before updates.
 
-17. Handle-Slow-Readers callback to resolve a database full/overflow issues due to long-lived read transaction(s).
+17. Extended update and delete operations.
+   > _libmdbx_ allows one _at once_ with getting previous value
+   > and addressing the particular item from multi-value with the same key.
 
-18. Ability to determine whether the cursor is pointed to a key-value
-pair, to the first, to the last, or not set to anything.
-
+18. Sequence generation and three persistent 64-bit vector-clock like markers.
 
 ## Other fixes and specifics
 
