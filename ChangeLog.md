@@ -4,6 +4,24 @@ ChangeLog
 English version [by liar Google](https://gitflic-ru.translate.goog/project/erthink/libmdbx/blob?file=ChangeLog.md&_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
+
+## v0.13.2 в процессе
+
+Поддерживающий выпуск с исправлением обнаруженных ошибок и устранением недочетов.
+
+Исправления:
+
+ - Добавлены упущенные inline-реализации `mdbx::cursor::upper_bound()` и `mdbx::cursor::upper_bound_multivalue()`.
+ - Корректировка описания С++ API для использования термина "таблица" вместо "sub-database".
+
+Мелочи:
+
+ - Теперь `MDBX_ENABLE_BIGFOOT` включена по-умолчанию вне зависимости от разрядности платформы.
+ - Дополнение README и исправление опечаток/орфографии.
+
+--------------------------------------------------------------------------------
+
+
 ## v0.13.1 "РДС-1" от 2024-08-29
 
 Новая версия со сменой лицензии, существенным расширением API,
