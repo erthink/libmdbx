@@ -157,10 +157,10 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno,
   const void *const prev_map = env->dxb_mmap.base;
 #endif /* MDBX_ENABLE_MADVISE || ENABLE_MEMCHECK */
 
-  VERBOSE("resize/%d datafile/mapping: "
+  VERBOSE("resize(env-flags 0x%x, mode %d) datafile/mapping: "
           "present %" PRIuPTR " -> %" PRIuPTR ", "
           "limit %" PRIuPTR " -> %" PRIuPTR,
-          mode, prev_size, size_bytes, prev_limit, limit_bytes);
+          env->flags, mode, prev_size, size_bytes, prev_limit, limit_bytes);
 
   eASSERT(env, limit_bytes >= size_bytes);
   eASSERT(env, bytes2pgno(env, size_bytes) >= size_pgno);
