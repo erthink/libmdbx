@@ -1736,7 +1736,7 @@ private:
         return capacity_bytes < sizeof(bin);
       }
 
-      enum : byte { lastbyte_inplace_signature = byte(~0u) };
+      enum : byte { lastbyte_inplace_signature = byte(~byte(0)) };
       enum : size_t {
         inplace_signature_limit =
             size_t(lastbyte_inplace_signature)
