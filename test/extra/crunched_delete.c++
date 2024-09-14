@@ -64,7 +64,7 @@ static mdbx::slice mk(mdbx::default_buffer &buf, unsigned min, unsigned max) {
   unsigned len = (min < max) ? min + prng_fast(seed) % (max - min) : min;
   buf.clear_and_reserve(len);
   for (unsigned i = 0; i < len; ++i)
-    buf.append_byte(prng_fast(seed));
+    buf.append_byte(mdbx::byte(prng_fast(seed)));
   return buf.slice();
 }
 
@@ -112,28 +112,30 @@ static void chunched_delete(mdbx::txn txn, const acase &thecase,
   {
     auto cursor = txn.open_cursor(map);
     while (true) {
-      const unsigned all = cursor.txn().get_map_stat(cursor.map()).ms_entries;
+      const auto all = cursor.txn().get_map_stat(cursor.map()).ms_entries;
       // printf("== seek random of %u\n", all);
 
       const char *last_op;
       bool last_r;
 
-      if ((last_op = "MDBX_GET_BOTH",
-           last_r = cursor.find_multivalue(mk_key(k, thecase),
-                                           mk_val(v, thecase), false)) ||
+      if (true == ((last_op = "MDBX_GET_BOTH"),
+                   (last_r = cursor.find_multivalue(
+                        mk_key(k, thecase), mk_val(v, thecase), false))) ||
           rnd() % 3 == 0 ||
-          (last_op = "MDBX_SET_RANGE",
-           last_r = cursor.lower_bound(mk_key(k, thecase), false))) {
+          true == ((last_op = "MDBX_SET_RANGE"),
+                   (last_r = cursor.lower_bound(mk_key(k, thecase), false)))) {
         int i = int(rnd() % 7) - 3;
         // if (i)
         //   printf(" %s -> %s\n", last_op, last_r ? "true" : "false");
         // printf("== shift multi %i\n", i);
         try {
-          while (i < 0 && (last_op = "MDBX_PREV_DUP",
-                           last_r = cursor.to_current_prev_multi(false)))
+          while (i < 0 &&
+                 true == ((last_op = "MDBX_PREV_DUP"),
+                          (last_r = cursor.to_current_prev_multi(false))))
             ++i;
-          while (i > 0 && (last_op = "MDBX_NEXT_DUP",
-                           last_r = cursor.to_current_next_multi(false)))
+          while (i > 0 &&
+                 true == ((last_op = "MDBX_NEXT_DUP"),
+                          (last_r = cursor.to_current_next_multi(false))))
             --i;
         } catch (const mdbx::no_data &) {
           printf("cursor_del() -> exception, last %s %s\n", last_op,

@@ -17,7 +17,7 @@ static buffer random(size_t length) {
   buffer result(length);
 #if defined(__cpp_lib_span) && __cpp_lib_span >= 202002L
   for (auto &i : result.bytes())
-    i = prng();
+    i = mdbx::byte(prng());
 #else
   for (auto p = result.byte_ptr(); p < result.end_byte_ptr(); ++p)
     *p = mdbx::byte(prng());
