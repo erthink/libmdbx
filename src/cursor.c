@@ -2191,7 +2191,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       return rc;
     else {
     fetch_multiple:
-      cASSERT(mc, is_filled(mc) && !inner_filled(mc));
+      cASSERT(mc, is_filled(mc) && inner_filled(mc));
       MDBX_cursor *mx = &mc->subcur->cursor;
       data->iov_len = page_numkeys(mx->pg[mx->top]) * mx->tree->dupfix_size;
       data->iov_base = page_data(mx->pg[mx->top]);
