@@ -377,8 +377,8 @@ int main(int argc, const char *argv[]) {
   mdbx_setup_debug_nofmt(MDBX_LOG_NOTICE, MDBX_DBG_ASSERT, logger_nofmt,
                          log_buffer, sizeof(log_buffer));
 
-  const char *filename = "test-crunched-del";
-  mdbx::env::remove(filename);
+  mdbx::path db_filename = "test-crunched-del";
+  mdbx::env::remove(db_filename);
 
   std::vector<acase> testset;
   // Там ключи разной длины - от 1 до 64 байт.
@@ -394,7 +394,7 @@ int main(int argc, const char *argv[]) {
   testset.emplace_back(8, 8, 1, 5, 10);
   testset.emplace_back(8, 8, 32, 36, 9);
 
-  mdbx::env_managed env(filename, mdbx::env_managed::create_parameters(),
+  mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(),
                         mdbx::env::operate_parameters(42));
   if (!simple(env) || !next_prev_current(env) || !outofrange_prev(env))
     return EXIT_FAILURE;

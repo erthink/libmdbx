@@ -3,16 +3,14 @@
 
 #include "mdbx.h++"
 #include <iostream>
-#include <unistd.h>
 
 int main(int argc, const char *argv[]) {
   (void)argc;
   (void)argv;
 
-  unlink("." MDBX_DATANAME);
-  unlink("." MDBX_LOCKNAME);
-
-  mdbx::env_managed env(".", mdbx::env_managed::create_parameters(),
+  mdbx::path db_filename = "test-dupfix-multiple";
+  mdbx::env_managed::remove(db_filename);
+  mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(),
                         mdbx::env::operate_parameters());
 
   using buffer =
@@ -23,7 +21,7 @@ int main(int argc, const char *argv[]) {
 #if 0 /* workaround */
   txn.commit();
   env.close();
-  env = mdbx::env_managed(".", mdbx::env_managed::create_parameters(),
+  env = mdbx::env_managed(db_filename, mdbx::env_managed::create_parameters(),
                         mdbx::env::operate_parameters());
   txn = env.start_write();
 #endif

@@ -6,7 +6,6 @@
 #include <functional>
 #include <iostream>
 #include <random>
-#include <unistd.h>
 
 static ::std::ostream &operator<<(::std::ostream &out,
                                   const mdbx::cursor::move_operation op) {
@@ -233,9 +232,9 @@ int main(int argc, const char *argv[]) {
   (void)argc;
   (void)argv;
 
-  unlink("." MDBX_DATANAME);
-  unlink("." MDBX_LOCKNAME);
-  mdbx::env_managed env(".", mdbx::env_managed::create_parameters(),
+  mdbx::path db_filename = "test-posi";
+  mdbx::env_managed::remove(db_filename);
+  mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(),
                         mdbx::env::operate_parameters(3));
 
   auto txn = env.start_write();
