@@ -50,13 +50,20 @@ int main(int argc, const char *argv[]) {
 
   const uint64_t array[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 42, 17, 99, 0, 33, 333};
   txn = env.start_write();
-  txn.put_multiple(map, buffer::key_from_u64(13), array + 3, 4, mdbx::upsert);
-  txn.put_multiple(map, buffer::key_from_u64(10), array + 0, 1, mdbx::upsert);
-  txn.put_multiple(map, buffer::key_from_u64(12), array + 2, 3, mdbx::upsert);
-  txn.put_multiple(map, buffer::key_from_u64(15), array + 5, 6, mdbx::upsert);
-  txn.put_multiple(map, buffer::key_from_u64(14), array + 4, 5, mdbx::upsert);
-  txn.put_multiple(map, buffer::key_from_u64(11), array + 1, 2, mdbx::upsert);
-  txn.put_multiple(map, buffer::key_from_u64(16), array + 6, 7, mdbx::upsert);
+  txn.put_multiple_samelength(map, buffer::key_from_u64(13), array + 3, 4,
+                              mdbx::upsert);
+  txn.put_multiple_samelength(map, buffer::key_from_u64(10), array + 0, 1,
+                              mdbx::upsert);
+  txn.put_multiple_samelength(map, buffer::key_from_u64(12), array + 2, 3,
+                              mdbx::upsert);
+  txn.put_multiple_samelength(map, buffer::key_from_u64(15), array + 5, 6,
+                              mdbx::upsert);
+  txn.put_multiple_samelength(map, buffer::key_from_u64(14), array + 4, 5,
+                              mdbx::upsert);
+  txn.put_multiple_samelength(map, buffer::key_from_u64(11), array + 1, 2,
+                              mdbx::upsert);
+  txn.put_multiple_samelength(map, buffer::key_from_u64(16), array + 6, 7,
+                              mdbx::upsert);
   txn.commit();
 
   txn = env.start_read();
@@ -119,21 +126,29 @@ int main(int argc, const char *argv[]) {
   txn.abort();
 
   txn = env.start_write();
-  txn.put_multiple(map, buffer::key_from_u64(7), array + 3, 4, mdbx::update);
+  txn.put_multiple_samelength(map, buffer::key_from_u64(7), array + 3, 4,
+                              mdbx::update);
   txn.upsert(map, buffer::key_from_u64(10), buffer::key_from_u64(14));
-  txn.put_multiple(map, buffer::key_from_u64(11), array + 4, 5, mdbx::upsert);
-  txn.put_multiple(map, buffer::key_from_u64(12), array + 0, 1, mdbx::update);
+  txn.put_multiple_samelength(map, buffer::key_from_u64(11), array + 4, 5,
+                              mdbx::upsert);
+  txn.put_multiple_samelength(map, buffer::key_from_u64(12), array + 0, 1,
+                              mdbx::update);
   txn.update(map, buffer::key_from_u64(13), buffer::key_from_u64(18));
-  txn.put_multiple(map, buffer::key_from_u64(14), array + 2, 3, mdbx::update);
+  txn.put_multiple_samelength(map, buffer::key_from_u64(14), array + 2, 3,
+                              mdbx::update);
   txn.update(map, buffer::key_from_u64(15), buffer::key_from_u64(13));
-  txn.put_multiple(map, buffer::key_from_u64(16), array + 6, 9, mdbx::update);
+  txn.put_multiple_samelength(map, buffer::key_from_u64(16), array + 6, 9,
+                              mdbx::update);
   txn.update(map, buffer::key_from_u64(21), buffer::key_from_u64(17));
   txn.update(map, buffer::key_from_u64(22), buffer::key_from_u64(15));
-  txn.put_multiple(map, buffer::key_from_u64(23), array + 1, 2, mdbx::update);
+  txn.put_multiple_samelength(map, buffer::key_from_u64(23), array + 1, 2,
+                              mdbx::update);
   txn.update(map, buffer::key_from_u64(24), buffer::key_from_u64(16));
-  txn.put_multiple(map, buffer::key_from_u64(25), array + 5, 6, mdbx::update);
+  txn.put_multiple_samelength(map, buffer::key_from_u64(25), array + 5, 6,
+                              mdbx::update);
   txn.upsert(map, buffer::key_from_u64(26), buffer::key_from_u64(12));
-  txn.put_multiple(map, buffer::key_from_u64(27), array + 12, 3, mdbx::update);
+  txn.put_multiple_samelength(map, buffer::key_from_u64(27), array + 12, 3,
+                              mdbx::update);
   txn.commit();
 
   txn = env.start_read();

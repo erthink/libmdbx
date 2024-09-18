@@ -4669,25 +4669,26 @@ public:
     return append(map, kv.key, kv.value, multivalue_order_preserved);
   }
 
-  size_t put_multiple(map_handle map, const slice &key,
-                      const size_t value_length, const void *values_array,
-                      size_t values_count, put_mode mode,
-                      bool allow_partial = false);
+  size_t put_multiple_samelength(map_handle map, const slice &key,
+                                 const size_t value_length,
+                                 const void *values_array, size_t values_count,
+                                 put_mode mode, bool allow_partial = false);
   template <typename VALUE>
-  size_t put_multiple(map_handle map, const slice &key,
-                      const VALUE *values_array, size_t values_count,
-                      put_mode mode, bool allow_partial = false) {
+  size_t put_multiple_samelength(map_handle map, const slice &key,
+                                 const VALUE *values_array, size_t values_count,
+                                 put_mode mode, bool allow_partial = false) {
     static_assert(::std::is_standard_layout<VALUE>::value &&
                       !::std::is_pointer<VALUE>::value &&
                       !::std::is_array<VALUE>::value,
                   "Must be a standard layout type!");
-    return put_multiple(map, key, sizeof(VALUE), values_array, values_count,
-                        mode, allow_partial);
+    return put_multiple_samelength(map, key, sizeof(VALUE), values_array,
+                                   values_count, mode, allow_partial);
   }
   template <typename VALUE>
-  void put_multiple(map_handle map, const slice &key,
-                    const ::std::vector<VALUE> &vector, put_mode mode) {
-    put_multiple(map, key, vector.data(), vector.size(), mode);
+  void put_multiple_samelength(map_handle map, const slice &key,
+                               const ::std::vector<VALUE> &vector,
+                               put_mode mode) {
+    put_multiple_samelength(map, key, vector.data(), vector.size(), mode);
   }
 
   inline ptrdiff_t estimate(map_handle map, const pair &from,
@@ -6913,10 +6914,11 @@ inline void txn::append(map_handle map, const slice &key, const slice &value,
                                  : MDBX_APPEND));
 }
 
-inline size_t txn::put_multiple(map_handle map, const slice &key,
-                                const size_t value_length,
-                                const void *values_array, size_t values_count,
-                                put_mode mode, bool allow_partial) {
+inline size_t txn::put_multiple_samelength(map_handle map, const slice &key,
+                                           const size_t value_length,
+                                           const void *values_array,
+                                           size_t values_count, put_mode mode,
+                                           bool allow_partial) {
   MDBX_val args[2] = {{const_cast<void *>(values_array), value_length},
                       {nullptr, values_count}};
   const int err = ::mdbx_put(handle_, map.dbi, const_cast<slice *>(&key), args,
