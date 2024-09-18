@@ -2176,9 +2176,16 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       rc = cursor_seek(mc, key, data, MDBX_SET).err;
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
+    } else {
+      if (unlikely(is_eof(mc) || !inner_filled(mc)))
+        return MDBX_ENODATA;
+      cASSERT(mc, is_filled(mc));
+      if (key) {
+        const page_t *mp = mc->pg[mc->top];
+        const node_t *node = page_node(mp, mc->ki[mc->top]);
+        *key = get_key(node);
+      }
     }
-    if (unlikely(is_eof(mc) || !inner_filled(mc)))
-      return MDBX_ENODATA;
     goto fetch_multiple;
 
   case MDBX_NEXT_MULTIPLE:
