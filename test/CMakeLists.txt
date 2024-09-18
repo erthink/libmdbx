@@ -284,6 +284,7 @@ else()
       add_extra_test(doubtless_positioning TIMEOUT 10800)
       add_extra_test(crunched_delete TIMEOUT 10800)
       add_extra_test(dbi)
+      add_extra_test(open)
     endif()
   endif()
 
