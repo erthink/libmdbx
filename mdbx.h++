@@ -4868,6 +4868,10 @@ public:
     pair_exact = pair_equal,
     pair_greater_or_equal = MDBX_TO_PAIR_GREATER_OR_EQUAL,
     pair_greater_than = MDBX_TO_PAIR_GREATER_THAN,
+
+    batch_samelength = MDBX_GET_MULTIPLE,
+    batch_samelength_next = MDBX_NEXT_MULTIPLE,
+    batch_samelength_previous = MDBX_PREV_MULTIPLE
   };
 
   struct move_result : public pair_result {
@@ -5132,6 +5136,23 @@ public:
   inline move_result upper_bound_multivalue(const slice &key,
                                             const slice &value,
                                             bool throw_notfound = false);
+
+  inline move_result get_multiple_samelength(const slice &key,
+                                             bool throw_notfound = true) {
+    return move(batch_samelength, key, throw_notfound);
+  }
+
+  inline move_result get_multiple_samelength(bool throw_notfound = false) {
+    return move(batch_samelength, throw_notfound);
+  }
+
+  inline move_result next_multiple_samelength(bool throw_notfound = false) {
+    return move(batch_samelength_next, throw_notfound);
+  }
+
+  inline move_result previous_multiple_samelength(bool throw_notfound = false) {
+    return move(batch_samelength_previous, throw_notfound);
+  }
 
   inline bool eof() const;
   inline bool on_first() const;
