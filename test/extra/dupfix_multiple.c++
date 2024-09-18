@@ -223,6 +223,67 @@ int main(int argc, const char *argv[]) {
     std::cerr << "Fail\n";
     return EXIT_FAILURE;
   }
+  txn.abort();
+
+  //----------------------------------------------------------------------------
+
+  // let dir = tempdir().unwrap();
+  // let db = Database::open(&dir).unwrap();
+
+  // let txn = db.begin_rw_txn().unwrap();
+  // let table = txn
+  //     .create_table(None, TableFlags::DUP_SORT | TableFlags::DUP_FIXED)
+  //     .unwrap();
+  // for (k, v) in [
+  //     (b"key1", b"val1"),
+  //     (b"key1", b"val2"),
+  //     (b"key1", b"val3"),
+  //     (b"key2", b"val1"),
+  //     (b"key2", b"val2"),
+  //     (b"key2", b"val3"),
+  // ] {
+  //     txn.put(&table, k, v, WriteFlags::empty()).unwrap();
+  // }
+
+  // let mut cursor = txn.cursor(&table).unwrap();
+  // assert_eq!(cursor.first().unwrap(), Some((*b"key1", *b"val1")));
+  // assert_eq!(cursor.get_multiple().unwrap(), Some(*b"val1val2val3"));
+  // assert_eq!(cursor.next_multiple::<(), ()>().unwrap(), None);
+
+  txn = env.start_write();
+  txn.clear_map(map);
+  map = txn.create_map(nullptr, mdbx::key_mode::usual,
+                       mdbx::value_mode::multi_samelength);
+  txn.upsert(map, mdbx::slice("key1"), mdbx::slice("val1"));
+  txn.upsert(map, mdbx::pair("key1", "val2"));
+  txn.upsert(map, mdbx::pair("key1", "val3"));
+  txn.upsert(map, mdbx::slice("key2"), mdbx::slice("val1"));
+  txn.upsert(map, mdbx::pair("key2", "val2"));
+  txn.upsert(map, mdbx::pair("key2", "val3"));
+
+  // cursor.close();
+  cursor = txn.open_cursor(map);
+  const auto t1 = cursor.to_first();
+  if (!t1 || t1.key != "key1" || t1.value != "val1") {
+    std::cerr << "Fail-t1\n";
+    return EXIT_FAILURE;
+  }
+  const auto t2 = cursor.get_multiple_samelength();
+  if (!t2 || t2.key != "key1" || t2.value != "val1val2val3") {
+    std::cerr << "Fail-t2\n";
+    return EXIT_FAILURE;
+  }
+  // const auto t3 = cursor.get_multiple_samelength("key2");
+  // if (!t3 || t3.key != "key2" || t3.value != "val1val2val3") {
+  //   std::cerr << "Fail-t3\n";
+  //   return EXIT_FAILURE;
+  // }
+  const auto t4 = cursor.next_multiple_samelength();
+  if (t4) {
+    std::cerr << "Fail-t4\n";
+    return EXIT_FAILURE;
+  }
+
   std::cout << "OK\n";
   return EXIT_SUCCESS;
 }
