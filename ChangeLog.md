@@ -13,11 +13,19 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 
  - Добавлены упущенные inline-реализации `mdbx::cursor::upper_bound()` и `mdbx::cursor::upper_bound_multivalue()`.
  - Корректировка описания С++ API для использования термина "таблица" вместо "sub-database".
+ - Исправление условия внутри `assert()` в пути обработки `MDBX_GET/NEXT/PREV_MULTIPLE`.
+
+Новое:
+ - Добавление `mdbx::cursor::get_multiple_samelength()` и переименование `mdbx::txn::put_multiple_samelength()`.
+ - Возвращение ключа при `MDBX_GET_MULTIPLE` для единообразия C++ API.
 
 Мелочи:
 
  - Теперь `MDBX_ENABLE_BIGFOOT` включена по-умолчанию вне зависимости от разрядности платформы.
  - Дополнение README и исправление опечаток/орфографии.
+ - Использование `WIN32` вместо `${CMAKE_SYSTEM_NAME}`.
+ - Подавление параноидальных предупреждений MSVC в extra-тестах.
+ - Дополнение отладочного логирования внутри `dxb_resize()`.
 
 --------------------------------------------------------------------------------
 
