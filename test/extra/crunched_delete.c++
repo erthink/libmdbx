@@ -5,7 +5,7 @@
 #include <random>
 #include <vector>
 
-#if MDBX_DEBUG || !defined(NDEBUG) || defined(__APPLE__)
+#if MDBX_DEBUG || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
 #define NN 1024
 #else
 #define NN 16384
