@@ -3509,7 +3509,9 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages,
 #include <sys/uuid.h>
 #endif /* FreeBSD */
 
-#if __GLIBC_PREREQ(2, 25) || defined(__FreeBSD__) || defined(__NetBSD__) ||    \
+#ifdef __IPHONE_OS_VERSION_MIN_REQUIRED
+#include <CommonCrypto/CommonRandom.h>
+#elif __GLIBC_PREREQ(2, 25) || defined(__FreeBSD__) || defined(__NetBSD__) ||  \
     defined(__BSD__) || defined(__bsdi__) || defined(__DragonFly__) ||         \
     defined(__APPLE__) || __has_include(<sys/random.h>)
 #include <sys/random.h>
