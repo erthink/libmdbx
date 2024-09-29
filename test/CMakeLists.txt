@@ -91,6 +91,13 @@ if(UNIX AND NOT SUBPROJECT)
       set_target_properties(test_extra_dupfixed_multiple PROPERTIES
         CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
     endif()
+    add_executable(test_extra_dbi extra/dbi.c++)
+    target_include_directories(test_extra_dbi PRIVATE "${PROJECT_SOURCE_DIR}")
+    target_link_libraries(test_extra_dbi ${TOOL_MDBX_LIB})
+    if(MDBX_CXX_STANDARD)
+      set_target_properties(test_extra_dbi PROPERTIES
+        CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
+    endif()
   endif()
 endif()
 
@@ -176,6 +183,7 @@ else()
     if(MDBX_BUILD_CXX)
       add_test(NAME extra_maindb_ordinal COMMAND test_extra_maindb_ordinal)
       add_test(NAME extra_dupfixed_multiple COMMAND test_extra_dupfixed_multiple)
+      add_test(NAME extra_dbi COMMAND test_extra_dbi)
     endif()
   endif()
 
