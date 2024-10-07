@@ -2761,7 +2761,9 @@ __cold MDBX_INTERNAL void osal_jitter(bool tiny) {
   for (;;) {
 #if defined(_M_IX86) || defined(_M_X64) || defined(__i386__) ||                \
     defined(__x86_64__)
-    const unsigned salt = 277u * (unsigned)__rdtsc();
+    unsigned salt = 5296013u * (unsigned)__rdtsc();
+    salt ^= salt >> 11;
+    salt *= 25810541u;
 #elif (defined(_WIN32) || defined(_WIN64)) && MDBX_WITHOUT_MSVC_CRT
     static ULONG state;
     const unsigned salt = (unsigned)RtlRandomEx(&state);
@@ -2769,13 +2771,26 @@ __cold MDBX_INTERNAL void osal_jitter(bool tiny) {
     const unsigned salt = rand();
 #endif
 
-    const unsigned coin = salt % (tiny ? 29u : 43u);
+    const int coin = salt % (tiny ? 29u : 43u);
     if (coin < 43 / 3)
       break;
 #if defined(_WIN32) || defined(_WIN64)
-    SwitchToThread();
-    if (coin > 43 * 2 / 3)
-      Sleep(1);
+    if (coin < 43 * 2 / 3)
+      SwitchToThread();
+    else {
+      static HANDLE timer;
+      if (!timer)
+        timer = CreateWaitableTimer(NULL, TRUE, NULL);
+
+      LARGE_INTEGER ft;
+      ft.QuadPart =
+          coin * (int64_t)-10; // Convert to 100 nanosecond interval,
+                               // negative value indicates relative time.
+      SetWaitableTimer(timer, &ft, 0, NULL, NULL, 0);
+      WaitForSingleObject(timer, INFINITE);
+      // CloseHandle(timer);
+      break;
+    }
 #else
     sched_yield();
     if (coin > 43 * 2 / 3)
