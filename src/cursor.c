@@ -1569,12 +1569,19 @@ __hot int cursor_put_checklen(MDBX_cursor *mc, const MDBX_val *key,
   if (mc->tree->flags & MDBX_INTEGERDUP) {
     if (data->iov_len == 8) {
       if (unlikely(7 & (uintptr_t)data->iov_base)) {
-        if (unlikely(flags & MDBX_MULTIPLE))
-          return MDBX_BAD_VALSIZE;
-        /* copy instead of return error to avoid break compatibility */
-        aligned_data.iov_base = bcopy_8(&aligned_databytes, data->iov_base);
-        aligned_data.iov_len = data->iov_len;
-        data = &aligned_data;
+        if (unlikely(flags & MDBX_MULTIPLE)) {
+          /* LY: использование alignof(uint64_t) тут не подходил из-за ошибок
+           * MSVC и некоторых других компиляторов, когда для элементов
+           * массивов/векторов обеспечивает выравнивание только на 4-х байтовых
+           * границу и одновременно alignof(uint64_t) == 8. */
+          if (MDBX_WORDBITS > 32 || (3 & (uintptr_t)data->iov_base) != 0)
+            return MDBX_BAD_VALSIZE;
+        } else {
+          /* copy instead of return error to avoid break compatibility */
+          aligned_data.iov_base = bcopy_8(&aligned_databytes, data->iov_base);
+          aligned_data.iov_len = data->iov_len;
+          data = &aligned_data;
+        }
       }
     } else if (data->iov_len == 4) {
       if (unlikely(3 & (uintptr_t)data->iov_base)) {
