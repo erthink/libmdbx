@@ -906,8 +906,21 @@ if(MDBX_BUILD_SHARED_LIBRARY AND MDBX_LINK_TOOLS_NONSTATIC)
       set(CMAKE_INSTALL_RPATH "\$ORIGIN/../lib")
     endif()
   endif()
+
+  if(WIN32)
+    # Windows don't have RPATH feature,
+    # therefore we should prepare PATH or copy DLL(s)
+    set(TOOL_MDBX_DLLCRUTCH "Crutch for ${CMAKE_SYSTEM_NAME}")
+    if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_VERSION VERSION_LESS 3.0)
+      # will use LOCATION property to compose DLLPATH
+      cmake_policy(SET CMP0026 OLD)
+    endif()
+  else()
+    set(TOOL_MDBX_DLLCRUTCH FALSE)
+  endif()
 else()
   set(TOOL_MDBX_LIB mdbx-static)
+  set(TOOL_MDBX_DLLCRUTCH FALSE)
 endif()
 
 # build mdbx-tools
