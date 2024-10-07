@@ -380,11 +380,18 @@ int main(int argc, const char *argv[]) {
   mdbx::path db_filename = "test-crunched-del";
   mdbx::env::remove(db_filename);
 
+  mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(),
+                        mdbx::env::operate_parameters(42));
+  if (!simple(env) || !next_prev_current(env) || !outofrange_prev(env))
+    return EXIT_FAILURE;
+
   std::vector<acase> testset;
   // Там ключи разной длины - от 1 до 64 байт.
   // Значения разной длины от 100 до 1000 байт.
   testset.emplace_back(/* keylen_min */ 1, /* keylen_max */ 64,
-                       /* datalen_min */ 100, /* datalen_max */ 4000,
+                       /* datalen_min */ 100, /* datalen_max */
+                       mdbx_env_get_valsize4page_max(
+                           env, MDBX_db_flags_t(mdbx::value_mode::multi)),
                        /* dups_log2 */ 6);
   // В одной таблице DupSort: path -> version_u64+data
   // path - это префикс в дереве. Самые частые длины: 1-5 байт и 32-36 байт.
@@ -393,11 +400,6 @@ int main(int argc, const char *argv[]) {
   // В другой DupSort: timestamp_u64 -> path
   testset.emplace_back(8, 8, 1, 5, 10);
   testset.emplace_back(8, 8, 32, 36, 9);
-
-  mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(),
-                        mdbx::env::operate_parameters(42));
-  if (!simple(env) || !next_prev_current(env) || !outofrange_prev(env))
-    return EXIT_FAILURE;
 
   auto txn = env.start_write();
   for (unsigned i = 0; i < testset.size(); ++i)
