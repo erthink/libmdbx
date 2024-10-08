@@ -7,6 +7,8 @@
 
 #if MDBX_DEBUG || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
 #define NN 1024
+#elif defined(MDBX_CI)
+#define NN 4096
 #else
 #define NN 16384
 #endif
