@@ -14,10 +14,11 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
  - Добавлены упущенные inline-реализации `mdbx::cursor::upper_bound()` и `mdbx::cursor::upper_bound_multivalue()`.
  - Корректировка описания С++ API для использования термина "таблица" вместо "sub-database".
  - Исправление условия внутри `assert()` в пути обработки `MDBX_GET/NEXT/PREV_MULTIPLE`.
+ - Допущение 4-байтового выравнивания данных `MDBX_MULTIPLE` для 32-битных сборок.
 
 Новое:
  - Добавление `mdbx::cursor::get_multiple_samelength()` и переименование `mdbx::txn::put_multiple_samelength()`.
- - Возвращение ключа при `MDBX_GET_MULTIPLE` для единообразия C++ API.
+ - Возвращение ключа при выполнении операции `MDBX_GET_MULTIPLE` для единообразия C++ API.
 
 Мелочи:
 
@@ -26,6 +27,11 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
  - Использование `WIN32` вместо `${CMAKE_SYSTEM_NAME}`.
  - Подавление параноидальных предупреждений MSVC в extra-тестах.
  - Дополнение отладочного логирования внутри `dxb_resize()`.
+ - Добавление в сценарии CMake/CTest копирования dll под  Windows для работы исключений в тестах на C++.
+ - Добавление С++ теста `extra/open`.
+ - Доработка `osal_jitter()` для уменьшения задержек в тестах под Windows.
+ - Исправление максимальной длины значений в тесте `extra/crunched-delete`.
+ - Добавление логирования С++ исключений в `extra/dupfix_multiple`.
 
 --------------------------------------------------------------------------------
 
