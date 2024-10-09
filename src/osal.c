@@ -146,13 +146,14 @@ __extern_C void __assert2(const char *file, int line, const char *function,
   __assert2(file, line, function, assertion)
 
 #elif defined(__UCLIBC__)
-__extern_C void __assert(const char *, const char *, unsigned, const char *)
+MDBX_NORETURN __extern_C void __assert(const char *, const char *, unsigned,
+                                       const char *)
 #ifdef __THROW
     __THROW
 #else
     __nothrow
 #endif /* __THROW */
-    MDBX_NORETURN;
+    ;
 #define __assert_fail(assertion, file, line, function)                         \
   __assert(assertion, file, line, function)
 
@@ -160,14 +161,15 @@ __extern_C void __assert(const char *, const char *, unsigned, const char *)
     /* workaround for avoid musl libc wrong prototype */ (                     \
         defined(__GLIBC__) || defined(__GNU_LIBRARY__))
 /* Prototype should match libc runtime. ISO POSIX (2003) & LSB 1.x-3.x */
-__extern_C void __assert_fail(const char *assertion, const char *file,
-                              unsigned line, const char *function)
+MDBX_NORETURN __extern_C void __assert_fail(const char *assertion,
+                                            const char *file, unsigned line,
+                                            const char *function)
 #ifdef __THROW
     __THROW
 #else
     __nothrow
 #endif /* __THROW */
-    MDBX_NORETURN;
+    ;
 
 #elif defined(__APPLE__) || defined(__MACH__)
 __extern_C void __assert_rtn(const char *function, const char *file, int line,
@@ -185,8 +187,9 @@ __extern_C void __assert_rtn(const char *function, const char *file, int line,
 #define __assert_fail(assertion, file, line, function)                         \
   __assert_rtn(function, file, line, assertion)
 #elif defined(__sun) || defined(__SVR4) || defined(__svr4__)
-__extern_C void __assert_c99(const char *assection, const char *file, int line,
-                             const char *function) MDBX_NORETURN;
+MDBX_NORETURN __extern_C void __assert_c99(const char *assection,
+                                           const char *file, int line,
+                                           const char *function);
 #define __assert_fail(assertion, file, line, function)                         \
   __assert_c99(assertion, file, line, function)
 #elif defined(__OpenBSD__)
