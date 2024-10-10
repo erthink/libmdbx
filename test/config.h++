@@ -282,7 +282,7 @@ struct actor_params_pod {
     // FIXME: TODO
     return 0;
   }
-  static MDBX_PURE_FUNCTION uint64_t serial_mask(unsigned bits) {
+  MDBX_PURE_FUNCTION static uint64_t serial_mask(unsigned bits) {
     assert(bits > 0 && bits <= 64);
     return (~(uint64_t)0u) >> (64 - bits);
   }

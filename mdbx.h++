@@ -924,7 +924,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param [in] ignore_spaces If `true` function will skips spaces surrounding
   /// (before, between and after) a encoded bytes. However, spaces should not
   /// break a pair of characters encoding a single byte.
-  inline MDBX_NOTHROW_PURE_FUNCTION bool
+  MDBX_NOTHROW_PURE_FUNCTION inline bool
   is_hex(bool ignore_spaces = false) const noexcept;
 
   /// \brief Checks whether the content of the slice is a
@@ -932,7 +932,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param [in] ignore_spaces If `true` function will skips spaces surrounding
   /// (before, between and after) a encoded bytes. However, spaces should not
   /// break a code group of characters.
-  inline MDBX_NOTHROW_PURE_FUNCTION bool
+  MDBX_NOTHROW_PURE_FUNCTION inline bool
   is_base58(bool ignore_spaces = false) const noexcept;
 
   /// \brief Checks whether the content of the slice is a
@@ -940,7 +940,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param [in] ignore_spaces If `true` function will skips spaces surrounding
   /// (before, between and after) a encoded bytes. However, spaces should not
   /// break a code group of characters.
-  inline MDBX_NOTHROW_PURE_FUNCTION bool
+  MDBX_NOTHROW_PURE_FUNCTION inline bool
   is_base64(bool ignore_spaces = false) const noexcept;
 
   inline void swap(slice &other) noexcept;
@@ -5876,17 +5876,17 @@ slice::base64_decode(bool ignore_spaces, const ALLOCATOR &allocator) const {
       .as_buffer<ALLOCATOR, CAPACITY_POLICY>(allocator);
 }
 
-inline MDBX_NOTHROW_PURE_FUNCTION bool
+MDBX_NOTHROW_PURE_FUNCTION inline bool
 slice::is_hex(bool ignore_spaces) const noexcept {
   return !from_hex(*this, ignore_spaces).is_erroneous();
 }
 
-inline MDBX_NOTHROW_PURE_FUNCTION bool
+MDBX_NOTHROW_PURE_FUNCTION inline bool
 slice::is_base58(bool ignore_spaces) const noexcept {
   return !from_base58(*this, ignore_spaces).is_erroneous();
 }
 
-inline MDBX_NOTHROW_PURE_FUNCTION bool
+MDBX_NOTHROW_PURE_FUNCTION inline bool
 slice::is_base64(bool ignore_spaces) const noexcept {
   return !from_base64(*this, ignore_spaces).is_erroneous();
 }

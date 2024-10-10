@@ -189,9 +189,32 @@ typedef mode_t mdbx_mode_t;
 #define __has_attribute(x) (0)
 #endif /* __has_attribute */
 
+#ifndef __has_c_attribute
+#define __has_c_attribute(x) (0)
+#endif /* __has_c_attribute */
+
 #ifndef __has_cpp_attribute
 #define __has_cpp_attribute(x) 0
 #endif /* __has_cpp_attribute */
+
+#ifndef __has_CXX_attribute
+#if defined(__cplusplus) &&                                                    \
+    (!defined(_MSC_VER) || defined(__clang__) || _MSC_VER >= 1942)
+#define __has_CXX_attribute(x) __has_cpp_attribute(x)
+#else
+#define __has_CXX_attribute(x) 0
+#endif
+#endif /* __has_CXX_attribute */
+
+#ifndef __has_C23_or_CXX_attribute
+#if defined(__cplusplus)
+#define __has_C23_or_CXX_attribute(x) __has_CXX_attribute(x)
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ > 202311L
+#define __has_C23_or_CXX_attribute(x) __has_c_attribute(x)
+#else
+#define __has_C23_or_CXX_attribute(x) 0
+#endif
+#endif /* __has_C23_or_CXX_attribute */
 
 #ifndef __has_feature
 #define __has_feature(x) (0)
@@ -213,15 +236,12 @@ typedef mode_t mdbx_mode_t;
  * These functions should be declared with the attribute pure. */
 #if defined(DOXYGEN)
 #define MDBX_PURE_FUNCTION [[gnu::pure]]
-#elif (defined(__GNUC__) || __has_attribute(__pure__)) &&                      \
-    (!defined(__clang__) /* https://bugs.llvm.org/show_bug.cgi?id=43275 */     \
-     || !defined(__cplusplus) || !__has_feature(cxx_exceptions))
-#define MDBX_PURE_FUNCTION __attribute__((__pure__))
-#elif defined(_MSC_VER) && !defined(__clang__) && _MSC_VER >= 1920
-#define MDBX_PURE_FUNCTION
-#elif defined(__cplusplus) && __has_cpp_attribute(gnu::pure) &&                \
-    (!defined(__clang__) || !__has_feature(cxx_exceptions))
+#elif __has_C23_or_CXX_attribute(gnu::pure)
 #define MDBX_PURE_FUNCTION [[gnu::pure]]
+#elif (defined(__GNUC__) || __has_attribute(__pure__)) &&                      \
+    (!defined(__clang__) /* https://bugs.llvm.org/show_bug.cgi?id=43275 */ ||  \
+     !defined(__cplusplus) || !__has_feature(cxx_exceptions))
+#define MDBX_PURE_FUNCTION __attribute__((__pure__))
 #else
 #define MDBX_PURE_FUNCTION
 #endif /* MDBX_PURE_FUNCTION */
@@ -231,22 +251,16 @@ typedef mode_t mdbx_mode_t;
  * that is compatible to CLANG and proposed [[pure]]. */
 #if defined(DOXYGEN)
 #define MDBX_NOTHROW_PURE_FUNCTION [[gnu::pure, gnu::nothrow]]
-#elif defined(__GNUC__) ||                                                     \
-    (__has_attribute(__pure__) && __has_attribute(__nothrow__))
-#define MDBX_NOTHROW_PURE_FUNCTION __attribute__((__pure__, __nothrow__))
-#elif defined(_MSC_VER) && !defined(__clang__) && _MSC_VER >= 1920
-#if __has_cpp_attribute(pure)
-#define MDBX_NOTHROW_PURE_FUNCTION [[pure]]
-#else
-#define MDBX_NOTHROW_PURE_FUNCTION
-#endif
-#elif defined(__cplusplus) && __has_cpp_attribute(gnu::pure)
-#if __has_cpp_attribute(gnu::nothrow)
+#elif __has_C23_or_CXX_attribute(gnu::pure)
+#if __has_C23_or_CXX_attribute(gnu::nothrow)
 #define MDBX_NOTHROW_PURE_FUNCTION [[gnu::pure, gnu::nothrow]]
 #else
 #define MDBX_NOTHROW_PURE_FUNCTION [[gnu::pure]]
 #endif
-#elif defined(__cplusplus) && __has_cpp_attribute(pure)
+#elif defined(__GNUC__) ||                                                     \
+    (__has_attribute(__pure__) && __has_attribute(__nothrow__))
+#define MDBX_NOTHROW_PURE_FUNCTION __attribute__((__pure__, __nothrow__))
+#elif __has_CXX_attribute(pure)
 #define MDBX_NOTHROW_PURE_FUNCTION [[pure]]
 #else
 #define MDBX_NOTHROW_PURE_FUNCTION
@@ -264,15 +278,12 @@ typedef mode_t mdbx_mode_t;
  * It does not make sense for a const function to return void. */
 #if defined(DOXYGEN)
 #define MDBX_CONST_FUNCTION [[gnu::const]]
-#elif (defined(__GNUC__) || __has_attribute(__pure__)) &&                      \
-    (!defined(__clang__) /* https://bugs.llvm.org/show_bug.cgi?id=43275 */     \
-     || !defined(__cplusplus) || !__has_feature(cxx_exceptions))
-#define MDBX_CONST_FUNCTION __attribute__((__const__))
-#elif defined(_MSC_VER) && !defined(__clang__) && _MSC_VER >= 1920
-#define MDBX_CONST_FUNCTION MDBX_PURE_FUNCTION
-#elif defined(__cplusplus) && __has_cpp_attribute(gnu::const) &&               \
-    (!defined(__clang__) || !__has_feature(cxx_exceptions))
+#elif __has_C23_or_CXX_attribute(gnu::const)
 #define MDBX_CONST_FUNCTION [[gnu::const]]
+#elif (defined(__GNUC__) || __has_attribute(__const__)) &&                     \
+    (!defined(__clang__) /* https://bugs.llvm.org/show_bug.cgi?id=43275 */ ||  \
+     !defined(__cplusplus) || !__has_feature(cxx_exceptions))
+#define MDBX_CONST_FUNCTION __attribute__((__const__))
 #else
 #define MDBX_CONST_FUNCTION MDBX_PURE_FUNCTION
 #endif /* MDBX_CONST_FUNCTION */
@@ -282,18 +293,16 @@ typedef mode_t mdbx_mode_t;
  * that is compatible to CLANG and future [[const]]. */
 #if defined(DOXYGEN)
 #define MDBX_NOTHROW_CONST_FUNCTION [[gnu::const, gnu::nothrow]]
+#elif __has_C23_or_CXX_attribute(gnu::const)
+#if __has_C23_or_CXX_attribute(gnu::nothrow)
+#define MDBX_NOTHROW_CONST_FUNCTION [[gnu::const, gnu::nothrow]]
+#else
+#define MDBX_NOTHROW_CONST_FUNCTION [[gnu::const]]
+#endif
 #elif defined(__GNUC__) ||                                                     \
     (__has_attribute(__const__) && __has_attribute(__nothrow__))
 #define MDBX_NOTHROW_CONST_FUNCTION __attribute__((__const__, __nothrow__))
-#elif defined(_MSC_VER) && !defined(__clang__) && _MSC_VER >= 1920
-#define MDBX_NOTHROW_CONST_FUNCTION MDBX_NOTHROW_PURE_FUNCTION
-#elif defined(__cplusplus) && __has_cpp_attribute(gnu::const)
-#if __has_cpp_attribute(gnu::nothrow)
-#define MDBX_NOTHROW_PURE_FUNCTION [[gnu::const, gnu::nothrow]]
-#else
-#define MDBX_NOTHROW_PURE_FUNCTION [[gnu::const]]
-#endif
-#elif defined(__cplusplus) && __has_cpp_attribute(const)
+#elif __has_CXX_attribute(const)
 #define MDBX_NOTHROW_CONST_FUNCTION [[const]]
 #else
 #define MDBX_NOTHROW_CONST_FUNCTION MDBX_NOTHROW_PURE_FUNCTION
@@ -3848,7 +3857,7 @@ mdbx_env_get_maxvalsize_ex(const MDBX_env *env, MDBX_db_flags_t flags);
 /** \deprecated Please use \ref mdbx_env_get_maxkeysize_ex()
  *              and/or \ref mdbx_env_get_maxvalsize_ex()
  * \ingroup c_statinfo */
-MDBX_DEPRECATED MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
+MDBX_NOTHROW_PURE_FUNCTION MDBX_DEPRECATED LIBMDBX_API int
 mdbx_env_get_maxkeysize(const MDBX_env *env);
 
 /** \brief Returns maximal size of key-value pair to fit in a single page
