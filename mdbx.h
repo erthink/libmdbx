@@ -621,7 +621,7 @@ extern "C" {
 #define MDBX_VERSION_MINOR 13
 
 #ifndef LIBMDBX_API
-#if defined(LIBMDBX_EXPORTS)
+#if defined(LIBMDBX_EXPORTS) || defined(DOXYGEN)
 #define LIBMDBX_API __dll_export
 #elif defined(LIBMDBX_IMPORTS)
 #define LIBMDBX_API __dll_import
@@ -631,7 +631,7 @@ extern "C" {
 #endif /* LIBMDBX_API */
 
 #ifdef __cplusplus
-#if defined(__clang__) || __has_attribute(type_visibility)
+#if defined(__clang__) || __has_attribute(type_visibility) || defined(DOXYGEN)
 #define LIBMDBX_API_TYPE LIBMDBX_API __attribute__((type_visibility("default")))
 #else
 #define LIBMDBX_API_TYPE LIBMDBX_API
