@@ -1743,10 +1743,10 @@ private:
             << (sizeof(size_t /* allocated::capacity_bytes_ */) - 1) * CHAR_BIT
       };
 
-      constexpr byte lastbyte() const noexcept {
+      constexpr byte inplace_lastbyte() const noexcept {
         return inplace_[sizeof(bin) - 1];
       }
-      MDBX_CXX17_CONSTEXPR byte &lastbyte() noexcept {
+      MDBX_CXX17_CONSTEXPR byte &inplace_lastbyte() noexcept {
         return inplace_[sizeof(bin) - 1];
       }
 
@@ -1758,7 +1758,7 @@ private:
                     (std::numeric_limits<size_t>::max() >> CHAR_BIT) ==
                 inplace_signature_limit,
             "WTF?");
-        return lastbyte() == lastbyte_inplace_signature;
+        return inplace_lastbyte() == lastbyte_inplace_signature;
       }
       constexpr bool is_allocated() const noexcept { return !is_inplace(); }
 
@@ -1772,7 +1772,7 @@ private:
         if (::std::is_trivial<allocator_pointer>::value)
           /* workaround for "uninitialized" warning from some compilers */
           memset(&allocated_.ptr_, 0, sizeof(allocated_.ptr_));
-        lastbyte() = lastbyte_inplace_signature;
+        inplace_lastbyte() = lastbyte_inplace_signature;
         MDBX_CONSTEXPR_ASSERT(is_inplace() && address() == inplace_ &&
                               is_suitable_for_inplace(capacity()));
         return address();
