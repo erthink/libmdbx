@@ -2559,6 +2559,11 @@ LIBMDBX_API int mdbx_env_open(MDBX_env *env, const char *pathname,
  * \see mdbx_env_open() */
 LIBMDBX_API int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
                                MDBX_env_flags_t flags, mdbx_mode_t mode);
+#define mdbx_env_openT(env, pathname, flags, mode)                             \
+  mdbx_env_openW(env, pathname, flags, mode)
+#else
+#define mdbx_env_openT(env, pathname, flags, mode)                             \
+  mdbx_env_open(env, pathname, flags, mode)
 #endif /* Windows */
 
 /** \brief Deletion modes for \ref mdbx_env_delete().
@@ -2609,6 +2614,9 @@ LIBMDBX_API int mdbx_env_delete(const char *pathname,
  * \see mdbx_env_delete() */
 LIBMDBX_API int mdbx_env_deleteW(const wchar_t *pathname,
                                  MDBX_env_delete_mode_t mode);
+#define mdbx_env_deleteT(pathname, mode) mdbx_env_deleteW(pathname, mode)
+#else
+#define mdbx_env_deleteT(pathname, mode) mdbx_env_delete(pathname, mode)
 #endif /* Windows */
 
 /** \brief Copy an MDBX environment to the specified path, with options.
@@ -2730,6 +2738,7 @@ LIBMDBX_API int mdbx_txn_copy2pathname(MDBX_txn *txn, const char *dest,
  * \see mdbx_env_copy() */
 LIBMDBX_API int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest,
                                MDBX_copy_flags_t flags);
+#define mdbx_env_copyT(env, dest, flags) mdbx_env_copyW(env, dest, flags)
 
 /** \copydoc mdbx_txn_copy2pathname()
  * \ingroup c_extra
@@ -2737,6 +2746,12 @@ LIBMDBX_API int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest,
  * \see mdbx_txn_copy2pathname() */
 LIBMDBX_API int mdbx_txn_copy2pathnameW(MDBX_txn *txn, const wchar_t *dest,
                                         MDBX_copy_flags_t flags);
+#define mdbx_txn_copy2pathnameT(txn, dest, flags)                              \
+  mdbx_txn_copy2pathnameW(txn, dest, path)
+#else
+#define mdbx_env_copyT(env, dest, flags) mdbx_env_copy(env, dest, flags)
+#define mdbx_txn_copy2pathnameT(txn, dest, flags)                              \
+  mdbx_txn_copy2pathname(txn, dest, path)
 #endif /* Windows */
 
 /** \brief Copy an environment to the specified file descriptor, with
@@ -3403,6 +3418,9 @@ LIBMDBX_API int mdbx_env_get_path(const MDBX_env *env, const char **dest);
  * \note Available only on Windows.
  * \see mdbx_env_get_path() */
 LIBMDBX_API int mdbx_env_get_pathW(const MDBX_env *env, const wchar_t **dest);
+#define mdbx_env_get_pathT(env, dest) mdbx_env_get_pathW(env, dest)
+#else
+#define mdbx_env_get_pathT(env, dest) mdbx_env_get_path(env, dest)
 #endif /* Windows */
 
 /** \brief Return the file descriptor for the given environment.
@@ -6426,6 +6444,11 @@ LIBMDBX_API int mdbx_env_open_for_recoveryW(MDBX_env *env,
                                             const wchar_t *pathname,
                                             unsigned target_meta,
                                             bool writeable);
+#define mdbx_env_open_for_recoveryT(env, pathname, target_mets, writeable)     \
+  mdbx_env_open_for_recoveryW(env, pathname, target_mets, writeable)
+#else
+#define mdbx_env_open_for_recoveryT(env, pathname, target_mets, writeable)     \
+  mdbx_env_open_for_recovery(env, pathname, target_mets, writeable)
 #endif /* Windows */
 
 /** \brief Turn database to the specified meta-page.
@@ -6475,6 +6498,11 @@ LIBMDBX_API int mdbx_preopen_snapinfo(const char *pathname, MDBX_envinfo *info,
  * \see mdbx_preopen_snapinfo() */
 LIBMDBX_API int mdbx_preopen_snapinfoW(const wchar_t *pathname,
                                        MDBX_envinfo *info, size_t bytes);
+#define mdbx_preopen_snapinfoT(pathname, info, bytes)                          \
+  mdbx_preopen_snapinfoW(pathname, info, bytes)
+#else
+#define mdbx_preopen_snapinfoT(pathname, info, bytes)                          \
+  mdbx_preopen_snapinfo(pathname, info, bytes)
 #endif /* Windows */
 
 /** \brief Флаги/опции для проверки целостности базы данных.
