@@ -3570,22 +3570,26 @@ public:
   /// create_parameters &, const operate_parameters &, bool accede)
 
   struct LIBMDBX_API_TYPE geometry {
-    enum : int64_t {
+    enum : intptr_t {
       default_value = -1,         ///< Means "keep current or use default"
       minimal_value = 0,          ///< Means "minimal acceptable"
       maximal_value = INTPTR_MAX, ///< Means "maximal acceptable"
-      kB = 1000,                  ///< \f$10^{3}\f$ bytes
-      MB = kB * 1000,             ///< \f$10^{6}\f$ bytes
-      GB = MB * 1000,             ///< \f$10^{9}\f$ bytes
-      TB = GB * 1000,             ///< \f$10^{12}\f$ bytes
-      PB = TB * 1000,             ///< \f$10^{15}\f$ bytes
-      EB = PB * 1000,             ///< \f$10^{18}\f$ bytes
-      KiB = 1024,                 ///< \f$2^{10}\f$ bytes
-      MiB = KiB << 10,            ///< \f$2^{20}\f$ bytes
-      GiB = MiB << 10,            ///< \f$2^{30}\f$ bytes
-      TiB = GiB << 10,            ///< \f$2^{40}\f$ bytes
-      PiB = TiB << 10,            ///< \f$2^{50}\f$ bytes
-      EiB = PiB << 10,            ///< \f$2^{60}\f$ bytes
+      kB = 1000,                  ///< \f$10^{3}\f$ bytes (0x03E8)
+      MB = kB * 1000,             ///< \f$10^{6}\f$ bytes (0x000F_4240)
+      GB = MB * 1000,             ///< \f$10^{9}\f$ bytes (0x3B9A_CA00)
+#if INTPTR_MAX > 0x7fffFFFFl
+      TB = GB * 1000,  ///< \f$10^{12}\f$ bytes (0x0000_00E8_D4A5_1000)
+      PB = TB * 1000,  ///< \f$10^{15}\f$ bytes (0x0003_8D7E_A4C6_8000)
+      EB = PB * 1000,  ///< \f$10^{18}\f$ bytes (0x0DE0_B6B3_A764_0000)
+#endif                 /* 64-bit intptr_t */
+      KiB = 1024,      ///< \f$2^{10}\f$ bytes (0x0400)
+      MiB = KiB << 10, ///< \f$2^{20}\f$ bytes (0x0010_0000)
+      GiB = MiB << 10, ///< \f$2^{30}\f$ bytes (0x4000_0000)
+#if INTPTR_MAX > 0x7fffFFFFl
+      TiB = GiB << 10, ///< \f$2^{40}\f$ bytes (0x0000_0100_0000_0000)
+      PiB = TiB << 10, ///< \f$2^{50}\f$ bytes (0x0004_0000_0000_0000)
+      EiB = PiB << 10, ///< \f$2^{60}\f$ bytes (0x1000_0000_0000_0000)
+#endif                 /* 64-bit intptr_t */
     };
 
     /// \brief Tagged type for output to std::ostream
