@@ -2013,7 +2013,7 @@ typedef enum MDBX_error {
   MDBX_DUPLICATED_CLK = -30413,
 
   /** Some cursors and/or other resources should be closed before table or
-   *  corresponding DBI-handle could be (re)used */
+   *  corresponding DBI-handle could be (re)used and/or closed. */
   MDBX_DANGLING_DBI = -30412,
 
   /** The parked read transaction was outed for the sake of
@@ -4904,9 +4904,12 @@ LIBMDBX_INLINE_API(int, mdbx_dbi_flags,
  * \ref mdbx_env_set_maxdbs(), unless that value would be large.
  *
  * \note Use with care.
- * This call is synchronized via mutex with \ref mdbx_dbi_close(), but NOT with
- * other transactions running by other threads. The "next" version of libmdbx
- * (\ref MithrilDB) will solve this issue.
+ * This call is synchronized via mutex with \ref mdbx_dbi_open(), but NOT with
+ * any transaction(s) running by other thread(s).
+ * So the `mdbx_dbi_close()` MUST NOT be called in-parallel/concurrently
+ * with any transactions using the closing dbi-handle, nor during other thread
+ * commit/abort a write transacton(s). The "next" version of libmdbx (\ref
+ * MithrilDB) will solve this issue.
  *
  * Handles should only be closed if no other threads are going to reference
  * the table handle or one of its cursors any further. Do not close a handle
