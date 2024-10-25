@@ -23134,9 +23134,29 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
 
   rc = osal_fastmutex_acquire(&env->me_dbi_lock);
   if (likely(rc == MDBX_SUCCESS)) {
-    rc = (dbi < env->me_maxdbs && (env->me_dbflags[dbi] & DB_VALID))
-             ? dbi_close_locked(env, dbi)
-             : MDBX_BAD_DBI;
+  retry:
+    rc = MDBX_BAD_DBI;
+    if (dbi < env->me_maxdbs && (env->me_dbflags[dbi] & DB_VALID)) {
+      const MDBX_txn *const hazard = env->me_txn;
+      osal_compiler_barrier();
+      if (env->me_txn0 && (env->me_txn0->mt_flags & MDBX_TXN_FINISHED) == 0) {
+        if (env->me_txn0->mt_dbistate[dbi] & (DBI_DIRTY | DBI_CREAT))
+          goto bailout_dirty_dbi;
+        osal_memory_barrier();
+        if (unlikely(hazard != env->me_txn))
+          goto retry;
+        if (hazard != env->me_txn0 && hazard &&
+            (hazard->mt_flags & MDBX_TXN_FINISHED) == 0 &&
+            hazard->mt_signature == MDBX_MT_SIGNATURE &&
+            (hazard->mt_dbistate[dbi] & (DBI_DIRTY | DBI_CREAT)))
+          goto bailout_dirty_dbi;
+        osal_compiler_barrier();
+        if (unlikely(hazard != env->me_txn))
+          goto retry;
+      }
+      rc = dbi_close_locked(env, dbi);
+    }
+  bailout_dirty_dbi:
     ENSURE(env, osal_fastmutex_release(&env->me_dbi_lock) == MDBX_SUCCESS);
   }
   return rc;
