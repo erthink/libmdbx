@@ -472,14 +472,11 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi,
   }
 
   /* Done here so we cannot fail after creating a new DB */
-  void *clone = nullptr;
-  if (name.iov_len) {
-    clone = osal_malloc(dbi_namelen(name));
-    if (unlikely(!clone))
-      return MDBX_ENOMEM;
-    name.iov_base = memcpy(clone, name.iov_base, name.iov_len);
-  } else
-    name.iov_base = "";
+  defer_free_item_t *const clone = osal_malloc(dbi_namelen(name));
+  if (unlikely(!clone))
+    return MDBX_ENOMEM;
+  memcpy(clone, name.iov_base, name.iov_len);
+  name.iov_base = clone;
 
   uint8_t dbi_state = DBI_LINDO | DBI_VALID | DBI_FRESH;
   if (unlikely(rc)) {
