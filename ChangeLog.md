@@ -4,9 +4,21 @@ ChangeLog
 English version [by Google](https://gitflic-ru.translate.goog/project/erthink/libmdbx/blob?file=ChangeLog.md&_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
-## v0.12.12 (в процессе накопления исправлений)
+## v0.12.12 "Доллежаль" от 2024-10-27
 
-Поддерживающий выпуск с исправлением обнаруженных ошибок и устранением недочетов.
+Поддерживающий выпуск с исправлением обнаруженных ошибок и устранением недочетов,
+в память о советском ученом-энергетике Николае Антоновиче Доллежаль в день 125-летия со дня его рождения.
+
+Это последний выпуск куста стабильных версий 0.12.x, спустя более двух
+лет после выпуска 0.12.1. Последующие выпуски 0.12.x будут формироваться
+только в случае существенных проблем/ошибок, вероятность чего близка к
+нулю. Для всех проектов находящихся в стадии активной разраборки
+рекомендуется использовать ветку `master`.
+
+```
+git diff' stat: x commits, y files changed, z insertions(+), zz deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
+```
 
 Значимые исправления:
 
