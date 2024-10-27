@@ -1,8 +1,8 @@
-From 22732cf074188912caea6da6795c36098efb7eb5 Mon Sep 17 00:00:00 2001
+From 40efe497b511c322470aa9c084fe4c1759788c57 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?=D0=9B=D0=B5=D0=BE=D0=BD=D0=B8=D0=B4=20=D0=AE=D1=80=D1=8C?=
  =?UTF-8?q?=D0=B5=D0=B2=20=28Leonid=20Yuriev=29?= <leo@yuriev.ru>
-Date: Mon, 23 Oct 2023 18:07:13 +0300
-Subject: [PATCH] package/libmdbx: new package (library/database).
+Date: Sun, 27 Oct 2024 22:34:19 +0300
+Subject: [PATCH 1/1] package/libmdbx: new package (library/database).
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -15,8 +15,9 @@ This patch adds libmdbx:
    in terms of reliability, features and performance.
  - more information at https://gitflic.ru/project/erthink/libmdbx
 
-The v0.12.10 "SEM" is stable release of _libmdbx_ branch with new superior features,
-in memory of the Hero of Russia Guard Major Dmitry Semenov with the call sign "SEM".
+The 0.12.12 "Dollezhal" is stable release of _libmdbx_ branch in memory
+of the Soviet energy scientist Nikolai Antonovich Dollezhal on the 125th
+anniversary of his birth.
 
 The complete ChangeLog: https://gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md
 
@@ -111,18 +112,18 @@ index 0000000000..a9a4ac45c5
 +		!BR2_TOOLCHAIN_GCC_AT_LEAST_4_4
 diff --git a/package/libmdbx/libmdbx.hash b/package/libmdbx/libmdbx.hash
 new file mode 100644
-index 0000000000..1dbdef7c69
+index 0000000000..222e7caf5c
 --- /dev/null
 +++ b/package/libmdbx/libmdbx.hash
 @@ -0,0 +1,5 @@
 +# Hashes from: https://libmdbx.dqdkfa.ru/release/SHA256SUMS
-+sha256  4637e06768a9a8fc7577e6e458e045ad1f9a8baee74996a3c88bc0ad64cbcf67  libmdbx-amalgamated-0.12.10.tar.xz
++sha256  19c0eb33e1ed43ca2a94dceb06dd31946432d16f30a9751d3701c67efa22eb1a  libmdbx-amalgamated-0.12.12.tar.xz
 +
 +# Locally calculated
 +sha256  310fe25c858a9515fc8c8d7d1f24a67c9496f84a91e0a0e41ea9975b1371e569  LICENSE
 diff --git a/package/libmdbx/libmdbx.mk b/package/libmdbx/libmdbx.mk
 new file mode 100644
-index 0000000000..36df45b64f
+index 0000000000..da4a53913f
 --- /dev/null
 +++ b/package/libmdbx/libmdbx.mk
 @@ -0,0 +1,42 @@
@@ -132,7 +133,7 @@ index 0000000000..36df45b64f
 +#
 +################################################################################
 +
-+LIBMDBX_VERSION = 0.12.10
++LIBMDBX_VERSION = 0.12.12
 +LIBMDBX_SOURCE = libmdbx-amalgamated-$(LIBMDBX_VERSION).tar.xz
 +LIBMDBX_SITE = https://libmdbx.dqdkfa.ru/release
 +LIBMDBX_SUPPORTS_IN_SOURCE_BUILD = NO
@@ -169,5 +170,5 @@ index 0000000000..36df45b64f
 +
 +$(eval $(cmake-package))
 -- 
-2.43.2
+2.47.0
 
