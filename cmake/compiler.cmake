@@ -368,13 +368,15 @@ else()
   set(CMAKE_REQUIRED_FLAGS "-fopenmp -Werror")
   if(CMAKE_CXX_COMPILER_LOADED)
     check_cxx_source_compiles("int main(void) {
-      #pragma omp parallel
-      return 0;
+      #pragma omp for
+      for(int i = 0, j = 0; i != 42; i = 1 + i * 12345) j += i % 43;
+      return j;
       }" HAVE_OPENMP)
   else()
     check_c_source_compiles("int main(void) {
-      #pragma omp parallel
-      return 0;
+      #pragma omp for
+      for(int i = 0, j = 0; i != 42; i = 1 + i * 12345) j += i % 43;
+      return j;
       }" HAVE_OPENMP)
   endif()
   set(CMAKE_REQUIRED_FLAGS "")
