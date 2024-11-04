@@ -7,6 +7,10 @@
 #if (defined(MDBX_DEBUG) && MDBX_DEBUG > 0) ||                                 \
     (defined(MDBX_FORCE_ASSERTIONS) && MDBX_FORCE_ASSERTIONS)
 #undef NDEBUG
+#ifndef MDBX_DEBUG
+/* Чтобы избежать включения отладки только из-за включения assert-проверок */
+#define MDBX_DEBUG 0
+#endif
 #endif
 
 /*----------------------------------------------------------------------------*/
