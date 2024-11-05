@@ -365,9 +365,15 @@ fi
 ###############################################################################
 # 5. run stochastic iterations
 
+if which setsid >/dev/null 2>/dev/null; then
+  SETSID=$(which setsid)
+else
+  SETSID=""
+fi
+
 if which lz4 >/dev/null; then
   function logger {
-    lz4 > ${TESTDB_DIR}/long.log.lz4
+    ${SETSID} lz4 -z -c > ${TESTDB_DIR}/long.log.lz4 || echo "FAILED 'lz4 -z -c > ${TESTDB_DIR}/long.log.lz4'" >&2
   }
   function taillog {
     if [ -s ${TESTDB_DIR}/long.log.lz4 ]; then
@@ -379,7 +385,7 @@ if which lz4 >/dev/null; then
   }
 elif which gzip >/dev/null; then
   function logger {
-    gzip > ${TESTDB_DIR}/long.log.gz
+    ${SETSID} gzip -c -k > ${TESTDB_DIR}/long.log.gz || echo "FAILED 'gzip -c -k > ${TESTDB_DIR}/long.log.gz'" >&2
   }
   function taillog {
     if [ -s ${TESTDB_DIR}/long.log.gz ]; then
@@ -391,7 +397,7 @@ elif which gzip >/dev/null; then
   }
 else
   function logger {
-    cat > ${TESTDB_DIR}/long.log
+    cat > ${TESTDB_DIR}/long.log || echo "FAILED 'cat > ${TESTDB_DIR}/long.log'" >&2
   }
   function taillog {
     if [ -s ${TESTDB_DIR}/long.log ]; then
@@ -421,21 +427,37 @@ function bits2options {
   join , ${list[@]}
 }
 
+LFD=0
+trap "echo 'SIGPIPE(ignored)'" SIGPIPE
+
 function failed {
+  set +euo pipefail
   echo "FAILED" >&2
+  if [ ${LFD} -ne 0 ]; then
+    sleep 0.05
+    echo "@@@ END-OF-LOG/FAILED" >&${LFD}
+    sleep 0.05
+    exec {LFD}>&-
+    LFD=0
+  fi
   if [ ${TAILLOG} -gt 0 ]; then
     taillog
   fi
   exit 1
 }
 
-function check_deep {
-  if [ "$case" = "basic" -o "$case" = "--hill" ]; then
-    tee >(logger) | grep -e reach -e achieve
-  else
-    logger
+function on_exit {
+  set +euo pipefail
+  if [ ${LFD} -ne 0 ]; then
+    sleep 0.05
+    echo "@@@ END-OF-LOG/EXIT" >&${LFD}
+    sleep 0.05
+    exec {LFD}>&-
+    LFD=0
   fi
+  echo "--- EXIT" >&2
 }
+trap on_exit EXIT
 
 function probe {
   echo "----------------------------------------------- $(date)"
@@ -444,11 +466,21 @@ function probe {
   for case in $LIST
   do
     echo "Run ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} $@ $case"
-    ${MONITOR} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} "$@" $case | check_deep \
+    if [ "$case" = "basic" -o "$case" = "--hill" ]; then
+      exec {LFD}> >(tee -p -i >(logger) | grep -e reach -e achieve)
+    else
+      exec {LFD}> >(logger)
+    fi
+    ${MONITOR} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} "$@" $case >&${LFD} \
       && ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
       && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
       || failed
-   done
+    if [ ${LFD} -ne 0 ]; then
+      echo "@@@ END-OF-LOG/ITERATION" >&${LFD}
+      exec {LFD}>&-
+      LFD=0
+    fi
+  done
 }
 
 #------------------------------------------------------------------------------
