@@ -342,6 +342,12 @@ static void handler_SIGCHLD(int signum) {
     ++sigalarm_head;
 }
 
+static std::atomic_int sigbreak;
+static void handler_SIGBREAK(int signum) {
+  (void)signum;
+  ++sigbreak;
+}
+
 int osal_delay(unsigned seconds) { return sleep(seconds) ? errno : 0; }
 
 int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
@@ -349,6 +355,17 @@ int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
   if (children.empty()) {
     struct sigaction act;
     memset(&act, 0, sizeof(act));
+    act.sa_handler = handler_SIGBREAK;
+    sigaction(SIGTERM, &act, nullptr);
+    sigaction(SIGHUP, &act, nullptr);
+    sigaction(SIGINT, &act, nullptr);
+    sigaction(SIGQUIT, &act, nullptr);
+#ifdef SIGXCPU
+    sigaction(SIGXCPU, &act, nullptr);
+#endif
+#ifdef SIGXFSZ
+    sigaction(SIGXFSZ, &act, nullptr);
+#endif
     act.sa_handler = handler_SIGCHLD;
     sigaction(SIGCHLD, &act, nullptr);
     sigaction(SIGALRM, &act, nullptr);
@@ -500,7 +517,7 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
   sigalarm_tail = sigalarm_head /* reset timeout flag */;
 
   int options = WNOHANG;
-  if (timeout) {
+  if (timeout && !sigbreak) {
     alarm((timeout > INT_MAX) ? INT_MAX : timeout);
     options = 0;
   }
@@ -573,7 +590,7 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
     if (err != EINTR)
       return err;
   }
-  return 0 /* timeout */;
+  return sigbreak ? EINTR : 0 /* timeout */;
 }
 
 void osal_yield(void) {
