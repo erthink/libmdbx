@@ -18,6 +18,7 @@ DONT_CHECK_RAM=no
 EXTRA=no
 TAILLOG=0
 DELAY=0
+REPORT_DEPTH=no
 
 while [ -n "$1" ]
 do
@@ -43,6 +44,7 @@ do
     echo "--extra                Iterate extra modes/flags"
     echo "--taillog              Dump tail of test log on failure"
     echo "--delay NN             Delay NN seconds before run test"
+    echo "--report-depth         Report tree depth (tee+grep log)"
     echo "--help                 Print this usage help and exit"
     exit -2
   ;;
@@ -172,6 +174,9 @@ do
   --delay)
     DELAY=$(($2))
     shift
+  ;;
+  --report-depth)
+    REPORT_DEPTH=yes
   ;;
   *)
     echo "Unknown option '$1'"
@@ -466,7 +471,7 @@ function probe {
   for case in $LIST
   do
     echo "Run ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} $@ $case"
-    if [ "$case" = "basic" -o "$case" = "--hill" ]; then
+    if [[ ${REPORT_DEPTH} = "yes" && ($case = "basic" || $case = "--hill") ]]; then
       exec {LFD}> >(tee -p -i >(logger) | grep -e reach -e achieve)
     else
       exec {LFD}> >(logger)
