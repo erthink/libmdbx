@@ -188,12 +188,6 @@ done
 
 set -euo pipefail
 if [ -z "$MONITOR" ]; then
-  if which time >/dev/null 2>/dev/null; then
-    MONITOR=$(which time)
-    if $MONITOR -o /dev/stdout true >/dev/null 2>/dev/null; then
-      MONITOR="$MONITOR -o /dev/stdout"
-    fi
-  fi
   export MALLOC_CHECK_=7 MALLOC_PERTURB_=42
 fi
 
