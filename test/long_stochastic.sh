@@ -3,6 +3,12 @@
 # Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 # SPDX-License-Identifier: Apache-2.0
 
+if [ "${BASH_VERSION}" \< "4.3" ]; then
+  echo "Bash-shell 4.3 or later is REQUIRED." >&2
+  echo "Present Bash-shell version is '${BASH_VERSION}' (BASH_VERSION)" >&2
+  exit
+fi
+
 LIST=basic
 FROM=1
 UPTO=9999999
