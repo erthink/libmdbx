@@ -472,7 +472,10 @@ function probe {
   do
     echo "Run ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} $@ $case"
     if [[ ${REPORT_DEPTH} = "yes" && ($case = "basic" || $case = "--hill") ]]; then
-      exec {LFD}> >(tee -p -i >(logger) | grep -e reach -e achieve)
+      if [ -z "${TEE4PIPE:-}" ]; then
+        TEE4PIPE=$(tee --help | grep -q ' -p' && echo "tee -i -p" || echo "tee -i")
+      fi
+      exec {LFD}> >(${TEE4PIPE} >(logger) | grep -e reach -e achieve)
     else
       exec {LFD}> >(logger)
     fi
