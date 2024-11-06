@@ -25,6 +25,9 @@ EXTRA=no
 TAILLOG=0
 DELAY=0
 REPORT_DEPTH=no
+REPEAT=11
+ROUNDS=1
+SMALL=no
 
 while [ -n "$1" ]
 do
@@ -40,6 +43,8 @@ do
     echo "--skip-make            Don't (re)build libmdbx and test's executable"
     echo "--from NN              Start iterating from the NN ops per test case"
     echo "--upto NN              Don't run tests with more than NN ops per test case"
+    echo "--repeat NN            Repeat each testcase NN times within test run"
+    echo "--rounds NN            Cycle each n-ops/wbatch case NN times"
     echo "--loops NN             Stop after the NN loops"
     echo "--dir PATH             Specifies directory for test DB and other files (it will be cleared)"
     echo "--db-upto-mb NN        Limits upper size of test DB to the NN megabytes"
@@ -51,6 +56,7 @@ do
     echo "--taillog              Dump tail of test log on failure"
     echo "--delay NN             Delay NN seconds before run test"
     echo "--report-depth         Report tree depth (tee+grep log)"
+    echo "--small                Small transactions/batch/nops pattern"
     echo "--help                 Print this usage help and exit"
     exit -2
   ;;
@@ -99,6 +105,22 @@ do
     UPTO=$(($2))
     if [ -z "$UPTO" -o "$UPTO" -lt 1 ]; then
       echo "Invalid value '$UPTO' for --upto option"
+      exit -2
+    fi
+    shift
+  ;;
+  --repeat|--reps|--rep)
+    REPEAT=$(($2))
+    if [ -z "$REPEAT" -o "$REPEAT" -lt 1 -o "$REPEAT" -gt 99 ]; then
+      echo "Invalid value '$REPEAT' for --repeat option"
+      exit -2
+    fi
+    shift
+  ;;
+  --rounds)
+    ROUNDS=$(($2))
+    if [ -z "$ROUNDS" -o "$ROUNDS" -lt 1 -o "$ROUNDS" -gt 99 ]; then
+      echo "Invalid value '$ROUNDS' for --rounds option"
       exit -2
     fi
     shift
@@ -183,6 +205,9 @@ do
   ;;
   --report-depth)
     REPORT_DEPTH=yes
+  ;;
+  --small)
+    SMALL=yes
   ;;
   *)
     echo "Unknown option '$1'"
@@ -470,7 +495,7 @@ function probe {
   rm -f ${TESTDB_DIR}/* || failed
   for case in $LIST
   do
-    echo "${speculum} --random-writemap=no --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} $@ $case"
+    echo "${speculum} --random-writemap=no --ignore-dbfull --repeat=${REPEAT} --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} $@ $case"
     if [[ ${REPORT_DEPTH} = "yes" && ($case = "basic" || $case = "--hill") ]]; then
       if [ -z "${TEE4PIPE:-}" ]; then
         TEE4PIPE=$(tee --help | grep -q ' -p' && echo "tee -i -p" || echo "tee -i")
@@ -479,7 +504,7 @@ function probe {
     else
       exec {LFD}> >(logger)
     fi
-    ${MONITOR} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} "$@" $case >&${LFD} \
+    ${MONITOR} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=${REPEAT} --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} "$@" $case >&${LFD} \
       && ${MONITOR} ./mdbx_chk -q ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
       && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${MONITOR} ./mdbx_chk -q ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
       || failed
@@ -491,25 +516,14 @@ function probe {
   done
 }
 
-#------------------------------------------------------------------------------
-
-if [ "$DELAY" != "0" ]; then
-  sleep $DELAY
-fi
-
-count=0
-loop=0
-cases='?'
-for nops in 10 33 100 333 1000 3333 10000 33333 100000 333333 1000000 3333333 10000000 33333333 100000000 333333333 1000000000; do
-  if [ $nops -lt $FROM ]; then continue; fi
-  if [ $nops -gt $UPTO ]; then echo "The '--upto $UPTO' limit reached"; break; fi
-  if [ -n "$LOOPS" ] && [ $loop -ge "$LOOPS" ]; then echo "The '--loops $LOOPS' limit reached"; break; fi
-  echo "======================================================================="
-  wbatch=$((nops / 7 + 1))
-  speculum=$([ $nops -le 1000 ] && echo '--speculum' || true)
-  while true; do
+function pass {
+  for ((round=1; round <= ROUNDS; ++round)); do
     echo "======================================================================="
-    ${BANNER} "$nops / $wbatch"
+    if [[ $ROUNDS > 1 ]]; then
+      ${BANNER} "$nops / $wbatch / round $round of $ROUNDS"
+    else
+      ${BANNER} "$nops / $wbatch"
+    fi
     subcase=0
     for ((bits=2**${#options[@]}; --bits >= 0; )); do
       seed=$(($(date +%s) + RANDOM))
@@ -547,7 +561,6 @@ for nops in 10 33 100 333 1000 3333 10000 33333 100000 333333 1000000 3333333 10
       caption="$((++count)) fixdups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.fixed --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen=rnd \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
-
 
       split=16
       caption="$((++count)) int-key,w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
@@ -614,12 +627,44 @@ for nops in 10 33 100 333 1000 3333 10000 33333 100000 333333 1000000 3333333 10
         --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M --table=+data.fixed --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen=rnd \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2options $bits)${syncmodes[count%4]}
     done # options
-    loop=$((loop + 1))
-    if [ -n "$LOOPS" ] && [ $loop -ge "$LOOPS" ]; then break; fi
     cases="${subcase}"
-    wbatch=$(((wbatch > 7) ? wbatch / 7 : 1))
-    if [ $wbatch -eq 1 -o $((nops / wbatch)) -gt 1000 ]; then break; fi
-  done # batch (write-ops per txn)
-done # n-ops
+  done
+}
+
+#------------------------------------------------------------------------------
+
+if [ "$DELAY" != "0" ]; then
+  sleep $DELAY
+fi
+
+count=0
+loop=0
+cases='?'
+if [[ $SMALL != "yes" ]]; then
+  for nops in 10 33 100 333 1000 3333 10000 33333 100000 333333 1000000 3333333 10000000 33333333 100000000 333333333 1000000000; do
+    if [ $nops -lt $FROM ]; then continue; fi
+    if [ $nops -gt $UPTO ]; then echo "The '--upto $UPTO' limit reached"; break; fi
+    if [ -n "$LOOPS" ] && [ $loop -ge "$LOOPS" ]; then echo "The '--loops $LOOPS' limit reached"; break; fi
+    echo "======================================================================="
+    wbatch=$((nops / 7 + 1))
+    speculum=$([ $nops -le 1000 ] && echo '--speculum' || true)
+    while true; do
+      pass
+      loop=$((loop + 1))
+      if [ -n "$LOOPS" ] && [ $loop -ge "$LOOPS" ]; then break; fi
+      wbatch=$(((wbatch > 7) ? wbatch / 7 : 1))
+      if [ $wbatch -eq 1 -o $((nops / wbatch)) -gt 1000 ]; then break; fi
+    done # batch (write-ops per txn)
+  done # n-ops
+else
+  for ((wbatch=FROM; wbatch<=UPTO; ++wbatch)); do
+    if [ -n "$LOOPS" ] && [ $loop -ge "$LOOPS" ]; then echo "The '--loops $LOOPS' limit reached"; break; fi
+    echo "======================================================================="
+    speculum=$([ $wbatch -le 1000 ] && echo '--speculum' || true)
+    nops=$((wbatch / 7 + 1))
+    pass
+    loop=$((loop + 1))
+  done # wbatch
+fi
 
 echo "=== ALL DONE ====================== $(date)"
