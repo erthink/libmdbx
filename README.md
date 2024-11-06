@@ -472,7 +472,7 @@ Therefore, only basic information is provided:
    - The `Makefile` provide several self-described targets for testing: `smoke`, `test`, `check`, `memcheck`, `test-valgrind`,
      `test-asan`, `test-leak`, `test-ubsan`, `cross-gcc`, `cross-qemu`, `gcc-analyzer`, `smoke-fault`, `smoke-singleprocess`,
      `test-singleprocess`, 'long-test'. Please run `make --help` if doubt.
-   - In addition to the `mdbx_test` utility, there is the script [`long_stochastic.sh`](https://gitflic.ru/project/erthink/libmdbx/blob/master/test/long_stochastic.sh),
+   - In addition to the `mdbx_test` utility, there is the script [`stochastic.sh`](https://gitflic.ru/project/erthink/libmdbx/blob/master/test/stochastic.sh),
      which calls `mdbx_test` by going through set of modes and options, with gradually increasing the number of operations and the size of transactions.
      This script is used for mostly of all automatic testing, including `Makefile` targets and Continuous Integration.
    - Brief information of available command-line options is available by `--help`.
@@ -583,7 +583,7 @@ during configure by CMake.
 
 An example of running a basic test script can be found in the
 [CI-script](appveyor.yml) for [AppVeyor](https://www.appveyor.com/). To
-run the [long stochastic test scenario](test/long_stochastic.sh),
+run the [long stochastic test scenario](test/stochastic.sh),
 [bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)) is required, and
 such testing is recommended with placing the test data on the
 [RAM-disk](https://en.wikipedia.org/wiki/RAM_drive).
@@ -603,7 +603,7 @@ directory with source code, and run `make check` to execute the base
 tests. If something goes wrong, it is recommended to install
 [Homebrew](https://brew.sh/) and try again.
 
-To run the [long stochastic test scenario](test/long_stochastic.sh), you
+To run the [long stochastic test scenario](test/stochastic.sh), you
 will need to install the current (not outdated) version of
 [Bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)). To do this, we
 recommend that you install [Homebrew](https://brew.sh/) and then execute

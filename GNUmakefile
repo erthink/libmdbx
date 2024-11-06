@@ -425,23 +425,23 @@ smoke-fault: build-test
 	; ./mdbx_chk -vvnw $(TEST_DB) && ([ ! -e $(TEST_DB)-copy ] || ./mdbx_chk -vvn $(TEST_DB)-copy)
 
 test: build-test
-	@echo '  RUNNING `test/long_stochastic.sh --loops 2`...'
-	$(QUIET)test/long_stochastic.sh --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+	@echo '  RUNNING `test/stochastic.sh --loops 2`...'
+	$(QUIET)test/stochastic.sh --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 long-test: test-long
 test-long: build-test
-	@echo '  RUNNING `test/long_stochastic.sh --loops 42`...'
-	$(QUIET)test/long_stochastic.sh --loops 42 --db-upto-mb 1024 --extra --skip-make --taillog
+	@echo '  RUNNING `test/stochastic.sh --loops 42`...'
+	$(QUIET)test/stochastic.sh --loops 42 --db-upto-mb 1024 --extra --skip-make --taillog
 
 test-singleprocess: build-test
-	@echo '  RUNNING `test/long_stochastic.sh --single --loops 2`...'
-	$(QUIET)test/long_stochastic.sh --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+	@echo '  RUNNING `test/stochastic.sh --single --loops 2`...'
+	$(QUIET)test/stochastic.sh --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 test-valgrind: test-memcheck
 test-memcheck: CFLAGS_EXTRA=-Ofast -DENABLE_MEMCHECK
 test-memcheck: build-test
-	@echo '  RUNNING `test/long_stochastic.sh --with-valgrind --loops 2`...'
-	$(QUIET)test/long_stochastic.sh --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+	@echo '  RUNNING `test/stochastic.sh --with-valgrind --loops 2`...'
+	$(QUIET)test/stochastic.sh --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 memcheck: smoke-memcheck
 smoke-memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt
