@@ -3652,9 +3652,10 @@ public:
 
   /// \brief Operation mode.
   enum mode {
-    readonly,       ///< \copydoc MDBX_RDONLY
-    write_file_io,  // don't available on OpenBSD
-    write_mapped_io ///< \copydoc MDBX_WRITEMAP
+    readonly,        ///< \copydoc MDBX_RDONLY
+    write_file_io,   // don't available on OpenBSD
+    write_mapped_io, ///< \copydoc MDBX_WRITEMAP
+    nested_transactions = write_file_io
   };
 
   /// \brief Durability level.
@@ -4196,6 +4197,9 @@ public:
 
   /// \brief Creates but not start read transaction.
   inline txn_managed prepare_read() const;
+
+  /// \brief Starts write (read-write) transaction.
+  inline txn_managed start_write(txn &parent);
 
   /// \brief Starts write (read-write) transaction.
   inline txn_managed start_write(bool dont_wait = false);
@@ -6400,6 +6404,14 @@ inline txn_managed env::start_write(bool dont_wait) {
   ::MDBX_txn *ptr;
   error::success_or_throw(::mdbx_txn_begin(
       handle_, nullptr, dont_wait ? MDBX_TXN_TRY : MDBX_TXN_READWRITE, &ptr));
+  assert(ptr != nullptr);
+  return txn_managed(ptr);
+}
+
+inline txn_managed env::start_write(txn &parent) {
+  ::MDBX_txn *ptr;
+  error::success_or_throw(
+      ::mdbx_txn_begin(handle_, parent, MDBX_TXN_READWRITE, &ptr));
   assert(ptr != nullptr);
   return txn_managed(ptr);
 }
