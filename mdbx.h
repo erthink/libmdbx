@@ -323,14 +323,16 @@ typedef mode_t mdbx_mode_t;
 #ifdef __deprecated
 #define MDBX_DEPRECATED __deprecated
 #elif defined(DOXYGEN) ||                                                      \
-    (defined(__cplusplus) && __cplusplus >= 201403L &&                         \
-     __has_cpp_attribute(deprecated) &&                                        \
-     __has_cpp_attribute(deprecated) >= 201309L) ||                            \
-    (!defined(__cplusplus) && defined(__STDC_VERSION__) &&                     \
-     __STDC_VERSION__ >= 202304L)
+    ((!defined(__GNUC__) || defined(__clang__) || __GNUC__ > 5) &&             \
+     ((defined(__cplusplus) && __cplusplus >= 201403L &&                       \
+       __has_cpp_attribute(deprecated) &&                                      \
+       __has_cpp_attribute(deprecated) >= 201309L) ||                          \
+      (!defined(__cplusplus) && defined(__STDC_VERSION__) &&                   \
+       __STDC_VERSION__ >= 202304L)))
 #define MDBX_DEPRECATED [[deprecated]]
 #elif (defined(__GNUC__) && __GNUC__ > 5) ||                                   \
-    (__has_attribute(__deprecated__) && !defined(__GNUC__))
+    (__has_attribute(__deprecated__) &&                                        \
+     (!defined(__GNUC__) || defined(__clang__) || __GNUC__ > 5))
 #define MDBX_DEPRECATED __attribute__((__deprecated__))
 #elif defined(_MSC_VER)
 #define MDBX_DEPRECATED __declspec(deprecated)
@@ -340,7 +342,10 @@ typedef mode_t mdbx_mode_t;
 #endif /* MDBX_DEPRECATED */
 
 #ifndef MDBX_DEPRECATED_ENUM
-#if !defined(DOXYGEN) && (!defined(_MSC_VER) || _MSC_VER >= 1930)
+#if !defined(DOXYGEN) &&                                                       \
+    (!defined(_MSC_VER) || (defined(__cplusplus) && __cplusplus >= 201403L &&  \
+                            __has_cpp_attribute(deprecated) &&                 \
+                            __has_cpp_attribute(deprecated) >= 201309L))
 #define MDBX_DEPRECATED_ENUM MDBX_DEPRECATED
 #else
 #define MDBX_DEPRECATED_ENUM /* avoid madness MSVC */
