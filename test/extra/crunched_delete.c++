@@ -92,7 +92,7 @@ static mdbx::map_handle create_and_fill(mdbx::txn txn, const acase &thecase,
                                 : mdbx::value_mode::multi);
 
   if (txn.get_map_stat(map).ms_entries < NN) {
-    mdbx::buffer k, v;
+    mdbx::default_buffer k, v;
     for (auto i = 0u; i < NN; i++) {
       mk_key(k, thecase);
       for (auto ii = thecase.dupmax_log2
@@ -108,7 +108,7 @@ static mdbx::map_handle create_and_fill(mdbx::txn txn, const acase &thecase,
 static void chunched_delete(mdbx::txn txn, const acase &thecase,
                             const unsigned n) {
   // printf(">> %s, case #%i\n", __FUNCTION__, n);
-  mdbx::buffer k, v;
+  mdbx::default_buffer k, v;
   auto map = txn.open_map_accede(name(n));
 
   {
