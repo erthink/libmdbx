@@ -78,11 +78,34 @@
 #include <string_view>
 #endif
 
-#if defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L
-#include <filesystem>
+#ifndef MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM
+#ifdef INCLUDE_STD_FILESYSTEM_EXPERIMENTAL
+#define MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM 1
+#elif defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L &&      \
+    __cplusplus >= 201703L
+#define MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM 0
+#elif (!defined(_MSC_VER) || __cplusplus >= 201403L ||                         \
+       (defined(_MSC_VER) &&                                                   \
+        defined(_SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING) &&       \
+        __cplusplus >= 201403L))
+#if defined(__cpp_lib_experimental_filesystem) &&                              \
+    __cpp_lib_experimental_filesystem >= 201406L
+#define MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM 1
 #elif defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L &&    \
     __has_include(<experimental/filesystem>)
+#define MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM 1
+#else
+#define MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM 0
+#endif
+#else
+#define MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM 0
+#endif
+#endif /* MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM */
+
+#if MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM
 #include <experimental/filesystem>
+#elif defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L
+#include <filesystem>
 #endif
 
 #if defined(__cpp_lib_span) && __cpp_lib_span >= 202002L
@@ -388,13 +411,21 @@ template <class ALLOCATOR = default_allocator>
 using string = ::std::basic_string<char, ::std::char_traits<char>, ALLOCATOR>;
 
 using filehandle = ::mdbx_filehandle_t;
-#if defined(DOXYGEN) ||                                                        \
+#if MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM
+#ifdef _MSC_VER
+namespace filesystem = ::std::experimental::filesystem::v1;
+#else
+namespace filesystem = ::std::experimental::filesystem;
+#endif
+#define MDBX_STD_FILESYSTEM_PATH ::mdbx::filesystem::path
+#elif defined(DOXYGEN) ||                                                      \
     (defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L &&       \
      defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L &&     \
      (!defined(__MAC_OS_X_VERSION_MIN_REQUIRED) ||                             \
       __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500) &&                            \
      (!defined(__IPHONE_OS_VERSION_MIN_REQUIRED) ||                            \
-      __IPHONE_OS_VERSION_MIN_REQUIRED >= 130100))
+      __IPHONE_OS_VERSION_MIN_REQUIRED >= 130100)) &&                          \
+        (!defined(_MSC_VER) || __cplusplus >= 201703L)
 namespace filesystem = ::std::filesystem;
 /// \brief Defined if `mdbx::filesystem::path` is available.
 /// \details If defined, it is always `mdbx::filesystem::path`,
@@ -402,10 +433,6 @@ namespace filesystem = ::std::filesystem;
 /// or `std::experimental::filesystem::path`.
 /// Nonetheless `MDBX_STD_FILESYSTEM_PATH` not defined if the `::mdbx::path`
 /// is fallbacked to c `std::string` or `std::wstring`.
-#define MDBX_STD_FILESYSTEM_PATH ::mdbx::filesystem::path
-#elif defined(__cpp_lib_experimental_filesystem) &&                            \
-    __cpp_lib_experimental_filesystem >= 201406L
-namespace filesystem = ::std::experimental::filesystem;
 #define MDBX_STD_FILESYSTEM_PATH ::mdbx::filesystem::path
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 
