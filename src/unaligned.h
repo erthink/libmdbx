@@ -6,7 +6,7 @@
 /*------------------------------------------------------------------------------
  * Unaligned access */
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static inline size_t
+MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline size_t
 field_alignment(size_t alignment_baseline, size_t field_offset) {
   size_t merge = alignment_baseline | (size_t)field_offset;
   return merge & -(int)merge;

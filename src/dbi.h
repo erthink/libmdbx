@@ -5,7 +5,7 @@
 
 #include "essentials.h"
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION MDBX_INTERNAL size_t
+MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED MDBX_INTERNAL size_t
 dbi_bitmap_ctz_fallback(const MDBX_txn *txn, intptr_t bmi);
 
 #if MDBX_ENABLE_DBI_SPARSE
