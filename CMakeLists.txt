@@ -429,12 +429,12 @@ else()
 
     if(NOT "${PROJECT_BINARY_DIR}" STREQUAL "${PROJECT_SOURCE_DIR}")
       add_custom_target(distclean)
-      add_custom_command(TARGET distclean
+      add_custom_command(TARGET distclean POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E remove_directory "${PROJECT_BINARY_DIR}"
         COMMENT "Removing the build directory and its content")
     elseif(IS_DIRECTORY .git AND GIT)
       add_custom_target(distclean)
-      add_custom_command(TARGET distclean
+      add_custom_command(TARGET distclean POST_BUILD
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMAND ${GIT} submodule foreach --recursive git clean -f -X -d
         COMMAND ${GIT} clean -f -X -d
