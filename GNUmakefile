@@ -353,7 +353,7 @@ define uname2titer
   esac
 endef
 
-DIST_EXTRA := LICENSE NOTICE README.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.txt config.h.in ntdll.def \
+DIST_EXTRA := LICENSE NOTICE README.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.json config.h.in ntdll.def \
 	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake
 DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(MDBX_TOOLS))
 
@@ -733,11 +733,11 @@ dist/$(1): $(1) src/version.c $(lastword $(MAKEFILE_LIST))
 	$(QUIET)mkdir -p $$(dir $$@) && sed -e '/^#> dist-cutoff-begin/,/^#< dist-cutoff-end/d' $$< >$$@
 
 endef
-$(foreach file,mdbx.h mdbx.h++ $(filter-out man1/% VERSION.txt %.in ntdll.def,$(DIST_EXTRA)),$(eval $(call dist-extra-rule,$(file))))
+$(foreach file,mdbx.h mdbx.h++ $(filter-out man1/% VERSION.json %.in ntdll.def,$(DIST_EXTRA)),$(eval $(call dist-extra-rule,$(file))))
 
-dist/VERSION.txt: src/version.c
+dist/VERSION.json: src/version.c
 	@echo '  MAKE $@'
-	$(QUIET)mkdir -p dist/ && echo "$(MDBX_GIT_VERSION).$(MDBX_GIT_REVISION)" >$@
+	$(QUIET)mkdir -p dist/ && echo "{ \"git_describe\": \"$(MDBX_GIT_DESCRIBE)\", \"git_timestamp\": \"$(MDBX_GIT_TIMESTAMP)\", \"git_tree\": \"$(shell git show --no-patch --format=%T HEAD 2>&1)\", \"git_commit\": \"$(shell git show --no-patch --format=%H HEAD 2>&1)\", \"version_4dot\": \"$(MDBX_GIT_VERSION).$(MDBX_GIT_REVISION)\" }" >$@
 
 dist/ntdll.def: src/ntdll.def
 	@echo '  COPY $@'
