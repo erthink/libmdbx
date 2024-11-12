@@ -51,6 +51,8 @@ CC      ?= gcc
 CXX     ?= g++
 CFLAGS_EXTRA ?=
 LD      ?= ld
+CMAKE	?= cmake
+CMAKE_OPT ?=
 
 # build options
 MDBX_BUILD_OPTIONS   ?=-DNDEBUG=1
@@ -127,7 +129,7 @@ MANPAGES   := mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1 mdbx_chk.1 mdbx_dr
 TIP        := // TIP:
 
 .PHONY: all help options lib libs tools clean install uninstall check_buildflags_tag tools-static
-.PHONY: install-strip install-no-strip strip libmdbx mdbx show-options lib-static lib-shared
+.PHONY: install-strip install-no-strip strip libmdbx mdbx show-options lib-static lib-shared cmake-build ninja
 
 boolean = $(if $(findstring $(strip $($1)),YES Yes yes y ON On on 1 true True TRUE),1,$(if $(findstring $(strip $($1)),NO No no n OFF Off off 0 false False FALSE),,$(error Wrong value `$($1)` of $1 for YES/NO option)))
 select_by = $(if $(call boolean,$(1)),$(2),$(3))
@@ -161,6 +163,7 @@ help:
 	@echo "  make clean               "
 	@echo "  make install             "
 	@echo "  make uninstall           "
+	@echo "  make cmake-build | ninja - build by CMake & Ninja"
 	@echo ""
 	@echo "  make strip               - strip debug symbols from binaries"
 	@echo "  make install-no-strip    - install explicitly without strip"
@@ -257,7 +260,7 @@ clean:
 	$(QUIET)rm -rf $(MDBX_TOOLS) mdbx_test @* *.[ao] *.[ls]o *.$(SO_SUFFIX) *.dSYM *~ tmp.db/* \
 		*.gcov *.log *.err src/*.o test/*.o mdbx_example dist @dist-check \
 		config.h src/config.h src/version.c *.tar* @buildflags.tag @dist-checked.tag \
-		mdbx_*.static mdbx_*.static-lto
+		mdbx_*.static mdbx_*.static-lto CMakeFiles
 
 MDBX_BUILD_FLAGS =$(strip MDBX_BUILD_CXX=$(MDBX_BUILD_CXX) $(MDBX_BUILD_OPTIONS) $(call select_by,MDBX_BUILD_CXX,$(CXXFLAGS) $(LDFLAGS) $(LIB_STDCXXFS) $(LIBS),$(CFLAGS) $(LDFLAGS) $(LIBS)))
 check_buildflags_tag:
@@ -276,6 +279,11 @@ lib-static libmdbx.a: mdbx-static.o $(call select_by,MDBX_BUILD_CXX,mdbx++-stati
 lib-shared libmdbx.$(SO_SUFFIX): mdbx-dylib.o $(call select_by,MDBX_BUILD_CXX,mdbx++-dylib.o)
 	@echo '  LD $@'
 	$(QUIET)$(call select_by,MDBX_BUILD_CXX,$(CXX) $(CXXFLAGS),$(CC) $(CFLAGS)) $^ -pthread -shared $(LDFLAGS) $(call select_by,MDBX_BUILD_CXX,$(LIB_STDCXXFS)) $(LIBS) -o $@
+
+ninja: cmake-build
+cmake-build:
+	@echo "-G Ninja . && cmake --build ."
+	$(QUIET)mkdir @cmake-ninja-build && $(CMAKE) $(CMAKE_OPT) -G Ninja -S . -B @cmake-ninja-build && $(CMAKE) --build @cmake-ninja-build
 
 #> dist-cutoff-begin
 ifeq ($(wildcard mdbx.c),mdbx.c)
@@ -392,7 +400,8 @@ MDBX_DIST_DIR = libmdbx-$(MDBX_VERSION_NODOT)
 MDBX_SMOKE_EXTRA ?=
 
 check: DESTDIR = $(shell pwd)/@check-install
-check: test dist install
+check: CMAKE_OPT = -Werror=dev
+check: smoke-assertion ninja dist install test
 
 smoke-assertion: MDBX_BUILD_OPTIONS:=$(strip $(MDBX_BUILD_OPTIONS) -DMDBX_FORCE_ASSERTIONS=1 -UNDEBUG -DMDBX_DEBUG=0)
 smoke-assertion: smoke
@@ -623,7 +632,7 @@ release-assets: libmdbx-amalgamated-$(MDBX_GIT_VERSION).zpaq \
 	@echo -n '  VERIFY amalgamated sources...'
 	$(QUIET)rm -rf $@ dist/@tmp-essentials.inc dist/@tmp-internals.inc \
 	&& if grep -R "define xMDBX_ALLOY" dist | grep -q MDBX_BUILD_SOURCERY; then echo "sed output is WRONG!" >&2; exit 2; fi \
-	&& rm -rf @dist-check && cp -r -p dist @dist-check && ($(MAKE) IOARENA=false CXXSTD=$(CXXSTD) -C @dist-check >@dist-check.log 2>@dist-check.err || (cat @dist-check.err && exit 1)) \
+	&& rm -rf @dist-check && cp -r -p dist @dist-check && ($(MAKE) -j IOARENA=false CXXSTD=$(CXXSTD) -C @dist-check all ninja >@dist-check.log 2>@dist-check.err || (cat @dist-check.err && exit 1)) \
 	&& touch $@ || (echo " FAILED! See @dist-check.log and @dist-check.err" >&2; exit 2) && echo " Ok"
 
 %.tar.gz: @dist-checked.tag

@@ -1,6 +1,6 @@
 # This is thunk-Makefile for calling GNU Make 3.80 or above
 
-all help options \
+all help options cmake-build ninja \
 clean install install-no-strip install-strip strip tools uninstall \
 bench bench-clean bench-couple bench-quartet bench-triplet re-bench \
 lib libs lib-static lib-shared tools-static \
