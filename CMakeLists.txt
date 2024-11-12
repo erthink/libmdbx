@@ -677,7 +677,7 @@ if(MDBX_BUILD_CXX)
 endif()
 
 # Get version
-fetch_version(MDBX "${CMAKE_CURRENT_SOURCE_DIR}" FALSE)
+fetch_version(MDBX "${CMAKE_CURRENT_SOURCE_DIR}" FALSE "${CMAKE_CURRENT_BINARY_DIR}")
 message(STATUS "libmdbx version is ${MDBX_VERSION}")
 
 # sources list
