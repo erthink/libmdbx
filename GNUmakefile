@@ -255,19 +255,19 @@ strip: all
 clean:
 	@echo '  REMOVE ...'
 	$(QUIET)rm -rf $(MDBX_TOOLS) mdbx_test @* *.[ao] *.[ls]o *.$(SO_SUFFIX) *.dSYM *~ tmp.db/* \
-		*.gcov *.log *.err src/*.o test/*.o mdbx_example dist \
-		config.h src/config.h src/version.c *.tar* buildflags.tag \
+		*.gcov *.log *.err src/*.o test/*.o mdbx_example dist @dist-check \
+		config.h src/config.h src/version.c *.tar* @buildflags.tag @dist-checked.tag \
 		mdbx_*.static mdbx_*.static-lto
 
 MDBX_BUILD_FLAGS =$(strip MDBX_BUILD_CXX=$(MDBX_BUILD_CXX) $(MDBX_BUILD_OPTIONS) $(call select_by,MDBX_BUILD_CXX,$(CXXFLAGS) $(LDFLAGS) $(LIB_STDCXXFS) $(LIBS),$(CFLAGS) $(LDFLAGS) $(LIBS)))
 check_buildflags_tag:
-	$(QUIET)if [ "$(MDBX_BUILD_FLAGS)" != "$$(cat buildflags.tag 2>&1)" ]; then \
+	$(QUIET)if [ "$(MDBX_BUILD_FLAGS)" != "$$(cat @buildflags.tag 2>&1)" ]; then \
 		echo -n "  CLEAN for build with specified flags..." && \
 		$(MAKE) IOARENA=false CXXSTD= -s clean >/dev/null && echo " Ok" && \
-		echo '$(MDBX_BUILD_FLAGS)' > buildflags.tag; \
+		echo '$(MDBX_BUILD_FLAGS)' > @buildflags.tag; \
 	fi
 
-buildflags.tag: check_buildflags_tag
+@buildflags.tag: check_buildflags_tag
 
 lib-static libmdbx.a: mdbx-static.o $(call select_by,MDBX_BUILD_CXX,mdbx++-static.o)
 	@echo '  AR $@'
@@ -285,10 +285,10 @@ ifeq ($(wildcard mdbx.c),mdbx.c)
 # Amalgamated source code, i.e. distributed after `make dist`
 MAN_SRCDIR := man1/
 
-config.h: buildflags.tag mdbx.c $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE
+config.h: @buildflags.tag mdbx.c $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE
 	@echo '  MAKE $@'
 	$(QUIET)(echo '#define MDBX_BUILD_TIMESTAMP "$(MDBX_BUILD_TIMESTAMP)"' \
-	&& echo "#define MDBX_BUILD_FLAGS \"$$(cat buildflags.tag)\"" \
+	&& echo "#define MDBX_BUILD_FLAGS \"$$(cat @buildflags.tag)\"" \
 	&& echo '#define MDBX_BUILD_COMPILER "$(shell (LC_ALL=C $(CC) --version || echo 'Please use GCC or CLANG compatible compiler') | head -1)"' \
 	&& echo '#define MDBX_BUILD_TARGET "$(shell set -o pipefail; (LC_ALL=C $(CC) -v 2>&1 | grep -i '^Target:' | cut -d ' ' -f 2- || (LC_ALL=C $(CC) --version | grep -qi e2k && echo E2K) || echo 'Please use GCC or CLANG compatible compiler') | head -1)"' \
 	&& echo '#define MDBX_BUILD_CXX $(call select_by,MDBX_BUILD_CXX,1,0)' \
@@ -531,10 +531,10 @@ src/version.c: src/version.c.in $(lastword $(MAKEFILE_LIST)) $(git_DIR)/HEAD $(g
 		-e "s|\$${MDBX_VERSION_REVISION}|$(MDBX_GIT_REVISION)|" \
 	src/version.c.in >$@
 
-src/config.h: buildflags.tag src/version.c $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE
+src/config.h: @buildflags.tag src/version.c $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE
 	@echo '  MAKE $@'
 	$(QUIET)(echo '#define MDBX_BUILD_TIMESTAMP "$(MDBX_BUILD_TIMESTAMP)"' \
-	&& echo "#define MDBX_BUILD_FLAGS \"$$(cat buildflags.tag)\"" \
+	&& echo "#define MDBX_BUILD_FLAGS \"$$(cat @buildflags.tag)\"" \
 	&& echo '#define MDBX_BUILD_COMPILER "$(shell (LC_ALL=C $(CC) --version || echo 'Please use GCC or CLANG compatible compiler') | head -1)"' \
 	&& echo '#define MDBX_BUILD_TARGET "$(shell set -o pipefail; (LC_ALL=C $(CC) -v 2>&1 | grep -i '^Target:' | cut -d ' ' -f 2- || (LC_ALL=C $(CC) --version | grep -qi e2k && echo E2K) || echo 'Please use GCC or CLANG compatible compiler') | head -1)"' \
 	&& echo '#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)' \
@@ -600,7 +600,7 @@ mdbx++-static.o: src/config.h src/mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE
 	@echo '  CC $@'
 	$(QUIET)$(CXX) $(CXXFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c src/mdbx.c++ -o $@
 
-dist: tags dist-checked.tag libmdbx-sources-$(MDBX_VERSION_IDENT).tar.gz $(lastword $(MAKEFILE_LIST))
+dist: tags @dist-checked.tag libmdbx-sources-$(MDBX_VERSION_IDENT).tar.gz $(lastword $(MAKEFILE_LIST))
 	@echo '  AMALGAMATION is done'
 
 tags:
@@ -619,32 +619,32 @@ release-assets: libmdbx-amalgamated-$(MDBX_GIT_VERSION).zpaq \
 		|| (echo 'ERROR: Is not a valid release because not in the clean state with a suitable annotated tag!!!' >&2 && false)) \
 	&& echo '  RELEASE ASSETS are done'
 
-dist-checked.tag: $(addprefix dist/, $(DIST_SRC) $(DIST_EXTRA))
+@dist-checked.tag: $(addprefix dist/, $(DIST_SRC) $(DIST_EXTRA))
 	@echo -n '  VERIFY amalgamated sources...'
 	$(QUIET)rm -rf $@ dist/@tmp-essentials.inc dist/@tmp-internals.inc \
 	&& if grep -R "define xMDBX_ALLOY" dist | grep -q MDBX_BUILD_SOURCERY; then echo "sed output is WRONG!" >&2; exit 2; fi \
-	&& rm -rf dist-check && cp -r -p dist dist-check && ($(MAKE) IOARENA=false CXXSTD=$(CXXSTD) -C dist-check >dist-check.log 2>dist-check.err || (cat dist-check.err && exit 1)) \
-	&& touch $@ || (echo " FAILED! See dist-check.log and dist-check.err" >&2; exit 2) && echo " Ok"
+	&& rm -rf @dist-check && cp -r -p dist @dist-check && ($(MAKE) IOARENA=false CXXSTD=$(CXXSTD) -C @dist-check >@dist-check.log 2>@dist-check.err || (cat @dist-check.err && exit 1)) \
+	&& touch $@ || (echo " FAILED! See @dist-check.log and @dist-check.err" >&2; exit 2) && echo " Ok"
 
-%.tar.gz: dist-checked.tag
+%.tar.gz: @dist-checked.tag
 	@echo '  CREATE $@'
 	$(QUIET)$(TAR) -c $(shell LC_ALL=C $(TAR) --help | grep -q -- '--owner' && echo '--owner=0 --group=0') -f - -C dist $(DIST_SRC) $(DIST_EXTRA) | gzip -c -9 >$@
 
-%.tar.xz: dist-checked.tag
+%.tar.xz: @dist-checked.tag
 	@echo '  CREATE $@'
 	$(QUIET)$(TAR) -c $(shell LC_ALL=C $(TAR) --help | grep -q -- '--owner' && echo '--owner=0 --group=0') -f - -C dist $(DIST_SRC) $(DIST_EXTRA) | xz -9 -z >$@
 
-%.tar.bz2: dist-checked.tag
+%.tar.bz2: @dist-checked.tag
 	@echo '  CREATE $@'
 	$(QUIET)$(TAR) -c $(shell LC_ALL=C $(TAR) --help | grep -q -- '--owner' && echo '--owner=0 --group=0') -f - -C dist $(DIST_SRC) $(DIST_EXTRA) | bzip2 -9 -z >$@
 
-%.zip: dist-checked.tag
+%.zip: @dist-checked.tag
 	@echo '  CREATE $@'
-	$(QUIET)rm -rf $@ && (cd dist && $(ZIP) -9 ../$@ $(DIST_SRC) $(DIST_EXTRA)) &>zip.log
+	$(QUIET)rm -rf $@ && (cd dist && $(ZIP) -9 ../$@ $(DIST_SRC) $(DIST_EXTRA)) &>@zip.log
 
-%.zpaq: dist-checked.tag
+%.zpaq: @dist-checked.tag
 	@echo '  CREATE $@'
-	$(QUIET)rm -rf $@ && (cd dist && zpaq a ../$@ $(DIST_SRC) $(DIST_EXTRA) -m59) &>zpaq.log
+	$(QUIET)rm -rf $@ && (cd dist && zpaq a ../$@ $(DIST_SRC) $(DIST_EXTRA) -m59) &>@zpaq.log
 
 dist/@tmp-essentials.inc: src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
 	@echo '  ALLOYING...'
@@ -741,11 +741,11 @@ dist/VERSION.json: src/version.c
 
 dist/ntdll.def: src/ntdll.def
 	@echo '  COPY $@'
-	$(QUIET)mkdir -p dist/cmake/ && cp $< $@
+	$(QUIET)mkdir -p dist/ && cp $< $@
 
 dist/config.h.in: src/config.h.in
 	@echo '  COPY $@'
-	$(QUIET)mkdir -p dist/cmake/ && cp $< $@
+	$(QUIET)mkdir -p dist/ && cp $< $@
 
 dist/man1/mdbx_%.1: src/man1/mdbx_%.1
 	@echo '  COPY $@'
