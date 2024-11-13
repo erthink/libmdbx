@@ -362,7 +362,7 @@ define uname2titer
 endef
 
 DIST_EXTRA := LICENSE NOTICE README.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.json config.h.in ntdll.def \
-	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake
+	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake .clang-format-ignore
 DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(MDBX_TOOLS))
 
 TEST_DB    ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.db
@@ -711,7 +711,7 @@ dist/mdbx.c: dist/@tmp-internals.inc $(lastword $(MAKEFILE_LIST))
 		-e '/#include "debug_begin.h"/r src/debug_begin.h' \
 		-e '/#include "debug_end.h"/r src/debug_end.h' \
 	) | sed -e '/#include "/d;/#pragma once/d' -e 's|@INCLUDE|#include|' \
-		-e '/ clang-format o/d;/ \*INDENT-O/d' >$@
+		-e '/ clang-format o/d;/ \*INDENT-O/d' -e '3i /* clang-format off */' | cat -s >$@
 
 dist/mdbx.c++: dist/@tmp-essentials.inc src/mdbx.c++ $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
@@ -719,7 +719,7 @@ dist/mdbx.c++: dist/@tmp-essentials.inc src/mdbx.c++ $(lastword $(MAKEFILE_LIST)
 		-e '/#define xMDBX_ALLOY/d' \
 		-e '/#include "/d;/#pragma once/d' \
 		-e 's|@INCLUDE|#include|;s|"mdbx.h"|"mdbx.h++"|' \
-		-e '/ clang-format o/d;/ \*INDENT-O/d' >$@
+		-e '/ clang-format o/d;/ \*INDENT-O/d' -e '3i /* clang-format off */' | cat -s >$@
 
 define dist-tool-rule
 dist/mdbx_$(1).c: src/tools/$(1).c src/tools/wingetopt.h src/tools/wingetopt.c \
@@ -731,7 +731,7 @@ dist/mdbx_$(1).c: src/tools/$(1).c src/tools/wingetopt.h src/tools/wingetopt.c \
 		-e '/ clang-format o/d' -e '/ \*INDENT-O/d' \
 		src/tools/$(1).c \
 	| sed -e '/#include "/d;/#pragma once/d;/#define xMDBX_ALLOY/d' -e 's|@INCLUDE|#include|' \
-		-e '/ clang-format o/d;/ \*INDENT-O/d' >$$@
+		-e '/ clang-format o/d;/ \*INDENT-O/d' -e '9i /* clang-format off */' | cat -s >$$@
 
 endef
 $(foreach file,$(TOOLS),$(eval $(call dist-tool-rule,$(file))))
@@ -739,14 +739,18 @@ $(foreach file,$(TOOLS),$(eval $(call dist-tool-rule,$(file))))
 define dist-extra-rule
 dist/$(1): $(1) src/version.c $(lastword $(MAKEFILE_LIST))
 	@echo '  REFINE $$@'
-	$(QUIET)mkdir -p $$(dir $$@) && sed -e '/^#> dist-cutoff-begin/,/^#< dist-cutoff-end/d' $$< >$$@
+	$(QUIET)mkdir -p $$(dir $$@) && sed -e '/^#> dist-cutoff-begin/,/^#< dist-cutoff-end/d' $$< | cat -s >$$@
 
 endef
-$(foreach file,mdbx.h mdbx.h++ $(filter-out man1/% VERSION.json %.in ntdll.def,$(DIST_EXTRA)),$(eval $(call dist-extra-rule,$(file))))
+$(foreach file,mdbx.h mdbx.h++ $(filter-out man1/% VERSION.json .clang-format-ignore %.in ntdll.def,$(DIST_EXTRA)),$(eval $(call dist-extra-rule,$(file))))
 
 dist/VERSION.json: src/version.c
 	@echo '  MAKE $@'
 	$(QUIET)mkdir -p dist/ && echo "{ \"git_describe\": \"$(MDBX_GIT_DESCRIBE)\", \"git_timestamp\": \"$(MDBX_GIT_TIMESTAMP)\", \"git_tree\": \"$(shell git show --no-patch --format=%T HEAD 2>&1)\", \"git_commit\": \"$(shell git show --no-patch --format=%H HEAD 2>&1)\", \"version_4dot\": \"$(MDBX_GIT_VERSION).$(MDBX_GIT_REVISION)\" }" >$@
+
+dist/.clang-format-ignore: $(lastword $(MAKEFILE_LIST))
+	@echo '  MAKE $@'
+	$(QUIET)echo "$(filter-out %.h %h++,$(DIST_SRC))" | tr ' ' \\n > $@
 
 dist/ntdll.def: src/ntdll.def
 	@echo '  COPY $@'
