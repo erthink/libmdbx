@@ -61,20 +61,19 @@ MDBX_INTERNAL int txn_unpark(MDBX_txn *txn);
 MDBX_INTERNAL int txn_check_badbits_parked(const MDBX_txn *txn, int bad_bits);
 
 #define TXN_END_NAMES                                                          \
-  {"committed", "empty-commit", "abort",           "reset",                    \
-   "reset-tmp", "fail-begin",   "fail-beginchild", "ousted"}
+  {"committed",  "empty-commit",    "abort",  "reset",                         \
+   "fail-begin", "fail-beginchild", "ousted", nullptr}
 enum {
   /* txn_end operation number, for logging */
   TXN_END_COMMITTED,
   TXN_END_PURE_COMMIT,
   TXN_END_ABORT,
   TXN_END_RESET,
-  TXN_END_RESET_TMP,
   TXN_END_FAIL_BEGIN,
   TXN_END_FAIL_BEGINCHILD,
   TXN_END_OUSTED,
 
-  TXN_END_OPMASK = 0x0F /* mask for txn_end() operation number */,
+  TXN_END_OPMASK = 0x07 /* mask for txn_end() operation number */,
   TXN_END_UPDATE = 0x10 /* update env state (DBIs) */,
   TXN_END_FREE = 0x20 /* free txn unless it is env.basal_txn */,
   TXN_END_EOTDONE = 0x40 /* txn's cursors already closed */,

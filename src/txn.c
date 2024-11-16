@@ -1350,11 +1350,11 @@ int txn_end(MDBX_txn *txn, unsigned mode) {
   MDBX_env *env = txn->env;
   static const char *const names[] = TXN_END_NAMES;
 
-  DEBUG("%s txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO
+  DEBUG("%s txn %" PRIaTXN "%c-0x%X %p  on env %p, root page %" PRIaPGNO
         "/%" PRIaPGNO,
         names[mode & TXN_END_OPMASK], txn->txnid,
-        (txn->flags & MDBX_TXN_RDONLY) ? 'r' : 'w', (void *)txn, (void *)env,
-        txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
+        (txn->flags & MDBX_TXN_RDONLY) ? 'r' : 'w', txn->flags, (void *)txn,
+        (void *)env, txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
 
   if (!(mode & TXN_END_EOTDONE)) /* !(already closed cursors) */
     done_cursors(txn, false);
@@ -1374,7 +1374,7 @@ int txn_end(MDBX_txn *txn, unsigned mode) {
         } else {
           if ((mode & TXN_END_OPMASK) != TXN_END_OUSTED &&
               safe64_read(&slot->tid) == MDBX_TID_TXN_OUSTED)
-            mode = (mode & TXN_END_OPMASK) | TXN_END_OUSTED;
+            mode = (mode & ~TXN_END_OPMASK) | TXN_END_OUSTED;
           do {
             safe64_reset(&slot->txnid, false);
             atomic_store64(&slot->tid, txn->owner, mo_AcquireRelease);
