@@ -23,6 +23,8 @@ void testcase_copy::copy_db(const bool with_compaction) {
   if (flipcoin()) {
     err = mdbx_env_copy(db_guard.get(), copy_pathname.c_str(),
                         with_compaction ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS);
+    log_verbose("mdbx_env_copy(%s), err %d", with_compaction ? "true" : "false",
+                err);
     if (unlikely(err != MDBX_SUCCESS))
       failure_perror(with_compaction ? "mdbx_env_copy(MDBX_CP_COMPACT)"
                                      : "mdbx_env_copy(MDBX_CP_ASIS)",
@@ -43,6 +45,7 @@ void testcase_copy::copy_db(const bool with_compaction) {
       txn_begin(ro);
       err =
           mdbx_txn_copy2pathname(txn_guard.get(), copy_pathname.c_str(), flags);
+      log_verbose("mdbx_txn_copy2pathname(flags=0x%X), err %d", flags, err);
       txn_end(err != MDBX_SUCCESS || flipcoin());
       if (unlikely(
               err != MDBX_SUCCESS && !(throttle && err == MDBX_OUSTED) &&
