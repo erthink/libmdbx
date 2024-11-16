@@ -43,13 +43,16 @@ void testcase_copy::copy_db(const bool with_compaction) {
       txn_begin(ro);
       err =
           mdbx_txn_copy2pathname(txn_guard.get(), copy_pathname.c_str(), flags);
-      if (unlikely(err != MDBX_SUCCESS && (!throttle || err != MDBX_OUSTED) &&
-                   (!enable_renew && err != MDBX_MVCC_RETARDED)))
+      txn_end(err != MDBX_SUCCESS || flipcoin());
+      if (unlikely(
+              err != MDBX_SUCCESS && !(throttle && err == MDBX_OUSTED) &&
+              !(!enable_renew && err == MDBX_MVCC_RETARDED) &&
+              !(err == MDBX_EINVAL && !ro &&
+                (flags & (MDBX_CP_THROTTLE_MVCC | MDBX_CP_RENEW_TXN)) != 0)))
         failure_perror(with_compaction
                            ? "mdbx_txn_copy2pathname(MDBX_CP_COMPACT)"
                            : "mdbx_txn_copy2pathname(MDBX_CP_ASIS)",
                        err);
-      txn_end(err != MDBX_SUCCESS || flipcoin());
     } while (err != MDBX_SUCCESS);
   }
 }
