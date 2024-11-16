@@ -815,6 +815,10 @@ static bool execute_thunk(const actor_config *const_config,
     std::unique_ptr<testcase> test(registry::create_actor(config, pid));
     size_t iter = 0;
     do {
+      if (iter) {
+        prng_seed(config.params.prng_seed += INT32_C(0xA4F4D37B));
+        log_verbose("turn PRNG to %u", config.params.prng_seed);
+      }
       iter++;
       if (!test->setup()) {
         log_notice("test setup failed");
@@ -837,8 +841,6 @@ static bool execute_thunk(const actor_config *const_config,
                       size_t(config.params.nrepeat));
         else
           log_verbose("test successfully (iteration %zi)", iter);
-        prng_seed(config.params.prng_seed += INT32_C(0xA4F4D37B));
-        log_verbose("turn PRNG to %u", config.params.prng_seed);
       }
 
     } while (config.params.nrepeat == 0 || iter < config.params.nrepeat);
@@ -856,7 +858,7 @@ bool test_execute(const actor_config &config) {
     return execute_thunk(&config, osal_getpid());
 #ifdef _MSC_VER
   } __except (seh_filter(GetExceptionInformation(), stderr)) {
-    fprintf(stderr, "Exception \n");
+    fprintf(stderr, "Exception\n");
     return false;
   }
 #endif
