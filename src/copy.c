@@ -838,10 +838,8 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path,
 __cold int mdbx_txn_copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd,
                             MDBX_copy_flags_t flags) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  rc = copy2fd(txn, fd, flags);
+  if (likely(rc == MDBX_SUCCESS))
+    rc = copy2fd(txn, fd, flags);
   if (flags & MDBX_CP_DISPOSE_TXN)
     mdbx_txn_abort(txn);
   return rc;
@@ -882,10 +880,8 @@ __cold int mdbx_txn_copy2pathnameW(MDBX_txn *txn, const wchar_t *dest_path,
                                    MDBX_copy_flags_t flags) {
 #endif /* Windows */
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  rc = copy2pathname(txn, dest_path, flags);
+  if (likely(rc == MDBX_SUCCESS))
+    rc = copy2pathname(txn, dest_path, flags);
   if (flags & MDBX_CP_DISPOSE_TXN)
     mdbx_txn_abort(txn);
   return rc;
