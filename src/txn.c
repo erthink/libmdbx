@@ -460,20 +460,22 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
 
   int rc = check_txn(txn, MDBX_TXN_FINISHED);
   if (unlikely(rc != MDBX_SUCCESS)) {
+    if (rc == MDBX_BAD_TXN && (txn->flags & MDBX_TXN_RDONLY)) {
+      rc = MDBX_RESULT_TRUE;
+      goto fail;
+    }
+  bailout:
     if (latency)
       memset(latency, 0, sizeof(*latency));
     return rc;
   }
 
   MDBX_env *const env = txn->env;
-#if MDBX_ENV_CHECKPID
-  if (unlikely(env->pid != osal_getpid())) {
+  if (MDBX_ENV_CHECKPID && unlikely(env->pid != osal_getpid())) {
     env->flags |= ENV_FATAL_ERROR;
-    if (latency)
-      memset(latency, 0, sizeof(*latency));
-    return MDBX_PANIC;
+    rc = MDBX_PANIC;
+    goto bailout;
   }
-#endif /* MDBX_ENV_CHECKPID */
 
   if (unlikely(txn->flags & MDBX_TXN_ERROR)) {
     rc = MDBX_RESULT_TRUE;
