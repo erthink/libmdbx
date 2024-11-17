@@ -762,10 +762,12 @@ __cold static int copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd,
       rc = mdbx_txn_unpark(txn, false);
   }
 
-  if (flags & MDBX_CP_THROTTLE_MVCC)
-    mdbx_txn_park(txn, true);
-  else if (flags & MDBX_CP_DISPOSE_TXN)
-    mdbx_txn_reset(txn);
+  if (txn->flags & MDBX_TXN_RDONLY) {
+    if (flags & MDBX_CP_THROTTLE_MVCC)
+      mdbx_txn_park(txn, true);
+    else if (flags & MDBX_CP_DISPOSE_TXN)
+      mdbx_txn_reset(txn);
+  }
 
   if (!dest_is_pipe) {
     if (likely(rc == MDBX_SUCCESS) && (flags & MDBX_CP_DONT_FLUSH) == 0)
