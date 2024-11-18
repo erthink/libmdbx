@@ -191,28 +191,31 @@ typedef mode_t mdbx_mode_t;
 
 #ifndef __has_c_attribute
 #define __has_c_attribute(x) (0)
+#define __has_c_attribute_qualified(x) 0
+#elif !defined(__STDC_VERSION__) || __STDC_VERSION__ < 202311L
+#define __has_c_attribute_qualified(x) 0
+#elif defined(_MSC_VER)
+/* MSVC don't support `namespace::attr` syntax */
+#define __has_c_attribute_qualified(x) 0
+#else
+#define __has_c_attribute_qualified(x) __has_c_attribute(x)
 #endif /* __has_c_attribute */
 
 #ifndef __has_cpp_attribute
 #define __has_cpp_attribute(x) 0
-#endif /* __has_cpp_attribute */
-
-#ifndef __has_CXX_attribute
-#if defined(__cplusplus) &&                                                    \
-    (!defined(_MSC_VER) || defined(__clang__) || _MSC_VER >= 1942)
-#define __has_CXX_attribute(x) __has_cpp_attribute(x)
+#define __has_cpp_attribute_qualified(x) 0
+#elif defined(_MSC_VER)
+/* MSVC don't support `namespace::attr` syntax */
+#define __has_cpp_attribute_qualified(x) 0
 #else
-#define __has_CXX_attribute(x) 0
-#endif
-#endif /* __has_CXX_attribute */
+#define __has_cpp_attribute_qualified(x) __has_cpp_attribute(x)
+#endif /* __has_cpp_attribute */
 
 #ifndef __has_C23_or_CXX_attribute
 #if defined(__cplusplus)
-#define __has_C23_or_CXX_attribute(x) __has_CXX_attribute(x)
-#elif defined(__STDC_VERSION__) && __STDC_VERSION__ > 202311L
-#define __has_C23_or_CXX_attribute(x) __has_c_attribute(x)
+#define __has_C23_or_CXX_attribute(x) __has_cpp_attribute_qualified(x)
 #else
-#define __has_C23_or_CXX_attribute(x) 0
+#define __has_C23_or_CXX_attribute(x) __has_c_attribute_qualified(x)
 #endif
 #endif /* __has_C23_or_CXX_attribute */
 
@@ -240,9 +243,7 @@ typedef mode_t mdbx_mode_t;
  * These functions should be declared with the attribute pure. */
 #if defined(DOXYGEN)
 #define MDBX_PURE_FUNCTION [[gnu::pure]]
-#elif __has_C23_or_CXX_attribute(gnu::pure) &&                                 \
-    (!defined(__apple_build_version__) || !defined(__clang_major__) ||         \
-     __clang_major__ > 17)
+#elif __has_C23_or_CXX_attribute(gnu::pure)
 #define MDBX_PURE_FUNCTION [[gnu::pure]]
 #elif (defined(__GNUC__) || __has_attribute(__pure__)) &&                      \
     (!defined(__clang__) /* https://bugs.llvm.org/show_bug.cgi?id=43275 */ ||  \
@@ -266,7 +267,7 @@ typedef mode_t mdbx_mode_t;
 #elif defined(__GNUC__) ||                                                     \
     (__has_attribute(__pure__) && __has_attribute(__nothrow__))
 #define MDBX_NOTHROW_PURE_FUNCTION __attribute__((__pure__, __nothrow__))
-#elif __has_CXX_attribute(pure)
+#elif __has_cpp_attribute(pure)
 #define MDBX_NOTHROW_PURE_FUNCTION [[pure]]
 #else
 #define MDBX_NOTHROW_PURE_FUNCTION
@@ -284,9 +285,7 @@ typedef mode_t mdbx_mode_t;
  * It does not make sense for a const function to return void. */
 #if defined(DOXYGEN)
 #define MDBX_CONST_FUNCTION [[gnu::const]]
-#elif __has_C23_or_CXX_attribute(gnu::const) &&                                \
-    (!defined(__apple_build_version__) || !defined(__clang_major__) ||         \
-     __clang_major__ > 17)
+#elif __has_C23_or_CXX_attribute(gnu::const)
 #define MDBX_CONST_FUNCTION [[gnu::const]]
 #elif (defined(__GNUC__) || __has_attribute(__const__)) &&                     \
     (!defined(__clang__) /* https://bugs.llvm.org/show_bug.cgi?id=43275 */ ||  \
@@ -310,7 +309,7 @@ typedef mode_t mdbx_mode_t;
 #elif defined(__GNUC__) ||                                                     \
     (__has_attribute(__const__) && __has_attribute(__nothrow__))
 #define MDBX_NOTHROW_CONST_FUNCTION __attribute__((__const__, __nothrow__))
-#elif __has_CXX_attribute(const)
+#elif __has_cpp_attribute_qualified(const)
 #define MDBX_NOTHROW_CONST_FUNCTION [[const]]
 #else
 #define MDBX_NOTHROW_CONST_FUNCTION MDBX_NOTHROW_PURE_FUNCTION
