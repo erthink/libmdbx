@@ -682,6 +682,9 @@ extern LIBMDBX_VERINFO_API const struct MDBX_build_info {
   const char *options;  /**< mdbx-related options */
   const char *compiler; /**< compiler */
   const char *flags;    /**< CFLAGS and CXXFLAGS */
+  const char *metadata; /**< an extra/custom information provided via
+                             the MDBX_BUILD_METADATA definition
+                             during library build */
 } /** \brief libmdbx build information */ mdbx_build;
 
 #if (defined(_WIN32) || defined(_WIN64)) && !MDBX_BUILD_SHARED_LIBRARY

@@ -648,6 +648,10 @@ endif()
 # ~~~
 # ##############################################################################
 
+set(MDBX_BUILD_METADATA
+    ""
+    CACHE STRING "An extra/custom information provided during libmdbx build")
+
 set(MDBX_BUILD_OPTIONS ENABLE_UBSAN ENABLE_ASAN ENABLE_MEMCHECK ENABLE_GPROF
                        ENABLE_GCOV)
 macro(add_mdbx_option NAME DESCRIPTION DEFAULT)
@@ -663,7 +667,7 @@ if(IOS)
   set(MDBX_BUILD_TOOLS_DEFAULT OFF)
   if(NOT_SUBPROJECT)
     cmake_policy(SET CMP0006 OLD)
-    set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO")
+    set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED NO)
   endif()
 else()
   set(MDBX_BUILD_TOOLS_DEFAULT ON)

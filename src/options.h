@@ -513,6 +513,10 @@
 #define MDBX_AUXILARY_IOV_MAX IOV_MAX
 #endif /* MDBX_AUXILARY_IOV_MAX */
 
+/* An extra/custom information provided during library build */
+#ifndef MDBX_BUILD_METADATA
+#define MDBX_BUILD_METADATA ""
+#endif /* MDBX_BUILD_METADATA */
 /** @} end of build options */
 /*******************************************************************************
  *******************************************************************************
