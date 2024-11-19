@@ -56,9 +56,9 @@ CMAKE_OPT ?=
 
 # build options
 MDBX_BUILD_OPTIONS   ?=-DNDEBUG=1
-MDBX_BUILD_TIMESTAMP ?=$(shell date +%Y-%m-%dT%H:%M:%S%z)
-MDBX_BUILD_CXX       ?= YES
-MDBX_BUILD_METADATA  ?= ""
+MDBX_BUILD_TIMESTAMP ?=$(if $(SOURCE_DATE_EPOCH),$(SOURCE_DATE_EPOCH),$(shell date +%Y-%m-%dT%H:%M:%S%z))
+MDBX_BUILD_CXX       ?=YES
+MDBX_BUILD_METADATA  ?=
 
 # probe and compose common compiler flags with variable expansion trick (seems this work two times per session for GNU Make 3.81)
 CFLAGS       ?= $(strip $(eval CFLAGS := -std=gnu11 -O2 -g -Wall -Werror -Wextra -Wpedantic -ffunction-sections -fPIC -fvisibility=hidden -pthread -Wno-error=attributes $$(shell for opt in -fno-semantic-interposition -Wno-unused-command-line-argument -Wno-tautological-compare; do [ -z "$$$$($(CC) '-DMDBX_BUILD_FLAGS="probe"' $$$${opt} -c $(SRC_PROBE_C) -o /dev/null >/dev/null 2>&1 || echo failed)" ] && echo "$$$${opt} "; done)$(CFLAGS_EXTRA))$(CFLAGS))
