@@ -170,7 +170,7 @@ static int gcu_loose(MDBX_txn *txn, gcu_t *ctx) {
     if (err == MDBX_SUCCESS) {
       TRACE("%s: retry since gc-slot for %zu loose-pages available",
             dbg_prefix(ctx), txn->tw.loose_count);
-      return MDBX_SUCCESS;
+      return MDBX_RESULT_TRUE;
     }
 
     /* Put loose page numbers in tw.retired_pages,
@@ -538,9 +538,9 @@ static rid_t get_rid_for_reclaimed(MDBX_txn *txn, gcu_t *ctx,
           goto return_error;
         }
         const txnid_t gc_first = unaligned_peek_u64(4, key.iov_base);
-        if (ctx->rid >= gc_first)
+        if (ctx->rid >= gc_first && gc_first)
           ctx->rid = gc_first - 1;
-        if (unlikely(ctx->rid == 0)) {
+        if (unlikely(ctx->rid <= MIN_TXNID)) {
           ERROR("%s", "** no GC tail-space to store (going dense-mode)");
           ctx->dense = true;
           goto return_restart;
@@ -597,7 +597,7 @@ int gc_update(MDBX_txn *txn, gcu_t *ctx) {
 retry_clean_adj:
   ctx->reserve_adj = 0;
 retry:
-  ctx->loop += ctx->prev_first_unallocated == txn->geo.first_unallocated;
+  ctx->loop += !(ctx->prev_first_unallocated > txn->geo.first_unallocated);
   TRACE(">> restart, loop %u", ctx->loop);
 
   tASSERT(txn, pnl_check_allocated(txn->tw.relist, txn->geo.first_unallocated -
@@ -671,8 +671,13 @@ retry:
       while (txn->tw.gc.last_reclaimed &&
              ctx->cleaned_id <= txn->tw.gc.last_reclaimed) {
         rc = outer_first(&ctx->cursor, &key, nullptr);
-        if (rc == MDBX_NOTFOUND)
+        if (rc == MDBX_NOTFOUND) {
+          ctx->cleaned_id = txn->tw.gc.last_reclaimed + 1;
+          ctx->rid = txn->tw.gc.last_reclaimed;
+          ctx->reserved = 0;
+          ctx->reused_slot = 0;
           break;
+        }
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
         if (!MDBX_DISABLE_VALIDATION &&
@@ -729,10 +734,12 @@ retry:
     if (txn->tw.loose_pages) {
       /* put loose pages into the reclaimed- or retired-list */
       rc = gcu_loose(txn, ctx);
-      if (unlikely(rc != MDBX_SUCCESS))
+      if (unlikely(rc != MDBX_SUCCESS)) {
+        if (rc == MDBX_RESULT_TRUE)
+          continue;
         goto bailout;
-      if (unlikely(txn->tw.loose_pages))
-        continue;
+      }
+      tASSERT(txn, txn->tw.loose_pages == 0);
     }
 
     if (unlikely(ctx->reserved > MDBX_PNL_GETSIZE(txn->tw.relist)) &&
@@ -865,6 +872,8 @@ retry:
       goto bailout;
     }
 
+    tASSERT(txn,
+            reservation_gc_id >= MIN_TXNID && reservation_gc_id <= MAX_TXNID);
     key.iov_len = sizeof(reservation_gc_id);
     key.iov_base = (void *)&reservation_gc_id;
     data.iov_len = (chunk + 1) * sizeof(pgno_t);
