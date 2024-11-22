@@ -341,7 +341,9 @@ typedef mode_t mdbx_mode_t;
 #endif /* MDBX_DEPRECATED */
 
 #ifndef MDBX_DEPRECATED_ENUM
-#if !defined(DOXYGEN) &&                                                       \
+#ifdef __deprecated_enum
+#define MDBX_DEPRECATED_ENUM __deprecated_enum
+#elif defined(DOXYGEN) ||                                                      \
     (!defined(_MSC_VER) || (defined(__cplusplus) && __cplusplus >= 201403L &&  \
                             __has_cpp_attribute(deprecated) &&                 \
                             __has_cpp_attribute(deprecated) >= 201309L))
