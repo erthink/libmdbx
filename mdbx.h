@@ -222,7 +222,7 @@ typedef mode_t mdbx_mode_t;
 #ifndef __has_feature
 #define __has_feature(x) (0)
 #define __has_exceptions_disabled (0)
-#else
+#elif !defined(__has_exceptions_disabled)
 #define __has_exceptions_disabled                                              \
   (__has_feature(cxx_noexcept) && !__has_feature(cxx_exceptions))
 #endif /* __has_feature */
