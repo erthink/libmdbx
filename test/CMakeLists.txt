@@ -4,79 +4,6 @@
 enable_language(CXX)
 include(../cmake/compiler.cmake)
 
-set(LIBMDBX_TEST_SOURCES
-    base.h++
-    cases.c++
-    chrono.c++
-    chrono.h++
-    config.c++
-    config.h++
-    copy.c++
-    dead.c++
-    hill.c++
-    jitter.c++
-    keygen.c++
-    keygen.h++
-    log.c++
-    log.h++
-    main.c++
-    osal.h++
-    osal-unix.c++
-    osal-windows.c++
-    test.c++
-    test.h++
-    try.c++
-    utils.c++
-    utils.h++
-    append.c++
-    ttl.c++
-    nested.c++
-    fork.c++)
-
-if(NOT MDBX_BUILD_CXX)
-  probe_libcxx_filesystem()
-  list(APPEND LIBMDBX_TEST_SOURCES "${MDBX_SOURCE_DIR}/mdbx.c++" ../mdbx.h++)
-endif()
-
-add_executable(mdbx_test ${LIBMDBX_TEST_SOURCES})
-target_compile_definitions(mdbx_test PRIVATE MDBX_BUILD_TEST=1 MDBX_BUILD_CXX=1)
-
-if(MDBX_CXX_STANDARD)
-  set_target_properties(mdbx_test PROPERTIES CXX_STANDARD ${MDBX_CXX_STANDARD}
-                                             CXX_STANDARD_REQUIRED ON)
-endif()
-
-set_target_properties(
-  mdbx_test PROPERTIES INTERPROCEDURAL_OPTIMIZATION
-                       $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
-target_setup_options(mdbx_test)
-
-if(NOT MDBX_BUILD_CXX)
-  target_compile_definitions(mdbx_test PRIVATE MDBX_BUILD_CXX=1)
-  if(WIN32)
-    target_compile_definitions(mdbx_test PRIVATE MDBX_WITHOUT_MSVC_CRT=0)
-  endif()
-endif()
-
-if(NOT MDBX_BUILD_CXX AND LIBCXX_FILESYSTEM)
-  if(CMAKE_COMPILER_IS_ELBRUSCXX
-     AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 1.25.23
-     AND NOT CMAKE_VERSION VERSION_LESS 3.13)
-    target_link_options(mdbx_test PRIVATE "-Wl,--allow-multiple-definition")
-  endif()
-  target_link_libraries(mdbx_test ${LIBCXX_FILESYSTEM})
-endif()
-
-if(CMAKE_VERSION VERSION_LESS 3.1)
-  target_link_libraries(mdbx_test ${TOOL_MDBX_LIB} ${LIB_MATH}
-                        ${CMAKE_THREAD_LIBS_INIT})
-else()
-  target_link_libraries(mdbx_test ${TOOL_MDBX_LIB} ${LIB_MATH} Threads::Threads)
-endif()
-if(WIN32)
-  target_link_libraries(mdbx_test winmm.lib)
-endif()
-
 function(add_extra_test name)
   set(options DISABLED)
   set(oneValueArgs TIMEOUT)
@@ -211,6 +138,79 @@ function(add_extra_test name)
     endif()
   endif()
 endfunction(add_extra_test)
+
+set(LIBMDBX_TEST_SOURCES
+    base.h++
+    cases.c++
+    chrono.c++
+    chrono.h++
+    config.c++
+    config.h++
+    copy.c++
+    dead.c++
+    hill.c++
+    jitter.c++
+    keygen.c++
+    keygen.h++
+    log.c++
+    log.h++
+    main.c++
+    osal.h++
+    osal-unix.c++
+    osal-windows.c++
+    test.c++
+    test.h++
+    try.c++
+    utils.c++
+    utils.h++
+    append.c++
+    ttl.c++
+    nested.c++
+    fork.c++)
+
+if(NOT MDBX_BUILD_CXX)
+  probe_libcxx_filesystem()
+  list(APPEND LIBMDBX_TEST_SOURCES "${MDBX_SOURCE_DIR}/mdbx.c++" ../mdbx.h++)
+endif()
+
+add_executable(mdbx_test ${LIBMDBX_TEST_SOURCES})
+target_compile_definitions(mdbx_test PRIVATE MDBX_BUILD_TEST=1 MDBX_BUILD_CXX=1)
+
+if(MDBX_CXX_STANDARD)
+  set_target_properties(mdbx_test PROPERTIES CXX_STANDARD ${MDBX_CXX_STANDARD}
+                                             CXX_STANDARD_REQUIRED ON)
+endif()
+
+set_target_properties(
+  mdbx_test PROPERTIES INTERPROCEDURAL_OPTIMIZATION
+                       $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
+target_setup_options(mdbx_test)
+
+if(NOT MDBX_BUILD_CXX)
+  target_compile_definitions(mdbx_test PRIVATE MDBX_BUILD_CXX=1)
+  if(WIN32)
+    target_compile_definitions(mdbx_test PRIVATE MDBX_WITHOUT_MSVC_CRT=0)
+  endif()
+endif()
+
+if(NOT MDBX_BUILD_CXX AND LIBCXX_FILESYSTEM)
+  if(CMAKE_COMPILER_IS_ELBRUSCXX
+     AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 1.25.23
+     AND NOT CMAKE_VERSION VERSION_LESS 3.13)
+    target_link_options(mdbx_test PRIVATE "-Wl,--allow-multiple-definition")
+  endif()
+  target_link_libraries(mdbx_test ${LIBCXX_FILESYSTEM})
+endif()
+
+if(CMAKE_VERSION VERSION_LESS 3.1)
+  target_link_libraries(mdbx_test ${TOOL_MDBX_LIB} ${LIB_MATH}
+                        ${CMAKE_THREAD_LIBS_INIT})
+else()
+  target_link_libraries(mdbx_test ${TOOL_MDBX_LIB} ${LIB_MATH} Threads::Threads)
+endif()
+if(WIN32)
+  target_link_libraries(mdbx_test winmm.lib)
+endif()
 
 if(NOT SUBPROJECT)
   if(UNIX)
