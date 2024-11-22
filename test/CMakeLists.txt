@@ -168,7 +168,9 @@ set(LIBMDBX_TEST_SOURCES
     nested.c++
     fork.c++)
 
-if(NOT MDBX_BUILD_CXX)
+if(MDBX_BUILD_CXX)
+  add_extra_test(probe DISABLED)
+else()
   probe_libcxx_filesystem()
   list(APPEND LIBMDBX_TEST_SOURCES "${MDBX_SOURCE_DIR}/mdbx.c++" ../mdbx.h++)
 endif()

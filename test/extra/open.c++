@@ -7,7 +7,7 @@
 int main(int argc, const char *argv[]) {
   (void)argc;
   (void)argv;
-  std::cout << "FAKE-OK (since no C++20 std::thread and/or std::latch\n";
+  std::cout << "FAKE-OK (since no C++20 std::thread and/or std::latch)\n";
   return EXIT_SUCCESS;
 }
 
