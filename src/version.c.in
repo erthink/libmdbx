@@ -25,8 +25,10 @@ __dll_export
     const struct MDBX_version_info mdbx_version = {
         ${MDBX_VERSION_MAJOR},
         ${MDBX_VERSION_MINOR},
-        ${MDBX_VERSION_RELEASE},
-        ${MDBX_VERSION_REVISION},
+        ${MDBX_VERSION_PATCH},
+        ${MDBX_VERSION_TWEAK},
+        "@MDBX_VERSION_PRERELEASE@", /* pre-release suffix of SemVer
+                                        @MDBX_VERSION_PURE@ */
         {"@MDBX_GIT_TIMESTAMP@", "@MDBX_GIT_TREE@", "@MDBX_GIT_COMMIT@",
          "@MDBX_GIT_DESCRIBE@"},
         sourcery};

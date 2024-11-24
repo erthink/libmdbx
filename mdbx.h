@@ -660,12 +660,13 @@ extern "C" {
 #define LIBMDBX_VERINFO_API __dll_export
 #endif /* LIBMDBX_VERINFO_API */
 
-/** \brief libmdbx version information */
+/** \brief libmdbx version information, \see https://semver.org/ */
 extern LIBMDBX_VERINFO_API const struct MDBX_version_info {
-  uint8_t major;     /**< Major version number */
-  uint8_t minor;     /**< Minor version number */
-  uint16_t release;  /**< Release number of Major.Minor */
-  uint32_t revision; /**< Revision number of Release */
+  uint16_t major;                /**< Major version number */
+  uint16_t minor;                /**< Minor version number */
+  uint16_t patch;                /**< Patch number */
+  uint16_t tweak;                /**< Tweak number */
+  const char *semver_prerelease; /**< Semantic Versioning `pre-release` */
   struct {
     const char *datetime; /**< committer date, strict ISO-8601 format */
     const char *tree;     /**< commit hash (hexadecimal digits) */

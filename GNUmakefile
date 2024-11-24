@@ -398,11 +398,14 @@ reformat:
 
 MAN_SRCDIR := src/man1/
 ALLOY_DEPS := $(shell git ls-files src/ | grep -e /tools -e /man -v)
-git_DIR := $(shell if [ -d .git ]; then echo .git; elif [ -s .git -a -f .git ]; then grep '^gitdir: ' .git | cut -d ':' -f 2; else echo git_directory_is_absent; fi)
-MDBX_GIT_VERSION = $(shell set -o pipefail; git describe --tags '--match=v[0-9]*' 2>&- | sed -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)|\1|p' || echo 'Please fetch tags and/or use non-obsolete git version')
-MDBX_GIT_REVISION = $(shell set -o pipefail; git rev-list `git describe --tags --abbrev=0`..HEAD --count 2>&- || echo 'Please fetch tags and/or use non-obsolete git version')
-MDBX_GIT_TIMESTAMP = $(shell git show --no-patch --format=%cI HEAD 2>&- || echo 'Please install latest get version')
-MDBX_GIT_DESCRIBE = $(shell git describe --tags --long --dirty=-dirty '--match=v[0-9]*' 2>&- || echo 'Please fetch tags and/or install non-obsolete git version')
+MDBX_GIT_DIR := $(shell if [ -d .git ]; then echo .git; elif [ -s .git -a -f .git ]; then grep '^gitdir: ' .git | cut -d ':' -f 2; else echo git_directory_is_absent; fi)
+MDBX_GIT_LASTVTAG := $(shell git describe --tags --dirty=-DIRTY --abbrev=0 '--match=v[0-9]*' 2>&- || echo 'Please fetch tags and/or install non-obsolete git version')
+MDBX_GIT_3DOT := $(shell set -o pipefail; echo "$(MDBX_GIT_LASTVTAG)" | sed -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)|\1|p' || echo 'Please fetch tags and/or use non-obsolete git version')
+MDBX_GIT_TWEAK := $(shell set -o pipefail; git rev-list $(shell git describe --tags --abbrev=0 '--match=v[0-9]*')..HEAD --count 2>&- || echo 'Please fetch tags and/or use non-obsolete git version')
+MDBX_GIT_TIMESTAMP := $(shell git show --no-patch --format=%cI HEAD 2>&- || echo 'Please install latest get version')
+MDBX_GIT_DESCRIBE := $(shell git describe --tags --long --dirty '--match=v[0-9]*' 2>&- || echo 'Please fetch tags and/or install non-obsolete git version')
+MDBX_GIT_PRERELEASE := $(shell echo "$(MDBX_GIT_LASTVTAG)" | sed -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)-\([-.0-1a-zA-Z]\+\)|\3|p')
+MDBX_VERSION_PURE = $(MDBX_GIT_3DOT)$(if $(filter-out 0,$(MDBX_GIT_TWEAK)),.$(MDBX_GIT_TWEAK),)$(if $(MDBX_GIT_PRERELEASE),-$(MDBX_GIT_PRERELEASE),)
 MDBX_VERSION_IDENT = $(shell set -o pipefail; echo -n '$(MDBX_GIT_DESCRIBE)' | tr -c -s '[a-zA-Z0-9.]' _)
 MDBX_VERSION_NODOT = $(subst .,_,$(MDBX_VERSION_IDENT))
 MDBX_BUILD_SOURCERY = $(shell set -o pipefail; $(MAKE) IOARENA=false CXXSTD= -s src/version.c >/dev/null && (openssl dgst -r -sha256 src/version.c || sha256sum src/version.c || shasum -a 256 src/version.c) 2>/dev/null | cut -d ' ' -f 1 || (echo 'Please install openssl or sha256sum or shasum' >&2 && echo sha256sum_is_no_available))_$(MDBX_VERSION_NODOT)
@@ -529,7 +532,7 @@ mdbx_test: $(TEST_OBJ) libmdbx.$(SO_SUFFIX)
 	@echo '  LD $@'
 	$(QUIET)$(CXX) $(CXXFLAGS) $(TEST_OBJ) -Wl,-rpath . -L . -l mdbx $(EXE_LDFLAGS) $(LIBS) -o $@
 
-$(git_DIR)/HEAD $(git_DIR)/index $(git_DIR)/refs/tags:
+$(MDBX_GIT_DIR)/HEAD $(MDBX_GIT_DIR)/index $(MDBX_GIT_DIR)/refs/tags:
 	@echo '*** ' >&2
 	@echo '*** Please don''t use tarballs nor zips which are automatically provided by Github !' >&2
 	@echo '*** These archives do not contain version information and thus are unfit to build libmdbx.' >&2
@@ -539,17 +542,19 @@ $(git_DIR)/HEAD $(git_DIR)/index $(git_DIR)/refs/tags:
 	@echo '*** ' >&2
 	@false
 
-src/version.c: src/version.c.in $(lastword $(MAKEFILE_LIST)) $(git_DIR)/HEAD $(git_DIR)/index $(git_DIR)/refs/tags LICENSE NOTICE
+src/version.c: src/version.c.in $(lastword $(MAKEFILE_LIST)) $(MDBX_GIT_DIR)/HEAD $(MDBX_GIT_DIR)/index $(MDBX_GIT_DIR)/refs/tags LICENSE NOTICE
 	@echo '  MAKE $@'
 	$(QUIET)sed \
 		-e "s|@MDBX_GIT_TIMESTAMP@|$(MDBX_GIT_TIMESTAMP)|" \
 		-e "s|@MDBX_GIT_TREE@|$(shell git show --no-patch --format=%T HEAD || echo 'Please install latest get version')|" \
 		-e "s|@MDBX_GIT_COMMIT@|$(shell git show --no-patch --format=%H HEAD || echo 'Please install latest get version')|" \
 		-e "s|@MDBX_GIT_DESCRIBE@|$(MDBX_GIT_DESCRIBE)|" \
-		-e "s|\$${MDBX_VERSION_MAJOR}|$(shell echo '$(MDBX_GIT_VERSION)' | cut -d . -f 1)|" \
-		-e "s|\$${MDBX_VERSION_MINOR}|$(shell echo '$(MDBX_GIT_VERSION)' | cut -d . -f 2)|" \
-		-e "s|\$${MDBX_VERSION_RELEASE}|$(shell echo '$(MDBX_GIT_VERSION)' | cut -d . -f 3)|" \
-		-e "s|\$${MDBX_VERSION_REVISION}|$(MDBX_GIT_REVISION)|" \
+		-e "s|\$${MDBX_VERSION_MAJOR}|$(shell echo '$(MDBX_GIT_3DOT)' | cut -d . -f 1)|" \
+		-e "s|\$${MDBX_VERSION_MINOR}|$(shell echo '$(MDBX_GIT_3DOT)' | cut -d . -f 2)|" \
+		-e "s|\$${MDBX_VERSION_PATCH}|$(shell echo '$(MDBX_GIT_3DOT)' | cut -d . -f 3)|" \
+		-e "s|\$${MDBX_VERSION_TWEAK}|$(MDBX_GIT_TWEAK)|" \
+		-e "s|\$${MDBX_VERSION_PRERELEASE}|$(MDBX_GIT_PRERELEASE)|" \
+		-e "s|\$${MDBX_VERSION_PURE}|$(MDBX_VERSION_PURE)|" \
 	src/version.c.in >$@
 
 src/config.h: @buildflags.tag $(WAIT) src/version.c $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE
@@ -578,10 +583,12 @@ docs/Doxyfile: docs/Doxyfile.in src/version.c $(lastword $(MAKEFILE_LIST))
 		-e "s|@MDBX_GIT_TREE@|$(shell git show --no-patch --format=%T HEAD || echo 'Please install latest get version')|" \
 		-e "s|@MDBX_GIT_COMMIT@|$(shell git show --no-patch --format=%H HEAD || echo 'Please install latest get version')|" \
 		-e "s|@MDBX_GIT_DESCRIBE@|$(MDBX_GIT_DESCRIBE)|" \
-		-e "s|\$${MDBX_VERSION_MAJOR}|$(shell echo '$(MDBX_GIT_VERSION)' | cut -d . -f 1)|" \
-		-e "s|\$${MDBX_VERSION_MINOR}|$(shell echo '$(MDBX_GIT_VERSION)' | cut -d . -f 2)|" \
-		-e "s|\$${MDBX_VERSION_RELEASE}|$(shell echo '$(MDBX_GIT_VERSION)' | cut -d . -f 3)|" \
-		-e "s|\$${MDBX_VERSION_REVISION}|$(MDBX_GIT_REVISION)|" \
+		-e "s|\$${MDBX_VERSION_MAJOR}|$(shell echo '$(MDBX_GIT_3DOT)' | cut -d . -f 1)|" \
+		-e "s|\$${MDBX_VERSION_MINOR}|$(shell echo '$(MDBX_GIT_3DOT)' | cut -d . -f 2)|" \
+		-e "s|\$${MDBX_VERSION_PATCH}|$(shell echo '$(MDBX_GIT_3DOT)' | cut -d . -f 3)|" \
+		-e "s|\$${MDBX_VERSION_TWEAK}|$(MDBX_GIT_TWEAK)|" \
+		-e "s|\$${MDBX_VERSION_PRERELEASE}|$(MDBX_GIT_PRERELEASE)|" \
+		-e "s|\$${MDBX_VERSION_PURE}|$(MDBX_VERSION_PURE)|" \
 	docs/Doxyfile.in >$@
 
 define md-extract-section
@@ -629,11 +636,11 @@ tags:
 	@echo '  FETCH git tags...'
 	$(QUIET)git fetch --tags --force
 
-release-assets: libmdbx-amalgamated-$(MDBX_GIT_VERSION).zpaq \
-	libmdbx-amalgamated-$(MDBX_GIT_VERSION).tar.xz \
-	libmdbx-amalgamated-$(MDBX_GIT_VERSION).tar.bz2 \
-	libmdbx-amalgamated-$(MDBX_GIT_VERSION).tar.gz \
-	libmdbx-amalgamated-$(subst .,_,$(MDBX_GIT_VERSION)).zip
+release-assets: libmdbx-amalgamated-$(MDBX_GIT_3DOT).zpaq \
+	libmdbx-amalgamated-$(MDBX_GIT_3DOT).tar.xz \
+	libmdbx-amalgamated-$(MDBX_GIT_3DOT).tar.bz2 \
+	libmdbx-amalgamated-$(MDBX_GIT_3DOT).tar.gz \
+	libmdbx-amalgamated-$(subst .,_,$(MDBX_GIT_3DOT)).zip
 	$(QUIET)([ \
 		"$$(set -o pipefail; git describe | sed -n '/^v[0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}$$/p' || echo fail-left)" \
 	== \
@@ -759,7 +766,7 @@ $(foreach file,mdbx.h mdbx.h++ $(filter-out man1/% VERSION.json .clang-format-ig
 
 dist/VERSION.json: src/version.c
 	@echo '  MAKE $@'
-	$(QUIET)mkdir -p dist/ && echo "{ \"git_describe\": \"$(MDBX_GIT_DESCRIBE)\", \"git_timestamp\": \"$(MDBX_GIT_TIMESTAMP)\", \"git_tree\": \"$(shell git show --no-patch --format=%T HEAD 2>&1)\", \"git_commit\": \"$(shell git show --no-patch --format=%H HEAD 2>&1)\", \"version_4dot\": \"$(MDBX_GIT_VERSION).$(MDBX_GIT_REVISION)\" }" >$@
+	$(QUIET)mkdir -p dist/ && echo "{ \"git_describe\": \"$(MDBX_GIT_DESCRIBE)\", \"git_timestamp\": \"$(MDBX_GIT_TIMESTAMP)\", \"git_tree\": \"$(shell git show --no-patch --format=%T HEAD 2>&1)\", \"git_commit\": \"$(shell git show --no-patch --format=%H HEAD 2>&1)\", \"semver\": \"$(MDBX_VERSION_PURE)\" }" >$@
 
 dist/.clang-format-ignore: $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'

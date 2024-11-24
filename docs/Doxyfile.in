@@ -48,7 +48,7 @@ PROJECT_NAME           = libmdbx
 # could be handy for archiving the generated documentation or if some version
 # control system is used.
 
-PROJECT_NUMBER         = "${MDBX_VERSION_MAJOR}.${MDBX_VERSION_MINOR}.${MDBX_VERSION_RELEASE}.${MDBX_VERSION_REVISION} (@MDBX_GIT_TIMESTAMP@)"
+PROJECT_NUMBER         = "${MDBX_VERSION_MAJOR}.${MDBX_VERSION_MINOR}.${MDBX_VERSION_PATCH}.${MDBX_VERSION_TWEAK} (@MDBX_GIT_TIMESTAMP@)"
 
 # Using the PROJECT_BRIEF tag one can provide an optional one line description
 # for a project that appears at the top of each page and should give viewer a

@@ -195,6 +195,15 @@ else()
       "PLEASE, AVOID USING ANY OTHER TECHNIQUES.")
 endif()
 
+# Provide version
+include(cmake/utils.cmake)
+set(MDBX_BUILD_METADATA
+    "${MDBX_BUILD_METADATA}"
+    CACHE STRING "An extra/custom information provided during libmdbx build")
+semver_provide(MDBX "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}"
+               "${MDBX_BUILD_METADATA}" FALSE)
+message(STATUS "libmdbx version is ${MDBX_VERSION}")
+
 if(DEFINED PROJECT_NAME)
   option(
     MDBX_FORCE_BUILD_AS_MAIN_PROJECT
@@ -304,7 +313,6 @@ if(NOT DEFINED THREADS_PREFER_PTHREAD_FLAG)
 endif()
 find_package(Threads REQUIRED)
 
-include(cmake/utils.cmake)
 include(cmake/compiler.cmake)
 include(cmake/profile.cmake)
 
@@ -650,10 +658,6 @@ endif()
 # ~~~
 # ##############################################################################
 
-set(MDBX_BUILD_METADATA
-    ""
-    CACHE STRING "An extra/custom information provided during libmdbx build")
-
 set(MDBX_BUILD_OPTIONS ENABLE_UBSAN ENABLE_ASAN ENABLE_MEMCHECK ENABLE_GPROF
                        ENABLE_GCOV)
 macro(add_mdbx_option NAME DESCRIPTION DEFAULT)
@@ -811,11 +815,6 @@ if(MDBX_BUILD_CXX)
   # determine library for C++ std::filesystem
   probe_libcxx_filesystem()
 endif()
-
-# Get version
-fetch_version(MDBX "${CMAKE_CURRENT_SOURCE_DIR}" FALSE
-              "${CMAKE_CURRENT_BINARY_DIR}")
-message(STATUS "libmdbx version is ${MDBX_VERSION}")
 
 # sources list
 set(LIBMDBX_PUBLIC_HEADERS mdbx.h)
@@ -1370,11 +1369,9 @@ if(NOT SUBPROJECT)
   set(PACKAGE "libmdbx")
   set(CPACK_PACKAGE_VERSION_MAJOR ${MDBX_VERSION_MAJOR})
   set(CPACK_PACKAGE_VERSION_MINOR ${MDBX_VERSION_MINOR})
-  set(CPACK_PACKAGE_VERSION_PATCH ${MDBX_VERSION_RELEASE})
-  set(CPACK_PACKAGE_VERSION_COMMIT ${MDBX_VERSION_REVISION})
-  set(PACKAGE_VERSION
-      "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}.${CPACK_PACKAGE_VERSION_COMMIT}"
-  )
+  set(CPACK_PACKAGE_VERSION_PATCH ${MDBX_VERSION_PATCH})
+  set(CPACK_PACKAGE_VERSION_TWEAK ${MDBX_VERSION_TWEAK})
+  set(PACKAGE_VERSION ${MDBX_VERSION})
   message(STATUS "libmdbx package version is ${PACKAGE_VERSION}")
 endif()
 

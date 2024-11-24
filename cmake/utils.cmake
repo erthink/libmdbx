@@ -74,15 +74,313 @@ macro(set_source_files_compile_flags)
   unset(_lang)
 endmacro(set_source_files_compile_flags)
 
-macro(fetch_version name source_root_directory parent_scope
-      build_directory_for_json_output)
-  set(_version_4dot "")
+macro(semver_parse str)
+  set(_semver_ok FALSE)
+  set(_semver_err "")
+  set(_semver_major 0)
+  set(_semver_minor 0)
+  set(_semver_patch 0)
+  set(_semver_tweak_withdot "")
+  set(_semver_tweak "")
+  set(_semver_extra "")
+  set(_semver_prerelease_withdash "")
+  set(_semver_prerelease "")
+  set(_semver_buildmetadata_withplus "")
+  set(_semver_buildmetadata "")
+  if("${str}"
+     MATCHES
+     "^v?(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(\\.(0|[1-9][0-9]*))?([-+]-*[0-9a-zA-Z]+.*)?$"
+  )
+    set(_semver_major ${CMAKE_MATCH_1})
+    set(_semver_minor ${CMAKE_MATCH_2})
+    set(_semver_patch ${CMAKE_MATCH_3})
+    set(_semver_tweak_withdot ${CMAKE_MATCH_4})
+    set(_semver_tweak ${CMAKE_MATCH_5})
+    set(_semver_extra "${CMAKE_MATCH_6}")
+    if("${_semver_extra}" STREQUAL "")
+      set(_semver_ok TRUE)
+    elseif("${_semver_extra}" MATCHES "^([.-][a-zA-Z0-9-]+)*(\\+[^+]+)?$")
+      set(_semver_prerelease_withdash "${CMAKE_MATCH_1}")
+      if(NOT "${_semver_prerelease_withdash}" STREQUAL "")
+        string(SUBSTRING "${_semver_prerelease_withdash}" 1 -1
+                         _semver_prerelease)
+      endif()
+      set(_semver_buildmetadata_withplus "${CMAKE_MATCH_2}")
+      if(NOT "${_semver_buildmetadata_withplus}" STREQUAL "")
+        string(SUBSTRING "${_semver_buildmetadata_withplus}" 1 -1
+                         _semver_buildmetadata)
+      endif()
+      set(_semver_ok TRUE)
+    else()
+      set(_semver_err
+          "Поля prerelease и/или buildmetadata (строка `-foo+bar` в составе `0.0.0[.0][-foo][+bar]`) не соответствуют SemVer-спецификации"
+      )
+    endif()
+  else()
+    set(_semver_err
+        "Версионная отметка в целом не соответствует шаблону `0.0.0[.0][-foo][+bar]` SemVer-спецификации"
+    )
+  endif()
+endmacro(semver_parse)
+
+function(_semver_parse_probe str expect)
+  semver_parse(${str})
+  if(expect AND NOT _semver_ok)
+    message(
+      FATAL_ERROR
+        "semver_parse(${str}) expect SUCCESS, got ${_semver_ok}: ${_semver_err}"
+    )
+  elseif(NOT expect AND _semver_ok)
+    message(FATAL_ERROR "semver_parse(${str}) expect FAIL, got ${_semver_ok}")
+  endif()
+endfunction()
+
+function(semver_parse_selfcheck)
+  _semver_parse_probe("0.0.4" TRUE)
+  _semver_parse_probe("v1.2.3" TRUE)
+  _semver_parse_probe("10.20.30" TRUE)
+  _semver_parse_probe("10.20.30.42" TRUE)
+  _semver_parse_probe("1.1.2-prerelease+meta" TRUE)
+  _semver_parse_probe("1.1.2+meta" TRUE)
+  _semver_parse_probe("1.1.2+meta-valid" TRUE)
+  _semver_parse_probe("1.0.0-alpha" TRUE)
+  _semver_parse_probe("1.0.0-beta" TRUE)
+  _semver_parse_probe("1.0.0-alpha.beta" TRUE)
+  _semver_parse_probe("1.0.0-alpha.beta.1" TRUE)
+  _semver_parse_probe("1.0.0-alpha.1" TRUE)
+  _semver_parse_probe("1.0.0-alpha0.valid" TRUE)
+  _semver_parse_probe("1.0.0-alpha.0valid" TRUE)
+  _semver_parse_probe("1.0.0-alpha-a.b-c-somethinglong+build.1-aef.1-its-okay"
+                      TRUE)
+  _semver_parse_probe("1.0.0-rc.1+build.1" TRUE)
+  _semver_parse_probe("2.0.0-rc.1+build.123" TRUE)
+  _semver_parse_probe("1.2.3-beta" TRUE)
+  _semver_parse_probe("10.2.3-DEV-SNAPSHOT" TRUE)
+  _semver_parse_probe("1.2.3-SNAPSHOT-123" TRUE)
+  _semver_parse_probe("1.0.0" TRUE)
+  _semver_parse_probe("2.0.0" TRUE)
+  _semver_parse_probe("1.1.7" TRUE)
+  _semver_parse_probe("2.0.0+build.1848" TRUE)
+  _semver_parse_probe("2.0.1-alpha.1227" TRUE)
+  _semver_parse_probe("1.0.0-alpha+beta" TRUE)
+  _semver_parse_probe("1.2.3----RC-SNAPSHOT.12.9.1--.12+788" TRUE)
+  _semver_parse_probe("1.2.3----R-S.12.9.1--.12+meta" TRUE)
+  _semver_parse_probe("1.2.3----RC-SNAPSHOT.12.9.1--.12" TRUE)
+  _semver_parse_probe("1.0.0+0.build.1-rc.10000aaa-kk-0.1" TRUE)
+  _semver_parse_probe(
+    "99999999999999999999999.999999999999999999.99999999999999999" TRUE)
+  _semver_parse_probe("v1.0.0-0A.is.legal" TRUE)
+
+  _semver_parse_probe("1" FALSE)
+  _semver_parse_probe("1.2" FALSE)
+  # _semver_parse_probe("1.2.3-0123" FALSE)
+  # _semver_parse_probe("1.2.3-0123.0123" FALSE)
+  _semver_parse_probe("1.1.2+.123" FALSE)
+  _semver_parse_probe("+invalid" FALSE)
+  _semver_parse_probe("-invalid" FALSE)
+  _semver_parse_probe("-invalid+invalid" FALSE)
+  _semver_parse_probe("-invalid.01" FALSE)
+  _semver_parse_probe("alpha" FALSE)
+  _semver_parse_probe("alpha.beta" FALSE)
+  _semver_parse_probe("alpha.beta.1" FALSE)
+  _semver_parse_probe("alpha.1" FALSE)
+  _semver_parse_probe("alpha+beta" FALSE)
+  _semver_parse_probe("alpha_beta" FALSE)
+  _semver_parse_probe("alpha." FALSE)
+  _semver_parse_probe("alpha.." FALSE)
+  _semver_parse_probe("beta" FALSE)
+  _semver_parse_probe("1.0.0-alpha_beta" FALSE)
+  _semver_parse_probe("-alpha." FALSE)
+  _semver_parse_probe("1.0.0-alpha.." FALSE)
+  _semver_parse_probe("1.0.0-alpha..1" FALSE)
+  _semver_parse_probe("1.0.0-alpha...1" FALSE)
+  _semver_parse_probe("1.0.0-alpha....1" FALSE)
+  _semver_parse_probe("1.0.0-alpha.....1" FALSE)
+  _semver_parse_probe("1.0.0-alpha......1" FALSE)
+  _semver_parse_probe("1.0.0-alpha.......1" FALSE)
+  _semver_parse_probe("01.1.1" FALSE)
+  _semver_parse_probe("1.01.1" FALSE)
+  _semver_parse_probe("1.1.01" FALSE)
+  _semver_parse_probe("1.2" FALSE)
+  _semver_parse_probe("1.2.3.DEV" FALSE)
+  _semver_parse_probe("1.2-SNAPSHOT" FALSE)
+  _semver_parse_probe("1.2.31.2.3----RC-SNAPSHOT.12.09.1--..12+788" FALSE)
+  _semver_parse_probe("1.2-RC-SNAPSHOT" FALSE)
+  _semver_parse_probe("-1.0.3-gamma+b7718" FALSE)
+  _semver_parse_probe("+justmeta" FALSE)
+  _semver_parse_probe("9.8.7+meta+meta" FALSE)
+  _semver_parse_probe("9.8.7-whatever+meta+meta" FALSE)
+  _semver_parse_probe(
+    "99999999999999999999999.999999999999999999.99999999999999999----RC-SNAPSHOT.12.09.1--------------------------------..12"
+    FALSE)
+endfunction()
+
+macro(git_get_versioninfo source_root_directory)
   set(_git_describe "")
   set(_git_timestamp "")
   set(_git_tree "")
   set(_git_commit "")
-  set(_git_revision 0)
-  set(_git_version "")
+  set(_git_last_vtag "")
+  set(_git_trailing_commits 0)
+  set(_git_is_dirty FALSE)
+
+  execute_process(
+    COMMAND ${GIT} show --no-patch --format=%cI HEAD
+    OUTPUT_VARIABLE _git_timestamp
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    WORKING_DIRECTORY ${source_root_directory}
+    RESULT_VARIABLE _rc)
+  if(_rc OR _git_timestamp STREQUAL "%cI")
+    execute_process(
+      COMMAND ${GIT} show --no-patch --format=%ci HEAD
+      OUTPUT_VARIABLE _git_timestamp
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      WORKING_DIRECTORY ${source_root_directory}
+      RESULT_VARIABLE _rc)
+    if(_rc OR _git_timestamp STREQUAL "%ci")
+      message(
+        FATAL_ERROR
+          "Please install latest version of git (`show --no-patch --format=%cI HEAD` failed)"
+      )
+    endif()
+  endif()
+
+  execute_process(
+    COMMAND ${GIT} show --no-patch --format=%T HEAD
+    OUTPUT_VARIABLE _git_tree
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    WORKING_DIRECTORY ${source_root_directory}
+    RESULT_VARIABLE _rc)
+  if(_rc OR _git_tree STREQUAL "")
+    message(
+      FATAL_ERROR
+        "Please install latest version of git (`show --no-patch --format=%T HEAD` failed)"
+    )
+  endif()
+
+  execute_process(
+    COMMAND ${GIT} show --no-patch --format=%H HEAD
+    OUTPUT_VARIABLE _git_commit
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    WORKING_DIRECTORY ${source_root_directory}
+    RESULT_VARIABLE _rc)
+  if(_rc OR _git_commit STREQUAL "")
+    message(
+      FATAL_ERROR
+        "Please install latest version of git (`show --no-patch --format=%H HEAD` failed)"
+    )
+  endif()
+
+  execute_process(
+    COMMAND ${GIT} status --untracked-files=no --porcelain
+    OUTPUT_VARIABLE _git_status
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    WORKING_DIRECTORY ${source_root_directory}
+    RESULT_VARIABLE _rc)
+  if(_rc)
+    message(
+      FATAL_ERROR
+        "Please install latest version of git (`status --untracked-files=no --porcelain` failed)"
+    )
+  endif()
+  if(NOT _git_status STREQUAL "")
+    set(_git_commit "DIRTY-${_git_commit}")
+    set(_git_is_dirty TRUE)
+  endif()
+  unset(_git_status)
+
+  execute_process(
+    COMMAND ${GIT} describe --tags --abbrev=0 "--match=v[0-9]*"
+    OUTPUT_VARIABLE _git_last_vtag
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    WORKING_DIRECTORY ${source_root_directory}
+    RESULT_VARIABLE _rc)
+  if(_rc OR _git_last_vtag STREQUAL "")
+    execute_process(
+      COMMAND ${GIT} tag
+      OUTPUT_VARIABLE _git_tags_dump
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      WORKING_DIRECTORY ${source_root_directory}
+      RESULT_VARIABLE _rc)
+    execute_process(
+      COMMAND ${GIT} rev-list --count --no-merges --remove-empty HEAD
+      OUTPUT_VARIABLE _git_whole_count
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      WORKING_DIRECTORY ${source_root_directory}
+      RESULT_VARIABLE _rc)
+    if(_rc)
+      message(
+        FATAL_ERROR
+          "Please install latest version of git (`git rev-list --count --no-merges --remove-empty HEAD` failed)"
+      )
+    endif()
+    if(_git_whole_count GREATER 42 AND _git_tags_dump STREQUAL "")
+      message(
+        FATAL_ERROR
+          "Please fetch tags (`describe --tags --abbrev=0 --match=v[0-9]*` failed)"
+      )
+    else()
+      message(
+        NOTICE
+        "Falling back to version `0.0.0` (have you made an initial release?")
+    endif()
+    set(_git_last_vtag "0.0.0")
+    set(_git_trailing_commits ${_git_whole_count})
+    execute_process(
+      COMMAND ${GIT} describe --tags --dirty --long --always
+      OUTPUT_VARIABLE _git_describe
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      WORKING_DIRECTORY ${source_root_directory}
+      RESULT_VARIABLE _rc)
+    if(_rc OR _git_describe STREQUAL "")
+      execute_process(
+        COMMAND ${GIT} describe --tags --all --dirty --long --always
+        OUTPUT_VARIABLE _git_describe
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        WORKING_DIRECTORY ${source_root_directory}
+        RESULT_VARIABLE _rc)
+      if(_rc OR _git_describe STREQUAL "")
+        message(
+          FATAL_ERROR
+            "Please install latest version of git (`describe --tags --all --long` failed)"
+        )
+      endif()
+    endif()
+  else()
+    execute_process(
+      COMMAND ${GIT} describe --tags --dirty --long "--match=v[0-9]*"
+      OUTPUT_VARIABLE _git_describe
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      WORKING_DIRECTORY ${source_root_directory}
+      RESULT_VARIABLE _rc)
+    if(_rc OR _git_describe STREQUAL "")
+      message(
+        FATAL_ERROR
+          "Please install latest version of git (`describe --tags --long --match=v[0-9]*`)"
+      )
+    endif()
+    execute_process(
+      COMMAND ${GIT} rev-list --count "${_git_last_vtag}..HEAD"
+      OUTPUT_VARIABLE _git_trailing_commits
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      WORKING_DIRECTORY ${source_root_directory}
+      RESULT_VARIABLE _rc)
+    if(_rc OR _git_trailing_commits STREQUAL "")
+      message(
+        FATAL_ERROR
+          "Please install latest version of git (`rev-list --count ${_git_last_vtag}..HEAD` failed)"
+      )
+    endif()
+  endif()
+endmacro(git_get_versioninfo)
+
+macro(semver_provide name source_root_directory build_directory_for_json_output
+      build_metadata parent_scope)
+  set(_semver "")
+  set(_git_describe "")
+  set(_git_timestamp "")
+  set(_git_tree "")
+  set(_git_commit "")
   set(_version_from "")
   set(_git_root FALSE)
 
@@ -134,246 +432,28 @@ macro(fetch_version name source_root_directory parent_scope
     string(JSON _git_timestamp GET "${_versioninfo_json}" "git_timestamp")
     string(JSON _git_tree GET "${_versioninfo_json}" "git_tree")
     string(JSON _git_commit GET "${_versioninfo_json}" "git_commit")
-    string(JSON _version_4dot GET "${_versioninfo_json}" "version_4dot")
+    string(JSON _semver GET "${_versioninfo_json}" "semver")
     unset(_json_object)
-    string(REPLACE "." ";" _version_list "${_version_4dot}")
-
-    if(NOT _version_4dot)
+    if(NOT _semver)
       message(
-        ERROR
-        "Unable to retrieve ${name} version from \"${_version_from}\" file.")
-      set(_version_list ${_git_version})
-      string(REPLACE ";" "." _version_4dot "${_git_version}")
-    else()
-      string(REPLACE "." ";" _version_list ${_version_4dot})
+        FATAL_ERROR
+          "Unable to retrieve ${name} version from \"${_version_from}\" file.")
     endif()
-
+    semver_parse("${_semver}")
+    if(NOT _semver_ok)
+      message(
+        FATAL_ERROR "SemVer `${_semver}` from ${_version_from}: ${_semver_err}")
+    endif()
   elseif(_git_root AND _source_root STREQUAL _git_root)
     set(_version_from git)
-
-    execute_process(
-      COMMAND ${GIT} show --no-patch --format=%cI HEAD
-      OUTPUT_VARIABLE _git_timestamp
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      WORKING_DIRECTORY ${source_root_directory}
-      RESULT_VARIABLE _rc)
-    if(_rc OR _git_timestamp STREQUAL "%cI")
-      execute_process(
-        COMMAND ${GIT} show --no-patch --format=%ci HEAD
-        OUTPUT_VARIABLE _git_timestamp
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        WORKING_DIRECTORY ${source_root_directory}
-        RESULT_VARIABLE _rc)
-      if(_rc OR _git_timestamp STREQUAL "%ci")
-        message(
-          FATAL_ERROR
-            "Please install latest version of git (`show --no-patch --format=%cI HEAD` failed)"
-        )
-      endif()
+    git_get_versioninfo(${source_root_directory})
+    semver_parse(${_git_last_vtag})
+    if(NOT _semver_ok)
+      message(FATAL_ERROR "Git tag `${_git_last_vtag}`: ${_semver_err}")
     endif()
-
-    execute_process(
-      COMMAND ${GIT} show --no-patch --format=%T HEAD
-      OUTPUT_VARIABLE _git_tree
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      WORKING_DIRECTORY ${source_root_directory}
-      RESULT_VARIABLE _rc)
-    if(_rc OR _git_tree STREQUAL "")
-      message(
-        FATAL_ERROR
-          "Please install latest version of git (`show --no-patch --format=%T HEAD` failed)"
-      )
+    if(_git_trailing_commits GREATER 0 AND "${_semver_tweak}" STREQUAL "")
+      set(_semver_tweak ${_git_trailing_commits})
     endif()
-
-    execute_process(
-      COMMAND ${GIT} show --no-patch --format=%H HEAD
-      OUTPUT_VARIABLE _git_commit
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      WORKING_DIRECTORY ${source_root_directory}
-      RESULT_VARIABLE _rc)
-    if(_rc OR _git_commit STREQUAL "")
-      message(
-        FATAL_ERROR
-          "Please install latest version of git (`show --no-patch --format=%H HEAD` failed)"
-      )
-    endif()
-
-    execute_process(
-      COMMAND ${GIT} status --untracked-files=no --porcelain
-      OUTPUT_VARIABLE _git_status
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      WORKING_DIRECTORY ${source_root_directory}
-      RESULT_VARIABLE _rc)
-    if(_rc)
-      message(
-        FATAL_ERROR
-          "Please install latest version of git (`status --untracked-files=no --porcelain` failed)"
-      )
-    endif()
-    if(NOT _git_status STREQUAL "")
-      set(_git_commit "${_git_commit}-dirty")
-    endif()
-    unset(_git_status)
-
-    execute_process(
-      COMMAND ${GIT} rev-list --tags --count
-      OUTPUT_VARIABLE _tag_count
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      WORKING_DIRECTORY ${source_root_directory}
-      RESULT_VARIABLE _rc)
-    if(_rc)
-      message(
-        FATAL_ERROR
-          "Please install latest version of git (`git rev-list --tags --count` failed)"
-      )
-    endif()
-
-    if(_tag_count EQUAL 0)
-      execute_process(
-        COMMAND ${GIT} rev-list --all --count
-        OUTPUT_VARIABLE _whole_count
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        WORKING_DIRECTORY ${source_root_directory}
-        RESULT_VARIABLE _rc)
-      if(_rc)
-        message(
-          FATAL_ERROR
-            "Please install latest version of git (`git rev-list --all --count` failed)"
-        )
-      endif()
-      if(_whole_count GREATER 42)
-        message(
-          FATAL_ERROR
-            "Please fetch tags (no any tags for ${_whole_count} commits)")
-      endif()
-      set(_git_version "0;0;0")
-      execute_process(
-        COMMAND ${GIT} rev-list --count --all --no-merges
-        OUTPUT_VARIABLE _git_revision
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        WORKING_DIRECTORY ${source_root_directory}
-        RESULT_VARIABLE _rc)
-      if(_rc OR _git_revision STREQUAL "")
-        message(
-          FATAL_ERROR
-            "Please install latest version of git (`rev-list --count --all --no-merges` failed)"
-        )
-      endif()
-    else(_tag_count EQUAL 0)
-      execute_process(
-        COMMAND ${GIT} describe --tags --long --dirty=-dirty "--match=v[0-9]*"
-        OUTPUT_VARIABLE _git_describe
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        WORKING_DIRECTORY ${source_root_directory}
-        RESULT_VARIABLE _rc)
-      if(_rc OR _git_describe STREQUAL "")
-        execute_process(
-          COMMAND ${GIT} rev-list --all --count
-          OUTPUT_VARIABLE _whole_count
-          OUTPUT_STRIP_TRAILING_WHITESPACE
-          WORKING_DIRECTORY ${source_root_directory}
-          RESULT_VARIABLE _rc)
-        if(_rc)
-          message(
-            FATAL_ERROR
-              "Please install latest version of git (`git rev-list --all --count` failed)"
-          )
-        endif()
-        if(_whole_count GREATER 42)
-          message(
-            FATAL_ERROR
-              "Please fetch tags (`describe --tags --long --dirty --match=v[0-9]*` failed)"
-          )
-        else()
-          execute_process(
-            COMMAND ${GIT} describe --all --long --dirty=-dirty
-            OUTPUT_VARIABLE _git_describe
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-            WORKING_DIRECTORY ${source_root_directory}
-            RESULT_VARIABLE _rc)
-          if(_rc OR _git_describe STREQUAL "")
-            message(
-              FATAL_ERROR
-                "Please install latest version of git (`git rev-list --tags --count` and/or `git rev-list --all --count` failed)"
-            )
-          endif()
-        endif()
-      endif()
-
-      execute_process(
-        COMMAND ${GIT} describe --tags --abbrev=0 "--match=v[0-9]*"
-        OUTPUT_VARIABLE _last_release_tag
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        WORKING_DIRECTORY ${source_root_directory}
-        RESULT_VARIABLE _rc)
-      if(_rc)
-        message(
-          FATAL_ERROR
-            "Please install latest version of git (`describe --tags --abbrev=0 --match=v[0-9]*` failed)"
-        )
-      endif()
-      if(_last_release_tag)
-        set(_git_revlist_arg "${_last_release_tag}..HEAD")
-      else()
-        execute_process(
-          COMMAND ${GIT} tag --sort=-version:refname
-          OUTPUT_VARIABLE _tag_list
-          OUTPUT_STRIP_TRAILING_WHITESPACE
-          WORKING_DIRECTORY ${source_root_directory}
-          RESULT_VARIABLE _rc)
-        if(_rc)
-          message(
-            FATAL_ERROR
-              "Please install latest version of git (`tag --sort=-version:refname` failed)"
-          )
-        endif()
-        string(REGEX REPLACE "\n" ";" _tag_list "${_tag_list}")
-        set(_git_revlist_arg "HEAD")
-        foreach(_tag IN LISTS _tag_list)
-          if(NOT _last_release_tag)
-            string(REGEX MATCH "^v[0-9]+(\.[0-9]+)+" _last_release_tag
-                         "${_tag}")
-            set(_git_revlist_arg "${_tag}..HEAD")
-          endif()
-        endforeach(_tag)
-      endif()
-      execute_process(
-        COMMAND ${GIT} rev-list --count "${_git_revlist_arg}"
-        OUTPUT_VARIABLE _git_revision
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        WORKING_DIRECTORY ${source_root_directory}
-        RESULT_VARIABLE _rc)
-      if(_rc OR _git_revision STREQUAL "")
-        message(
-          FATAL_ERROR
-            "Please install latest version of git (`rev-list --count ${_git_revlist_arg}` failed)"
-        )
-      endif()
-
-      string(REGEX MATCH "^(v)?([0-9]+)\\.([0-9]+)\\.([0-9]+)(.*)?"
-                   _git_version_valid "${_git_describe}")
-      if(_git_version_valid)
-        string(REGEX REPLACE "^(v)?([0-9]+)\\.([0-9]+)\\.([0-9]+)(.*)?"
-                             "\\2;\\3;\\4" _git_version ${_git_describe})
-      else()
-        string(REGEX MATCH "^(v)?([0-9]+)\\.([0-9]+)(.*)?" _git_version_valid
-                     "${_git_describe}")
-        if(_git_version_valid)
-          string(REGEX REPLACE "^(v)?([0-9]+)\\.([0-9]+)(.*)?" "\\2;\\3;0"
-                               _git_version ${_git_describe})
-        else()
-          message(
-            AUTHOR_WARNING
-              "Bad ${name} version \"${_git_describe}\"; falling back to 0.0.0 (have you made an initial release?)"
-          )
-          set(_git_version "0;0;0")
-        endif()
-      endif()
-    endif(_tag_count EQUAL 0)
-
-    list(APPEND _git_version "${_git_revision}")
-    set(_version_list "${_git_version}")
-    string(REPLACE ";" "." _version_4dot "${_version_list}")
 
   elseif(GIT)
     message(
@@ -384,44 +464,68 @@ macro(fetch_version name source_root_directory parent_scope
     message(FATAL_ERROR "Требуется git для получения информации о версии")
   endif()
 
-  list(LENGTH _version_list _version_list_length)
-  list(GET _version_list 0 _version_major)
-  list(GET _version_list 1 _version_minor)
-  list(GET _version_list 2 _version_release)
-  list(GET _version_list 3 _version_revision)
-
   if(NOT _git_describe
      OR NOT _git_timestamp
      OR NOT _git_tree
      OR NOT _git_commit
-     OR _git_revision STREQUAL ""
-     OR NOT _version_list_length EQUAL 4
-     OR _version_major STREQUAL ""
-     OR _version_minor STREQUAL ""
-     OR _version_release STREQUAL ""
-     OR _version_revision STREQUAL "")
+     OR _semver_major STREQUAL ""
+     OR _semver_minor STREQUAL ""
+     OR _semver_patch STREQUAL "")
     message(ERROR "Unable to retrieve ${name} version from ${_version_from}.")
-  else()
-    list(APPEND _git_version "${_git_revision}")
   endif()
 
+  set(_semver "${_semver_major}.${_semver_minor}.${_semver_patch}")
+  if(_semver_tweak STREQUAL "")
+    set(_semver_tweak 0)
+  elseif(_semver_tweak GREATER 0)
+    string(APPEND _semver ".${_semver_tweak}")
+  endif()
+  if(NOT _semver_prerelease STREQUAL "")
+    string(APPEND _semver "-${_semver_prerelease}")
+  endif()
+  if(_git_is_dirty)
+    string(APPEND _semver "-DIRTY")
+  endif()
+
+  set(_semver_complete "${_semver}")
+  if(NOT "${build_metadata}" STREQUAL "")
+    string(APPEND _semver_complete "+${build_metadata}")
+  endif()
+
+  set(${name}_VERSION "${_semver_complete}")
+  set(${name}_VERSION_PURE "${_semver}")
+  set(${name}_VERSION_MAJOR ${_semver_major})
+  set(${name}_VERSION_MINOR ${_semver_minor})
+  set(${name}_VERSION_PATCH ${_semver_patch})
+  set(${name}_VERSION_TWEAK "${_semver_tweak}")
+  set(${name}_VERSION_PRERELEASE "${_semver_prerelease}")
+  set(${name}_GIT_DESCRIBE "${_git_describe}")
+  set(${name}_GIT_TIMESTAMP "${_git_timestamp}")
+  set(${name}_GIT_TREE "${_git_tree}")
+  set(${name}_GIT_COMMIT "${_git_commit}")
+
   if(${parent_scope})
+    set(${name}_VERSION
+        "${_semver_complete}"
+        PARENT_SCOPE)
+    set(${name}_VERSION_PURE
+        "${_semver}"
+        PARENT_SCOPE)
     set(${name}_VERSION_MAJOR
-        "${_version_major}"
+        ${_semver_major}
         PARENT_SCOPE)
     set(${name}_VERSION_MINOR
-        "${_version_minor}"
+        ${_semver_minor}
         PARENT_SCOPE)
-    set(${name}_VERSION_RELEASE
-        "${_version_release}"
+    set(${name}_VERSION_PATCH
+        ${_semver_patch}
         PARENT_SCOPE)
-    set(${name}_VERSION_REVISION
-        "${_version_revision}"
+    set(${name}_VERSION_TWEAK
+        "${_semver_tweak}"
         PARENT_SCOPE)
-    set(${name}_VERSION
-        "${_version_4dot}"
+    set(${name}_VERSION_PRERELEASE
+        "${_semver_prerelease}"
         PARENT_SCOPE)
-
     set(${name}_GIT_DESCRIBE
         "${_git_describe}"
         PARENT_SCOPE)
@@ -434,21 +538,6 @@ macro(fetch_version name source_root_directory parent_scope
     set(${name}_GIT_COMMIT
         "${_git_commit}"
         PARENT_SCOPE)
-    set(${name}_GIT_REVISION
-        "${_git_revision}"
-        PARENT_SCOPE)
-  else()
-    set(${name}_VERSION_MAJOR "${_version_major}")
-    set(${name}_VERSION_MINOR "${_version_minor}")
-    set(${name}_VERSION_RELEASE "${_version_release}")
-    set(${name}_VERSION_REVISION "${_version_revision}")
-    set(${name}_VERSION "${_version_4dot}")
-
-    set(${name}_GIT_DESCRIBE "${_git_describe}")
-    set(${name}_GIT_TIMESTAMP "${_git_timestamp}")
-    set(${name}_GIT_TREE "${_git_tree}")
-    set(${name}_GIT_COMMIT "${_git_commit}")
-    set(${name}_GIT_REVISION "${_git_revision}")
   endif()
 
   if(_version_from STREQUAL "git")
@@ -459,12 +548,12 @@ macro(fetch_version name source_root_directory parent_scope
       \"git_timestamp\" : \"@_git_timestamp@\",
       \"git_tree\" : \"@_git_tree@\",
       \"git_commit\" : \"@_git_commit@\",
-      \"version_4dot\" : \"@_version_4dot@\"\n}"
+      \"semver\" : \"@_semver@\"\n}"
         _versioninfo_json
       @ONLY ESCAPE_QUOTES)
     file(WRITE "${build_directory_for_json_output}/VERSION.json"
          "${_versioninfo_json}")
   endif()
-endmacro(fetch_version)
+endmacro(semver_provide)
 
 cmake_policy(POP)
