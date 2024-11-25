@@ -158,3 +158,11 @@ MDBX_INTERNAL const char *pagetype_caption(const uint8_t type,
 #define DKEY_DEBUG(x) ("-")
 #define DVAL_DEBUG(x) ("-")
 #endif
+
+MDBX_INTERNAL int log_error(const int err, const char *func, unsigned line);
+
+static inline int log_if_error(int err, const char *func, unsigned line) {
+  return likely(err == MDBX_SUCCESS) ? err : log_error(err, func, line);
+}
+
+#define LOG_IFERR(err) log_if_error((err), __func__, __LINE__)

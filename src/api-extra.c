@@ -10,10 +10,10 @@ __cold int mdbx_reader_list(const MDBX_env *env, MDBX_reader_list_func *func,
                             void *ctx) {
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(!func))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   rc = MDBX_RESULT_TRUE;
   int serial = 0;
@@ -74,13 +74,13 @@ __cold int mdbx_reader_list(const MDBX_env *env, MDBX_reader_list_func *func,
     }
   }
 
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 __cold int mdbx_reader_check(MDBX_env *env, int *dead) {
   if (dead)
     *dead = 0;
-  return mvcc_cleanup_dead(env, false, dead);
+  return LOG_IFERR(mvcc_cleanup_dead(env, false, dead));
 }
 
 /*------------------------------------------------------------------------------
@@ -89,28 +89,28 @@ __cold int mdbx_reader_check(MDBX_env *env, int *dead) {
 int mdbx_txn_lock(MDBX_env *env, bool dont_wait) {
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(env->flags & MDBX_RDONLY))
-    return MDBX_EACCESS;
+    return LOG_IFERR(MDBX_EACCESS);
   if (unlikely(env->basal_txn->owner ||
                (env->basal_txn->flags & MDBX_TXN_FINISHED) == 0))
-    return MDBX_BUSY;
+    return LOG_IFERR(MDBX_BUSY);
 
-  return lck_txn_lock(env, dont_wait);
+  return LOG_IFERR(lck_txn_lock(env, dont_wait));
 }
 
 int mdbx_txn_unlock(MDBX_env *env) {
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(env->flags & MDBX_RDONLY))
-    return MDBX_EACCESS;
+    return LOG_IFERR(MDBX_EACCESS);
   if (unlikely(env->basal_txn->owner != osal_thread_self()))
-    return MDBX_THREAD_MISMATCH;
+    return LOG_IFERR(MDBX_THREAD_MISMATCH);
   if (unlikely((env->basal_txn->flags & MDBX_TXN_FINISHED) == 0))
-    return MDBX_BUSY;
+    return LOG_IFERR(MDBX_BUSY);
 
   lck_txn_unlock(env);
   return MDBX_SUCCESS;

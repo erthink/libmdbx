@@ -2019,13 +2019,13 @@ __cold int mdbx_env_chk(MDBX_env *env, const struct MDBX_chk_callbacks *cb,
                         unsigned timeout_seconds_16dot16) {
   int err, rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
   if (unlikely(!cb || !ctx || ctx->internal))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   MDBX_chk_internal_t *const chk = osal_calloc(1, sizeof(MDBX_chk_internal_t));
   if (unlikely(!chk))
-    return MDBX_ENOMEM;
+    return LOG_IFERR(MDBX_ENOMEM);
 
   chk->cb = cb;
   chk->usr = ctx;
@@ -2101,5 +2101,5 @@ __cold int mdbx_env_chk(MDBX_env *env, const struct MDBX_chk_callbacks *cb,
   err = chk_scope_begin(chk, 0, MDBX_chk_finalize, nullptr, nullptr, nullptr);
   rc = chk_scope_end(chk, err ? err : rc);
   chk_dispose(chk);
-  return rc;
+  return LOG_IFERR(rc);
 }

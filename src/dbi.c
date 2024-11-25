@@ -745,35 +745,35 @@ static defer_free_item_t *dbi_close_locked(MDBX_env *env, MDBX_dbi dbi) {
 
 int mdbx_dbi_open(MDBX_txn *txn, const char *name, MDBX_db_flags_t flags,
                   MDBX_dbi *dbi) {
-  return dbi_open_cstr(txn, name, flags, dbi, nullptr, nullptr);
+  return LOG_IFERR(dbi_open_cstr(txn, name, flags, dbi, nullptr, nullptr));
 }
 
 int mdbx_dbi_open2(MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags,
                    MDBX_dbi *dbi) {
-  return dbi_open(txn, name, flags, dbi, nullptr, nullptr);
+  return LOG_IFERR(dbi_open(txn, name, flags, dbi, nullptr, nullptr));
 }
 
 int mdbx_dbi_open_ex(MDBX_txn *txn, const char *name, MDBX_db_flags_t flags,
                      MDBX_dbi *dbi, MDBX_cmp_func *keycmp,
                      MDBX_cmp_func *datacmp) {
-  return dbi_open_cstr(txn, name, flags, dbi, keycmp, datacmp);
+  return LOG_IFERR(dbi_open_cstr(txn, name, flags, dbi, keycmp, datacmp));
 }
 
 int mdbx_dbi_open_ex2(MDBX_txn *txn, const MDBX_val *name,
                       MDBX_db_flags_t flags, MDBX_dbi *dbi,
                       MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp) {
-  return dbi_open(txn, name, flags, dbi, keycmp, datacmp);
+  return LOG_IFERR(dbi_open(txn, name, flags, dbi, keycmp, datacmp));
 }
 
 __cold int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
   int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (txn->dbs[dbi].height) {
     cx.outer.next = txn->cursors[dbi];
@@ -782,7 +782,7 @@ __cold int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
                    dbi == MAIN_DBI || (cx.outer.tree->flags & MDBX_DUPSORT));
     txn->cursors[dbi] = cx.outer.next;
     if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
+      return LOG_IFERR(rc);
   }
 
   /* Invalidate the dropped DB's cursors */
@@ -820,12 +820,12 @@ __cold int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
         txn->dbi_state[dbi] = DBI_LINDO | DBI_OLDEN;
         rc = osal_fastmutex_acquire(&env->dbi_lock);
         if (likely(rc == MDBX_SUCCESS))
-          return defer_and_release(env, dbi_close_locked(env, dbi));
+          return LOG_IFERR(defer_and_release(env, dbi_close_locked(env, dbi)));
       }
     }
   }
   txn->flags |= MDBX_TXN_ERROR;
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 __cold int mdbx_dbi_rename(MDBX_txn *txn, MDBX_dbi dbi, const char *name_cstr) {
@@ -838,22 +838,22 @@ __cold int mdbx_dbi_rename(MDBX_txn *txn, MDBX_dbi dbi, const char *name_cstr) {
     thunk.iov_base = (void *)name_cstr;
     name = &thunk;
   }
-  return mdbx_dbi_rename2(txn, dbi, name);
+  return LOG_IFERR(mdbx_dbi_rename2(txn, dbi, name));
 }
 
 int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(dbi < CORE_DBS))
-    return (dbi == MAIN_DBI) ? MDBX_SUCCESS : MDBX_BAD_DBI;
+    return (dbi == MAIN_DBI) ? MDBX_SUCCESS : LOG_IFERR(MDBX_BAD_DBI);
 
   if (unlikely(dbi >= env->max_dbi))
-    return MDBX_BAD_DBI;
+    return LOG_IFERR(MDBX_BAD_DBI);
 
   if (unlikely(dbi < CORE_DBS || dbi >= env->max_dbi))
-    return MDBX_BAD_DBI;
+    return LOG_IFERR(MDBX_BAD_DBI);
 
   rc = osal_fastmutex_acquire(&env->dbi_lock);
   if (likely(rc == MDBX_SUCCESS && dbi < env->n_dbi)) {
@@ -886,7 +886,7 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
            (DBI_LINDO | DBI_DIRTY | DBI_CREAT)) > DBI_LINDO) {
       bailout_dirty_dbi:
         osal_fastmutex_release(&env->dbi_lock);
-        return MDBX_DANGLING_DBI;
+        return LOG_IFERR(MDBX_DANGLING_DBI);
       }
       osal_memory_barrier();
       if (unlikely(hazard != env->txn))
@@ -903,21 +903,21 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
     }
     rc = defer_and_release(env, dbi_close_locked(env, dbi));
   }
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 int mdbx_dbi_flags_ex(const MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
                       unsigned *state) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR - MDBX_TXN_PARKED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(!flags || !state))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   rc = dbi_check(txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   *flags = txn->dbs[dbi].flags & DB_PERSISTENT_FLAGS;
   *state =
@@ -930,19 +930,19 @@ __cold int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi,
                             const MDBX_val *new_name) {
   int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(new_name == MDBX_CHK_MAIN ||
                new_name->iov_base == MDBX_CHK_MAIN || new_name == MDBX_CHK_GC ||
                new_name->iov_base == MDBX_CHK_GC || new_name == MDBX_CHK_META ||
                new_name->iov_base == MDBX_CHK_META))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(dbi < CORE_DBS))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
   rc = dbi_check(txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   rc = osal_fastmutex_acquire(&txn->env->dbi_lock);
   if (likely(rc == MDBX_SUCCESS)) {
@@ -952,7 +952,7 @@ __cold int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi,
     defer_and_release(txn->env, pair.defer);
     rc = pair.err;
   }
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 static void stat_get(const tree_t *db, MDBX_stat *st, size_t bytes) {
@@ -970,26 +970,26 @@ __cold int mdbx_dbi_stat(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest,
                          size_t bytes) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(!dest))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   rc = dbi_check(txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   const size_t size_before_modtxnid = offsetof(MDBX_stat, ms_mod_txnid);
   if (unlikely(bytes != sizeof(MDBX_stat)) && bytes != size_before_modtxnid)
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(txn->flags & MDBX_TXN_BLOCKED))
-    return MDBX_BAD_TXN;
+    return LOG_IFERR(MDBX_BAD_TXN);
 
   if (unlikely(txn->dbi_state[dbi] & DBI_STALE)) {
     rc = tbl_fetch((MDBX_txn *)txn, dbi);
     if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
+      return LOG_IFERR(rc);
   }
 
   dest->ms_psize = txn->env->ps;
@@ -1024,16 +1024,16 @@ __cold const tree_t *dbi_dig(const MDBX_txn *txn, const size_t dbi,
 __cold int mdbx_enumerate_tables(const MDBX_txn *txn,
                                  MDBX_table_enum_func *func, void *ctx) {
   if (unlikely(!func))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, MAIN_DBI);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   cx.outer.next = txn->cursors[MAIN_DBI];
   txn->cursors[MAIN_DBI] = &cx.outer;
@@ -1076,5 +1076,5 @@ __cold int mdbx_enumerate_tables(const MDBX_txn *txn,
 
 bailout:
   txn->cursors[MAIN_DBI] = cx.outer.next;
-  return rc;
+  return LOG_IFERR(rc);
 }

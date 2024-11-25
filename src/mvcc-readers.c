@@ -536,14 +536,14 @@ __cold txnid_t mvcc_kick_laggards(MDBX_env *env, const txnid_t straggler) {
 __cold int mdbx_thread_register(const MDBX_env *env) {
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(!env->lck_mmap.lck))
-    return (env->flags & MDBX_EXCLUSIVE) ? MDBX_EINVAL : MDBX_EPERM;
+    return LOG_IFERR((env->flags & MDBX_EXCLUSIVE) ? MDBX_EINVAL : MDBX_EPERM);
 
   if (unlikely((env->flags & ENV_TXKEY) == 0)) {
     eASSERT(env, env->flags & MDBX_NOSTICKYTHREADS);
-    return MDBX_EINVAL /* MDBX_NOSTICKYTHREADS mode */;
+    return LOG_IFERR(MDBX_EINVAL) /* MDBX_NOSTICKYTHREADS mode */;
   }
 
   eASSERT(env, (env->flags & (MDBX_NOSTICKYTHREADS | ENV_TXKEY)) == ENV_TXKEY);
@@ -552,17 +552,17 @@ __cold int mdbx_thread_register(const MDBX_env *env) {
     eASSERT(env, r->pid.weak == env->pid);
     eASSERT(env, r->tid.weak == osal_thread_self());
     if (unlikely(r->pid.weak != env->pid))
-      return MDBX_BAD_RSLOT;
+      return LOG_IFERR(MDBX_BAD_RSLOT);
     return MDBX_RESULT_TRUE /* already registered */;
   }
 
-  return mvcc_bind_slot((MDBX_env *)env).err;
+  return LOG_IFERR(mvcc_bind_slot((MDBX_env *)env).err);
 }
 
 __cold int mdbx_thread_unregister(const MDBX_env *env) {
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(!env->lck_mmap.lck))
     return MDBX_RESULT_TRUE;
@@ -580,11 +580,11 @@ __cold int mdbx_thread_unregister(const MDBX_env *env) {
   eASSERT(env, r->pid.weak == env->pid);
   eASSERT(env, r->tid.weak == osal_thread_self());
   if (unlikely(r->pid.weak != env->pid || r->tid.weak != osal_thread_self()))
-    return MDBX_BAD_RSLOT;
+    return LOG_IFERR(MDBX_BAD_RSLOT);
 
   eASSERT(env, r->txnid.weak >= SAFE64_INVALID_THRESHOLD);
   if (unlikely(r->txnid.weak < SAFE64_INVALID_THRESHOLD))
-    return MDBX_BUSY /* transaction is still active */;
+    return LOG_IFERR(MDBX_BUSY) /* transaction is still active */;
 
   atomic_store32(&r->pid, 0, mo_Relaxed);
   atomic_store32(&env->lck->rdt_refresh_flag, true, mo_AcquireRelease);

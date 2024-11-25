@@ -844,26 +844,26 @@ __cold int mdbx_txn_copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd,
     rc = copy2fd(txn, fd, flags);
   if (flags & MDBX_CP_DISPOSE_TXN)
     mdbx_txn_abort(txn);
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 __cold int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
                             MDBX_copy_flags_t flags) {
   if (unlikely(flags & (MDBX_CP_DISPOSE_TXN | MDBX_CP_RENEW_TXN)))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   MDBX_txn *txn = nullptr;
   rc = mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   rc = copy2fd(txn, fd, flags | MDBX_CP_DISPOSE_TXN | MDBX_CP_RENEW_TXN);
   mdbx_txn_abort(txn);
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 __cold int mdbx_txn_copy2pathname(MDBX_txn *txn, const char *dest_path,
@@ -875,7 +875,7 @@ __cold int mdbx_txn_copy2pathname(MDBX_txn *txn, const char *dest_path,
     rc = mdbx_txn_copy2pathnameW(txn, dest_pathW, flags);
     osal_free(dest_pathW);
   }
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 __cold int mdbx_txn_copy2pathnameW(MDBX_txn *txn, const wchar_t *dest_path,
@@ -886,7 +886,7 @@ __cold int mdbx_txn_copy2pathnameW(MDBX_txn *txn, const wchar_t *dest_path,
     rc = copy2pathname(txn, dest_path, flags);
   if (flags & MDBX_CP_DISPOSE_TXN)
     mdbx_txn_abort(txn);
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 __cold int mdbx_env_copy(MDBX_env *env, const char *dest_path,
@@ -898,26 +898,26 @@ __cold int mdbx_env_copy(MDBX_env *env, const char *dest_path,
     rc = mdbx_env_copyW(env, dest_pathW, flags);
     osal_free(dest_pathW);
   }
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 __cold int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest_path,
                           MDBX_copy_flags_t flags) {
 #endif /* Windows */
   if (unlikely(flags & (MDBX_CP_DISPOSE_TXN | MDBX_CP_RENEW_TXN)))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   MDBX_txn *txn = nullptr;
   rc = mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   rc = copy2pathname(txn, dest_path,
                      flags | MDBX_CP_DISPOSE_TXN | MDBX_CP_RENEW_TXN);
   mdbx_txn_abort(txn);
-  return rc;
+  return LOG_IFERR(rc);
 }

@@ -105,7 +105,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
                                uint64_t value) {
   int err = check_env(env, false);
   if (unlikely(err != MDBX_SUCCESS))
-    return err;
+    return LOG_IFERR(err);
 
   const bool lock_needed =
       ((env->flags & ENV_ACTIVE) && env->basal_txn && !env_txn0_owned(env));
@@ -115,11 +115,11 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     if (value == /* default */ UINT64_MAX)
       value = MAX_WRITE;
     if (unlikely(env->flags & MDBX_RDONLY))
-      return MDBX_EACCESS;
+      return LOG_IFERR(MDBX_EACCESS);
     if (unlikely(!(env->flags & ENV_ACTIVE)))
-      return MDBX_EPERM;
+      return LOG_IFERR(MDBX_EPERM);
     if (unlikely(value > SIZE_MAX - 65536))
-      return MDBX_EINVAL;
+      return LOG_IFERR(MDBX_EINVAL);
     value = bytes2pgno(env, (size_t)value + env->ps - 1);
     if ((uint32_t)value !=
             atomic_load32(&env->lck->autosync_threshold, mo_AcquireRelease) &&
@@ -138,11 +138,11 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     if (value == /* default */ UINT64_MAX)
       value = 2780315 /* 42.42424 секунды */;
     if (unlikely(env->flags & MDBX_RDONLY))
-      return MDBX_EACCESS;
+      return LOG_IFERR(MDBX_EACCESS);
     if (unlikely(!(env->flags & ENV_ACTIVE)))
-      return MDBX_EPERM;
+      return LOG_IFERR(MDBX_EPERM);
     if (unlikely(value > UINT32_MAX))
-      return MDBX_EINVAL;
+      return LOG_IFERR(MDBX_EINVAL);
     value = osal_16dot16_to_monotime((uint32_t)value);
     if (value != atomic_load64(&env->lck->autosync_period, mo_AcquireRelease) &&
         atomic_store64(&env->lck->autosync_period, value, mo_Relaxed)
@@ -159,9 +159,9 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     if (value == /* default */ UINT64_MAX)
       value = 42;
     if (unlikely(value > MDBX_MAX_DBI))
-      return MDBX_EINVAL;
+      return LOG_IFERR(MDBX_EINVAL);
     if (unlikely(env->dxb_mmap.base))
-      return MDBX_EPERM;
+      return LOG_IFERR(MDBX_EPERM);
     env->max_dbi = (unsigned)value + CORE_DBS;
     break;
 
@@ -169,9 +169,9 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     if (value == /* default */ UINT64_MAX)
       value = MDBX_READERS_LIMIT;
     if (unlikely(value < 1 || value > MDBX_READERS_LIMIT))
-      return MDBX_EINVAL;
+      return LOG_IFERR(MDBX_EINVAL);
     if (unlikely(env->dxb_mmap.base))
-      return MDBX_EPERM;
+      return LOG_IFERR(MDBX_EPERM);
     env->max_readers = (unsigned)value;
     break;
 
@@ -179,12 +179,12 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     if (value == /* default */ UINT64_MAX)
       value = INT_MAX;
     if (unlikely(value > INT_MAX))
-      return MDBX_EINVAL;
+      return LOG_IFERR(MDBX_EINVAL);
     if (env->options.dp_reserve_limit != (unsigned)value) {
       if (lock_needed) {
         err = lck_txn_lock(env, false);
         if (unlikely(err != MDBX_SUCCESS))
-          return err;
+          return LOG_IFERR(err);
         should_unlock = true;
       }
       env->options.dp_reserve_limit = (unsigned)value;
@@ -206,7 +206,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
       env->options.flags.non_auto.rp_augment_limit = 0;
       env->options.rp_augment_limit = default_rp_augment_limit(env);
     } else if (unlikely(value > PAGELIST_LIMIT))
-      return MDBX_EINVAL;
+      return LOG_IFERR(MDBX_EINVAL);
     else {
       env->options.flags.non_auto.rp_augment_limit = 1;
       env->options.rp_augment_limit = (unsigned)value;
@@ -217,13 +217,13 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     if (value == /* default */ UINT64_MAX)
       value = 0;
     if (unlikely(value > UINT32_MAX))
-      return MDBX_EINVAL;
+      return LOG_IFERR(MDBX_EINVAL);
     if (unlikely(env->flags & MDBX_RDONLY))
-      return MDBX_EACCESS;
+      return LOG_IFERR(MDBX_EACCESS);
     value = osal_16dot16_to_monotime((uint32_t)value);
     if (value != env->options.gc_time_limit) {
       if (env->txn && lock_needed)
-        return MDBX_EPERM;
+        return LOG_IFERR(MDBX_EPERM);
       env->options.gc_time_limit = value;
       if (!env->options.flags.non_auto.rp_augment_limit)
         env->options.rp_augment_limit = default_rp_augment_limit(env);
@@ -235,13 +235,13 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     if (value == /* default */ UINT64_MAX)
       value = PAGELIST_LIMIT;
     if (unlikely(value > PAGELIST_LIMIT || value < CURSOR_STACK_SIZE * 4))
-      return MDBX_EINVAL;
+      return LOG_IFERR(MDBX_EINVAL);
     if (unlikely(env->flags & MDBX_RDONLY))
-      return MDBX_EACCESS;
+      return LOG_IFERR(MDBX_EACCESS);
     if (lock_needed) {
       err = lck_txn_lock(env, false);
       if (unlikely(err != MDBX_SUCCESS))
-        return err;
+        return LOG_IFERR(err);
       should_unlock = true;
     }
     if (env->txn)
@@ -269,21 +269,21 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     if (value == /* default */ UINT64_MAX)
       value = 8;
     if (unlikely(value > 255))
-      return MDBX_EINVAL;
+      return LOG_IFERR(MDBX_EINVAL);
     env->options.spill_max_denominator = (uint8_t)value;
     break;
   case MDBX_opt_spill_min_denominator:
     if (value == /* default */ UINT64_MAX)
       value = 8;
     if (unlikely(value > 255))
-      return MDBX_EINVAL;
+      return LOG_IFERR(MDBX_EINVAL);
     env->options.spill_min_denominator = (uint8_t)value;
     break;
   case MDBX_opt_spill_parent4child_denominator:
     if (value == /* default */ UINT64_MAX)
       value = 0;
     if (unlikely(value > 255))
-      return MDBX_EINVAL;
+      return LOG_IFERR(MDBX_EINVAL);
     env->options.spill_parent4child_denominator = (uint8_t)value;
     break;
 
@@ -291,7 +291,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     if (value == /* default */ UINT64_MAX)
       value = 64;
     if (unlikely(value > 255))
-      return MDBX_EINVAL;
+      return LOG_IFERR(MDBX_EINVAL);
     env->options.dp_loose_limit = (uint8_t)value;
     break;
 
@@ -299,7 +299,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     if (value == /* default */ UINT64_MAX)
       value = 65536 / 4 /* 25% */;
     if (unlikely(value < 8192 || value > 32768))
-      return MDBX_EINVAL;
+      return LOG_IFERR(MDBX_EINVAL);
     env->options.merge_threshold_16dot16_percent = (unsigned)value;
     recalculate_merge_thresholds(env);
     break;
@@ -392,33 +392,33 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     break;
 
   default:
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
   }
 
   if (should_unlock)
     lck_txn_unlock(env);
-  return err;
+  return LOG_IFERR(err);
 }
 
 __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
                                uint64_t *pvalue) {
   int err = check_env(env, false);
   if (unlikely(err != MDBX_SUCCESS))
-    return err;
+    return LOG_IFERR(err);
   if (unlikely(!pvalue))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   switch (option) {
   case MDBX_opt_sync_bytes:
     if (unlikely(!(env->flags & ENV_ACTIVE)))
-      return MDBX_EPERM;
+      return LOG_IFERR(MDBX_EPERM);
     *pvalue = pgno2bytes(
         env, atomic_load32(&env->lck->autosync_threshold, mo_Relaxed));
     break;
 
   case MDBX_opt_sync_period:
     if (unlikely(!(env->flags & ENV_ACTIVE)))
-      return MDBX_EPERM;
+      return LOG_IFERR(MDBX_EPERM);
     *pvalue = osal_monotime_to_16dot16(
         atomic_load64(&env->lck->autosync_period, mo_Relaxed));
     break;
@@ -501,7 +501,7 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
     break;
 
   default:
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
   }
 
   return MDBX_SUCCESS;

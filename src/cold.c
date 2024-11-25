@@ -229,35 +229,35 @@ __cold static int stat_acc(const MDBX_txn *txn, MDBX_stat *st, size_t bytes) {
 __cold int mdbx_env_stat_ex(const MDBX_env *env, const MDBX_txn *txn,
                             MDBX_stat *dest, size_t bytes) {
   if (unlikely(!dest))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
   const size_t size_before_modtxnid = offsetof(MDBX_stat, ms_mod_txnid);
   if (unlikely(bytes != sizeof(MDBX_stat)) && bytes != size_before_modtxnid)
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   if (likely(txn)) {
     if (env && unlikely(txn->env != env))
-      return MDBX_EINVAL;
-    return stat_acc(txn, dest, bytes);
+      return LOG_IFERR(MDBX_EINVAL);
+    return LOG_IFERR(stat_acc(txn, dest, bytes));
   }
 
   int err = check_env(env, true);
   if (unlikely(err != MDBX_SUCCESS))
-    return err;
+    return LOG_IFERR(err);
 
   if (env->txn && env_txn0_owned(env))
     /* inside write-txn */
-    return stat_acc(env->txn, dest, bytes);
+    return LOG_IFERR(stat_acc(env->txn, dest, bytes));
 
   MDBX_txn *tmp_txn;
   err = mdbx_txn_begin((MDBX_env *)env, nullptr, MDBX_TXN_RDONLY, &tmp_txn);
   if (unlikely(err != MDBX_SUCCESS))
-    return err;
+    return LOG_IFERR(err);
 
   const int rc = stat_acc(tmp_txn, dest, bytes);
   err = mdbx_txn_abort(tmp_txn);
   if (unlikely(err != MDBX_SUCCESS))
-    return err;
-  return rc;
+    return LOG_IFERR(err);
+  return LOG_IFERR(rc);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -271,23 +271,23 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn,
                            MDBX_warmup_flags_t flags,
                            unsigned timeout_seconds_16dot16) {
   if (unlikely(env == nullptr && txn == nullptr))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
   if (unlikely(flags >
                (MDBX_warmup_force | MDBX_warmup_oomsafe | MDBX_warmup_lock |
                 MDBX_warmup_touchlimit | MDBX_warmup_release)))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   if (txn) {
     int err = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR);
     if (unlikely(err != MDBX_SUCCESS))
-      return err;
+      return LOG_IFERR(err);
   }
   if (env) {
     int err = check_env(env, false);
     if (unlikely(err != MDBX_SUCCESS))
-      return err;
+      return LOG_IFERR(err);
     if (txn && unlikely(txn->env != env))
-      return MDBX_EINVAL;
+      return LOG_IFERR(MDBX_EINVAL);
   } else {
     env = txn->env;
   }
@@ -504,7 +504,7 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn,
 #endif
   }
 
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -512,10 +512,10 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn,
 __cold int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *arg) {
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(!arg))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   *arg = env->lazy_fd;
   return MDBX_SUCCESS;
@@ -525,21 +525,21 @@ __cold int mdbx_env_set_flags(MDBX_env *env, MDBX_env_flags_t flags,
                               bool onoff) {
   int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(flags & ((env->flags & ENV_ACTIVE) ? ~ENV_CHANGEABLE_FLAGS
                                                   : ~ENV_USABLE_FLAGS)))
-    return MDBX_EPERM;
+    return LOG_IFERR(MDBX_EPERM);
 
   if (unlikely(env->flags & MDBX_RDONLY))
-    return MDBX_EACCESS;
+    return LOG_IFERR(MDBX_EACCESS);
 
   const bool lock_needed = (env->flags & ENV_ACTIVE) && !env_txn0_owned(env);
   bool should_unlock = false;
   if (lock_needed) {
     rc = lck_txn_lock(env, false);
-    if (unlikely(rc))
-      return rc;
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
     should_unlock = true;
   }
 
@@ -556,10 +556,10 @@ __cold int mdbx_env_set_flags(MDBX_env *env, MDBX_env_flags_t flags,
 __cold int mdbx_env_get_flags(const MDBX_env *env, unsigned *arg) {
   int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(!arg))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   *arg = env->flags & ENV_USABLE_FLAGS;
   return MDBX_SUCCESS;
@@ -568,7 +568,7 @@ __cold int mdbx_env_get_flags(const MDBX_env *env, unsigned *arg) {
 __cold int mdbx_env_set_userctx(MDBX_env *env, void *ctx) {
   int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   env->userctx = ctx;
   return MDBX_SUCCESS;
@@ -581,21 +581,21 @@ __cold void *mdbx_env_get_userctx(const MDBX_env *env) {
 __cold int mdbx_env_set_assert(MDBX_env *env, MDBX_assert_func *func) {
   int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
 #if MDBX_DEBUG
   env->assert_func = func;
   return MDBX_SUCCESS;
 #else
   (void)func;
-  return MDBX_ENOSYS;
+  return LOG_IFERR(MDBX_ENOSYS);
 #endif
 }
 
 __cold int mdbx_env_set_hsr(MDBX_env *env, MDBX_hsr_func *hsr) {
   int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   env->hsr_callback = hsr;
   return MDBX_SUCCESS;
@@ -610,10 +610,10 @@ __cold MDBX_hsr_func *mdbx_env_get_hsr(const MDBX_env *env) {
 __cold int mdbx_env_get_pathW(const MDBX_env *env, const wchar_t **arg) {
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(!arg))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   *arg = env->pathname.specified;
   return MDBX_SUCCESS;
@@ -623,10 +623,10 @@ __cold int mdbx_env_get_pathW(const MDBX_env *env, const wchar_t **arg) {
 __cold int mdbx_env_get_path(const MDBX_env *env, const char **arg) {
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(!arg))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
 #if defined(_WIN32) || defined(_WIN64)
   if (!env->pathname_char) {
@@ -643,17 +643,17 @@ __cold int mdbx_env_get_path(const MDBX_env *env, const char **arg) {
       rc = mb_len ? MDBX_SUCCESS : (int)GetLastError();
     }
     if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
+      return LOG_IFERR(rc);
 
     char *const mb_pathname = osal_malloc(mb_len);
     if (!mb_pathname)
-      return MDBX_ENOMEM;
+      return LOG_IFERR(MDBX_ENOMEM);
     if (mb_len != (size_t)WideCharToMultiByte(
                       CP_THREAD_ACP, flags, env->pathname.specified, -1,
                       mb_pathname, (int)mb_len, nullptr, nullptr)) {
       rc = (int)GetLastError();
       osal_free(mb_pathname);
-      return rc;
+      return LOG_IFERR(rc);
     }
     if (env->pathname_char ||
         InterlockedCompareExchangePointer((PVOID volatile *)&env->pathname_char,

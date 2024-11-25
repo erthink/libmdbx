@@ -10,7 +10,7 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
   intptr_t pagesize, total_ram_pages;
   int err = mdbx_get_sysraminfo(&pagesize, &total_ram_pages, nullptr);
   if (unlikely(err != MDBX_SUCCESS))
-    return err;
+    return LOG_IFERR(err);
 
   const int log2page = log2n_powerof2(pagesize);
   const intptr_t volume_pages = (volume + pagesize - 1) >> log2page;
@@ -24,7 +24,7 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
   intptr_t avail_ram_pages;
   err = mdbx_get_sysraminfo(nullptr, nullptr, &avail_ram_pages);
   if (unlikely(err != MDBX_SUCCESS))
-    return err;
+    return LOG_IFERR(err);
 
   return (volume_pages + redundancy_pages >= avail_ram_pages)
              ? MDBX_RESULT_FALSE
@@ -35,16 +35,16 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
                       uint64_t increment) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   rc = dbi_check(txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(txn->dbi_state[dbi] & DBI_STALE)) {
     rc = tbl_fetch(txn, dbi);
     if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
+      return LOG_IFERR(rc);
   }
 
   tree_t *dbs = &txn->dbs[dbi];
@@ -95,10 +95,10 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
         cursor_couple_t cx;
         rc = cursor_init(&cx.outer, txn, MAIN_DBI);
         if (unlikely(rc != MDBX_SUCCESS))
-          return rc;
+          return LOG_IFERR(rc);
         rc = tree_search(&cx.outer, nullptr, Z_MODIFY | Z_ROOTONLY);
         if (unlikely(rc != MDBX_SUCCESS))
-          return rc;
+          return LOG_IFERR(rc);
       }
     }
     dbs->sequence = new;

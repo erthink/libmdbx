@@ -196,18 +196,18 @@ __cold static int env_handle_pathname(MDBX_env *env, const pathchar_t *pathname,
 
 __cold int mdbx_env_create(MDBX_env **penv) {
   if (unlikely(!penv))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
   *penv = nullptr;
 
 #ifdef MDBX_HAVE_C11ATOMICS
   if (unlikely(!atomic_is_lock_free((const volatile uint32_t *)penv))) {
     ERROR("lock-free atomic ops for %u-bit types is required", 32);
-    return MDBX_INCOMPATIBLE;
+    return LOG_IFERR(MDBX_INCOMPATIBLE);
   }
 #if MDBX_64BIT_ATOMIC
   if (unlikely(!atomic_is_lock_free((const volatile uint64_t *)penv))) {
     ERROR("lock-free atomic ops for %u-bit types is required", 64);
-    return MDBX_INCOMPATIBLE;
+    return LOG_IFERR(MDBX_INCOMPATIBLE);
   }
 #endif /* MDBX_64BIT_ATOMIC */
 #endif /* MDBX_HAVE_C11ATOMICS */
@@ -215,25 +215,25 @@ __cold int mdbx_env_create(MDBX_env **penv) {
   if (unlikely(!is_powerof2(globals.sys_pagesize) ||
                globals.sys_pagesize < MDBX_MIN_PAGESIZE)) {
     ERROR("unsuitable system pagesize %u", globals.sys_pagesize);
-    return MDBX_INCOMPATIBLE;
+    return LOG_IFERR(MDBX_INCOMPATIBLE);
   }
 
 #if defined(__linux__) || defined(__gnu_linux__)
   if (unlikely(globals.linux_kernel_version < 0x04000000)) {
-    /* 2022-09-01: Прошло уже больше двух после окончания какой-либо поддержки
-     * самого "долгоиграющего" ядра 3.16.85 ветки 3.x */
+    /* 2022-09-01: Прошло уже более двух лет после окончания какой-либо
+     * поддержки самого "долгоиграющего" ядра 3.16.85 ветки 3.x */
     ERROR("too old linux kernel %u.%u.%u.%u, the >= 4.0.0 is required",
           globals.linux_kernel_version >> 24,
           (globals.linux_kernel_version >> 16) & 255,
           (globals.linux_kernel_version >> 8) & 255,
           globals.linux_kernel_version & 255);
-    return MDBX_INCOMPATIBLE;
+    return LOG_IFERR(MDBX_INCOMPATIBLE);
   }
 #endif /* Linux */
 
   MDBX_env *env = osal_calloc(1, sizeof(MDBX_env));
   if (unlikely(!env))
-    return MDBX_ENOMEM;
+    return LOG_IFERR(MDBX_ENOMEM);
 
   env->max_readers = DEFAULT_READERS;
   env->max_dbi = env->n_dbi = CORE_DBS;
@@ -278,18 +278,18 @@ __cold int mdbx_env_create(MDBX_env **penv) {
 
 bailout:
   osal_free(env);
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 __cold int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target) {
   if (unlikely(target >= NUM_METAS))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely((env->flags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) != MDBX_EXCLUSIVE))
-    return MDBX_EPERM;
+    return LOG_IFERR(MDBX_EPERM);
 
   const meta_t *const target_meta = METAPAGE(env, target);
   txnid_t new_txnid = constmeta_txnid(target_meta);
@@ -303,7 +303,7 @@ __cold int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target) {
     if (meta_validate(env, &meta, page, n, nullptr) != MDBX_SUCCESS) {
       int err = meta_override(env, n, 0, nullptr);
       if (unlikely(err != MDBX_SUCCESS))
-        return err;
+        return LOG_IFERR(err);
     } else {
       txnid_t txnid = constmeta_txnid(&meta);
       if (new_txnid <= txnid)
@@ -313,9 +313,9 @@ __cold int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target) {
 
   if (unlikely(new_txnid > MAX_TXNID)) {
     ERROR("txnid overflow, raise %d", MDBX_TXN_FULL);
-    return MDBX_TXN_FULL;
+    return LOG_IFERR(MDBX_TXN_FULL);
   }
-  return meta_override(env, target, new_txnid, target_meta);
+  return LOG_IFERR(meta_override(env, target, new_txnid, target_meta));
 }
 
 __cold int mdbx_env_open_for_recovery(MDBX_env *env, const char *pathname,
@@ -327,7 +327,7 @@ __cold int mdbx_env_open_for_recovery(MDBX_env *env, const char *pathname,
     rc = mdbx_env_open_for_recoveryW(env, pathnameW, target_meta, writeable);
     osal_free(pathnameW);
   }
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 __cold int mdbx_env_open_for_recoveryW(MDBX_env *env, const wchar_t *pathname,
@@ -335,12 +335,12 @@ __cold int mdbx_env_open_for_recoveryW(MDBX_env *env, const wchar_t *pathname,
 #endif /* Windows */
 
   if (unlikely(target_meta >= NUM_METAS))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
   int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
   if (unlikely(env->dxb_mmap.base))
-    return MDBX_EPERM;
+    return LOG_IFERR(MDBX_EPERM);
 
   env->stuck_meta = (int8_t)target_meta;
   return
@@ -361,7 +361,7 @@ __cold int mdbx_env_delete(const char *pathname, MDBX_env_delete_mode_t mode) {
     rc = mdbx_env_deleteW(pathnameW, mode);
     osal_free(pathnameW);
   }
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 __cold int mdbx_env_deleteW(const wchar_t *pathname,
@@ -370,7 +370,7 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname,
 
   switch (mode) {
   default:
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
   case MDBX_ENV_JUST_DELETE:
   case MDBX_ENV_ENSURE_UNUSED:
   case MDBX_ENV_WAIT_FOR_UNUSED:
@@ -442,7 +442,7 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname,
     err = MDBX_SUCCESS;
 
   osal_free(dummy_env->pathname.buffer);
-  return (err == MDBX_SUCCESS) ? rc : err;
+  return LOG_IFERR((err == MDBX_SUCCESS) ? rc : err);
 }
 
 __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
@@ -457,7 +457,7 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
       /* force to make cache of the multi-byte pathname representation */
       mdbx_env_get_path(env, &pathname);
   }
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
@@ -466,14 +466,14 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
 
   int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(flags & ~ENV_USABLE_FLAGS))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(env->lazy_fd != INVALID_HANDLE_VALUE ||
                (env->flags & ENV_ACTIVE) != 0 || env->dxb_mmap.base))
-    return MDBX_EPERM;
+    return LOG_IFERR(MDBX_EPERM);
 
   /* Pickup previously mdbx_env_set_flags(),
    * but avoid MDBX_UTTERLY_NOSYNC by disjunction */
@@ -497,7 +497,7 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
         debug_log(MDBX_LOG_ERROR, __func__, __LINE__,
                   "System (i.e. OpenBSD) requires MDBX_WRITEMAP because "
                   "of an internal flaw(s) in a file/buffer/page cache.\n");
-        return 42 /* ENOPROTOOPT */;
+        return LOG_IFERR(42 /* ENOPROTOOPT */);
       }
     }
 #endif /* MDBX_MMAP_INCOHERENT_FILE_WRITE */
@@ -590,7 +590,7 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
       env->flags = saved_me_flags | ENV_FATAL_ERROR;
     }
   }
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -598,13 +598,13 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
 #if !(defined(_WIN32) || defined(_WIN64))
 __cold int mdbx_env_resurrect_after_fork(MDBX_env *env) {
   if (unlikely(!env))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(env->signature.weak != env_signature))
-    return MDBX_EBADSIGN;
+    return LOG_IFERR(MDBX_EBADSIGN);
 
   if (unlikely(env->flags & ENV_FATAL_ERROR))
-    return MDBX_PANIC;
+    return LOG_IFERR(MDBX_PANIC);
 
   if (unlikely((env->flags & ENV_ACTIVE) == 0))
     return MDBX_SUCCESS;
@@ -614,7 +614,7 @@ __cold int mdbx_env_resurrect_after_fork(MDBX_env *env) {
     return MDBX_SUCCESS;
 
   if (!atomic_cas32(&env->signature, env_signature, ~env_signature))
-    return MDBX_EBADSIGN;
+    return LOG_IFERR(MDBX_EBADSIGN);
 
   if (env->txn)
     txn_abort(env->basal_txn);
@@ -628,7 +628,7 @@ __cold int mdbx_env_resurrect_after_fork(MDBX_env *env) {
       env->flags |= ENV_FATAL_ERROR;
     }
   }
-  return rc;
+  return LOG_IFERR(rc);
 }
 #endif /* Windows */
 
@@ -637,10 +637,10 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
   int rc = MDBX_SUCCESS;
 
   if (unlikely(!env))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(env->signature.weak != env_signature))
-    return MDBX_EBADSIGN;
+    return LOG_IFERR(MDBX_EBADSIGN);
 
 #if MDBX_ENV_CHECKPID || !(defined(_WIN32) || defined(_WIN64))
   /* Check the PID even if MDBX_ENV_CHECKPID=0 on non-Windows
@@ -654,12 +654,12 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
   if (env->dxb_mmap.base &&
       (env->flags & (MDBX_RDONLY | ENV_FATAL_ERROR)) == 0 && env->basal_txn) {
     if (env->basal_txn->owner && env->basal_txn->owner != osal_thread_self())
-      return MDBX_BUSY;
+      return LOG_IFERR(MDBX_BUSY);
   } else
     dont_sync = true;
 
   if (!atomic_cas32(&env->signature, env_signature, 0))
-    return MDBX_EBADSIGN;
+    return LOG_IFERR(MDBX_EBADSIGN);
 
   if (!dont_sync) {
 #if defined(_WIN32) || defined(_WIN64)
@@ -712,7 +712,7 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
   VALGRIND_DESTROY_MEMPOOL(env);
   osal_free(env);
 
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -889,32 +889,32 @@ __cold int env_info(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo *out,
 __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
                             MDBX_envinfo *arg, size_t bytes) {
   if (unlikely((env == nullptr && txn == nullptr) || arg == nullptr))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   const size_t size_before_bootid = offsetof(MDBX_envinfo, mi_bootid);
   const size_t size_before_pgop_stat = offsetof(MDBX_envinfo, mi_pgop_stat);
   const size_t size_before_dxbid = offsetof(MDBX_envinfo, mi_dxbid);
   if (unlikely(bytes != sizeof(MDBX_envinfo)) && bytes != size_before_bootid &&
       bytes != size_before_pgop_stat && bytes != size_before_dxbid)
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   if (txn) {
     int err = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR);
     if (unlikely(err != MDBX_SUCCESS))
-      return err;
+      return LOG_IFERR(err);
   }
   if (env) {
     int err = check_env(env, false);
     if (unlikely(err != MDBX_SUCCESS))
-      return err;
+      return LOG_IFERR(err);
     if (txn && unlikely(txn->env != env))
-      return MDBX_EINVAL;
+      return LOG_IFERR(MDBX_EINVAL);
   } else {
     env = txn->env;
   }
 
   troika_t troika;
-  return env_info(env, txn, arg, bytes, &troika);
+  return LOG_IFERR(env_info(env, txn, arg, bytes, &troika));
 }
 
 __cold int mdbx_preopen_snapinfo(const char *pathname, MDBX_envinfo *out,
@@ -926,21 +926,21 @@ __cold int mdbx_preopen_snapinfo(const char *pathname, MDBX_envinfo *out,
     rc = mdbx_preopen_snapinfoW(pathnameW, out, bytes);
     osal_free(pathnameW);
   }
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 __cold int mdbx_preopen_snapinfoW(const wchar_t *pathname, MDBX_envinfo *out,
                                   size_t bytes) {
 #endif /* Windows */
   if (unlikely(!out))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   const size_t size_before_bootid = offsetof(MDBX_envinfo, mi_bootid);
   const size_t size_before_pgop_stat = offsetof(MDBX_envinfo, mi_pgop_stat);
   const size_t size_before_dxbid = offsetof(MDBX_envinfo, mi_dxbid);
   if (unlikely(bytes != sizeof(MDBX_envinfo)) && bytes != size_before_bootid &&
       bytes != size_before_pgop_stat && bytes != size_before_dxbid)
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   memset(out, 0, bytes);
   if (likely(bytes > size_before_bootid)) {
@@ -954,7 +954,7 @@ __cold int mdbx_preopen_snapinfoW(const wchar_t *pathname, MDBX_envinfo *out,
   if (unlikely(!is_powerof2(globals.sys_pagesize) ||
                globals.sys_pagesize < MDBX_MIN_PAGESIZE)) {
     ERROR("unsuitable system pagesize %u", globals.sys_pagesize);
-    return MDBX_INCOMPATIBLE;
+    return LOG_IFERR(MDBX_INCOMPATIBLE);
   }
   out->mi_sys_pagesize = globals.sys_pagesize;
   env.flags = MDBX_RDONLY | MDBX_NORDAHEAD | MDBX_ACCEDE | MDBX_VALIDATION;
@@ -1001,7 +1001,7 @@ __cold int mdbx_preopen_snapinfoW(const wchar_t *pathname, MDBX_envinfo *out,
 
 bailout:
   env_close(&env, false);
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -1012,7 +1012,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
                                  intptr_t shrink_threshold, intptr_t pagesize) {
   int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   const bool txn0_owned = env->basal_txn && env_txn0_owned(env);
   const bool inside_txn = txn0_owned && env->txn;
@@ -1029,12 +1029,12 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
   if (env->dxb_mmap.base) {
     /* env already mapped */
     if (unlikely(env->flags & MDBX_RDONLY))
-      return MDBX_EACCESS;
+      return LOG_IFERR(MDBX_EACCESS);
 
     if (!txn0_owned) {
       int err = lck_txn_lock(env, false);
       if (unlikely(err != MDBX_SUCCESS))
-        return err;
+        return LOG_IFERR(err);
       should_unlock = true;
       env->basal_txn->tw.troika = meta_tap(env);
       eASSERT(env, !env->txn && !env->basal_txn->nested);
@@ -1076,7 +1076,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
   } else {
     /* env NOT yet mapped */
     if (unlikely(inside_txn))
-      return MDBX_PANIC;
+      return LOG_IFERR(MDBX_PANIC);
 
     /* is requested some auto-value for pagesize ? */
     if (pagesize >= INT_MAX /* maximal */)
@@ -1393,13 +1393,13 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
 bailout:
   if (should_unlock)
     lck_txn_unlock(env);
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 __cold int mdbx_env_sync_ex(MDBX_env *env, bool force, bool nonblock) {
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
-  return env_sync(env, force, nonblock);
+  return LOG_IFERR(env_sync(env, force, nonblock));
 }

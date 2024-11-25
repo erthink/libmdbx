@@ -11,7 +11,7 @@ int mdbx_txn_straggler(const MDBX_txn *txn, int *percent)
 {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return (rc > 0) ? -rc : rc;
+    return LOG_IFERR((rc > 0) ? -rc : rc);
 
   MDBX_env *env = txn->env;
   if (unlikely((txn->flags & MDBX_TXN_RDONLY) == 0)) {
@@ -42,15 +42,15 @@ __cold int mdbx_dbi_dupsort_depthmask(const MDBX_txn *txn, MDBX_dbi dbi,
                                       uint32_t *mask) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(!mask))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
   if ((cx.outer.tree->flags & MDBX_DUPSORT) == 0)
     return MDBX_RESULT_TRUE;
 
@@ -79,21 +79,21 @@ __cold int mdbx_dbi_dupsort_depthmask(const MDBX_txn *txn, MDBX_dbi dbi,
     default:
       ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,
             "invalid node-size", flags);
-      return MDBX_CORRUPTED;
+      return LOG_IFERR(MDBX_CORRUPTED);
     }
     rc = outer_next(&cx.outer, &key, &data, MDBX_NEXT_NODUP);
   }
 
-  return (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
+  return LOG_IFERR((rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc);
 }
 
 int mdbx_canary_get(const MDBX_txn *txn, MDBX_canary *canary) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(canary == nullptr))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   *canary = txn->canary;
   return MDBX_SUCCESS;
@@ -106,37 +106,37 @@ int mdbx_get(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
 
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(!key || !data))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
-  return cursor_seek(&cx.outer, (MDBX_val *)key, data, MDBX_SET).err;
+  return LOG_IFERR(cursor_seek(&cx.outer, (MDBX_val *)key, data, MDBX_SET).err);
 }
 
 int mdbx_get_equal_or_great(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
                             MDBX_val *data) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(!key || !data))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(txn->flags & MDBX_TXN_BLOCKED))
-    return MDBX_BAD_TXN;
+    return LOG_IFERR(MDBX_BAD_TXN);
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
-  return cursor_ops(&cx.outer, key, data, MDBX_SET_LOWERBOUND);
+  return LOG_IFERR(cursor_ops(&cx.outer, key, data, MDBX_SET_LOWERBOUND));
 }
 
 int mdbx_get_ex(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
@@ -146,21 +146,21 @@ int mdbx_get_ex(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
 
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(!key || !data))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   rc = cursor_seek(&cx.outer, key, data, MDBX_SET_KEY).err;
   if (unlikely(rc != MDBX_SUCCESS)) {
     if (values_count)
       *values_count = 0;
-    return rc;
+    return LOG_IFERR(rc);
   }
 
   if (values_count) {
@@ -180,7 +180,7 @@ int mdbx_get_ex(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
 int mdbx_canary_put(MDBX_txn *txn, const MDBX_canary *canary) {
   int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (likely(canary)) {
     if (txn->canary.x == canary->x && txn->canary.y == canary->y &&
@@ -221,7 +221,7 @@ int mdbx_canary_put(MDBX_txn *txn, const MDBX_canary *canary) {
 int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   const MDBX_env *env = txn->env;
   const ptrdiff_t offset = ptr_dist(ptr, env->dxb_mmap.base);
@@ -232,7 +232,7 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
       if (unlikely(page->pgno != pgno || (page->flags & P_ILL_BITS) != 0)) {
         /* The ptr pointed into middle of a large page,
          * not to the beginning of a data. */
-        return MDBX_EINVAL;
+        return LOG_IFERR(MDBX_EINVAL);
       }
       return ((txn->flags & MDBX_TXN_RDONLY) || !is_modifable(txn, page))
                  ? MDBX_RESULT_FALSE
@@ -243,7 +243,8 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
        * распределенных страниц. Такое может случится если mdbx_is_dirty()
        * вызывается после операции, в ходе которой грязная страница была
        * возвращена в нераспределенное пространство. */
-      return (txn->flags & MDBX_TXN_RDONLY) ? MDBX_EINVAL : MDBX_RESULT_TRUE;
+      return (txn->flags & MDBX_TXN_RDONLY) ? LOG_IFERR(MDBX_EINVAL)
+                                            : MDBX_RESULT_TRUE;
     }
   }
 
@@ -253,29 +254,31 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
    *
    * Для режима MDBX_WRITE_MAP режима страница однозначно "не грязная",
    * а для режимов без MDBX_WRITE_MAP однозначно "не чистая". */
-  return (txn->flags & (MDBX_WRITEMAP | MDBX_TXN_RDONLY)) ? MDBX_EINVAL
-                                                          : MDBX_RESULT_TRUE;
+  return (txn->flags & (MDBX_WRITEMAP | MDBX_TXN_RDONLY))
+             ? LOG_IFERR(MDBX_EINVAL)
+             : MDBX_RESULT_TRUE;
 }
 
 int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
              const MDBX_val *data) {
   int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(!key))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(dbi <= FREE_DBI))
-    return MDBX_BAD_DBI;
+    return LOG_IFERR(MDBX_BAD_DBI);
 
   if (unlikely(txn->flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
-    return (txn->flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
+    return LOG_IFERR((txn->flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS
+                                                    : MDBX_BAD_TXN);
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   MDBX_val proxy;
   MDBX_cursor_op op = MDBX_SET;
@@ -288,39 +291,40 @@ int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
   }
   rc = cursor_seek(&cx.outer, (MDBX_val *)key, (MDBX_val *)data, op).err;
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   cx.outer.next = txn->cursors[dbi];
   txn->cursors[dbi] = &cx.outer;
   rc = cursor_del(&cx.outer, flags);
   txn->cursors[dbi] = cx.outer.next;
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
              MDBX_put_flags_t flags) {
   int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(!key || !data))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(dbi <= FREE_DBI))
-    return MDBX_BAD_DBI;
+    return LOG_IFERR(MDBX_BAD_DBI);
 
   if (unlikely(flags & ~(MDBX_NOOVERWRITE | MDBX_NODUPDATA | MDBX_ALLDUPS |
                          MDBX_ALLDUPS | MDBX_RESERVE | MDBX_APPEND |
                          MDBX_APPENDDUP | MDBX_CURRENT | MDBX_MULTIPLE)))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(txn->flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
-    return (txn->flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
+    return LOG_IFERR((txn->flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS
+                                                    : MDBX_BAD_TXN);
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
   cx.outer.next = txn->cursors[dbi];
   txn->cursors[dbi] = &cx.outer;
 
@@ -348,7 +352,7 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
     rc = cursor_put_checklen(&cx.outer, key, data, flags);
   txn->cursors[dbi] = cx.outer.next;
 
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 //------------------------------------------------------------------------------
@@ -383,30 +387,30 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
                     void *preserver_context) {
   int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(!key || !old_data || old_data == new_data))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(old_data->iov_base == nullptr && old_data->iov_len))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(new_data == nullptr &&
                (flags & (MDBX_CURRENT | MDBX_RESERVE)) != MDBX_CURRENT))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(dbi <= FREE_DBI))
-    return MDBX_BAD_DBI;
+    return LOG_IFERR(MDBX_BAD_DBI);
 
   if (unlikely(flags &
                ~(MDBX_NOOVERWRITE | MDBX_NODUPDATA | MDBX_ALLDUPS |
                  MDBX_RESERVE | MDBX_APPEND | MDBX_APPENDDUP | MDBX_CURRENT)))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
   cx.outer.next = txn->cursors[dbi];
   txn->cursors[dbi] = &cx.outer;
 
@@ -427,7 +431,7 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
   } else {
     /* в old_data буфер для сохранения предыдущего значения */
     if (unlikely(new_data && old_data->iov_base == new_data->iov_base))
-      return MDBX_EINVAL;
+      return LOG_IFERR(MDBX_EINVAL);
     MDBX_val present_data;
     rc = cursor_seek(&cx.outer, &present_key, &present_data, MDBX_SET_KEY).err;
     if (unlikely(rc != MDBX_SUCCESS)) {
@@ -485,7 +489,7 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
 
 bailout:
   txn->cursors[dbi] = cx.outer.next;
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 static int default_value_preserver(void *context, MDBX_val *target,
