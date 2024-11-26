@@ -16987,10 +16987,8 @@ static __hot int cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     }
     rc = MDBX_SUCCESS;
     if (unlikely(C_INITIALIZED != (mc->mc_xcursor->mx_cursor.mc_flags &
-                                   (C_INITIALIZED | C_EOF)))) {
-      rc = MDBX_NOTFOUND;
+                                   (C_INITIALIZED | C_EOF))))
       break;
-    }
     goto fetch_multiple;
   case MDBX_NEXT_MULTIPLE:
     if (unlikely(!data))
@@ -17006,8 +17004,6 @@ static __hot int cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
             page_numkeys(mx->mc_pg[mx->mc_top]) * mx->mc_db->md_xsize;
         data->iov_base = page_data(mx->mc_pg[mx->mc_top]);
         mx->mc_ki[mx->mc_top] = (indx_t)page_numkeys(mx->mc_pg[mx->mc_top]) - 1;
-      } else {
-        rc = MDBX_NOTFOUND;
       }
     }
     break;
