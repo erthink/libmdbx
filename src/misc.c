@@ -34,17 +34,21 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
 int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
                       uint64_t increment) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
-  if (unlikely(rc != MDBX_SUCCESS))
+  if (unlikely(rc != MDBX_SUCCESS)) {
+  bailout:
+    if (likely(result))
+      *result = ~UINT64_C(0);
     return LOG_IFERR(rc);
+  }
 
   rc = dbi_check(txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
+    goto bailout;
 
   if (unlikely(txn->dbi_state[dbi] & DBI_STALE)) {
     rc = tbl_fetch(txn, dbi);
     if (unlikely(rc != MDBX_SUCCESS))
-      return LOG_IFERR(rc);
+      goto bailout;
   }
 
   tree_t *dbs = &txn->dbs[dbi];

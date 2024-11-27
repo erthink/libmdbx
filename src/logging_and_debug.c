@@ -61,7 +61,9 @@ __cold void debug_log(int level, const char *function, int line,
 
 __cold int log_error(const int err, const char *func, unsigned line) {
   assert(err != MDBX_SUCCESS);
-  if (unlikely(globals.loglevel >= MDBX_LOG_DEBUG)) {
+  if (unlikely(globals.loglevel >= MDBX_LOG_DEBUG) &&
+      (globals.loglevel >= MDBX_LOG_TRACE ||
+       !(err == MDBX_RESULT_TRUE || err == MDBX_NOTFOUND))) {
     char buf[256];
     debug_log(MDBX_LOG_ERROR, func, line, "error %d (%s)\n", err,
               mdbx_strerror_r(err, buf, sizeof(buf)));

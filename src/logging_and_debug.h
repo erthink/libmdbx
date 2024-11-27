@@ -161,8 +161,25 @@ MDBX_INTERNAL const char *pagetype_caption(const uint8_t type,
 
 MDBX_INTERNAL int log_error(const int err, const char *func, unsigned line);
 
-static inline int log_if_error(int err, const char *func, unsigned line) {
-  return likely(err == MDBX_SUCCESS) ? err : log_error(err, func, line);
+static inline int log_if_error(const int err, const char *func, unsigned line) {
+  if (likely(err == MDBX_SUCCESS))
+    return err;
+  int rc = log_error(err, func, line);
+#if __has_c_attribute(assume)
+  [[assume(rc == err && rc != MDBX_SUCCESS)]];
+#endif
+#if defined(__clang__) || __has_builtin(assume)
+  __builtin_assume(rc == err && rc != MDBX_SUCCESS);
+#endif
+  if (rc != err || rc == MDBX_SUCCESS) {
+#if defined(__GNUC__)
+    __builtin_unreachable();
+#elif defined(_MSC_VER) && !defined(__clang__)
+    __assume(0);
+#endif
+    rc = err;
+  }
+  return rc;
 }
 
 #define LOG_IFERR(err) log_if_error((err), __func__, __LINE__)

@@ -908,21 +908,26 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
 
 int mdbx_dbi_flags_ex(const MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
                       unsigned *state) {
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR - MDBX_TXN_PARKED);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
-
   if (unlikely(!flags || !state))
     return LOG_IFERR(MDBX_EINVAL);
 
-  rc = dbi_check(txn, dbi);
-  if (unlikely(rc != MDBX_SUCCESS))
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR - MDBX_TXN_PARKED);
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    *flags = 0;
+    *state = 0;
     return LOG_IFERR(rc);
+  }
+
+  rc = dbi_check(txn, dbi);
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    *flags = 0;
+    *state = 0;
+    return LOG_IFERR(rc);
+  }
 
   *flags = txn->dbs[dbi].flags & DB_PERSISTENT_FLAGS;
   *state =
       txn->dbi_state[dbi] & (DBI_FRESH | DBI_CREAT | DBI_DIRTY | DBI_STALE);
-
   return MDBX_SUCCESS;
 }
 
@@ -968,33 +973,41 @@ static void stat_get(const tree_t *db, MDBX_stat *st, size_t bytes) {
 
 __cold int mdbx_dbi_stat(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest,
                          size_t bytes) {
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
-
   if (unlikely(!dest))
     return LOG_IFERR(MDBX_EINVAL);
 
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
+
   rc = dbi_check(txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
+    goto bailout;
 
   const size_t size_before_modtxnid = offsetof(MDBX_stat, ms_mod_txnid);
-  if (unlikely(bytes != sizeof(MDBX_stat)) && bytes != size_before_modtxnid)
-    return LOG_IFERR(MDBX_EINVAL);
+  if (unlikely(bytes != sizeof(MDBX_stat)) && bytes != size_before_modtxnid) {
+    rc = MDBX_EINVAL;
+    goto bailout;
+  }
 
-  if (unlikely(txn->flags & MDBX_TXN_BLOCKED))
-    return LOG_IFERR(MDBX_BAD_TXN);
+  if (unlikely(txn->flags & MDBX_TXN_BLOCKED)) {
+    rc = MDBX_BAD_TXN;
+    goto bailout;
+  }
 
   if (unlikely(txn->dbi_state[dbi] & DBI_STALE)) {
     rc = tbl_fetch((MDBX_txn *)txn, dbi);
     if (unlikely(rc != MDBX_SUCCESS))
-      return LOG_IFERR(rc);
+      goto bailout;
   }
 
   dest->ms_psize = txn->env->ps;
   stat_get(&txn->dbs[dbi], dest, bytes);
   return MDBX_SUCCESS;
+
+bailout:
+  memset(dest, 0, bytes);
+  return LOG_IFERR(rc);
 }
 
 __cold const tree_t *dbi_dig(const MDBX_txn *txn, const size_t dbi,

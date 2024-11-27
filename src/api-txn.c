@@ -40,12 +40,13 @@ int mdbx_txn_straggler(const MDBX_txn *txn, int *percent)
 
 __cold int mdbx_dbi_dupsort_depthmask(const MDBX_txn *txn, MDBX_dbi dbi,
                                       uint32_t *mask) {
+  if (unlikely(!mask))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  *mask = 0;
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
-
-  if (unlikely(!mask))
-    return LOG_IFERR(MDBX_EINVAL);
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, dbi);
@@ -56,7 +57,6 @@ __cold int mdbx_dbi_dupsort_depthmask(const MDBX_txn *txn, MDBX_dbi dbi,
 
   MDBX_val key, data;
   rc = outer_first(&cx.outer, &key, &data);
-  *mask = 0;
   while (rc == MDBX_SUCCESS) {
     const node_t *node =
         page_node(cx.outer.pg[cx.outer.top], cx.outer.ki[cx.outer.top]);
@@ -88,12 +88,14 @@ __cold int mdbx_dbi_dupsort_depthmask(const MDBX_txn *txn, MDBX_dbi dbi,
 }
 
 int mdbx_canary_get(const MDBX_txn *txn, MDBX_canary *canary) {
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
-
   if (unlikely(canary == nullptr))
     return LOG_IFERR(MDBX_EINVAL);
+
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    memset(canary, 0, sizeof(*canary));
+    return LOG_IFERR(rc);
+  }
 
   *canary = txn->canary;
   return MDBX_SUCCESS;
