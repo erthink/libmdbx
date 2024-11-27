@@ -566,11 +566,17 @@ endif()
 list(FIND CMAKE_C_COMPILE_FEATURES c_std_11 HAS_C11)
 list(FIND CMAKE_C_COMPILE_FEATURES c_std_23 HAS_C23)
 if(NOT DEFINED MDBX_C_STANDARD)
-  # MSVC >= 19.28 (Microsoft Visual Studio 16.8) is mad! It unable process
-  # Windows SDK headers in the C11 mode!
-  if(MSVC
-     AND MSVC_VERSION GREATER 1927
-     AND NOT MSVC_VERSION GREATER 1929)
+  if(DEFINED ENV{CMAKE_C_STANDARD})
+    set(CMAKE_C_STANDARD $ENV{CMAKE_C_STANDARD})
+  endif()
+  if(DEFINED CMAKE_C_STANDARD)
+    set(MDBX_C_STANDARD ${CMAKE_C_STANDARD})
+  elseif(
+    MSVC
+    # MSVC >= 19.28 (Microsoft Visual Studio 16.8) is mad! It unable process
+    # Windows SDK headers in the C11 mode!
+    AND MSVC_VERSION GREATER 1927
+    AND NOT MSVC_VERSION GREATER 1929)
     set(MDBX_C_STANDARD 99)
     set(C_FALLBACK_11 OFF)
     set(C_FALLBACK_GNU11 OFF)
