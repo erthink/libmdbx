@@ -403,9 +403,9 @@ macro(semver_provide name source_root_directory build_directory_for_json_output
       endif()
     else()
       set(_source_root "${source_root_directory}")
-      if(NOT CMAKE_VERSION VERSION_LESS 3.20)
-        cmake_path(NORMAL_PATH _git_root)
-        cmake_path(NORMAL_PATH _source_root)
+      if(NOT CMAKE_VERSION VERSION_LESS 3.19)
+        file(REAL_PATH "${_git_root}" _git_root)
+        file(REAL_PATH "${_source_root}" _source_root)
       endif()
       if(_source_root STREQUAL _git_root AND EXISTS "${_git_root}/VERSION.json")
         message(
