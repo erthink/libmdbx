@@ -54,6 +54,8 @@ CFLAGS_EXTRA ?=
 LD      ?= ld
 CMAKE	?= cmake
 CMAKE_OPT ?=
+# target directory for `make dist`
+DIST_DIR ?= dist
 
 # build options
 MDBX_BUILD_OPTIONS   ?=-DNDEBUG=1
@@ -648,11 +650,11 @@ release-assets: libmdbx-amalgamated-$(MDBX_GIT_3DOT).zpaq \
 		|| (echo 'ERROR: Is not a valid release because not in the clean state with a suitable annotated tag!!!' >&2 && false)) \
 	&& echo '  RELEASE ASSETS are done'
 
-@dist-checked.tag: $(addprefix dist/, $(DIST_SRC) $(DIST_EXTRA))
+@dist-checked.tag: $(addprefix $(DIST_DIR)/, $(DIST_SRC) $(DIST_EXTRA))
 	@echo -n '  VERIFY amalgamated sources...'
-	$(QUIET)rm -rf $@ dist/@tmp-essentials.inc dist/@tmp-internals.inc \
+	$(QUIET)rm -rf $@ $(DIST_DIR)/@tmp-essentials.inc $(DIST_DIR)/@tmp-internals.inc \
 	&& if grep -R "define xMDBX_ALLOY" dist | grep -q MDBX_BUILD_SOURCERY; then echo "sed output is WRONG!" >&2; exit 2; fi \
-	&& rm -rf @dist-check && cp -r -p dist @dist-check && ($(MAKE) -j IOARENA=false CXXSTD=$(CXXSTD) -C @dist-check all ninja >@dist-check.log 2>@dist-check.err || (cat @dist-check.err && exit 1)) \
+	&& rm -rf @dist-check && cp -r -p $(DIST_DIR) @dist-check && ($(MAKE) -j IOARENA=false CXXSTD=$(CXXSTD) -C @dist-check all ninja >@dist-check.log 2>@dist-check.err || (cat @dist-check.err && exit 1)) \
 	&& touch $@ || (echo " FAILED! See @dist-check.log and @dist-check.err" >&2; exit 2) && echo " Ok"
 
 %.tar.gz: @dist-checked.tag
@@ -675,7 +677,7 @@ release-assets: libmdbx-amalgamated-$(MDBX_GIT_3DOT).zpaq \
 	@echo '  CREATE $@'
 	$(QUIET)rm -rf $@ && (cd dist && zpaq a ../$@ $(DIST_SRC) $(DIST_EXTRA) -m59) &>@zpaq.log
 
-dist/@tmp-essentials.inc: src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
+$(DIST_DIR)/@tmp-essentials.inc: src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
 	@echo '  ALLOYING...'
 	$(QUIET)mkdir -p dist \
 	&& (grep -v '#include ' src/alloy.c && echo '#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)' \
@@ -696,8 +698,8 @@ dist/@tmp-essentials.inc: src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST
 		-e '/ clang-format o/d' -e '/ \*INDENT-O/d' \
 		| grep -v '^/// ') >$@
 
-dist/@tmp-internals.inc: dist/@tmp-essentials.inc src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
-	$(QUIET)(cat dist/@tmp-essentials.inc \
+$(DIST_DIR)/@tmp-internals.inc: $(DIST_DIR)/@tmp-essentials.inc src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
+	$(QUIET)(cat $(DIST_DIR)/@tmp-essentials.inc \
 	&& sed \
 		-e '/#include "essentials.h"/d' \
 		-e '/#include "atomics-ops.h"/r src/atomics-ops.h' \
@@ -725,28 +727,28 @@ dist/@tmp-internals.inc: dist/@tmp-essentials.inc src/version.c $(ALLOY_DEPS) $(
 		-e '/ clang-format o/d' -e '/ \*INDENT-O/d' \
 		| grep -v '^/// ') >$@
 
-dist/mdbx.c: dist/@tmp-internals.inc $(lastword $(MAKEFILE_LIST))
+$(DIST_DIR)/mdbx.c: $(DIST_DIR)/@tmp-internals.inc $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
-	$(QUIET)(cat dist/@tmp-internals.inc $(shell git ls-files src/*.c | grep -v alloy) src/version.c | sed \
+	$(QUIET)(cat $(DIST_DIR)/@tmp-internals.inc $(shell git ls-files src/*.c | grep -v alloy) src/version.c | sed \
 		-e '/#include "debug_begin.h"/r src/debug_begin.h' \
 		-e '/#include "debug_end.h"/r src/debug_end.h' \
 	) | sed -e '/#include "/d;/#pragma once/d' -e 's|@INCLUDE|#include|' \
 		-e '/ clang-format o/d;/ \*INDENT-O/d' -e '3i /* clang-format off */' | cat -s >$@
 
-dist/mdbx.c++: dist/@tmp-essentials.inc src/mdbx.c++ $(lastword $(MAKEFILE_LIST))
+$(DIST_DIR)/mdbx.c++: $(DIST_DIR)/@tmp-essentials.inc src/mdbx.c++ $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
-	$(QUIET)cat dist/@tmp-essentials.inc src/mdbx.c++ | sed \
+	$(QUIET)cat $(DIST_DIR)/@tmp-essentials.inc src/mdbx.c++ | sed \
 		-e '/#define xMDBX_ALLOY/d' \
 		-e '/#include "/d;/#pragma once/d' \
 		-e 's|@INCLUDE|#include|;s|"mdbx.h"|"mdbx.h++"|' \
 		-e '/ clang-format o/d;/ \*INDENT-O/d' -e '3i /* clang-format off */' | cat -s >$@
 
 define dist-tool-rule
-dist/mdbx_$(1).c: src/tools/$(1).c src/tools/wingetopt.h src/tools/wingetopt.c \
-		dist/@tmp-internals.inc $(lastword $(MAKEFILE_LIST))
+$(DIST_DIR)/mdbx_$(1).c: src/tools/$(1).c src/tools/wingetopt.h src/tools/wingetopt.c \
+		$(DIST_DIR)/@tmp-internals.inc $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $$@'
 	$(QUIET)mkdir -p dist && sed \
-		-e '/#include "essentials.h"/r dist/@tmp-essentials.inc' \
+		-e '/#include "essentials.h"/r $(DIST_DIR)/@tmp-essentials.inc' \
 		-e '/#include "wingetopt.h"/r src/tools/wingetopt.c' \
 		-e '/ clang-format o/d' -e '/ \*INDENT-O/d' \
 		src/tools/$(1).c \
@@ -757,32 +759,32 @@ endef
 $(foreach file,$(TOOLS),$(eval $(call dist-tool-rule,$(file))))
 
 define dist-extra-rule
-dist/$(1): $(1) src/version.c $(lastword $(MAKEFILE_LIST))
+$(DIST_DIR)/$(1): $(1) src/version.c $(lastword $(MAKEFILE_LIST))
 	@echo '  REFINE $$@'
 	$(QUIET)mkdir -p $$(dir $$@) && sed -e '/^#> dist-cutoff-begin/,/^#< dist-cutoff-end/d' $$< | cat -s >$$@
 
 endef
 $(foreach file,mdbx.h mdbx.h++ $(filter-out man1/% VERSION.json .clang-format-ignore %.in ntdll.def,$(DIST_EXTRA)),$(eval $(call dist-extra-rule,$(file))))
 
-dist/VERSION.json: src/version.c
+$(DIST_DIR)/VERSION.json: src/version.c
 	@echo '  MAKE $@'
-	$(QUIET)mkdir -p dist/ && echo "{ \"git_describe\": \"$(MDBX_GIT_DESCRIBE)\", \"git_timestamp\": \"$(MDBX_GIT_TIMESTAMP)\", \"git_tree\": \"$(shell git show --no-patch --format=%T HEAD 2>&1)\", \"git_commit\": \"$(shell git show --no-patch --format=%H HEAD 2>&1)\", \"semver\": \"$(MDBX_VERSION_PURE)\" }" >$@
+	$(QUIET)mkdir -p $(DIST_DIR)/ && echo "{ \"git_describe\": \"$(MDBX_GIT_DESCRIBE)\", \"git_timestamp\": \"$(MDBX_GIT_TIMESTAMP)\", \"git_tree\": \"$(shell git show --no-patch --format=%T HEAD 2>&1)\", \"git_commit\": \"$(shell git show --no-patch --format=%H HEAD 2>&1)\", \"semver\": \"$(MDBX_VERSION_PURE)\" }" >$@
 
-dist/.clang-format-ignore: $(lastword $(MAKEFILE_LIST))
+$(DIST_DIR)/.clang-format-ignore: $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)echo "$(filter-out %.h %h++,$(DIST_SRC))" | tr ' ' \\n > $@
 
-dist/ntdll.def: src/ntdll.def
+$(DIST_DIR)/ntdll.def: src/ntdll.def
 	@echo '  COPY $@'
-	$(QUIET)mkdir -p dist/ && cp $< $@
+	$(QUIET)mkdir -p $(DIST_DIR)/ && cp $< $@
 
-dist/config.h.in: src/config.h.in
+$(DIST_DIR)/config.h.in: src/config.h.in
 	@echo '  COPY $@'
-	$(QUIET)mkdir -p dist/ && cp $< $@
+	$(QUIET)mkdir -p $(DIST_DIR)/ && cp $< $@
 
-dist/man1/mdbx_%.1: src/man1/mdbx_%.1
+$(DIST_DIR)/man1/mdbx_%.1: src/man1/mdbx_%.1
 	@echo '  COPY $@'
-	$(QUIET)mkdir -p dist/man1/ && cp $< $@
+	$(QUIET)mkdir -p $(DIST_DIR)/man1/ && cp $< $@
 
 endif
 
