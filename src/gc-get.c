@@ -773,7 +773,7 @@ static inline pgr_t page_alloc_finalize(MDBX_env *const env,
 #if MDBX_ENABLE_PROFGC
   size_t majflt_before;
   const uint64_t cputime_before = osal_cputime(&majflt_before);
-  gc_prof_stat_t *const prof = (mc->mc_dbi == FREE_DBI)
+  gc_prof_stat_t *const prof = (cursor_dbi(mc) == FREE_DBI)
                                    ? &env->lck->pgops.gc_prof.self
                                    : &env->lck->pgops.gc_prof.work;
 #else
@@ -889,7 +889,7 @@ pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num,
   MDBX_txn *const txn = mc->txn;
   MDBX_env *const env = txn->env;
 #if MDBX_ENABLE_PROFGC
-  gc_prof_stat_t *const prof = (mc->mc_dbi == FREE_DBI)
+  gc_prof_stat_t *const prof = (cursor_dbi(mc) == FREE_DBI)
                                    ? &env->lck->pgops.gc_prof.self
                                    : &env->lck->pgops.gc_prof.work;
   prof->spe_counter += 1;
