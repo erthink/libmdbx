@@ -78,7 +78,6 @@ __cold static int lck_setup_locked(MDBX_env *env) {
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
-#if MDBX_ENABLE_MADVISE
 #ifdef MADV_DODUMP
   err = madvise(env->lck_mmap.lck, size, MADV_DODUMP) ? ignore_enosys(errno)
                                                       : MDBX_SUCCESS;
@@ -97,7 +96,6 @@ __cold static int lck_setup_locked(MDBX_env *env) {
   if (unlikely(MDBX_IS_ERROR(err)))
     return err;
 #endif /* MADV_WILLNEED */
-#endif /* MDBX_ENABLE_MADVISE */
 
   lck_t *lck = env->lck_mmap.lck;
   if (lck_seize_rc == MDBX_RESULT_TRUE) {

@@ -382,49 +382,7 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn,
 #endif /* MLOCK_ONFAULT */
 
   int err = MDBX_ENOSYS;
-#if MDBX_ENABLE_MADVISE
   err = dxb_set_readahead(env, used_pgno, true, true);
-#else
-#if defined(_WIN32) || defined(_WIN64)
-  if (imports.PrefetchVirtualMemory) {
-    WIN32_MEMORY_RANGE_ENTRY hint;
-    hint.VirtualAddress = env->dxb_mmap.base;
-    hint.NumberOfBytes = used_range;
-    if (imports.PrefetchVirtualMemory(GetCurrentProcess(), 1, &hint, 0))
-      err = MDBX_SUCCESS;
-    else {
-      err = (int)GetLastError();
-      ERROR("%s(%zu) error %d", "PrefetchVirtualMemory", used_range, err);
-    }
-  }
-#endif /* Windows */
-
-#if defined(POSIX_MADV_WILLNEED)
-  err = posix_madvise(env->dxb_mmap.base, used_range, POSIX_MADV_WILLNEED)
-            ? ignore_enosys(errno)
-            : MDBX_SUCCESS;
-#elif defined(MADV_WILLNEED)
-  err = madvise(env->dxb_mmap.base, used_range, MADV_WILLNEED)
-            ? ignore_enosys(errno)
-            : MDBX_SUCCESS;
-#endif
-
-#if defined(F_RDADVISE)
-  if (err) {
-    fcntl(env->lazy_fd, F_RDAHEAD, true);
-    struct radvisory hint;
-    hint.ra_offset = 0;
-    hint.ra_count = unlikely(used_range > INT_MAX &&
-                             sizeof(used_range) > sizeof(hint.ra_count))
-                        ? INT_MAX
-                        : (int)used_range;
-    err = fcntl(env->lazy_fd, F_RDADVISE, &hint) ? ignore_enosys(errno)
-                                                 : MDBX_SUCCESS;
-    if (err == ENOTTY)
-      err = MDBX_SUCCESS /* Ignore ENOTTY for DB on the ram-disk */;
-  }
-#endif /* F_RDADVISE */
-#endif /* MDBX_ENABLE_MADVISE */
   if (err != MDBX_SUCCESS && rc == MDBX_SUCCESS)
     rc = err;
 

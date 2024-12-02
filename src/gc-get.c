@@ -3,7 +3,7 @@
 
 #include "internals.h"
 
-#if MDBX_ENABLE_MINCORE
+#if MDBX_USE_MINCORE
 /*------------------------------------------------------------------------------
  * Проверка размещения/расположения отображенных страниц БД в ОЗУ (mem-in-core),
  * с кешированием этой информации. */
@@ -77,11 +77,11 @@ static bool mincore_fetch(MDBX_env *const env, const size_t unit_begin) {
   lck->mincore_cache.mask[0] = ~mask;
   return bit_tas(lck->mincore_cache.mask, 0);
 }
-#endif /* MDBX_ENABLE_MINCORE */
+#endif /* MDBX_USE_MINCORE */
 
 MDBX_MAYBE_UNUSED static inline bool mincore_probe(MDBX_env *const env,
                                                    const pgno_t pgno) {
-#if MDBX_ENABLE_MINCORE
+#if MDBX_USE_MINCORE
   const size_t offset_aligned =
       floor_powerof2(pgno2bytes(env, pgno), globals.sys_pagesize);
   const unsigned unit_log2 = (env->ps2ln > globals.sys_pagesize_ln2)
@@ -97,7 +97,7 @@ MDBX_MAYBE_UNUSED static inline bool mincore_probe(MDBX_env *const env,
   (void)env;
   (void)pgno;
   return false;
-#endif /* MDBX_ENABLE_MINCORE */
+#endif /* MDBX_USE_MINCORE */
 }
 
 /*----------------------------------------------------------------------------*/

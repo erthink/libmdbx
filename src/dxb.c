@@ -153,9 +153,7 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno,
   }
   const size_t limit_bytes = pgno_align2os_bytes(env, limit_pgno);
   const size_t size_bytes = pgno_align2os_bytes(env, size_pgno);
-#if MDBX_ENABLE_MADVISE || defined(ENABLE_MEMCHECK)
   const void *const prev_map = env->dxb_mmap.base;
-#endif /* MDBX_ENABLE_MADVISE || ENABLE_MEMCHECK */
 
   VERBOSE("resize(env-flags 0x%x, mode %d) datafile/mapping: "
           "present %" PRIuPTR " -> %" PRIuPTR ", "
@@ -252,7 +250,6 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno,
   }
   munlock_after(env, aligned_munlock_pgno, size_bytes);
 
-#if MDBX_ENABLE_MADVISE
   if (size_bytes < prev_size && mode > implicit_grow) {
     NOTICE("resize-MADV_%s %u..%u",
            (env->flags & MDBX_WRITEMAP) ? "REMOVE" : "DONTNEED", size_pgno,
@@ -304,12 +301,10 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno,
     } else
       env->lck->discarded_tail.weak = size_pgno;
   }
-#endif /* MDBX_ENABLE_MADVISE */
 
   rc = osal_mresize(mresize_flags, &env->dxb_mmap, size_bytes, limit_bytes);
   eASSERT(env, env->dxb_mmap.limit >= env->dxb_mmap.current);
 
-#if MDBX_ENABLE_MADVISE
   if (rc == MDBX_SUCCESS) {
     eASSERT(env, limit_bytes == env->dxb_mmap.limit);
     eASSERT(env, size_bytes <= env->dxb_mmap.filesize);
@@ -329,7 +324,6 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno,
         ;
     rc = dxb_set_readahead(env, size_pgno, readahead, force);
   }
-#endif /* MDBX_ENABLE_MADVISE */
 
 bailout:
   if (rc == MDBX_SUCCESS) {
@@ -448,7 +442,6 @@ void dxb_sanitize_tail(MDBX_env *env, MDBX_txn *txn) {
 }
 #endif /* ENABLE_MEMCHECK || __SANITIZE_ADDRESS__ */
 
-#if MDBX_ENABLE_MADVISE
 /* Turn on/off readahead. It's harmful when the DB is larger than RAM. */
 __cold int dxb_set_readahead(const MDBX_env *env, const pgno_t edge,
                              const bool enable, const bool force_whole) {
@@ -570,7 +563,6 @@ __cold int dxb_set_readahead(const MDBX_env *env, const pgno_t edge,
   err = MDBX_SUCCESS;
   return err;
 }
-#endif /* MDBX_ENABLE_MADVISE */
 
 __cold int dxb_setup(MDBX_env *env, const int lck_rc,
                      const mdbx_mode_t mode_bits) {
@@ -776,12 +768,10 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc,
           globals.bootid.x, globals.bootid.y,
           (globals.bootid.x | globals.bootid.y) ? "" : "not-");
 
-#if MDBX_ENABLE_MADVISE
   /* calculate readahead hint before mmap with zero redundant pages */
   const bool readahead =
       !(env->flags & MDBX_NORDAHEAD) &&
       mdbx_is_readahead_reasonable(used_bytes, 0) == MDBX_RESULT_TRUE;
-#endif /* MDBX_ENABLE_MADVISE */
 
   err = osal_mmap(env->flags, &env->dxb_mmap, env->geo_in_bytes.now,
                   env->geo_in_bytes.upper,
@@ -789,7 +779,6 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc,
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
-#if MDBX_ENABLE_MADVISE
 #if defined(MADV_DONTDUMP)
   err = madvise(env->dxb_mmap.base, env->dxb_mmap.limit, MADV_DONTDUMP)
             ? ignore_enosys(errno)
@@ -807,7 +796,6 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc,
       return err;
   }
 #endif /* MADV_DODUMP */
-#endif /* MDBX_ENABLE_MADVISE */
 
 #ifdef ENABLE_MEMCHECK
   env->valgrind_handle =
@@ -1082,7 +1070,6 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc,
   } /* lck exclusive, lck_rc == MDBX_RESULT_TRUE */
 
   //---------------------------------------------------- setup madvise/readahead
-#if MDBX_ENABLE_MADVISE
   if (used_aligned2os_bytes < env->dxb_mmap.current) {
 #if defined(MADV_REMOVE)
     if (lck_rc && (env->flags & MDBX_WRITEMAP) != 0 &&
@@ -1125,7 +1112,6 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc,
   err = dxb_set_readahead(env, bytes2pgno(env, used_bytes), readahead, true);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
-#endif /* MDBX_ENABLE_MADVISE */
 
   return rc;
 }
@@ -1192,8 +1178,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending,
       }
 #endif /* ENABLE_MEMCHECK || __SANITIZE_ADDRESS__ */
 
-#if MDBX_ENABLE_MADVISE &&                                                     \
-    (defined(MADV_DONTNEED) || defined(POSIX_MADV_DONTNEED))
+#if defined(MADV_DONTNEED) || defined(POSIX_MADV_DONTNEED)
       const size_t discard_edge_pgno = pgno_align2os_pgno(env, largest_pgno);
       if (prev_discarded_pgno >= discard_edge_pgno + env->madv_threshold) {
         const size_t prev_discarded_bytes =
@@ -1249,7 +1234,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending,
             env->lck->discarded_tail.weak = discard_edge_pgno;
         }
       }
-#endif /* MDBX_ENABLE_MADVISE && (MADV_DONTNEED || POSIX_MADV_DONTNEED) */
+#endif /* MADV_DONTNEED || POSIX_MADV_DONTNEED */
 
       /* LY: check conditions to shrink datafile */
       const pgno_t backlog_gap = 3 + pending->trees.gc.height * 3;

@@ -1623,7 +1623,7 @@ MDBX_INTERNAL int osal_fsync(mdbx_filehandle_t fd,
 #else
 
 #if defined(__APPLE__) &&                                                      \
-    MDBX_OSX_SPEED_INSTEADOF_DURABILITY == MDBX_OSX_WANNA_DURABILITY
+    MDBX_APPLE_SPEED_INSTEADOF_DURABILITY == MDBX_OSX_WANNA_DURABILITY
   if (mode_bits & MDBX_SYNC_IODQ)
     return likely(fcntl(fd, F_FULLFSYNC) != -1) ? MDBX_SUCCESS : errno;
 #endif /* MacOS */
@@ -1776,7 +1776,7 @@ MDBX_INTERNAL int osal_thread_join(osal_thread_t thread) {
 
 MDBX_INTERNAL int osal_msync(const osal_mmap_t *map, size_t offset,
                              size_t length, enum osal_syncmode_bits mode_bits) {
-  if (!MDBX_MMAP_USE_MS_ASYNC && mode_bits == MDBX_SYNC_NONE)
+  if (!MDBX_MMAP_NEEDS_JOLT && mode_bits == MDBX_SYNC_NONE)
     return MDBX_SUCCESS;
 
   void *ptr = ptr_disp(map->base, offset);
@@ -1793,7 +1793,7 @@ MDBX_INTERNAL int osal_msync(const osal_mmap_t *map, size_t offset,
   //
   // However, this behavior may be changed in custom kernels,
   // so just leave such optimization to the libc discretion.
-  // NOTE: The MDBX_MMAP_USE_MS_ASYNC must be defined to 1 for such cases.
+  // NOTE: The MDBX_MMAP_NEEDS_JOLT must be defined to 1 for such cases.
   //
   // assert(mdbx.linux_kernel_version > 0x02061300);
   // if (mode_bits <= MDBX_SYNC_KICK)
@@ -2314,7 +2314,6 @@ MDBX_INTERNAL int osal_mmap(const int flags, osal_mmap_t *map, size_t size,
   }
   map->limit = limit;
 
-#if MDBX_ENABLE_MADVISE
 #ifdef MADV_DONTFORK
   if (unlikely(madvise(map->base, map->limit, MADV_DONTFORK) != 0))
     return errno;
@@ -2322,7 +2321,6 @@ MDBX_INTERNAL int osal_mmap(const int flags, osal_mmap_t *map, size_t size,
 #ifdef MADV_NOHUGEPAGE
   (void)madvise(map->base, map->limit, MADV_NOHUGEPAGE);
 #endif /* MADV_NOHUGEPAGE */
-#endif /* MDBX_ENABLE_MADVISE */
 
 #endif /* ! Windows */
 
@@ -2735,7 +2733,6 @@ retry_mapview:;
   map->limit = limit;
   map->current = size;
 
-#if MDBX_ENABLE_MADVISE
 #ifdef MADV_DONTFORK
   if (unlikely(madvise(map->base, map->limit, MADV_DONTFORK) != 0)) {
     assert(errno != 0);
@@ -2745,7 +2742,6 @@ retry_mapview:;
 #ifdef MADV_NOHUGEPAGE
   (void)madvise(map->base, map->limit, MADV_NOHUGEPAGE);
 #endif /* MADV_NOHUGEPAGE */
-#endif /* MDBX_ENABLE_MADVISE */
 
 #endif /* POSIX / Windows */
 

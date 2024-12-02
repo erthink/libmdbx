@@ -690,7 +690,7 @@ add_mdbx_option(MDBX_INSTALL_STATIC
 add_mdbx_option(MDBX_BUILD_SHARED_LIBRARY
                 "Build libmdbx as shared library (DLL)" ${BUILD_SHARED_LIBS})
 add_mdbx_option(
-  MDBX_BUILD_TOOLS "Build MDBX tools (mdbx_chk/stat/dump/load/copy)"
+  MDBX_BUILD_TOOLS "Build MDBX tools (mdbx_chk/stat/dump/load/copy/drop)"
   ${MDBX_BUILD_TOOLS_DEFAULT})
 cmake_dependent_option(
   MDBX_INSTALL_MANPAGES
@@ -699,8 +699,10 @@ cmake_dependent_option(
 add_mdbx_option(
   MDBX_TXN_CHECKOWNER
   "Checking transaction matches the calling thread inside libmdbx's API" ON)
-add_mdbx_option(MDBX_ENV_CHECKPID "Paranoid checking PID inside libmdbx's API"
-                AUTO)
+add_mdbx_option(
+  MDBX_ENV_CHECKPID
+  "Checking PID inside libmdbx's API against reuse DB environment after the fork()"
+  AUTO)
 mark_as_advanced(MDBX_ENV_CHECKPID)
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
   add_mdbx_option(MDBX_DISABLE_GNU_SOURCE "Don't use GNU/Linux libc extensions"
@@ -708,9 +710,9 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
   mark_as_advanced(MDBX_DISABLE_GNU_SOURCE)
 endif()
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Darwin" OR IOS)
-  add_mdbx_option(MDBX_OSX_SPEED_INSTEADOF_DURABILITY
+  add_mdbx_option(MDBX_APPLE_SPEED_INSTEADOF_DURABILITY
                   "Disable use fcntl(F_FULLFSYNC) in favor of speed" OFF)
-  mark_as_advanced(MDBX_OSX_SPEED_INSTEADOF_DURABILITY)
+  mark_as_advanced(MDBX_APPLE_SPEED_INSTEADOF_DURABILITY)
 endif()
 if(WIN32)
   if(MDBX_NTDLL_EXTRA_IMPLIB)
@@ -724,15 +726,25 @@ else()
     MDBX_USE_OFDLOCKS
     "Use Open file description locks (aka OFD locks, non-POSIX)" AUTO)
   mark_as_advanced(MDBX_USE_OFDLOCKS)
+  add_mdbx_option(
+    MDBX_USE_MINCORE
+    "Use Unix' mincore() to determine whether DB-pages are resident in memory"
+    ON)
+  mark_as_advanced(MDBX_USE_MINCORE)
   set(MDBX_AVOID_MSYNC_DEFAULT OFF)
 endif()
 add_mdbx_option(
   MDBX_AVOID_MSYNC
-  "Controls dirty pages tracking, spilling and persisting in MDBX_WRITEMAP mode"
+  "Disable in-memory database updating with consequent flush-to-disk/msync syscall in `MDBX_WRITEMAP` mode"
   ${MDBX_AVOID_MSYNC_DEFAULT})
 add_mdbx_option(
+  MDBX_MMAP_NEEDS_JOLT
+  "Assume system needs explicit syscall to sync/flush/write modified mapped memory"
+  AUTO)
+mark_as_advanced(MDBX_MMAP_NEEDS_JOLT)
+add_mdbx_option(
   MDBX_LOCKING
-  "Locking method (Windows=-1, SysV=5, POSIX=1988, POSIX=2001, POSIX=2008, Futexes=1995)"
+  "Locking method (Windows=-1, SystemV=5, POSIX=1988, POSIX=2001, POSIX=2008)"
   AUTO)
 mark_as_advanced(MDBX_LOCKING)
 add_mdbx_option(
@@ -747,23 +759,22 @@ add_mdbx_option(
 mark_as_advanced(MDBX_DISABLE_VALIDATION)
 add_mdbx_option(MDBX_ENABLE_REFUND
                 "Zerocost auto-compactification during write-transactions" ON)
-add_mdbx_option(MDBX_ENABLE_MADVISE
-                "Using POSIX' madvise() and/or similar hints" ON)
-if(CMAKE_TARGET_BITNESS GREATER 32)
-  set(MDBX_BIGFOOT_DEFAULT ON)
-else()
-  set(MDBX_BIGFOOT_DEFAULT OFF)
-endif()
 add_mdbx_option(
   MDBX_ENABLE_BIGFOOT
   "Chunking long list of retired pages during huge transactions commit to avoid use sequences of pages"
-  ${MDBX_BIGFOOT_DEFAULT})
+  ON)
 add_mdbx_option(MDBX_ENABLE_PGOP_STAT
                 "Gathering statistics for page operations" ON)
 add_mdbx_option(MDBX_ENABLE_PROFGC "Profiling of GC search and updates" OFF)
 mark_as_advanced(MDBX_ENABLE_PROFGC)
-add_mdbx_option(MDBX_ENABLE_DBI_SPARSE "FIXME" ON)
-add_mdbx_option(MDBX_ENABLE_DBI_LOCKFREE "FIXME" ON)
+add_mdbx_option(
+  MDBX_ENABLE_DBI_SPARSE
+  "Support for sparse sets of DBI handles to reduce overhead when starting and processing transactions"
+  ON)
+add_mdbx_option(
+  MDBX_ENABLE_DBI_LOCKFREE
+  "Support for deferred releasing and a lockfree path to quickly open DBI handles"
+  ON)
 
 if(NOT MDBX_AMALGAMATED_SOURCE)
   if(CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE_UPPERCASE STREQUAL "DEBUG")
