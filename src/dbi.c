@@ -3,6 +3,7 @@
 
 #include "internals.h"
 
+#if MDBX_ENABLE_DBI_SPARSE
 size_t dbi_bitmap_ctz_fallback(const MDBX_txn *txn, intptr_t bmi) {
   tASSERT(txn, bmi > 0);
   bmi &= -bmi;
@@ -20,6 +21,7 @@ size_t dbi_bitmap_ctz_fallback(const MDBX_txn *txn, intptr_t bmi) {
     return debruijn_ctz32[(UINT32_C(0x077CB531) * (uint32_t)bmi) >> 27];
   }
 }
+#endif /* MDBX_ENABLE_DBI_SPARSE */
 
 struct dbi_snap_result dbi_snap(const MDBX_env *env, const size_t dbi) {
   eASSERT(env, dbi < env->n_dbi);

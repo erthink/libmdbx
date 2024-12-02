@@ -5,10 +5,10 @@
 
 #include "essentials.h"
 
+#if MDBX_ENABLE_DBI_SPARSE
+
 MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED MDBX_INTERNAL size_t
 dbi_bitmap_ctz_fallback(const MDBX_txn *txn, intptr_t bmi);
-
-#if MDBX_ENABLE_DBI_SPARSE
 
 static inline size_t dbi_bitmap_ctz(const MDBX_txn *txn, intptr_t bmi) {
   tASSERT(txn, bmi > 0);
