@@ -304,8 +304,10 @@ include(GNUInstallDirs)
 
 if(CMAKE_C_COMPILER_ID STREQUAL "MSVC" AND MSVC_VERSION LESS 1900)
   message(
-    SEND_ERROR "MSVC compiler ${MSVC_VERSION} is too old for building MDBX."
-               " At least 'Microsoft Visual Studio 2015' is required.")
+    SEND_ERROR
+      "MSVC compiler ${MSVC_VERSION} is too old for building MDBX."
+      " At least \"Microsoft C/C++ Compiler\" version 19.0.24234.1 (Visual Studio 2015 Update 3) is required."
+  )
 endif()
 
 if(NOT DEFINED THREADS_PREFER_PTHREAD_FLAG)
@@ -946,13 +948,7 @@ else()
     STATUS "Use C${MDBX_C_STANDARD} for libmdbx but C++ portion is disabled")
 endif()
 
-if(SUBPROJECT AND MSVC)
-  if(MSVC_VERSION LESS 1900)
-    message(
-      FATAL_ERROR
-        "At least \"Microsoft C/C++ Compiler\" version 19.0.24234.1 (Visual Studio 2015 Update 3) is required."
-    )
-  endif()
+if(MSVC)
   add_compile_options("/utf-8")
 endif()
 
