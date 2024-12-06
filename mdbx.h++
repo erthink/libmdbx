@@ -1,6 +1,9 @@
 ﻿/// \copyright SPDX-License-Identifier: Apache-2.0
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2020-2024
 ///
+/// Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`.
+/// Всё будет хорошо!
+///
 /// \file mdbx.h++
 /// \brief The libmdbx C++ API header file.
 ///

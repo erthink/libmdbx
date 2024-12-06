@@ -18,7 +18,8 @@ C++ API description and links to the origin git repo with the source code.
 Questions, feedback and suggestions are welcome to the Telegram' group
 https://t.me/libmdbx.
 
-_The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет хорошо._
+Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`.
+Всё будет хорошо!
 
 \note The origin has been migrated to
 [GitFlic](https://gitflic.ru/project/erthink/libmdbx) since on 2022-04-15 the

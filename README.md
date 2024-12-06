@@ -9,7 +9,8 @@
 > For NEWS take a look to the [ChangeLog](https://gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md)
 > or the [TODO](https://gitflic.ru/project/erthink/libmdbx/blob?file=TODO.md).
 
-*The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет хорошо.*
+Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`.
+Всё будет хорошо!
 
 
 libmdbx
@@ -368,7 +369,7 @@ year later _libmdbx_ was separated into a standalone project, which was
 conference](http://www.highload.ru/2015/abstracts/1831.html).
 
 Since 2017 _libmdbx_ is used in [Fast Positive Tables](https://gitflic.ru/project/erthink/libfpta),
-and development is funded by [Positive Technologies](https://www.ptsecurity.com).
+and until 2025 development was funded by [Positive Technologies](https://www.ptsecurity.com).
 
 On 2022-04-15 the Github administration, without any warning nor
 explanation, deleted _libmdbx_ along with a lot of other projects,

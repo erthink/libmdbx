@@ -1,7 +1,9 @@
 # Copyright (c) 2020-2024 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 # SPDX-License-Identifier: Apache-2.0
-
 #
+# Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`.
+# Всё будет хорошо!
+
 # libmdbx = { Revised and extended descendant of Symas LMDB. } Please see
 # README.md at https://gitflic.ru/project/erthink/libmdbx
 #
@@ -19,9 +21,6 @@
 # and API based on C++17, as well as the Apache 2.0 License. The goal of this
 # revolution is to provide a clearer and robust API, add more features and new
 # valuable properties of database.
-#
-# The Future will (be) Positive. Всё будет хорошо.
-#
 
 if(CMAKE_VERSION VERSION_LESS 3.8.2)
   cmake_minimum_required(VERSION 3.0.2)
