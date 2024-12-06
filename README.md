@@ -416,7 +416,7 @@ since release the version 1.0.
 
 ## Source code embedding
 
-_libmdbx_ provides two official ways for integration in source code form:
+_libmdbx_ provides two official three for integration in source code form:
 
 1. Using an amalgamated source code which available in the [releases section](https://gitflic.ru/project/erthink/libmdbx/release) on GitFlic.
    > An amalgamated source code includes all files required to build and
@@ -425,7 +425,13 @@ _libmdbx_ provides two official ways for integration in source code form:
    > repository on Linux by executing `make dist`. As a result, the desired
    > set of files will be formed in the `dist` subdirectory.
 
-2. Adding the complete source code as a `git submodule` from the [origin git repository](https://gitflic.ru/project/erthink/libmdbx) on GitFlic.
+2. Using [Conan Package Manager](https://conan.io/):
+    - optional: Setup your own conan-server;
+    - Create conan-package by `conan create .` inside the _libmdbx_' repo subdirectory;
+    - optional: Upload created recipe and/or package to the conan-server by `conan upload -r SERVER 'mdbx/*'`;
+    - Consume libmdbx-package from the local conan-cache or from conan-server in accordance with the [Conan tutorial](https://docs.conan.io/2/tutorial/consuming_packages.html).
+
+3. Adding the complete source code as a `git submodule` from the [origin git repository](https://gitflic.ru/project/erthink/libmdbx) on GitFlic.
    > This allows you to build as _libmdbx_ and testing tool.
    >  On the other hand, this way requires you to pull git tags, and use C++11 compiler for test tool.
 
