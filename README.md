@@ -232,7 +232,12 @@ On the other hand, if you make something suboptimally, you can notice detrimenta
 ## Comparison with other databases
 For now please refer to [chapter of "BoltDB comparison with other
 databases"](https://github.com/coreos/bbolt#comparison-with-other-databases)
-which is also (mostly) applicable to _libmdbx_.
+which is also (mostly) applicable to _libmdbx_ with minor clarification:
+ - a database could shared by multiple processes, i.e. no multi-process issues;
+ - no issues with moving a cursor(s) after the deletion;
+ - _libmdbx_ provides zero-overhead database compactification, so a database file could be shrinked/truncated in particular cases;
+ - excluding dist I/O time _libmdbx_ could be -3 times faster than BoltDB and up to 10-100K times faster than both BoltDB and LMDB in particular extreme cases;
+ - _libmdbx_ provides more features compared to BoltDB and/or LMDB.
 
 <!-- section-end -->
 
@@ -371,6 +376,9 @@ conference](http://www.highload.ru/2015/abstracts/1831.html).
 Since 2017 _libmdbx_ is used in [Fast Positive Tables](https://gitflic.ru/project/erthink/libfpta),
 and until 2025 development was funded by [Positive Technologies](https://www.ptsecurity.com).
 
+Since 2020 _libmdbx_ is used in Ethereum: [Erigon](https://github.com/erigontech/erigon), [Akula](https://github.com/akula-bft/akula),
+[Silkworm](https://github.com/erigontech/silkworm), [Reth](https://github.com/paradigmxyz/reth), etc.
+
 On 2022-04-15 the Github administration, without any warning nor
 explanation, deleted _libmdbx_ along with a lot of other projects,
 simultaneously blocking access for many developers. Therefore on
@@ -379,17 +387,8 @@ The origin for now is at [GitFlic](https://gitflic.ru/project/erthink/libmdbx)
 with backup at [ABF by ROSA Лаб](https://abf.rosalinux.ru/erthink/libmdbx).
 For the same reason ~~Github~~ is blacklisted forever.
 
-Начиная с 2021 года наблюдаются устойчивые тенденции к распространению
-недостоверной информации о libmdbx в странах НАТО, политизированной
-критики, а также отказу от использования библиотеки в пользу LMDB,
-несмотря на явные проблемы с одной стороны и преимущества с другой.
-Поэтому, начиная с 17 марта 2024 года, прекращается документирование и
-сопровождение проекта на английском языке. Новая функциональность будет
-документироваться только на русском языке, однако, целенаправленного
-переписывания/перевода документации пока не планируется.
-
-Since May 2024 and version v0.13 _libmdbx_ was re-licensed under Apache-2.0 license.
-Please refer to the `COPYRIGHT` file for license change explanations.
+Since May 2024 and version 0.13 _libmdbx_ was re-licensed under Apache-2.0 license.
+Please refer to the [`COPYRIGHT` file](https://gitflic.ru/project/erthink/libmdbx/blob/raw?file=COPYRIGHT) for license change explanations.
 
 
 ## Acknowledgments
@@ -445,11 +444,14 @@ don't ask for support and don't name such chimeras `libmdbx`.
 Both amalgamated and original source code provides build through the use
 [CMake](https://cmake.org/) or [GNU
 Make](https://www.gnu.org/software/make/) with
-[bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)). All build ways
+[bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)).
+
+All build ways
 are completely traditional and have minimal prerequirements like
 `build-essential`, i.e. the non-obsolete C/C++ compiler and a
 [SDK](https://en.wikipedia.org/wiki/Software_development_kit) for the
-target platform. Obviously you need building tools itself, i.e. `git`,
+target platform.
+Obviously you need building tools itself, i.e. `git`,
 `cmake` or GNU `make` with `bash`. For your convenience, `make help`
 and `make options` are also available for listing existing targets
 and build options respectively.
@@ -478,7 +480,7 @@ Therefore, only basic information is provided:
      This is the `basic` test scenario.
    - The `Makefile` provide several self-described targets for testing: `smoke`, `test`, `check`, `memcheck`, `test-valgrind`,
      `test-asan`, `test-leak`, `test-ubsan`, `cross-gcc`, `cross-qemu`, `gcc-analyzer`, `smoke-fault`, `smoke-singleprocess`,
-     `test-singleprocess`, 'long-test'. Please run `make --help` if doubt.
+     `test-singleprocess`, `long-test`. Please run `make --help` if doubt.
    - In addition to the `mdbx_test` utility, there is the script [`stochastic.sh`](https://gitflic.ru/project/erthink/libmdbx/blob/master/test/stochastic.sh),
      which calls `mdbx_test` by going through set of modes and options, with gradually increasing the number of operations and the size of transactions.
      This script is used for mostly of all automatic testing, including `Makefile` targets and Continuous Integration.
@@ -588,9 +590,7 @@ runtime dependencies from CRT and other MSVC libraries.
 For this is enough to pass the `-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON` option
 during configure by CMake.
 
-An example of running a basic test script can be found in the
-[CI-script](appveyor.yml) for [AppVeyor](https://www.appveyor.com/). To
-run the [long stochastic test scenario](test/stochastic.sh),
+To run the [long stochastic test scenario](test/stochastic.sh),
 [bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)) is required, and
 such testing is recommended with placing the test data on the
 [RAM-disk](https://en.wikipedia.org/wiki/RAM_drive).
