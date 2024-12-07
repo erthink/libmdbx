@@ -166,6 +166,8 @@ __cold static void stat_add(const tree_t *db, MDBX_stat *const st,
 }
 
 __cold static int stat_acc(const MDBX_txn *txn, MDBX_stat *st, size_t bytes) {
+  memset(st, 0, bytes);
+
   int err = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
