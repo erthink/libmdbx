@@ -555,8 +555,8 @@ src/version.c: src/version.c.in $(lastword $(MAKEFILE_LIST)) $(MDBX_GIT_DIR)/HEA
 		-e "s|\$${MDBX_VERSION_MINOR}|$(shell echo '$(MDBX_GIT_3DOT)' | cut -d . -f 2)|" \
 		-e "s|\$${MDBX_VERSION_PATCH}|$(shell echo '$(MDBX_GIT_3DOT)' | cut -d . -f 3)|" \
 		-e "s|\$${MDBX_VERSION_TWEAK}|$(MDBX_GIT_TWEAK)|" \
-		-e "s|\$${MDBX_VERSION_PRERELEASE}|$(MDBX_GIT_PRERELEASE)|" \
-		-e "s|\$${MDBX_VERSION_PURE}|$(MDBX_VERSION_PURE)|" \
+		-e "s|@MDBX_VERSION_PRERELEASE@|$(MDBX_GIT_PRERELEASE)|" \
+		-e "s|@MDBX_VERSION_PURE@|$(MDBX_VERSION_PURE)|" \
 	src/version.c.in >$@
 
 src/config.h: @buildflags.tag $(WAIT) src/version.c $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE
@@ -589,8 +589,8 @@ docs/Doxyfile: docs/Doxyfile.in src/version.c $(lastword $(MAKEFILE_LIST))
 		-e "s|\$${MDBX_VERSION_MINOR}|$(shell echo '$(MDBX_GIT_3DOT)' | cut -d . -f 2)|" \
 		-e "s|\$${MDBX_VERSION_PATCH}|$(shell echo '$(MDBX_GIT_3DOT)' | cut -d . -f 3)|" \
 		-e "s|\$${MDBX_VERSION_TWEAK}|$(MDBX_GIT_TWEAK)|" \
-		-e "s|\$${MDBX_VERSION_PRERELEASE}|$(MDBX_GIT_PRERELEASE)|" \
-		-e "s|\$${MDBX_VERSION_PURE}|$(MDBX_VERSION_PURE)|" \
+		-e "s|@MDBX_VERSION_PRERELEASE@|$(MDBX_GIT_PRERELEASE)|" \
+		-e "s|@MDBX_VERSION_PURE@|$(MDBX_VERSION_PURE)|" \
 	docs/Doxyfile.in >$@
 
 define md-extract-section
