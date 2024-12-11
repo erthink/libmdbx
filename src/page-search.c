@@ -54,14 +54,11 @@ __hot int tree_search(MDBX_cursor *mc, const MDBX_val *key, int flags) {
   cASSERT(mc, root >= NUM_METAS && root < mc->txn->geo.first_unallocated);
   if (mc->top < 0 || mc->pg[0]->pgno != root) {
     txnid_t pp_txnid = mc->tree->mod_txnid;
-    pp_txnid = /* tree->mod_txnid maybe zero in a legacy DB */ pp_txnid
-                   ? pp_txnid
-                   : mc->txn->txnid;
+    pp_txnid = /* tree->mod_txnid maybe zero in a legacy DB */ pp_txnid ? pp_txnid : mc->txn->txnid;
     if ((mc->txn->flags & MDBX_TXN_RDONLY) == 0) {
       MDBX_txn *scan = mc->txn;
       do
-        if ((scan->flags & MDBX_TXN_DIRTY) &&
-            (dbi == MAIN_DBI || (scan->dbi_state[dbi] & DBI_DIRTY))) {
+        if ((scan->flags & MDBX_TXN_DIRTY) && (dbi == MAIN_DBI || (scan->dbi_state[dbi] & DBI_DIRTY))) {
           /* После коммита вложенных тразакций может быть mod_txnid > front */
           pp_txnid = scan->front_txnid;
           break;
@@ -75,8 +72,7 @@ __hot int tree_search(MDBX_cursor *mc, const MDBX_val *key, int flags) {
 
   mc->top = 0;
   mc->ki[0] = (flags & Z_LAST) ? page_numkeys(mc->pg[0]) - 1 : 0;
-  DEBUG("db %d root page %" PRIaPGNO " has flags 0x%X", cursor_dbi_dbg(mc),
-        root, mc->pg[0]->flags);
+  DEBUG("db %d root page %" PRIaPGNO " has flags 0x%X", cursor_dbi_dbg(mc), root, mc->pg[0]->flags);
 
   if (flags & Z_MODIFY) {
     err = page_touch(mc);
@@ -90,8 +86,7 @@ __hot int tree_search(MDBX_cursor *mc, const MDBX_val *key, int flags) {
   return tree_search_finalize(mc, key, flags);
 }
 
-__hot __noinline int tree_search_finalize(MDBX_cursor *mc, const MDBX_val *key,
-                                          int flags) {
+__hot __noinline int tree_search_finalize(MDBX_cursor *mc, const MDBX_val *key, int flags) {
   cASSERT(mc, !is_poor(mc));
   DKBUF_DEBUG;
   int err;
@@ -128,16 +123,14 @@ __hot __noinline int tree_search_finalize(MDBX_cursor *mc, const MDBX_val *key,
   }
 
   if (!MDBX_DISABLE_VALIDATION && unlikely(!check_leaf_type(mc, mp))) {
-    ERROR("unexpected leaf-page #%" PRIaPGNO " type 0x%x seen by cursor",
-          mp->pgno, mp->flags);
+    ERROR("unexpected leaf-page #%" PRIaPGNO " type 0x%x seen by cursor", mp->pgno, mp->flags);
     err = MDBX_CORRUPTED;
   bailout:
     be_poor(mc);
     return err;
   }
 
-  DEBUG("found leaf page %" PRIaPGNO " for key [%s]", mp->pgno,
-        DKEY_DEBUG(key));
+  DEBUG("found leaf page %" PRIaPGNO " for key [%s]", mp->pgno, DKEY_DEBUG(key));
   /* Логически верно, но (в текущем понимании) нет необходимости.
      Однако, стоит ещё по-проверять/по-тестировать.
      Возможно есть сценарий, в котором очистка флагов всё-таки требуется.

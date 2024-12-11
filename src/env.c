@@ -4,17 +4,14 @@
 #include "internals.h"
 
 bool env_txn0_owned(const MDBX_env *env) {
-  return (env->flags & MDBX_NOSTICKYTHREADS)
-             ? (env->basal_txn->owner != 0)
-             : (env->basal_txn->owner == osal_thread_self());
+  return (env->flags & MDBX_NOSTICKYTHREADS) ? (env->basal_txn->owner != 0)
+                                             : (env->basal_txn->owner == osal_thread_self());
 }
 
 int env_page_auxbuffer(MDBX_env *env) {
-  const int err =
-      env->page_auxbuf
-          ? MDBX_SUCCESS
-          : osal_memalign_alloc(globals.sys_pagesize,
-                                env->ps * (size_t)NUM_METAS, &env->page_auxbuf);
+  const int err = env->page_auxbuf
+                      ? MDBX_SUCCESS
+                      : osal_memalign_alloc(globals.sys_pagesize, env->ps * (size_t)NUM_METAS, &env->page_auxbuf);
   if (likely(err == MDBX_SUCCESS)) {
     memset(env->page_auxbuf, -1, env->ps * (size_t)2);
     memset(ptr_disp(env->page_auxbuf, env->ps * (size_t)2), 0, env->ps);
@@ -34,26 +31,19 @@ __cold unsigned env_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   STATIC_ASSERT(MAX_GC1OVPAGE(MDBX_MIN_PAGESIZE) > 4);
   STATIC_ASSERT(MAX_GC1OVPAGE(MDBX_MAX_PAGESIZE) < PAGELIST_LIMIT);
   const intptr_t maxgc_ov1page = (pagesize - PAGEHDRSZ) / sizeof(pgno_t) - 1;
-  ENSURE(env,
-         maxgc_ov1page > 42 && maxgc_ov1page < (intptr_t)PAGELIST_LIMIT / 4);
+  ENSURE(env, maxgc_ov1page > 42 && maxgc_ov1page < (intptr_t)PAGELIST_LIMIT / 4);
   env->maxgc_large1page = (unsigned)maxgc_ov1page;
-  env->maxgc_per_branch =
-      (unsigned)((pagesize - PAGEHDRSZ) /
-                 (sizeof(indx_t) + sizeof(node_t) + sizeof(txnid_t)));
+  env->maxgc_per_branch = (unsigned)((pagesize - PAGEHDRSZ) / (sizeof(indx_t) + sizeof(node_t) + sizeof(txnid_t)));
 
-  STATIC_ASSERT(LEAF_NODE_MAX(MDBX_MIN_PAGESIZE) >
-                sizeof(tree_t) + NODESIZE + 42);
+  STATIC_ASSERT(LEAF_NODE_MAX(MDBX_MIN_PAGESIZE) > sizeof(tree_t) + NODESIZE + 42);
   STATIC_ASSERT(LEAF_NODE_MAX(MDBX_MAX_PAGESIZE) < UINT16_MAX);
-  STATIC_ASSERT(LEAF_NODE_MAX(MDBX_MIN_PAGESIZE) >=
-                BRANCH_NODE_MAX(MDBX_MIN_PAGESIZE));
+  STATIC_ASSERT(LEAF_NODE_MAX(MDBX_MIN_PAGESIZE) >= BRANCH_NODE_MAX(MDBX_MIN_PAGESIZE));
   STATIC_ASSERT(BRANCH_NODE_MAX(MDBX_MAX_PAGESIZE) > NODESIZE + 42);
   STATIC_ASSERT(BRANCH_NODE_MAX(MDBX_MAX_PAGESIZE) < UINT16_MAX);
   const intptr_t branch_nodemax = BRANCH_NODE_MAX(pagesize);
   const intptr_t leaf_nodemax = LEAF_NODE_MAX(pagesize);
-  ENSURE(env, branch_nodemax > (intptr_t)(NODESIZE + 42) &&
-                  branch_nodemax % 2 == 0 &&
-                  leaf_nodemax > (intptr_t)(sizeof(tree_t) + NODESIZE + 42) &&
-                  leaf_nodemax >= branch_nodemax &&
+  ENSURE(env, branch_nodemax > (intptr_t)(NODESIZE + 42) && branch_nodemax % 2 == 0 &&
+                  leaf_nodemax > (intptr_t)(sizeof(tree_t) + NODESIZE + 42) && leaf_nodemax >= branch_nodemax &&
                   leaf_nodemax < (int)UINT16_MAX && leaf_nodemax % 2 == 0);
   env->leaf_nodemax = (uint16_t)leaf_nodemax;
   env->branch_nodemax = (uint16_t)branch_nodemax;
@@ -71,18 +61,14 @@ __cold unsigned env_setup_pagesize(MDBX_env *env, const size_t pagesize) {
     if (unlikely(err != MDBX_SUCCESS))
       ERROR("mdbx_get_sysraminfo(), rc %d", err);
     else {
-      size_t reasonable_dpl_limit =
-          (size_t)(total_ram_pages + avail_ram_pages) / 42;
+      size_t reasonable_dpl_limit = (size_t)(total_ram_pages + avail_ram_pages) / 42;
       if (pagesize > globals.sys_pagesize)
         reasonable_dpl_limit /= pagesize / globals.sys_pagesize;
       else if (pagesize < globals.sys_pagesize)
         reasonable_dpl_limit *= globals.sys_pagesize / pagesize;
-      reasonable_dpl_limit = (reasonable_dpl_limit < PAGELIST_LIMIT)
-                                 ? reasonable_dpl_limit
-                                 : PAGELIST_LIMIT;
-      reasonable_dpl_limit = (reasonable_dpl_limit > CURSOR_STACK_SIZE * 4)
-                                 ? reasonable_dpl_limit
-                                 : CURSOR_STACK_SIZE * 4;
+      reasonable_dpl_limit = (reasonable_dpl_limit < PAGELIST_LIMIT) ? reasonable_dpl_limit : PAGELIST_LIMIT;
+      reasonable_dpl_limit =
+          (reasonable_dpl_limit > CURSOR_STACK_SIZE * 4) ? reasonable_dpl_limit : CURSOR_STACK_SIZE * 4;
       env->options.dp_limit = (unsigned)reasonable_dpl_limit;
     }
   }
@@ -108,46 +94,36 @@ retry:;
     goto bailout;
   }
 
-  const troika_t troika =
-      (txn0_owned | should_unlock) ? env->basal_txn->tw.troika : meta_tap(env);
+  const troika_t troika = (txn0_owned | should_unlock) ? env->basal_txn->tw.troika : meta_tap(env);
   const meta_ptr_t head = meta_recent(env, &troika);
-  const uint64_t unsynced_pages =
-      atomic_load64(&env->lck->unsynced_pages, mo_Relaxed);
+  const uint64_t unsynced_pages = atomic_load64(&env->lck->unsynced_pages, mo_Relaxed);
   if (unsynced_pages == 0) {
-    const uint32_t synched_meta_txnid_u32 =
-        atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed);
+    const uint32_t synched_meta_txnid_u32 = atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed);
     if (synched_meta_txnid_u32 == (uint32_t)head.txnid && head.is_steady)
       goto bailout;
   }
 
   if (should_unlock && (env->flags & MDBX_WRITEMAP) &&
-      unlikely(head.ptr_c->geometry.first_unallocated >
-               bytes2pgno(env, env->dxb_mmap.current))) {
+      unlikely(head.ptr_c->geometry.first_unallocated > bytes2pgno(env, env->dxb_mmap.current))) {
 
-    if (unlikely(env->stuck_meta >= 0) &&
-        troika.recent != (uint8_t)env->stuck_meta) {
+    if (unlikely(env->stuck_meta >= 0) && troika.recent != (uint8_t)env->stuck_meta) {
       NOTICE("skip %s since wagering meta-page (%u) is mispatch the recent "
              "meta-page (%u)",
              "sync datafile", env->stuck_meta, troika.recent);
       rc = MDBX_RESULT_TRUE;
     } else {
-      rc = dxb_resize(env, head.ptr_c->geometry.first_unallocated,
-                      head.ptr_c->geometry.now, head.ptr_c->geometry.upper,
+      rc = dxb_resize(env, head.ptr_c->geometry.first_unallocated, head.ptr_c->geometry.now, head.ptr_c->geometry.upper,
                       implicit_grow);
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
     }
   }
 
-  const size_t autosync_threshold =
-      atomic_load32(&env->lck->autosync_threshold, mo_Relaxed);
-  const uint64_t autosync_period =
-      atomic_load64(&env->lck->autosync_period, mo_Relaxed);
+  const size_t autosync_threshold = atomic_load32(&env->lck->autosync_threshold, mo_Relaxed);
+  const uint64_t autosync_period = atomic_load64(&env->lck->autosync_period, mo_Relaxed);
   uint64_t eoos_timestamp;
   if (force || (autosync_threshold && unsynced_pages >= autosync_threshold) ||
-      (autosync_period &&
-       (eoos_timestamp =
-            atomic_load64(&env->lck->eoos_timestamp, mo_Relaxed)) &&
+      (autosync_period && (eoos_timestamp = atomic_load64(&env->lck->eoos_timestamp, mo_Relaxed)) &&
        osal_monotime() - eoos_timestamp >= autosync_period))
     flags &= MDBX_WRITEMAP /* clear flags for full steady sync */;
 
@@ -159,8 +135,7 @@ retry:;
 
       int err;
       /* pre-sync to avoid latency for writer */
-      if (unsynced_pages > /* FIXME: define threshold */ 42 &&
-          (flags & MDBX_SAFE_NOSYNC) == 0) {
+      if (unsynced_pages > /* FIXME: define threshold */ 42 && (flags & MDBX_SAFE_NOSYNC) == 0) {
         eASSERT(env, ((flags ^ env->flags) & MDBX_WRITEMAP) == 0);
         if (flags & MDBX_WRITEMAP) {
           /* Acquire guard to avoid collision with remap */
@@ -171,8 +146,7 @@ retry:;
           if (unlikely(err != MDBX_SUCCESS))
             return err;
 #endif
-          const size_t usedbytes =
-              pgno_align2os_bytes(env, head.ptr_c->geometry.first_unallocated);
+          const size_t usedbytes = pgno_align2os_bytes(env, head.ptr_c->geometry.first_unallocated);
           err = osal_msync(&env->dxb_mmap, 0, usedbytes, MDBX_SYNC_DATA);
 #if defined(_WIN32) || defined(_WIN64)
           imports.srwl_ReleaseShared(&env->remap_guard);
@@ -215,8 +189,7 @@ retry:;
   eASSERT(env, txn0_owned || should_unlock);
   eASSERT(env, !txn0_owned || (flags & txn_shrink_allowed) == 0);
 
-  if (!head.is_steady && unlikely(env->stuck_meta >= 0) &&
-      troika.recent != (uint8_t)env->stuck_meta) {
+  if (!head.is_steady && unlikely(env->stuck_meta >= 0) && troika.recent != (uint8_t)env->stuck_meta) {
     NOTICE("skip %s since wagering meta-page (%u) is mispatch the recent "
            "meta-page (%u)",
            "sync datafile", env->stuck_meta, troika.recent);
@@ -224,9 +197,8 @@ retry:;
     goto bailout;
   }
   if (!head.is_steady || ((flags & MDBX_SAFE_NOSYNC) == 0 && unsynced_pages)) {
-    DEBUG("meta-head %" PRIaPGNO ", %s, sync_pending %" PRIu64,
-          data_page(head.ptr_c)->pgno, durable_caption(head.ptr_c),
-          unsynced_pages);
+    DEBUG("meta-head %" PRIaPGNO ", %s, sync_pending %" PRIu64, data_page(head.ptr_c)->pgno,
+          durable_caption(head.ptr_c), unsynced_pages);
     meta_t meta = *head.ptr_c;
     rc = dxb_sync_locked(env, flags, &meta, &env->basal_txn->tw.troika);
     if (unlikely(rc != MDBX_SUCCESS))
@@ -235,8 +207,7 @@ retry:;
 
   /* LY: sync meta-pages if MDBX_NOMETASYNC enabled
    *     and someone was not synced above. */
-  if (atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed) !=
-      (uint32_t)head.txnid)
+  if (atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed) != (uint32_t)head.txnid)
     rc = meta_sync(env, head);
 
 bailout:
@@ -334,9 +305,8 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
    */
 
   env->pid = osal_getpid();
-  int rc = osal_openfile((env->flags & MDBX_RDONLY) ? MDBX_OPEN_DXB_READ
-                                                    : MDBX_OPEN_DXB_LAZY,
-                         env, env->pathname.dxb, &env->lazy_fd, mode);
+  int rc = osal_openfile((env->flags & MDBX_RDONLY) ? MDBX_OPEN_DXB_READ : MDBX_OPEN_DXB_LAZY, env, env->pathname.dxb,
+                         &env->lazy_fd, mode);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -355,8 +325,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
 #if defined(_WIN32) || defined(_WIN64)
   eASSERT(env, env->ioring.overlapped_fd == 0);
   bool ior_direct = false;
-  if (!(env->flags &
-        (MDBX_RDONLY | MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC | MDBX_EXCLUSIVE))) {
+  if (!(env->flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC | MDBX_EXCLUSIVE))) {
     if (MDBX_AVOID_MSYNC && (env->flags & MDBX_WRITEMAP)) {
       /* Запрошен режим MDBX_SYNC_DURABLE | MDBX_WRITEMAP при активной опции
        * MDBX_AVOID_MSYNC.
@@ -383,8 +352,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
       int err = dxb_read_header(env, &header, MDBX_SUCCESS, true);
       if ((err == MDBX_SUCCESS && header.pagesize >= globals.sys_pagesize) ||
           (err == MDBX_ENODATA && mode && env->ps >= globals.sys_pagesize &&
-           osal_filesize(env->lazy_fd, &dxb_filesize) == MDBX_SUCCESS &&
-           dxb_filesize == 0))
+           osal_filesize(env->lazy_fd, &dxb_filesize) == MDBX_SUCCESS && dxb_filesize == 0))
         /* Может быть коллизия, если два процесса пытаются одновременно создать
          * БД с разным размером страницы, который у одного меньше системной
          * страницы, а у другого НЕ меньше. Эта допустимая, но очень странная
@@ -392,9 +360,8 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
         ior_direct = true;
     }
 
-    rc = osal_openfile(ior_direct ? MDBX_OPEN_DXB_OVERLAPPED_DIRECT
-                                  : MDBX_OPEN_DXB_OVERLAPPED,
-                       env, env->pathname.dxb, &env->ioring.overlapped_fd, 0);
+    rc = osal_openfile(ior_direct ? MDBX_OPEN_DXB_OVERLAPPED_DIRECT : MDBX_OPEN_DXB_OVERLAPPED, env, env->pathname.dxb,
+                       &env->ioring.overlapped_fd, 0);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
     env->dxb_lock_event = CreateEventW(nullptr, true, false, nullptr);
@@ -410,8 +377,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
       return errno;
     mode = st.st_mode;
   }
-  mode = (/* inherit read permissions for group and others */ mode &
-          (S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)) |
+  mode = (/* inherit read permissions for group and others */ mode & (S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)) |
          /* always add read/write for owner */ S_IRUSR | S_IWUSR |
          ((mode & S_IRGRP) ? /* +write if readable by group */ S_IWGRP : 0) |
          ((mode & S_IROTH) ? /* +write if readable by others */ S_IWOTH : 0);
@@ -428,8 +394,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
                       | MDBX_EXCLUSIVE
 #endif /* !Windows */
                       ))) {
-    rc = osal_openfile(MDBX_OPEN_DXB_DSYNC, env, env->pathname.dxb,
-                       &env->dsync_fd, 0);
+    rc = osal_openfile(MDBX_OPEN_DXB_DSYNC, env, env->pathname.dxb, &env->dsync_fd, 0);
     if (unlikely(MDBX_IS_ERROR(rc)))
       return rc;
     if (env->dsync_fd != INVALID_HANDLE_VALUE) {
@@ -439,19 +404,14 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
     }
   }
 
-  const MDBX_env_flags_t lazy_flags =
-      MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC | MDBX_NOMETASYNC;
-  const MDBX_env_flags_t mode_flags = lazy_flags | MDBX_LIFORECLAIM |
-                                      MDBX_NORDAHEAD | MDBX_RDONLY |
-                                      MDBX_WRITEMAP;
+  const MDBX_env_flags_t lazy_flags = MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC | MDBX_NOMETASYNC;
+  const MDBX_env_flags_t mode_flags = lazy_flags | MDBX_LIFORECLAIM | MDBX_NORDAHEAD | MDBX_RDONLY | MDBX_WRITEMAP;
 
   lck_t *const lck = env->lck_mmap.lck;
   if (lck && lck_rc != MDBX_RESULT_TRUE && (env->flags & MDBX_RDONLY) == 0) {
     MDBX_env_flags_t snap_flags;
-    while ((snap_flags = atomic_load32(&lck->envmode, mo_AcquireRelease)) ==
-           MDBX_RDONLY) {
-      if (atomic_cas32(&lck->envmode, MDBX_RDONLY,
-                       (snap_flags = (env->flags & mode_flags)))) {
+    while ((snap_flags = atomic_load32(&lck->envmode, mo_AcquireRelease)) == MDBX_RDONLY) {
+      if (atomic_cas32(&lck->envmode, MDBX_RDONLY, (snap_flags = (env->flags & mode_flags)))) {
         /* The case:
          *  - let's assume that for some reason the DB file is smaller
          *    than it should be according to the geometry,
@@ -471,12 +431,9 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
     if (env->flags & MDBX_ACCEDE) {
       /* Pickup current mode-flags (MDBX_LIFORECLAIM, MDBX_NORDAHEAD, etc). */
       const MDBX_env_flags_t diff =
-          (snap_flags ^ env->flags) &
-          ((snap_flags & lazy_flags) ? mode_flags
-                                     : mode_flags & ~MDBX_WRITEMAP);
+          (snap_flags ^ env->flags) & ((snap_flags & lazy_flags) ? mode_flags : mode_flags & ~MDBX_WRITEMAP);
       env->flags ^= diff;
-      NOTICE("accede mode-flags: 0x%X, 0x%X -> 0x%X", diff, env->flags ^ diff,
-             env->flags);
+      NOTICE("accede mode-flags: 0x%X, 0x%X -> 0x%X", diff, env->flags ^ diff, env->flags);
     }
 
     /* Ранее упущенный не очевидный момент: При работе БД в режимах
@@ -498,12 +455,10 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
      * В результате, требуется либо запретить совместную работу процессам с
      * разным MDBX_WRITEMAP в режиме отложенной записи, либо отслеживать такое
      * смешивание и блокировать steady-пометки - что контрпродуктивно. */
-    const MDBX_env_flags_t rigorous_flags =
-        (snap_flags & lazy_flags)
-            ? MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC | MDBX_WRITEMAP
-            : MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC;
-    const MDBX_env_flags_t rigorous_diff =
-        (snap_flags ^ env->flags) & rigorous_flags;
+    const MDBX_env_flags_t rigorous_flags = (snap_flags & lazy_flags)
+                                                ? MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC | MDBX_WRITEMAP
+                                                : MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC;
+    const MDBX_env_flags_t rigorous_diff = (snap_flags ^ env->flags) & rigorous_flags;
     if (rigorous_diff) {
       ERROR("current mode/flags 0x%X incompatible with requested 0x%X, "
             "rigorous diff 0x%X",
@@ -529,8 +484,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
   }
 
   if (unlikely(/* recovery mode */ env->stuck_meta >= 0) &&
-      (lck_rc != /* exclusive */ MDBX_RESULT_TRUE ||
-       (env->flags & MDBX_EXCLUSIVE) == 0)) {
+      (lck_rc != /* exclusive */ MDBX_RESULT_TRUE || (env->flags & MDBX_EXCLUSIVE) == 0)) {
     ERROR("%s", "recovery requires exclusive mode");
     return MDBX_BUSY;
   }
@@ -545,8 +499,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
   if (lck) {
     if (lck_rc == MDBX_RESULT_TRUE) {
       rc = lck_downgrade(env);
-      DEBUG("lck-downgrade-%s: rc %i",
-            (env->flags & MDBX_EXCLUSIVE) ? "partial" : "full", rc);
+      DEBUG("lck-downgrade-%s: rc %i", (env->flags & MDBX_EXCLUSIVE) ? "partial" : "full", rc);
       if (rc != MDBX_SUCCESS)
         return rc;
     } else {
@@ -556,14 +509,13 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
     }
   }
 
-  rc = (env->flags & MDBX_RDONLY)
-           ? MDBX_SUCCESS
-           : osal_ioring_create(&env->ioring
+  rc = (env->flags & MDBX_RDONLY) ? MDBX_SUCCESS
+                                  : osal_ioring_create(&env->ioring
 #if defined(_WIN32) || defined(_WIN64)
-                                ,
-                                ior_direct, env->ioring.overlapped_fd
+                                                       ,
+                                                       ior_direct, env->ioring.overlapped_fd
 #endif /* Windows */
-             );
+                                    );
   return rc;
 }
 
@@ -606,8 +558,7 @@ __cold int env_close(MDBX_env *env, bool resurrect_after_fork) {
   }
 
 #if defined(_WIN32) || defined(_WIN64)
-  eASSERT(env, !env->ioring.overlapped_fd ||
-                   env->ioring.overlapped_fd == INVALID_HANDLE_VALUE);
+  eASSERT(env, !env->ioring.overlapped_fd || env->ioring.overlapped_fd == INVALID_HANDLE_VALUE);
   if (env->dxb_lock_event != INVALID_HANDLE_VALUE) {
     CloseHandle(env->dxb_lock_event);
     env->dxb_lock_event = INVALID_HANDLE_VALUE;

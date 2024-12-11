@@ -8,8 +8,7 @@ protected:
   void check_dbi_error(int expect, const char *stage);
 
 public:
-  testcase_jitter(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid) {}
+  testcase_jitter(const actor_config &config, const mdbx_pid_t pid) : testcase(config, pid) {}
   bool run() override;
 };
 REGISTER_TESTCASE(jitter);
@@ -18,8 +17,7 @@ void testcase_jitter::check_dbi_error(int expect, const char *stage) {
   MDBX_stat stat;
   int err = mdbx_dbi_stat(txn_guard.get(), dbi, &stat, sizeof(stat));
   if (err != expect)
-    failure("unexpected result for %s dbi-handle: expect %d, got %d", stage,
-            expect, err);
+    failure("unexpected result for %s dbi-handle: expect %d, got %d", stage, expect, err);
 }
 
 bool testcase_jitter::run() {
@@ -31,8 +29,7 @@ bool testcase_jitter::run() {
   tablename_buf buffer;
   const char *const tablename = db_tablename(buffer);
   tablename_buf buffer_renamed;
-  const char *const tablename_renamed =
-      db_tablename(buffer_renamed, ".renamed");
+  const char *const tablename_renamed = db_tablename(buffer_renamed, ".renamed");
 
   while (should_continue()) {
     jitter_delay();
@@ -81,9 +78,8 @@ bool testcase_jitter::run() {
       // restore DBI
       dbi = db_table_open(false, renamed);
       if (renamed) {
-        err = mdbx_dbi_open(
-            txn_guard.get(), tablename_renamed,
-            flipcoin() ? MDBX_DB_ACCEDE : config.params.table_flags, &dbi);
+        err = mdbx_dbi_open(txn_guard.get(), tablename_renamed, flipcoin() ? MDBX_DB_ACCEDE : config.params.table_flags,
+                            &dbi);
         if (unlikely(err != MDBX_SUCCESS))
           failure_perror("open-renamed", err);
         err = mdbx_dbi_rename(txn_guard.get(), dbi, tablename);
@@ -100,13 +96,10 @@ bool testcase_jitter::run() {
 
     if (upper_limit < 1) {
       MDBX_envinfo info;
-      err = mdbx_env_info_ex(db_guard.get(), txn_guard.get(), &info,
-                             sizeof(info));
+      err = mdbx_env_info_ex(db_guard.get(), txn_guard.get(), &info, sizeof(info));
       if (err)
         failure_perror("mdbx_env_info_ex()", err);
-      upper_limit = (info.mi_geo.upper < INTPTR_MAX)
-                        ? (intptr_t)info.mi_geo.upper
-                        : INTPTR_MAX;
+      upper_limit = (info.mi_geo.upper < INTPTR_MAX) ? (intptr_t)info.mi_geo.upper : INTPTR_MAX;
     }
 
     if (flipcoin()) {
@@ -156,29 +149,26 @@ bool testcase_jitter::run() {
       fetch_canary();
       update_canary(1);
       if (global::config::geometry_jitter) {
-        err = mdbx_env_set_geometry(
-            db_guard.get(), -1, -1,
-            coin4size ? upper_limit * 2 / 3 : upper_limit * 3 / 2, -1, -1, -1);
-        if (err != MDBX_SUCCESS && err != MDBX_UNABLE_EXTEND_MAPSIZE &&
-            err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE && err != MDBX_EPERM)
+        err = mdbx_env_set_geometry(db_guard.get(), -1, -1, coin4size ? upper_limit * 2 / 3 : upper_limit * 3 / 2, -1,
+                                    -1, -1);
+        if (err != MDBX_SUCCESS && err != MDBX_UNABLE_EXTEND_MAPSIZE && err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE &&
+            err != MDBX_EPERM)
           failure_perror("mdbx_env_set_geometry-1", err);
       }
     }
     if (flipcoin()) {
       uint64_t unused;
-      err = mdbx_dbi_sequence(txn_guard.get(), MAIN_DBI, &unused,
-                              mode_readonly() ? 0 : 1);
+      err = mdbx_dbi_sequence(txn_guard.get(), MAIN_DBI, &unused, mode_readonly() ? 0 : 1);
       if (err)
         failure_perror("mdbx_dbi_sequence()", err);
     }
     txn_end(flipcoin());
 
     if (global::config::geometry_jitter) {
-      err = mdbx_env_set_geometry(
-          db_guard.get(), -1, -1,
-          !coin4size ? upper_limit * 2 / 3 : upper_limit * 3 / 2, -1, -1, -1);
-      if (err != MDBX_SUCCESS && err != MDBX_UNABLE_EXTEND_MAPSIZE &&
-          err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE && err != MDBX_EPERM)
+      err = mdbx_env_set_geometry(db_guard.get(), -1, -1, !coin4size ? upper_limit * 2 / 3 : upper_limit * 3 / 2, -1,
+                                  -1, -1);
+      if (err != MDBX_SUCCESS && err != MDBX_UNABLE_EXTEND_MAPSIZE && err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE &&
+          err != MDBX_EPERM)
         failure_perror("mdbx_env_set_geometry-2", err);
     }
 
@@ -191,18 +181,16 @@ bool testcase_jitter::run() {
 
     if (global::config::geometry_jitter) {
       jitter_delay();
-      err = mdbx_env_set_geometry(db_guard.get(), -1, -1, upper_limit, -1, -1,
-                                  -1);
-      if (err != MDBX_SUCCESS && err != MDBX_UNABLE_EXTEND_MAPSIZE &&
-          err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE && err != MDBX_EPERM)
+      err = mdbx_env_set_geometry(db_guard.get(), -1, -1, upper_limit, -1, -1, -1);
+      if (err != MDBX_SUCCESS && err != MDBX_UNABLE_EXTEND_MAPSIZE && err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE &&
+          err != MDBX_EPERM)
         failure_perror("mdbx_env_set_geometry-3", err);
     }
 
     db_close();
 
     /* just 'align' nops with other tests with batching */
-    const auto batching =
-        std::max(config.params.batch_read, config.params.batch_write);
+    const auto batching = std::max(config.params.batch_read, config.params.batch_write);
     report(std::max(1u, batching / 2));
   }
   return true;

@@ -9,9 +9,7 @@
 // Stub for slim read-write lock
 // Portion Copyright (C) 1995-2002 Brad Wilson
 
-static void WINAPI stub_srwlock_Init(osal_srwlock_t *srwl) {
-  srwl->readerCount = srwl->writerCount = 0;
-}
+static void WINAPI stub_srwlock_Init(osal_srwlock_t *srwl) { srwl->readerCount = srwl->writerCount = 0; }
 
 static void WINAPI stub_srwlock_AcquireShared(osal_srwlock_t *srwl) {
   while (true) {
@@ -76,8 +74,7 @@ static void WINAPI stub_srwlock_ReleaseExclusive(osal_srwlock_t *srwl) {
 
 static uint64_t WINAPI stub_GetTickCount64(void) {
   LARGE_INTEGER Counter, Frequency;
-  return (QueryPerformanceFrequency(&Frequency) &&
-          QueryPerformanceCounter(&Counter))
+  return (QueryPerformanceFrequency(&Frequency) && QueryPerformanceCounter(&Counter))
              ? Counter.QuadPart * 1000ul / Frequency.QuadPart
              : 0;
 }
@@ -91,8 +88,7 @@ struct libmdbx_imports imports;
 #pragma GCC diagnostic ignored "-Wcast-function-type"
 #endif /* GCC/MINGW */
 
-#define MDBX_IMPORT(HANDLE, ENTRY)                                             \
-  imports.ENTRY = (MDBX_##ENTRY)GetProcAddress(HANDLE, #ENTRY)
+#define MDBX_IMPORT(HANDLE, ENTRY) imports.ENTRY = (MDBX_##ENTRY)GetProcAddress(HANDLE, #ENTRY)
 
 void windows_import(void) {
   const HINSTANCE hNtdll = GetModuleHandleA("ntdll.dll");
@@ -121,20 +117,13 @@ void windows_import(void) {
   }
 
   const osal_srwlock_t_function srwlock_init =
-      (osal_srwlock_t_function)(hKernel32dll
-                                    ? GetProcAddress(hKernel32dll,
-                                                     "InitializeSRWLock")
-                                    : nullptr);
+      (osal_srwlock_t_function)(hKernel32dll ? GetProcAddress(hKernel32dll, "InitializeSRWLock") : nullptr);
   if (srwlock_init) {
     imports.srwl_Init = srwlock_init;
-    imports.srwl_AcquireShared = (osal_srwlock_t_function)GetProcAddress(
-        hKernel32dll, "AcquireSRWLockShared");
-    imports.srwl_ReleaseShared = (osal_srwlock_t_function)GetProcAddress(
-        hKernel32dll, "ReleaseSRWLockShared");
-    imports.srwl_AcquireExclusive = (osal_srwlock_t_function)GetProcAddress(
-        hKernel32dll, "AcquireSRWLockExclusive");
-    imports.srwl_ReleaseExclusive = (osal_srwlock_t_function)GetProcAddress(
-        hKernel32dll, "ReleaseSRWLockExclusive");
+    imports.srwl_AcquireShared = (osal_srwlock_t_function)GetProcAddress(hKernel32dll, "AcquireSRWLockShared");
+    imports.srwl_ReleaseShared = (osal_srwlock_t_function)GetProcAddress(hKernel32dll, "ReleaseSRWLockShared");
+    imports.srwl_AcquireExclusive = (osal_srwlock_t_function)GetProcAddress(hKernel32dll, "AcquireSRWLockExclusive");
+    imports.srwl_ReleaseExclusive = (osal_srwlock_t_function)GetProcAddress(hKernel32dll, "ReleaseSRWLockExclusive");
   } else {
     imports.srwl_Init = stub_srwlock_Init;
     imports.srwl_AcquireShared = stub_srwlock_AcquireShared;

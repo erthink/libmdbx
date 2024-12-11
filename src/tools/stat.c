@@ -61,27 +61,24 @@ static void usage(const char *prog) {
   exit(EXIT_FAILURE);
 }
 
-static int reader_list_func(void *ctx, int num, int slot, mdbx_pid_t pid,
-                            mdbx_tid_t thread, uint64_t txnid, uint64_t lag,
-                            size_t bytes_used, size_t bytes_retained) {
+static int reader_list_func(void *ctx, int num, int slot, mdbx_pid_t pid, mdbx_tid_t thread, uint64_t txnid,
+                            uint64_t lag, size_t bytes_used, size_t bytes_retained) {
   (void)ctx;
   if (num == 1)
     printf("Reader Table\n"
            "   #\tslot\t%6s %*s %20s %10s %13s %13s\n",
-           "pid", (int)sizeof(size_t) * 2, "thread", "txnid", "lag", "used",
-           "retained");
+           "pid", (int)sizeof(size_t) * 2, "thread", "txnid", "lag", "used", "retained");
 
   if (thread < (mdbx_tid_t)((intptr_t)MDBX_TID_TXN_OUSTED))
-    printf(" %3d)\t[%d]\t%6" PRIdSIZE " %*" PRIxPTR, num, slot, (size_t)pid,
-           (int)sizeof(size_t) * 2, (uintptr_t)thread);
+    printf(" %3d)\t[%d]\t%6" PRIdSIZE " %*" PRIxPTR, num, slot, (size_t)pid, (int)sizeof(size_t) * 2,
+           (uintptr_t)thread);
   else
     printf(" %3d)\t[%d]\t%6" PRIdSIZE " %sed", num, slot, (size_t)pid,
-           (thread == (mdbx_tid_t)((uintptr_t)MDBX_TID_TXN_PARKED)) ? "park"
-                                                                    : "oust");
+           (thread == (mdbx_tid_t)((uintptr_t)MDBX_TID_TXN_PARKED)) ? "park" : "oust");
 
   if (txnid)
-    printf(" %20" PRIu64 " %10" PRIu64 " %12.1fM %12.1fM\n", txnid, lag,
-           bytes_used / 1048576.0, bytes_retained / 1048576.0);
+    printf(" %20" PRIu64 " %10" PRIu64 " %12.1fM %12.1fM\n", txnid, lag, bytes_used / 1048576.0,
+           bytes_retained / 1048576.0);
   else
     printf(" %20s %10s %13s %13s\n", "-", "0", "0", "0");
 
@@ -92,8 +89,7 @@ const char *prog;
 bool quiet = false;
 static void error(const char *func, int rc) {
   if (!quiet)
-    fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc,
-            mdbx_strerror(rc));
+    fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc, mdbx_strerror(rc));
 }
 
 int main(int argc, char *argv[]) {
@@ -129,12 +125,9 @@ int main(int argc, char *argv[]) {
              " - build: %s for %s by %s\n"
              " - flags: %s\n"
              " - options: %s\n",
-             mdbx_version.major, mdbx_version.minor, mdbx_version.patch,
-             mdbx_version.tweak, mdbx_version.git.describe,
-             mdbx_version.git.datetime, mdbx_version.git.commit,
-             mdbx_version.git.tree, mdbx_sourcery_anchor, mdbx_build.datetime,
-             mdbx_build.target, mdbx_build.compiler, mdbx_build.flags,
-             mdbx_build.options);
+             mdbx_version.major, mdbx_version.minor, mdbx_version.patch, mdbx_version.tweak, mdbx_version.git.describe,
+             mdbx_version.git.datetime, mdbx_version.git.commit, mdbx_version.git.tree, mdbx_sourcery_anchor,
+             mdbx_build.datetime, mdbx_build.target, mdbx_build.compiler, mdbx_build.flags, mdbx_build.options);
       return EXIT_SUCCESS;
     case 'q':
       quiet = true;
@@ -187,8 +180,7 @@ int main(int argc, char *argv[]) {
   envname = argv[optind];
   envname = argv[optind];
   if (!quiet) {
-    printf("mdbx_stat %s (%s, T-%s)\nRunning for %s...\n",
-           mdbx_version.git.describe, mdbx_version.git.datetime,
+    printf("mdbx_stat %s (%s, T-%s)\nRunning for %s...\n", mdbx_version.git.describe, mdbx_version.git.datetime,
            mdbx_version.git.tree, envname);
     fflush(nullptr);
   }
@@ -232,39 +224,27 @@ int main(int argc, char *argv[]) {
 
   if (pgop) {
     printf("Page Operations (for current session):\n");
-    printf("      New: %8" PRIu64 "\t// quantity of a new pages added\n",
-           mei.mi_pgop_stat.newly);
-    printf("      CoW: %8" PRIu64
-           "\t// quantity of pages copied for altering\n",
-           mei.mi_pgop_stat.cow);
+    printf("      New: %8" PRIu64 "\t// quantity of a new pages added\n", mei.mi_pgop_stat.newly);
+    printf("      CoW: %8" PRIu64 "\t// quantity of pages copied for altering\n", mei.mi_pgop_stat.cow);
     printf("    Clone: %8" PRIu64 "\t// quantity of parent's dirty pages "
            "clones for nested transactions\n",
            mei.mi_pgop_stat.clone);
-    printf("    Split: %8" PRIu64
-           "\t// page splits during insertions or updates\n",
-           mei.mi_pgop_stat.split);
-    printf("    Merge: %8" PRIu64
-           "\t// page merges during deletions or updates\n",
-           mei.mi_pgop_stat.merge);
+    printf("    Split: %8" PRIu64 "\t// page splits during insertions or updates\n", mei.mi_pgop_stat.split);
+    printf("    Merge: %8" PRIu64 "\t// page merges during deletions or updates\n", mei.mi_pgop_stat.merge);
     printf("    Spill: %8" PRIu64 "\t// quantity of spilled/ousted `dirty` "
            "pages during large transactions\n",
            mei.mi_pgop_stat.spill);
     printf("  Unspill: %8" PRIu64 "\t// quantity of unspilled/redone `dirty` "
            "pages during large transactions\n",
            mei.mi_pgop_stat.unspill);
-    printf("      WOP: %8" PRIu64
-           "\t// number of explicit write operations (not a pages) to a disk\n",
+    printf("      WOP: %8" PRIu64 "\t// number of explicit write operations (not a pages) to a disk\n",
            mei.mi_pgop_stat.wops);
-    printf(" PreFault: %8" PRIu64
-           "\t// number of prefault write operations (not a pages)\n",
+    printf(" PreFault: %8" PRIu64 "\t// number of prefault write operations (not a pages)\n",
            mei.mi_pgop_stat.prefault);
-    printf("  mInCore: %8" PRIu64 "\t// number of mincore() calls\n",
-           mei.mi_pgop_stat.mincore);
-    printf("    mSync: %8" PRIu64
-           "\t// number of explicit msync-to-disk operations (not a pages)\n",
+    printf("  mInCore: %8" PRIu64 "\t// number of mincore() calls\n", mei.mi_pgop_stat.mincore);
+    printf("    mSync: %8" PRIu64 "\t// number of explicit msync-to-disk operations (not a pages)\n",
            mei.mi_pgop_stat.msync);
-    printf("    fSync: %8" PRIu64
-           "\t// number of explicit fsync-to-disk operations (not a pages)\n",
+    printf("    fSync: %8" PRIu64 "\t// number of explicit fsync-to-disk operations (not a pages)\n",
            mei.mi_pgop_stat.fsync);
   }
 
@@ -272,18 +252,15 @@ int main(int argc, char *argv[]) {
     printf("Environment Info\n");
     printf("  Pagesize: %u\n", mei.mi_dxb_pagesize);
     if (mei.mi_geo.lower != mei.mi_geo.upper) {
-      printf("  Dynamic datafile: %" PRIu64 "..%" PRIu64 " bytes (+%" PRIu64
-             "/-%" PRIu64 "), %" PRIu64 "..%" PRIu64 " pages (+%" PRIu64
-             "/-%" PRIu64 ")\n",
-             mei.mi_geo.lower, mei.mi_geo.upper, mei.mi_geo.grow,
-             mei.mi_geo.shrink, mei.mi_geo.lower / mei.mi_dxb_pagesize,
-             mei.mi_geo.upper / mei.mi_dxb_pagesize,
-             mei.mi_geo.grow / mei.mi_dxb_pagesize,
-             mei.mi_geo.shrink / mei.mi_dxb_pagesize);
-      printf("  Current mapsize: %" PRIu64 " bytes, %" PRIu64 " pages \n",
-             mei.mi_mapsize, mei.mi_mapsize / mei.mi_dxb_pagesize);
-      printf("  Current datafile: %" PRIu64 " bytes, %" PRIu64 " pages\n",
-             mei.mi_geo.current, mei.mi_geo.current / mei.mi_dxb_pagesize);
+      printf("  Dynamic datafile: %" PRIu64 "..%" PRIu64 " bytes (+%" PRIu64 "/-%" PRIu64 "), %" PRIu64 "..%" PRIu64
+             " pages (+%" PRIu64 "/-%" PRIu64 ")\n",
+             mei.mi_geo.lower, mei.mi_geo.upper, mei.mi_geo.grow, mei.mi_geo.shrink,
+             mei.mi_geo.lower / mei.mi_dxb_pagesize, mei.mi_geo.upper / mei.mi_dxb_pagesize,
+             mei.mi_geo.grow / mei.mi_dxb_pagesize, mei.mi_geo.shrink / mei.mi_dxb_pagesize);
+      printf("  Current mapsize: %" PRIu64 " bytes, %" PRIu64 " pages \n", mei.mi_mapsize,
+             mei.mi_mapsize / mei.mi_dxb_pagesize);
+      printf("  Current datafile: %" PRIu64 " bytes, %" PRIu64 " pages\n", mei.mi_geo.current,
+             mei.mi_geo.current / mei.mi_dxb_pagesize);
 #if defined(_WIN32) || defined(_WIN64)
       if (mei.mi_geo.shrink && mei.mi_geo.current != mei.mi_geo.upper)
         printf("                    WARNING: Due Windows system limitations a "
@@ -293,12 +270,11 @@ int main(int argc, char *argv[]) {
                "until it will be closed or reopened in read-write mode.\n");
 #endif
     } else {
-      printf("  Fixed datafile: %" PRIu64 " bytes, %" PRIu64 " pages\n",
-             mei.mi_geo.current, mei.mi_geo.current / mei.mi_dxb_pagesize);
+      printf("  Fixed datafile: %" PRIu64 " bytes, %" PRIu64 " pages\n", mei.mi_geo.current,
+             mei.mi_geo.current / mei.mi_dxb_pagesize);
     }
     printf("  Last transaction ID: %" PRIu64 "\n", mei.mi_recent_txnid);
-    printf("  Latter reader transaction ID: %" PRIu64 " (%" PRIi64 ")\n",
-           mei.mi_latter_reader_txnid,
+    printf("  Latter reader transaction ID: %" PRIu64 " (%" PRIi64 ")\n", mei.mi_latter_reader_txnid,
            mei.mi_latter_reader_txnid - mei.mi_recent_txnid);
     printf("  Max readers: %u\n", mei.mi_maxreaders);
     printf("  Number of reader slots uses: %u\n", mei.mi_numreaders);
@@ -352,8 +328,7 @@ int main(int argc, char *argv[]) {
     pgno_t pages = 0, *iptr;
     pgno_t reclaimable = 0;
     MDBX_val key, data;
-    while (MDBX_SUCCESS ==
-           (rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT))) {
+    while (MDBX_SUCCESS == (rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT))) {
       if (user_break) {
         rc = MDBX_EINTR;
         break;
@@ -367,29 +342,23 @@ int main(int argc, char *argv[]) {
 
       if (freinfo > 1) {
         char *bad = "";
-        pgno_t prev =
-            MDBX_PNL_ASCENDING ? NUM_METAS - 1 : (pgno_t)mei.mi_last_pgno + 1;
+        pgno_t prev = MDBX_PNL_ASCENDING ? NUM_METAS - 1 : (pgno_t)mei.mi_last_pgno + 1;
         pgno_t span = 1;
         for (unsigned i = 0; i < number; ++i) {
           pgno_t pg = iptr[i];
           if (MDBX_PNL_DISORDERED(prev, pg))
             bad = " [bad sequence]";
           prev = pg;
-          while (i + span < number &&
-                 iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pg, span)
-                                                       : pgno_sub(pg, span)))
+          while (i + span < number && iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pg, span) : pgno_sub(pg, span)))
             ++span;
         }
-        printf("    Transaction %" PRIaTXN ", %" PRIaPGNO
-               " pages, maxspan %" PRIaPGNO "%s\n",
-               *(txnid_t *)key.iov_base, number, span, bad);
+        printf("    Transaction %" PRIaTXN ", %" PRIaPGNO " pages, maxspan %" PRIaPGNO "%s\n", *(txnid_t *)key.iov_base,
+               number, span, bad);
         if (freinfo > 2) {
           for (unsigned i = 0; i < number; i += span) {
             const pgno_t pg = iptr[i];
             for (span = 1;
-                 i + span < number &&
-                 iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pg, span)
-                                                       : pgno_sub(pg, span));
+                 i + span < number && iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pg, span) : pgno_sub(pg, span));
                  ++span)
               ;
             if (span > 1)
@@ -443,8 +412,7 @@ int main(int argc, char *argv[]) {
       value = reclaimable;
       printf("  Reclaimable: %" PRIu64 " %.1f%%\n", value, value / percent);
 
-      value = mei.mi_mapsize / mei.mi_dxb_pagesize - (mei.mi_last_pgno + 1) +
-              reclaimable;
+      value = mei.mi_mapsize / mei.mi_dxb_pagesize - (mei.mi_last_pgno + 1) + reclaimable;
       printf("  Available: %" PRIu64 " %.1f%%\n", value, value / percent);
     } else
       printf("  GC: %" PRIaPGNO " pages\n", pages);
@@ -474,8 +442,7 @@ int main(int argc, char *argv[]) {
     }
 
     MDBX_val key;
-    while (MDBX_SUCCESS ==
-           (rc = mdbx_cursor_get(cursor, &key, nullptr, MDBX_NEXT_NODUP))) {
+    while (MDBX_SUCCESS == (rc = mdbx_cursor_get(cursor, &key, nullptr, MDBX_NEXT_NODUP))) {
       MDBX_dbi xdbi;
       if (memchr(key.iov_base, '\0', key.iov_len))
         continue;

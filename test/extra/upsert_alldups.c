@@ -17,8 +17,8 @@ static int dump(MDBX_cursor *cur) {
   int rc = mdbx_cursor_get(cur, &key, &data, MDBX_FIRST);
 
   while (rc == 0) {
-    printf("(%.*s) = (%.*s)\n", (int)key.iov_len, (const char *)key.iov_base,
-           (int)data.iov_len, (const char *)data.iov_base);
+    printf("(%.*s) = (%.*s)\n", (int)key.iov_len, (const char *)key.iov_base, (int)data.iov_len,
+           (const char *)data.iov_base);
     rc = mdbx_cursor_get(cur, &key, &data, MDBX_NEXT);
   }
   return rc;
@@ -38,8 +38,7 @@ static int clear(MDBX_cursor *cur) {
   return (rc == MDBX_NOTFOUND) ? 0 : rc;
 }
 
-static int put(MDBX_txn *txn, MDBX_dbi dbi, const char *k, const char *v,
-               MDBX_put_flags_t flags) {
+static int put(MDBX_txn *txn, MDBX_dbi dbi, const char *k, const char *v, MDBX_put_flags_t flags) {
   MDBX_val key = {.iov_base = (void *)k, .iov_len = strlen(k)};
   MDBX_val data = {.iov_base = (void *)v, .iov_len = strlen(v)};
   return mdbx_put(txn, dbi, &key, &data, flags);
@@ -79,21 +78,21 @@ int main(int argc, const char *argv[]) {
     goto Fail;
   }
 
-#define DUMP()                                                                 \
-  do {                                                                         \
-    if ((rc = dump(cur)) && rc != MDBX_NOTFOUND) {                             \
-      errmsg = "failed to mdbx_cursor_get(FIRST): %s\n";                       \
-      goto Fail;                                                               \
-    }                                                                          \
-    puts("");                                                                  \
+#define DUMP()                                                                                                         \
+  do {                                                                                                                 \
+    if ((rc = dump(cur)) && rc != MDBX_NOTFOUND) {                                                                     \
+      errmsg = "failed to mdbx_cursor_get(FIRST): %s\n";                                                               \
+      goto Fail;                                                                                                       \
+    }                                                                                                                  \
+    puts("");                                                                                                          \
   } while (0)
 
-#define PUTVAL(k, v, flags)                                                    \
-  do {                                                                         \
-    if ((rc = put(txn, dbi, k, v, flags))) {                                   \
-      errmsg = "failed to mdbx_put: %s\n";                                     \
-      goto Fail;                                                               \
-    }                                                                          \
+#define PUTVAL(k, v, flags)                                                                                            \
+  do {                                                                                                                 \
+    if ((rc = put(txn, dbi, k, v, flags))) {                                                                           \
+      errmsg = "failed to mdbx_put: %s\n";                                                                             \
+      goto Fail;                                                                                                       \
+    }                                                                                                                  \
   } while (0)
 
   puts("TEST WITH MULTIPLE KEYS ====================");

@@ -49,38 +49,32 @@ static inline dpl_t *dpl_sort(const MDBX_txn *txn) {
   dpl_t *dl = txn->tw.dirtylist;
   tASSERT(txn, dl->length <= PAGELIST_LIMIT);
   tASSERT(txn, dl->sorted <= dl->length);
-  tASSERT(txn, dl->items[0].pgno == 0 &&
-                   dl->items[dl->length + 1].pgno == P_INVALID);
+  tASSERT(txn, dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   return likely(dl->sorted == dl->length) ? dl : dpl_sort_slowpath(txn);
 }
 
 MDBX_INTERNAL __noinline size_t dpl_search(const MDBX_txn *txn, pgno_t pgno);
 
-MDBX_MAYBE_UNUSED MDBX_INTERNAL const page_t *
-debug_dpl_find(const MDBX_txn *txn, const pgno_t pgno);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL const page_t *debug_dpl_find(const MDBX_txn *txn, const pgno_t pgno);
 
-MDBX_NOTHROW_PURE_FUNCTION static inline unsigned dpl_npages(const dpl_t *dl,
-                                                             size_t i) {
+MDBX_NOTHROW_PURE_FUNCTION static inline unsigned dpl_npages(const dpl_t *dl, size_t i) {
   assert(0 <= (intptr_t)i && i <= dl->length);
   unsigned n = dl->items[i].npages;
   assert(n == (is_largepage(dl->items[i].ptr) ? dl->items[i].ptr->pages : 1));
   return n;
 }
 
-MDBX_NOTHROW_PURE_FUNCTION static inline pgno_t dpl_endpgno(const dpl_t *dl,
-                                                            size_t i) {
+MDBX_NOTHROW_PURE_FUNCTION static inline pgno_t dpl_endpgno(const dpl_t *dl, size_t i) {
   return dpl_npages(dl, i) + dl->items[i].pgno;
 }
 
-static inline bool dpl_intersect(const MDBX_txn *txn, pgno_t pgno,
-                                 size_t npages) {
+static inline bool dpl_intersect(const MDBX_txn *txn, pgno_t pgno, size_t npages) {
   tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
   dpl_t *dl = txn->tw.dirtylist;
   tASSERT(txn, dl->sorted == dl->length);
-  tASSERT(txn, dl->items[0].pgno == 0 &&
-                   dl->items[dl->length + 1].pgno == P_INVALID);
+  tASSERT(txn, dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   size_t const n = dpl_search(txn, pgno);
   tASSERT(txn, n >= 1 && n <= dl->length + 1);
   tASSERT(txn, pgno <= dl->items[n].pgno);
@@ -92,8 +86,7 @@ static inline bool dpl_intersect(const MDBX_txn *txn, pgno_t pgno,
     bool check = false;
     for (size_t i = 1; i <= dl->length; ++i) {
       const page_t *const dp = dl->items[i].ptr;
-      if (!(dp->pgno /* begin */ >= /* end */ pgno + npages ||
-            dpl_endpgno(dl, i) /* end */ <= /* begin */ pgno))
+      if (!(dp->pgno /* begin */ >= /* end */ pgno + npages || dpl_endpgno(dl, i) /* end */ <= /* begin */ pgno))
         check |= true;
     }
     tASSERT(txn, check == rc);
@@ -101,8 +94,7 @@ static inline bool dpl_intersect(const MDBX_txn *txn, pgno_t pgno,
   return rc;
 }
 
-MDBX_NOTHROW_PURE_FUNCTION static inline size_t dpl_exist(const MDBX_txn *txn,
-                                                          pgno_t pgno) {
+MDBX_NOTHROW_PURE_FUNCTION static inline size_t dpl_exist(const MDBX_txn *txn, pgno_t pgno) {
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
   dpl_t *dl = txn->tw.dirtylist;
   size_t i = dpl_search(txn, pgno);
@@ -116,13 +108,11 @@ static inline void dpl_remove(const MDBX_txn *txn, size_t i) {
   dpl_remove_ex(txn, i, dpl_npages(txn->tw.dirtylist, i));
 }
 
-MDBX_INTERNAL int __must_check_result dpl_append(MDBX_txn *txn, pgno_t pgno,
-                                                 page_t *page, size_t npages);
+MDBX_INTERNAL int __must_check_result dpl_append(MDBX_txn *txn, pgno_t pgno, page_t *page, size_t npages);
 
 MDBX_MAYBE_UNUSED MDBX_INTERNAL bool dpl_check(MDBX_txn *txn);
 
-MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t dpl_age(const MDBX_txn *txn,
-                                                          size_t i) {
+MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t dpl_age(const MDBX_txn *txn, size_t i) {
   tASSERT(txn, (txn->flags & (MDBX_TXN_RDONLY | MDBX_WRITEMAP)) == 0);
   const dpl_t *dl = txn->tw.dirtylist;
   assert((intptr_t)i > 0 && i <= dl->length);
@@ -134,8 +124,7 @@ MDBX_INTERNAL void dpl_lru_reduce(MDBX_txn *txn);
 
 static inline uint32_t dpl_lru_turn(MDBX_txn *txn) {
   txn->tw.dirtylru += 1;
-  if (unlikely(txn->tw.dirtylru > UINT32_MAX / 3) &&
-      (txn->flags & MDBX_WRITEMAP) == 0)
+  if (unlikely(txn->tw.dirtylru > UINT32_MAX / 3) && (txn->flags & MDBX_WRITEMAP) == 0)
     dpl_lru_reduce(txn);
   return txn->tw.dirtylru;
 }

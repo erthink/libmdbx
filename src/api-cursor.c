@@ -14,30 +14,24 @@ MDBX_cursor *mdbx_cursor_create(void *context) {
   couple->userctx = context;
   couple->outer.top_and_flags = z_poor_mark;
   couple->inner.cursor.top_and_flags = z_poor_mark | z_inner;
-  VALGRIND_MAKE_MEM_DEFINED(&couple->outer.backup,
-                            sizeof(couple->outer.backup));
+  VALGRIND_MAKE_MEM_DEFINED(&couple->outer.backup, sizeof(couple->outer.backup));
   VALGRIND_MAKE_MEM_DEFINED(&couple->outer.tree, sizeof(couple->outer.tree));
   VALGRIND_MAKE_MEM_DEFINED(&couple->outer.clc, sizeof(couple->outer.clc));
-  VALGRIND_MAKE_MEM_DEFINED(&couple->outer.dbi_state,
-                            sizeof(couple->outer.dbi_state));
-  VALGRIND_MAKE_MEM_DEFINED(&couple->outer.subcur,
-                            sizeof(couple->outer.subcur));
+  VALGRIND_MAKE_MEM_DEFINED(&couple->outer.dbi_state, sizeof(couple->outer.dbi_state));
+  VALGRIND_MAKE_MEM_DEFINED(&couple->outer.subcur, sizeof(couple->outer.subcur));
   VALGRIND_MAKE_MEM_DEFINED(&couple->outer.txn, sizeof(couple->outer.txn));
   return &couple->outer;
 }
 
 int mdbx_cursor_renew(const MDBX_txn *txn, MDBX_cursor *mc) {
-  return likely(mc)
-             ? mdbx_cursor_bind(txn, mc, (kvx_t *)mc->clc - txn->env->kvs)
-             : LOG_IFERR(MDBX_EINVAL);
+  return likely(mc) ? mdbx_cursor_bind(txn, mc, (kvx_t *)mc->clc - txn->env->kvs) : LOG_IFERR(MDBX_EINVAL);
 }
 
 int mdbx_cursor_reset(MDBX_cursor *mc) {
   if (unlikely(!mc))
     return LOG_IFERR(MDBX_EINVAL);
 
-  if (unlikely(mc->signature != cur_signature_ready4dispose &&
-               mc->signature != cur_signature_live))
+  if (unlikely(mc->signature != cur_signature_ready4dispose && mc->signature != cur_signature_live))
     return LOG_IFERR(MDBX_EBADSIGN);
 
   cursor_couple_t *couple = (cursor_couple_t *)mc;
@@ -50,8 +44,7 @@ int mdbx_cursor_bind(const MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
   if (unlikely(!mc))
     return LOG_IFERR(MDBX_EINVAL);
 
-  if (unlikely(mc->signature != cur_signature_ready4dispose &&
-               mc->signature != cur_signature_live))
+  if (unlikely(mc->signature != cur_signature_ready4dispose && mc->signature != cur_signature_live))
     return LOG_IFERR(MDBX_EBADSIGN);
 
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
@@ -68,16 +61,14 @@ int mdbx_cursor_bind(const MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
   if (unlikely(mc->backup)) /* Cursor from parent transaction */ {
     cASSERT(mc, mc->signature == cur_signature_live);
     if (unlikely(cursor_dbi(mc) != dbi ||
-                 /* paranoia */ mc->signature != cur_signature_live ||
-                 mc->txn != txn))
+                 /* paranoia */ mc->signature != cur_signature_live || mc->txn != txn))
       return LOG_IFERR(MDBX_EINVAL);
 
     cASSERT(mc, mc->tree == &txn->dbs[dbi]);
     cASSERT(mc, mc->clc == &txn->env->kvs[dbi].clc);
     cASSERT(mc, cursor_dbi(mc) == dbi);
     return likely(cursor_dbi(mc) == dbi &&
-                  /* paranoia */ mc->signature == cur_signature_live &&
-                  mc->txn == txn)
+                  /* paranoia */ mc->signature == cur_signature_live && mc->txn == txn)
                ? MDBX_SUCCESS
                : LOG_IFERR(MDBX_EINVAL) /* Disallow change DBI in nested
                                            transactions */
@@ -105,9 +96,7 @@ int mdbx_cursor_unbind(MDBX_cursor *mc) {
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(mc->signature != cur_signature_live))
-    return (mc->signature == cur_signature_ready4dispose)
-               ? MDBX_SUCCESS
-               : LOG_IFERR(MDBX_EBADSIGN);
+    return (mc->signature == cur_signature_ready4dispose) ? MDBX_SUCCESS : LOG_IFERR(MDBX_EBADSIGN);
 
   if (unlikely(mc->backup)) /* Cursor from parent transaction */
     return LOG_IFERR(MDBX_EINVAL);
@@ -116,9 +105,7 @@ int mdbx_cursor_unbind(MDBX_cursor *mc) {
   cASSERT(mc, mc->signature == cur_signature_live);
   cASSERT(mc, !mc->backup);
   if (unlikely(!mc->txn || mc->txn->signature != txn_signature)) {
-    ERROR("Wrong cursor's transaction %p 0x%x",
-          __Wpedantic_format_voidptr(mc->txn),
-          mc->txn ? mc->txn->signature : 0);
+    ERROR("Wrong cursor's transaction %p 0x%x", __Wpedantic_format_voidptr(mc->txn), mc->txn ? mc->txn->signature : 0);
     return LOG_IFERR(MDBX_PROBLEM);
   }
   if (mc->next != mc) {
@@ -160,8 +147,7 @@ int mdbx_cursor_open(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
 
 void mdbx_cursor_close(MDBX_cursor *mc) {
   if (likely(mc)) {
-    ENSURE(nullptr, mc->signature == cur_signature_live ||
-                        mc->signature == cur_signature_ready4dispose);
+    ENSURE(nullptr, mc->signature == cur_signature_live || mc->signature == cur_signature_ready4dispose);
     MDBX_txn *const txn = mc->txn;
     if (!mc->backup) {
       mc->txn = nullptr;
@@ -194,9 +180,7 @@ int mdbx_cursor_copy(const MDBX_cursor *src, MDBX_cursor *dest) {
   if (unlikely(!src))
     return LOG_IFERR(MDBX_EINVAL);
   if (unlikely(src->signature != cur_signature_live))
-    return LOG_IFERR((src->signature == cur_signature_ready4dispose)
-                         ? MDBX_EINVAL
-                         : MDBX_EBADSIGN);
+    return LOG_IFERR((src->signature == cur_signature_ready4dispose) ? MDBX_EINVAL : MDBX_EBADSIGN);
 
   int rc = mdbx_cursor_bind(src->txn, dest, cursor_dbi(src));
   if (unlikely(rc != MDBX_SUCCESS))
@@ -229,8 +213,7 @@ int mdbx_txn_release_all_cursors(const MDBX_txn *txn, bool unbind) {
     TXN_FOREACH_DBI_FROM(txn, i, MAIN_DBI) {
       while (txn->cursors[i]) {
         MDBX_cursor *mc = txn->cursors[i];
-        ENSURE(nullptr, mc->signature == cur_signature_live &&
-                            (mc->next != mc) && !mc->backup);
+        ENSURE(nullptr, mc->signature == cur_signature_live && (mc->next != mc) && !mc->backup);
         rc = likely(rc < INT_MAX) ? rc + 1 : rc;
         txn->cursors[i] = mc->next;
         mc->next = mc;
@@ -250,8 +233,7 @@ int mdbx_txn_release_all_cursors(const MDBX_txn *txn, bool unbind) {
   return rc;
 }
 
-int mdbx_cursor_compare(const MDBX_cursor *l, const MDBX_cursor *r,
-                        bool ignore_multival) {
+int mdbx_cursor_compare(const MDBX_cursor *l, const MDBX_cursor *r, bool ignore_multival) {
   const int incomparable = INT16_MAX + 1;
   if (unlikely(!l))
     return r ? -incomparable * 9 : 0;
@@ -267,8 +249,7 @@ int mdbx_cursor_compare(const MDBX_cursor *l, const MDBX_cursor *r,
     if (l->txn->env != r->txn->env)
       return (l->txn->env > r->txn->env) ? incomparable * 7 : -incomparable * 7;
     if (l->txn->txnid != r->txn->txnid)
-      return (l->txn->txnid > r->txn->txnid) ? incomparable * 6
-                                             : -incomparable * 6;
+      return (l->txn->txnid > r->txn->txnid) ? incomparable * 6 : -incomparable * 6;
     return (l->clc > r->clc) ? incomparable * 5 : -incomparable * 5;
   }
   assert(cursor_dbi(l) == cursor_dbi(r));
@@ -333,9 +314,7 @@ int mdbx_cursor_count(const MDBX_cursor *mc, size_t *countp) {
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(mc->signature != cur_signature_live))
-    return LOG_IFERR((mc->signature == cur_signature_ready4dispose)
-                         ? MDBX_EINVAL
-                         : MDBX_EBADSIGN);
+    return LOG_IFERR((mc->signature == cur_signature_ready4dispose) ? MDBX_EINVAL : MDBX_EBADSIGN);
 
   int rc = check_txn(mc->txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -349,9 +328,8 @@ int mdbx_cursor_count(const MDBX_cursor *mc, size_t *countp) {
       const page_t *mp = mc->pg[mc->top];
       const node_t *node = page_node(mp, mc->ki[mc->top]);
       cASSERT(mc, node_flags(node) & N_DUP);
-      *countp = unlikely(mc->subcur->nested_tree.items > PTRDIFF_MAX)
-                    ? PTRDIFF_MAX
-                    : (size_t)mc->subcur->nested_tree.items;
+      *countp =
+          unlikely(mc->subcur->nested_tree.items > PTRDIFF_MAX) ? PTRDIFF_MAX : (size_t)mc->subcur->nested_tree.items;
     }
   }
   return MDBX_SUCCESS;
@@ -362,9 +340,7 @@ int mdbx_cursor_on_first(const MDBX_cursor *mc) {
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(mc->signature != cur_signature_live))
-    return LOG_IFERR((mc->signature == cur_signature_ready4dispose)
-                         ? MDBX_EINVAL
-                         : MDBX_EBADSIGN);
+    return LOG_IFERR((mc->signature == cur_signature_ready4dispose) ? MDBX_EINVAL : MDBX_EBADSIGN);
 
   for (intptr_t i = 0; i <= mc->top; ++i) {
     if (mc->ki[i])
@@ -379,9 +355,7 @@ int mdbx_cursor_on_first_dup(const MDBX_cursor *mc) {
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(mc->signature != cur_signature_live))
-    return LOG_IFERR((mc->signature == cur_signature_ready4dispose)
-                         ? MDBX_EINVAL
-                         : MDBX_EBADSIGN);
+    return LOG_IFERR((mc->signature == cur_signature_ready4dispose) ? MDBX_EINVAL : MDBX_EBADSIGN);
 
   if (is_filled(mc) && mc->subcur) {
     mc = &mc->subcur->cursor;
@@ -399,9 +373,7 @@ int mdbx_cursor_on_last(const MDBX_cursor *mc) {
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(mc->signature != cur_signature_live))
-    return LOG_IFERR((mc->signature == cur_signature_ready4dispose)
-                         ? MDBX_EINVAL
-                         : MDBX_EBADSIGN);
+    return LOG_IFERR((mc->signature == cur_signature_ready4dispose) ? MDBX_EINVAL : MDBX_EBADSIGN);
 
   for (intptr_t i = 0; i <= mc->top; ++i) {
     size_t nkeys = page_numkeys(mc->pg[i]);
@@ -417,9 +389,7 @@ int mdbx_cursor_on_last_dup(const MDBX_cursor *mc) {
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(mc->signature != cur_signature_live))
-    return LOG_IFERR((mc->signature == cur_signature_ready4dispose)
-                         ? MDBX_EINVAL
-                         : MDBX_EBADSIGN);
+    return LOG_IFERR((mc->signature == cur_signature_ready4dispose) ? MDBX_EINVAL : MDBX_EBADSIGN);
 
   if (is_filled(mc) && mc->subcur) {
     mc = &mc->subcur->cursor;
@@ -438,22 +408,17 @@ int mdbx_cursor_eof(const MDBX_cursor *mc) {
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(mc->signature != cur_signature_live))
-    return LOG_IFERR((mc->signature == cur_signature_ready4dispose)
-                         ? MDBX_EINVAL
-                         : MDBX_EBADSIGN);
+    return LOG_IFERR((mc->signature == cur_signature_ready4dispose) ? MDBX_EINVAL : MDBX_EBADSIGN);
 
   return is_eof(mc) ? MDBX_RESULT_TRUE : MDBX_RESULT_FALSE;
 }
 
-int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
-                    MDBX_cursor_op op) {
+int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cursor_op op) {
   if (unlikely(mc == nullptr))
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(mc->signature != cur_signature_live))
-    return LOG_IFERR((mc->signature == cur_signature_ready4dispose)
-                         ? MDBX_EINVAL
-                         : MDBX_EBADSIGN);
+    return LOG_IFERR((mc->signature == cur_signature_ready4dispose) ? MDBX_EINVAL : MDBX_EBADSIGN);
 
   int rc = check_txn(mc->txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -465,8 +430,7 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   return LOG_IFERR(cursor_ops(mc, key, data, op));
 }
 
-__hot static int scan_confinue(MDBX_cursor *mc, MDBX_predicate_func *predicate,
-                               void *context, void *arg, MDBX_val *key,
+__hot static int scan_confinue(MDBX_cursor *mc, MDBX_predicate_func *predicate, void *context, void *arg, MDBX_val *key,
                                MDBX_val *value, MDBX_cursor_op turn_op) {
   int rc;
   switch (turn_op) {
@@ -528,22 +492,19 @@ __hot static int scan_confinue(MDBX_cursor *mc, MDBX_predicate_func *predicate,
   }
 }
 
-int mdbx_cursor_scan(MDBX_cursor *mc, MDBX_predicate_func *predicate,
-                     void *context, MDBX_cursor_op start_op,
+int mdbx_cursor_scan(MDBX_cursor *mc, MDBX_predicate_func *predicate, void *context, MDBX_cursor_op start_op,
                      MDBX_cursor_op turn_op, void *arg) {
   if (unlikely(!predicate))
     return LOG_IFERR(MDBX_EINVAL);
 
-  const unsigned valid_start_mask =
-      1 << MDBX_FIRST | 1 << MDBX_FIRST_DUP | 1 << MDBX_LAST |
-      1 << MDBX_LAST_DUP | 1 << MDBX_GET_CURRENT | 1 << MDBX_GET_MULTIPLE;
+  const unsigned valid_start_mask = 1 << MDBX_FIRST | 1 << MDBX_FIRST_DUP | 1 << MDBX_LAST | 1 << MDBX_LAST_DUP |
+                                    1 << MDBX_GET_CURRENT | 1 << MDBX_GET_MULTIPLE;
   if (unlikely(start_op > 30 || ((1 << start_op) & valid_start_mask) == 0))
     return LOG_IFERR(MDBX_EINVAL);
 
-  const unsigned valid_turn_mask =
-      1 << MDBX_NEXT | 1 << MDBX_NEXT_DUP | 1 << MDBX_NEXT_NODUP |
-      1 << MDBX_PREV | 1 << MDBX_PREV_DUP | 1 << MDBX_PREV_NODUP |
-      1 << MDBX_NEXT_MULTIPLE | 1 << MDBX_PREV_MULTIPLE;
+  const unsigned valid_turn_mask = 1 << MDBX_NEXT | 1 << MDBX_NEXT_DUP | 1 << MDBX_NEXT_NODUP | 1 << MDBX_PREV |
+                                   1 << MDBX_PREV_DUP | 1 << MDBX_PREV_NODUP | 1 << MDBX_NEXT_MULTIPLE |
+                                   1 << MDBX_PREV_MULTIPLE;
   if (unlikely(turn_op > 30 || ((1 << turn_op) & valid_turn_mask) == 0))
     return LOG_IFERR(MDBX_EINVAL);
 
@@ -551,28 +512,22 @@ int mdbx_cursor_scan(MDBX_cursor *mc, MDBX_predicate_func *predicate,
   int rc = mdbx_cursor_get(mc, &key, &value, start_op);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
-  return LOG_IFERR(
-      scan_confinue(mc, predicate, context, arg, &key, &value, turn_op));
+  return LOG_IFERR(scan_confinue(mc, predicate, context, arg, &key, &value, turn_op));
 }
 
-int mdbx_cursor_scan_from(MDBX_cursor *mc, MDBX_predicate_func *predicate,
-                          void *context, MDBX_cursor_op from_op, MDBX_val *key,
-                          MDBX_val *value, MDBX_cursor_op turn_op, void *arg) {
+int mdbx_cursor_scan_from(MDBX_cursor *mc, MDBX_predicate_func *predicate, void *context, MDBX_cursor_op from_op,
+                          MDBX_val *key, MDBX_val *value, MDBX_cursor_op turn_op, void *arg) {
   if (unlikely(!predicate || !key))
     return LOG_IFERR(MDBX_EINVAL);
 
-  const unsigned valid_start_mask =
-      1 << MDBX_GET_BOTH | 1 << MDBX_GET_BOTH_RANGE | 1 << MDBX_SET_KEY |
-      1 << MDBX_GET_MULTIPLE | 1 << MDBX_SET_LOWERBOUND |
-      1 << MDBX_SET_UPPERBOUND;
-  if (unlikely(from_op < MDBX_TO_KEY_LESSER_THAN &&
-               ((1 << from_op) & valid_start_mask) == 0))
+  const unsigned valid_start_mask = 1 << MDBX_GET_BOTH | 1 << MDBX_GET_BOTH_RANGE | 1 << MDBX_SET_KEY |
+                                    1 << MDBX_GET_MULTIPLE | 1 << MDBX_SET_LOWERBOUND | 1 << MDBX_SET_UPPERBOUND;
+  if (unlikely(from_op < MDBX_TO_KEY_LESSER_THAN && ((1 << from_op) & valid_start_mask) == 0))
     return LOG_IFERR(MDBX_EINVAL);
 
-  const unsigned valid_turn_mask =
-      1 << MDBX_NEXT | 1 << MDBX_NEXT_DUP | 1 << MDBX_NEXT_NODUP |
-      1 << MDBX_PREV | 1 << MDBX_PREV_DUP | 1 << MDBX_PREV_NODUP |
-      1 << MDBX_NEXT_MULTIPLE | 1 << MDBX_PREV_MULTIPLE;
+  const unsigned valid_turn_mask = 1 << MDBX_NEXT | 1 << MDBX_NEXT_DUP | 1 << MDBX_NEXT_NODUP | 1 << MDBX_PREV |
+                                   1 << MDBX_PREV_DUP | 1 << MDBX_PREV_NODUP | 1 << MDBX_NEXT_MULTIPLE |
+                                   1 << MDBX_PREV_MULTIPLE;
   if (unlikely(turn_op > 30 || ((1 << turn_op) & valid_turn_mask) == 0))
     return LOG_IFERR(MDBX_EINVAL);
 
@@ -588,12 +543,10 @@ int mdbx_cursor_scan_from(MDBX_cursor *mc, MDBX_predicate_func *predicate,
     if (unlikely(rc != MDBX_SUCCESS))
       return LOG_IFERR(rc);
   }
-  return LOG_IFERR(
-      scan_confinue(mc, predicate, context, arg, key, value, turn_op));
+  return LOG_IFERR(scan_confinue(mc, predicate, context, arg, key, value, turn_op));
 }
 
-int mdbx_cursor_get_batch(MDBX_cursor *mc, size_t *count, MDBX_val *pairs,
-                          size_t limit, MDBX_cursor_op op) {
+int mdbx_cursor_get_batch(MDBX_cursor *mc, size_t *count, MDBX_val *pairs, size_t limit, MDBX_cursor_op op) {
   if (unlikely(!count))
     return LOG_IFERR(MDBX_EINVAL);
 
@@ -602,9 +555,7 @@ int mdbx_cursor_get_batch(MDBX_cursor *mc, size_t *count, MDBX_val *pairs,
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(mc->signature != cur_signature_live))
-    return LOG_IFERR((mc->signature == cur_signature_ready4dispose)
-                         ? MDBX_EINVAL
-                         : MDBX_EBADSIGN);
+    return LOG_IFERR((mc->signature == cur_signature_ready4dispose) ? MDBX_EINVAL : MDBX_EBADSIGN);
 
   int rc = check_txn(mc->txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -661,11 +612,9 @@ int mdbx_cursor_get_batch(MDBX_cursor *mc, size_t *count, MDBX_val *pairs,
       }
 
       mp = mc->pg[mc->top];
-      DEBUG("next page is %" PRIaPGNO ", key index %u", mp->pgno,
-            mc->ki[mc->top]);
+      DEBUG("next page is %" PRIaPGNO ", key index %u", mp->pgno, mc->ki[mc->top]);
       if (!MDBX_DISABLE_VALIDATION && unlikely(!check_leaf_type(mc, mp))) {
-        ERROR("unexpected leaf-page #%" PRIaPGNO " type 0x%x seen by cursor",
-              mp->pgno, mp->flags);
+        ERROR("unexpected leaf-page #%" PRIaPGNO " type 0x%x seen by cursor", mp->pgno, mp->flags);
         rc = MDBX_CORRUPTED;
         goto bailout;
       }
@@ -686,8 +635,7 @@ int mdbx_cursor_set_userctx(MDBX_cursor *mc, void *ctx) {
   if (unlikely(!mc))
     return LOG_IFERR(MDBX_EINVAL);
 
-  if (unlikely(mc->signature != cur_signature_ready4dispose &&
-               mc->signature != cur_signature_live))
+  if (unlikely(mc->signature != cur_signature_ready4dispose && mc->signature != cur_signature_live))
     return LOG_IFERR(MDBX_EBADSIGN);
 
   cursor_couple_t *couple = container_of(mc, cursor_couple_t, outer);
@@ -699,8 +647,7 @@ void *mdbx_cursor_get_userctx(const MDBX_cursor *mc) {
   if (unlikely(!mc))
     return nullptr;
 
-  if (unlikely(mc->signature != cur_signature_ready4dispose &&
-               mc->signature != cur_signature_live))
+  if (unlikely(mc->signature != cur_signature_ready4dispose && mc->signature != cur_signature_live))
     return nullptr;
 
   cursor_couple_t *couple = container_of(mc, cursor_couple_t, outer);
@@ -726,15 +673,12 @@ MDBX_dbi mdbx_cursor_dbi(const MDBX_cursor *mc) {
 
 /*----------------------------------------------------------------------------*/
 
-int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
-                    MDBX_put_flags_t flags) {
+int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, MDBX_put_flags_t flags) {
   if (unlikely(mc == nullptr || key == nullptr || data == nullptr))
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(mc->signature != cur_signature_live))
-    return LOG_IFERR((mc->signature == cur_signature_ready4dispose)
-                         ? MDBX_EINVAL
-                         : MDBX_EBADSIGN);
+    return LOG_IFERR((mc->signature == cur_signature_ready4dispose) ? MDBX_EINVAL : MDBX_EBADSIGN);
 
   int rc = check_txn_rw(mc->txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -754,12 +698,9 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
     const size_t dcount = data[1].iov_len;
     if (unlikely(dcount < 2 || data->iov_len == 0))
       return LOG_IFERR(MDBX_BAD_VALSIZE);
-    if (unlikely(mc->tree->dupfix_size != data->iov_len) &&
-        mc->tree->dupfix_size)
+    if (unlikely(mc->tree->dupfix_size != data->iov_len) && mc->tree->dupfix_size)
       return LOG_IFERR(MDBX_BAD_VALSIZE);
-    if (unlikely(dcount >
-                 MAX_MAPSIZE / 2 /
-                     (BRANCH_NODE_MAX(MDBX_MAX_PAGESIZE) - NODESIZE))) {
+    if (unlikely(dcount > MAX_MAPSIZE / 2 / (BRANCH_NODE_MAX(MDBX_MAX_PAGESIZE) - NODESIZE))) {
       /* checking for multiplication overflow */
       if (unlikely(dcount > MAX_MAPSIZE / 2 / data->iov_len))
         return LOG_IFERR(MDBX_TOO_LARGE);
@@ -767,15 +708,13 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
   }
 
   if (flags & MDBX_RESERVE) {
-    if (unlikely(mc->tree->flags & (MDBX_DUPSORT | MDBX_REVERSEDUP |
-                                    MDBX_INTEGERDUP | MDBX_DUPFIXED)))
+    if (unlikely(mc->tree->flags & (MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_INTEGERDUP | MDBX_DUPFIXED)))
       return LOG_IFERR(MDBX_INCOMPATIBLE);
     data->iov_base = nullptr;
   }
 
   if (unlikely(mc->txn->flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
-    return LOG_IFERR((mc->txn->flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS
-                                                        : MDBX_BAD_TXN);
+    return LOG_IFERR((mc->txn->flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN);
 
   return LOG_IFERR(cursor_put_checklen(mc, key, data, flags));
 }
@@ -785,9 +724,7 @@ int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(mc->signature != cur_signature_live))
-    return LOG_IFERR((mc->signature == cur_signature_ready4dispose)
-                         ? MDBX_EINVAL
-                         : MDBX_EBADSIGN);
+    return LOG_IFERR((mc->signature == cur_signature_ready4dispose) ? MDBX_EINVAL : MDBX_EBADSIGN);
 
   int rc = check_txn_rw(mc->txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -804,9 +741,7 @@ __cold int mdbx_cursor_ignord(MDBX_cursor *mc) {
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(mc->signature != cur_signature_live))
-    return LOG_IFERR((mc->signature == cur_signature_ready4dispose)
-                         ? MDBX_EINVAL
-                         : MDBX_EBADSIGN);
+    return LOG_IFERR((mc->signature == cur_signature_ready4dispose) ? MDBX_EINVAL : MDBX_EBADSIGN);
 
   mc->checking |= z_ignord;
   if (mc->subcur)

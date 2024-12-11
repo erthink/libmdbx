@@ -16,10 +16,8 @@
 #define LCK_WAITFOR 0
 #define LCK_DONTWAIT LOCKFILE_FAIL_IMMEDIATELY
 
-static int flock_with_event(HANDLE fd, HANDLE event, unsigned flags,
-                            size_t offset, size_t bytes) {
-  TRACE("lock>>: fd %p, event %p, flags 0x%x offset %zu, bytes %zu >>", fd,
-        event, flags, offset, bytes);
+static int flock_with_event(HANDLE fd, HANDLE event, unsigned flags, size_t offset, size_t bytes) {
+  TRACE("lock>>: fd %p, event %p, flags 0x%x offset %zu, bytes %zu >>", fd, event, flags, offset, bytes);
   OVERLAPPED ov;
   ov.Internal = 0;
   ov.InternalHigh = 0;
@@ -27,8 +25,7 @@ static int flock_with_event(HANDLE fd, HANDLE event, unsigned flags,
   ov.Offset = (DWORD)offset;
   ov.OffsetHigh = HIGH_DWORD(offset);
   if (LockFileEx(fd, flags, 0, (DWORD)bytes, HIGH_DWORD(bytes), &ov)) {
-    TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << %s", fd,
-          event, flags, offset, bytes, "done");
+    TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << %s", fd, event, flags, offset, bytes, "done");
     return MDBX_SUCCESS;
   }
 
@@ -36,37 +33,32 @@ static int flock_with_event(HANDLE fd, HANDLE event, unsigned flags,
   if (rc == ERROR_IO_PENDING) {
     if (event) {
       if (GetOverlappedResult(fd, &ov, &rc, true)) {
-        TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << %s",
-              fd, event, flags, offset, bytes, "overlapped-done");
+        TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << %s", fd, event, flags, offset, bytes,
+              "overlapped-done");
         return MDBX_SUCCESS;
       }
       rc = GetLastError();
     } else
       CancelIo(fd);
   }
-  TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << err %d",
-        fd, event, flags, offset, bytes, (int)rc);
+  TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << err %d", fd, event, flags, offset, bytes,
+        (int)rc);
   return (int)rc;
 }
 
-static inline int flock(HANDLE fd, unsigned flags, size_t offset,
-                        size_t bytes) {
+static inline int flock(HANDLE fd, unsigned flags, size_t offset, size_t bytes) {
   return flock_with_event(fd, 0, flags, offset, bytes);
 }
 
-static inline int flock_data(const MDBX_env *env, unsigned flags, size_t offset,
-                             size_t bytes) {
-  const HANDLE fd4data =
-      env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
+static inline int flock_data(const MDBX_env *env, unsigned flags, size_t offset, size_t bytes) {
+  const HANDLE fd4data = env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
   return flock_with_event(fd4data, env->dxb_lock_event, flags, offset, bytes);
 }
 
 static int funlock(mdbx_filehandle_t fd, size_t offset, size_t bytes) {
   TRACE("unlock: fd %p, offset %zu, bytes %zu", fd, offset, bytes);
-  return UnlockFile(fd, (DWORD)offset, HIGH_DWORD(offset), (DWORD)bytes,
-                    HIGH_DWORD(bytes))
-             ? MDBX_SUCCESS
-             : (int)GetLastError();
+  return UnlockFile(fd, (DWORD)offset, HIGH_DWORD(offset), (DWORD)bytes, HIGH_DWORD(bytes)) ? MDBX_SUCCESS
+                                                                                            : (int)GetLastError();
 }
 
 /*----------------------------------------------------------------------------*/
@@ -88,9 +80,7 @@ int lck_txn_lock(MDBX_env *env, bool dontwait) {
   } else {
     __try {
       EnterCriticalSection(&env->windowsbug_lock);
-    }
-    __except ((GetExceptionCode() ==
-                 0xC0000194 /* STATUS_POSSIBLE_DEADLOCK / EXCEPTION_POSSIBLE_DEADLOCK */)
+    } __except ((GetExceptionCode() == 0xC0000194 /* STATUS_POSSIBLE_DEADLOCK / EXCEPTION_POSSIBLE_DEADLOCK */)
                     ? EXCEPTION_EXECUTE_HANDLER
                     : EXCEPTION_CONTINUE_SEARCH) {
       return MDBX_EDEADLK;
@@ -101,20 +91,15 @@ int lck_txn_lock(MDBX_env *env, bool dontwait) {
   if (env->flags & MDBX_EXCLUSIVE)
     goto done;
 
-  const HANDLE fd4data =
-      env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
+  const HANDLE fd4data = env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
   int rc = flock_with_event(fd4data, env->dxb_lock_event,
-                            dontwait ? (LCK_EXCLUSIVE | LCK_DONTWAIT)
-                                     : (LCK_EXCLUSIVE | LCK_WAITFOR),
-                            DXB_BODY);
+                            dontwait ? (LCK_EXCLUSIVE | LCK_DONTWAIT) : (LCK_EXCLUSIVE | LCK_WAITFOR), DXB_BODY);
   if (rc == ERROR_LOCK_VIOLATION && dontwait) {
     SleepEx(0, true);
-    rc = flock_with_event(fd4data, env->dxb_lock_event,
-                          LCK_EXCLUSIVE | LCK_DONTWAIT, DXB_BODY);
+    rc = flock_with_event(fd4data, env->dxb_lock_event, LCK_EXCLUSIVE | LCK_DONTWAIT, DXB_BODY);
     if (rc == ERROR_LOCK_VIOLATION) {
       SleepEx(0, true);
-      rc = flock_with_event(fd4data, env->dxb_lock_event,
-                            LCK_EXCLUSIVE | LCK_DONTWAIT, DXB_BODY);
+      rc = flock_with_event(fd4data, env->dxb_lock_event, LCK_EXCLUSIVE | LCK_DONTWAIT, DXB_BODY);
     }
   }
   if (rc == MDBX_SUCCESS) {
@@ -133,8 +118,7 @@ int lck_txn_lock(MDBX_env *env, bool dontwait) {
 void lck_txn_unlock(MDBX_env *env) {
   eASSERT(env, env->basal_txn->owner == osal_thread_self());
   if ((env->flags & MDBX_EXCLUSIVE) == 0) {
-    const HANDLE fd4data =
-        env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
+    const HANDLE fd4data = env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
     int err = funlock(fd4data, DXB_BODY);
     if (err != MDBX_SUCCESS)
       mdbx_panic("%s failed: err %u", __func__, err);
@@ -173,8 +157,7 @@ MDBX_INTERNAL int lck_rdt_lock(MDBX_env *env) {
 }
 
 MDBX_INTERNAL void lck_rdt_unlock(MDBX_env *env) {
-  if (env->lck_mmap.fd != INVALID_HANDLE_VALUE &&
-      (env->flags & MDBX_EXCLUSIVE) == 0) {
+  if (env->lck_mmap.fd != INVALID_HANDLE_VALUE && (env->flags & MDBX_EXCLUSIVE) == 0) {
     /* transition from S-E (locked) to S-? (used), e.g. unlock upper-part */
     int err = funlock(env->lck_mmap.fd, LCK_UPPER);
     if (err != MDBX_SUCCESS)
@@ -184,22 +167,15 @@ MDBX_INTERNAL void lck_rdt_unlock(MDBX_env *env) {
 }
 
 MDBX_INTERNAL int osal_lockfile(mdbx_filehandle_t fd, bool wait) {
-  return flock(
-      fd, wait ? LCK_EXCLUSIVE | LCK_WAITFOR : LCK_EXCLUSIVE | LCK_DONTWAIT, 0,
-      DXB_MAXLEN);
+  return flock(fd, wait ? LCK_EXCLUSIVE | LCK_WAITFOR : LCK_EXCLUSIVE | LCK_DONTWAIT, 0, DXB_MAXLEN);
 }
 
-static int suspend_and_append(mdbx_handle_array_t **array,
-                              const DWORD ThreadId) {
+static int suspend_and_append(mdbx_handle_array_t **array, const DWORD ThreadId) {
   const unsigned limit = (*array)->limit;
   if ((*array)->count == limit) {
-    mdbx_handle_array_t *const ptr =
-        osal_realloc((limit > ARRAY_LENGTH((*array)->handles))
-                         ? *array
-                         : /* don't free initial array on the stack */ nullptr,
-                     sizeof(mdbx_handle_array_t) +
-                         sizeof(HANDLE) * (limit * (size_t)2 -
-                                           ARRAY_LENGTH((*array)->handles)));
+    mdbx_handle_array_t *const ptr = osal_realloc(
+        (limit > ARRAY_LENGTH((*array)->handles)) ? *array : /* don't free initial array on the stack */ nullptr,
+        sizeof(mdbx_handle_array_t) + sizeof(HANDLE) * (limit * (size_t)2 - ARRAY_LENGTH((*array)->handles)));
     if (!ptr)
       return MDBX_ENOMEM;
     if (limit == ARRAY_LENGTH((*array)->handles))
@@ -208,16 +184,15 @@ static int suspend_and_append(mdbx_handle_array_t **array,
     (*array)->limit = limit * 2;
   }
 
-  HANDLE hThread = OpenThread(THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION,
-                              FALSE, ThreadId);
+  HANDLE hThread = OpenThread(THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION, FALSE, ThreadId);
   if (hThread == nullptr)
     return (int)GetLastError();
 
   if (SuspendThread(hThread) == (DWORD)-1) {
     int err = (int)GetLastError();
     DWORD ExitCode;
-    if (err == /* workaround for Win10 UCRT bug */ ERROR_ACCESS_DENIED ||
-        !GetExitCodeThread(hThread, &ExitCode) || ExitCode != STILL_ACTIVE)
+    if (err == /* workaround for Win10 UCRT bug */ ERROR_ACCESS_DENIED || !GetExitCodeThread(hThread, &ExitCode) ||
+        ExitCode != STILL_ACTIVE)
       err = MDBX_SUCCESS;
     CloseHandle(hThread);
     return err;
@@ -227,21 +202,17 @@ static int suspend_and_append(mdbx_handle_array_t **array,
   return MDBX_SUCCESS;
 }
 
-MDBX_INTERNAL int
-osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
+MDBX_INTERNAL int osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
   eASSERT(env, (env->flags & MDBX_NOSTICKYTHREADS) == 0);
   const uintptr_t CurrentTid = GetCurrentThreadId();
   int rc;
   if (env->lck_mmap.lck) {
     /* Scan LCK for threads of the current process */
     const reader_slot_t *const begin = env->lck_mmap.lck->rdt;
-    const reader_slot_t *const end =
-        begin +
-        atomic_load32(&env->lck_mmap.lck->rdt_length, mo_AcquireRelease);
+    const reader_slot_t *const end = begin + atomic_load32(&env->lck_mmap.lck->rdt_length, mo_AcquireRelease);
     const uintptr_t WriteTxnOwner = env->basal_txn ? env->basal_txn->owner : 0;
     for (const reader_slot_t *reader = begin; reader < end; ++reader) {
-      if (reader->pid.weak != env->pid || !reader->tid.weak ||
-          reader->tid.weak >= MDBX_TID_TXN_OUSTED) {
+      if (reader->pid.weak != env->pid || !reader->tid.weak || reader->tid.weak >= MDBX_TID_TXN_OUSTED) {
       skip_lck:
         continue;
       }
@@ -280,8 +251,7 @@ osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
     }
 
     do {
-      if (entry.th32OwnerProcessID != env->pid ||
-          entry.th32ThreadID == CurrentTid)
+      if (entry.th32OwnerProcessID != env->pid || entry.th32ThreadID == CurrentTid)
         continue;
 
       rc = suspend_and_append(array, entry.th32ThreadID);
@@ -306,8 +276,8 @@ MDBX_INTERNAL int osal_resume_threads_after_remap(mdbx_handle_array_t *array) {
     if (ResumeThread(hThread) == (DWORD)-1) {
       const int err = (int)GetLastError();
       DWORD ExitCode;
-      if (err != /* workaround for Win10 UCRT bug */ ERROR_ACCESS_DENIED &&
-          GetExitCodeThread(hThread, &ExitCode) && ExitCode == STILL_ACTIVE)
+      if (err != /* workaround for Win10 UCRT bug */ ERROR_ACCESS_DENIED && GetExitCodeThread(hThread, &ExitCode) &&
+          ExitCode == STILL_ACTIVE)
         rc = err;
     }
     CloseHandle(hThread);
@@ -358,35 +328,30 @@ static void lck_unlock(MDBX_env *env) {
     do
       err = funlock(env->lck_mmap.fd, LCK_LOWER);
     while (err == MDBX_SUCCESS);
-    assert(err == ERROR_NOT_LOCKED ||
-           (globals.running_under_Wine && err == ERROR_LOCK_VIOLATION));
+    assert(err == ERROR_NOT_LOCKED || (globals.running_under_Wine && err == ERROR_LOCK_VIOLATION));
     SetLastError(ERROR_SUCCESS);
 
     do
       err = funlock(env->lck_mmap.fd, LCK_UPPER);
     while (err == MDBX_SUCCESS);
-    assert(err == ERROR_NOT_LOCKED ||
-           (globals.running_under_Wine && err == ERROR_LOCK_VIOLATION));
+    assert(err == ERROR_NOT_LOCKED || (globals.running_under_Wine && err == ERROR_LOCK_VIOLATION));
     SetLastError(ERROR_SUCCESS);
   }
 
-  const HANDLE fd4data =
-      env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
+  const HANDLE fd4data = env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
   if (fd4data != INVALID_HANDLE_VALUE) {
     /* explicitly unlock to avoid latency for other processes (windows kernel
      * releases such locks via deferred queues) */
     do
       err = funlock(fd4data, DXB_BODY);
     while (err == MDBX_SUCCESS);
-    assert(err == ERROR_NOT_LOCKED ||
-           (globals.running_under_Wine && err == ERROR_LOCK_VIOLATION));
+    assert(err == ERROR_NOT_LOCKED || (globals.running_under_Wine && err == ERROR_LOCK_VIOLATION));
     SetLastError(ERROR_SUCCESS);
 
     do
       err = funlock(fd4data, DXB_WHOLE);
     while (err == MDBX_SUCCESS);
-    assert(err == ERROR_NOT_LOCKED ||
-           (globals.running_under_Wine && err == ERROR_LOCK_VIOLATION));
+    assert(err == ERROR_NOT_LOCKED || (globals.running_under_Wine && err == ERROR_LOCK_VIOLATION));
     SetLastError(ERROR_SUCCESS);
   }
 }
@@ -418,8 +383,7 @@ static int internal_seize_lck(HANDLE lfd) {
     /* 6) something went wrong, give up */
     rc = funlock(lfd, LCK_UPPER);
     if (rc != MDBX_SUCCESS)
-      mdbx_panic("%s(%s) failed: err %u", __func__, "?-E(middle) >> ?-?(free)",
-                 rc);
+      mdbx_panic("%s(%s) failed: err %u", __func__, "?-E(middle) >> ?-?(free)", rc);
     return rc;
   }
 
@@ -435,16 +399,14 @@ static int internal_seize_lck(HANDLE lfd) {
    *    transition to S-? (used) or ?-? (free) */
   int err = funlock(lfd, LCK_UPPER);
   if (err != MDBX_SUCCESS)
-    mdbx_panic("%s(%s) failed: err %u", __func__,
-               "X-E(locked/middle) >> X-?(used/free)", err);
+    mdbx_panic("%s(%s) failed: err %u", __func__, "X-E(locked/middle) >> X-?(used/free)", err);
 
   /* 9) now on S-? (used, DONE) or ?-? (free, FAILURE) */
   return rc;
 }
 
 MDBX_INTERNAL int lck_seize(MDBX_env *env) {
-  const HANDLE fd4data =
-      env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
+  const HANDLE fd4data = env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
   assert(fd4data != INVALID_HANDLE_VALUE);
   if (env->flags & MDBX_EXCLUSIVE)
     return MDBX_RESULT_TRUE /* nope since files were must be opened
@@ -479,16 +441,14 @@ MDBX_INTERNAL int lck_seize(MDBX_env *env) {
     jitter4testing(false);
     err = funlock(fd4data, DXB_WHOLE);
     if (err != MDBX_SUCCESS)
-      mdbx_panic("%s(%s) failed: err %u", __func__,
-                 "unlock-against-without-lck", err);
+      mdbx_panic("%s(%s) failed: err %u", __func__, "unlock-against-without-lck", err);
   }
 
   return rc;
 }
 
 MDBX_INTERNAL int lck_downgrade(MDBX_env *env) {
-  const HANDLE fd4data =
-      env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
+  const HANDLE fd4data = env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
   /* Transite from exclusive-write state (E-E) to used (S-?) */
   assert(fd4data != INVALID_HANDLE_VALUE);
   assert(env->lck_mmap.fd != INVALID_HANDLE_VALUE);
@@ -499,8 +459,7 @@ MDBX_INTERNAL int lck_downgrade(MDBX_env *env) {
   /* 1) now at E-E (exclusive-write), transition to ?_E (middle) */
   int rc = funlock(env->lck_mmap.fd, LCK_LOWER);
   if (rc != MDBX_SUCCESS)
-    mdbx_panic("%s(%s) failed: err %u", __func__,
-               "E-E(exclusive-write) >> ?-E(middle)", rc);
+    mdbx_panic("%s(%s) failed: err %u", __func__, "E-E(exclusive-write) >> ?-E(middle)", rc);
 
   /* 2) now at ?-E (middle), transition to S-E (locked) */
   rc = flock(env->lck_mmap.fd, LCK_SHARED | LCK_DONTWAIT, LCK_LOWER);
@@ -513,8 +472,7 @@ MDBX_INTERNAL int lck_downgrade(MDBX_env *env) {
   /* 4) got S-E (locked), continue transition to S-? (used) */
   rc = funlock(env->lck_mmap.fd, LCK_UPPER);
   if (rc != MDBX_SUCCESS)
-    mdbx_panic("%s(%s) failed: err %u", __func__, "S-E(locked) >> S-?(used)",
-               rc);
+    mdbx_panic("%s(%s) failed: err %u", __func__, "S-E(locked) >> S-?(used)", rc);
 
   return MDBX_SUCCESS /* 5) now at S-? (used), done */;
 }
@@ -529,9 +487,7 @@ MDBX_INTERNAL int lck_upgrade(MDBX_env *env, bool dont_wait) {
 
   /* 1) now on S-? (used), try S-E (locked) */
   jitter4testing(false);
-  int rc = flock(env->lck_mmap.fd,
-                 dont_wait ? LCK_EXCLUSIVE | LCK_DONTWAIT : LCK_EXCLUSIVE,
-                 LCK_UPPER);
+  int rc = flock(env->lck_mmap.fd, dont_wait ? LCK_EXCLUSIVE | LCK_DONTWAIT : LCK_EXCLUSIVE, LCK_UPPER);
   if (rc != MDBX_SUCCESS) {
     /* 2) something went wrong, give up */;
     VERBOSE("%s, err %u", "S-?(used) >> S-E(locked)", rc);
@@ -541,14 +497,11 @@ MDBX_INTERNAL int lck_upgrade(MDBX_env *env, bool dont_wait) {
   /* 3) now on S-E (locked), transition to ?-E (middle) */
   rc = funlock(env->lck_mmap.fd, LCK_LOWER);
   if (rc != MDBX_SUCCESS)
-    mdbx_panic("%s(%s) failed: err %u", __func__, "S-E(locked) >> ?-E(middle)",
-               rc);
+    mdbx_panic("%s(%s) failed: err %u", __func__, "S-E(locked) >> ?-E(middle)", rc);
 
   /* 4) now on ?-E (middle), try E-E (exclusive-write) */
   jitter4testing(false);
-  rc = flock(env->lck_mmap.fd,
-             dont_wait ? LCK_EXCLUSIVE | LCK_DONTWAIT : LCK_EXCLUSIVE,
-             LCK_LOWER);
+  rc = flock(env->lck_mmap.fd, dont_wait ? LCK_EXCLUSIVE | LCK_DONTWAIT : LCK_EXCLUSIVE, LCK_LOWER);
   if (rc != MDBX_SUCCESS) {
     /* 5) something went wrong, give up */;
     VERBOSE("%s, err %u", "?-E(middle) >> E-E(exclusive-write)", rc);
@@ -558,8 +511,7 @@ MDBX_INTERNAL int lck_upgrade(MDBX_env *env, bool dont_wait) {
   return MDBX_SUCCESS /* 6) now at E-E (exclusive-write), done */;
 }
 
-MDBX_INTERNAL int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor,
-                           int global_uniqueness_flag) {
+MDBX_INTERNAL int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor, int global_uniqueness_flag) {
   (void)env;
   (void)inprocess_neighbor;
   (void)global_uniqueness_flag;
@@ -568,12 +520,9 @@ MDBX_INTERNAL int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor,
     TOKEN_PRIVILEGES privileges;
     privileges.PrivilegeCount = 1;
     privileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES,
-                          &token) ||
-        !LookupPrivilegeValue(nullptr, SE_LOCK_MEMORY_NAME,
-                              &privileges.Privileges[0].Luid) ||
-        !AdjustTokenPrivileges(token, FALSE, &privileges, sizeof(privileges),
-                               nullptr, nullptr) ||
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &token) ||
+        !LookupPrivilegeValue(nullptr, SE_LOCK_MEMORY_NAME, &privileges.Privileges[0].Luid) ||
+        !AdjustTokenPrivileges(token, FALSE, &privileges, sizeof(privileges), nullptr, nullptr) ||
         GetLastError() != ERROR_SUCCESS)
       imports.SetFileIoOverlappedRange = nullptr;
 
@@ -583,8 +532,7 @@ MDBX_INTERNAL int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor,
   return MDBX_SUCCESS;
 }
 
-MDBX_INTERNAL int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor,
-                              const uint32_t current_pid) {
+MDBX_INTERNAL int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const uint32_t current_pid) {
   (void)current_pid;
   /* LY: should unmap before releasing the locks to avoid race condition and
    * STATUS_USER_MAPPED_FILE/ERROR_USER_MAPPED_FILE */
@@ -593,8 +541,7 @@ MDBX_INTERNAL int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor,
   if (env->lck_mmap.lck) {
     const bool synced = env->lck_mmap.lck->unsynced_pages.weak == 0;
     osal_munmap(&env->lck_mmap);
-    if (synced && !inprocess_neighbor &&
-        env->lck_mmap.fd != INVALID_HANDLE_VALUE &&
+    if (synced && !inprocess_neighbor && env->lck_mmap.fd != INVALID_HANDLE_VALUE &&
         lck_upgrade(env, true) == MDBX_SUCCESS)
       /* this will fail if LCK is used/mmapped by other process(es) */
       osal_ftruncate(env->lck_mmap.fd, 0);

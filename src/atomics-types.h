@@ -16,21 +16,19 @@
 #if defined(__cplusplus) && !defined(__STDC_NO_ATOMICS__) && __has_include(<cstdatomic>)
 #include <cstdatomic>
 #define MDBX_HAVE_C11ATOMICS
-#elif !defined(__cplusplus) &&                                                 \
-    (__STDC_VERSION__ >= 201112L || __has_extension(c_atomic)) &&              \
-    !defined(__STDC_NO_ATOMICS__) &&                                           \
-    (__GNUC_PREREQ(4, 9) || __CLANG_PREREQ(3, 8) ||                            \
-     !(defined(__GNUC__) || defined(__clang__)))
+#elif !defined(__cplusplus) && (__STDC_VERSION__ >= 201112L || __has_extension(c_atomic)) &&                           \
+    !defined(__STDC_NO_ATOMICS__) &&                                                                                   \
+    (__GNUC_PREREQ(4, 9) || __CLANG_PREREQ(3, 8) || !(defined(__GNUC__) || defined(__clang__)))
 #include <stdatomic.h>
 #define MDBX_HAVE_C11ATOMICS
 #elif defined(__GNUC__) || defined(__clang__)
 #elif defined(_MSC_VER)
 #pragma warning(disable : 4163) /* 'xyz': not available as an intrinsic */
-#pragma warning(disable : 4133) /* 'function': incompatible types - from       \
+#pragma warning(disable : 4133) /* 'function': incompatible types - from                                               \
                                    'size_t' to 'LONGLONG' */
-#pragma warning(disable : 4244) /* 'return': conversion from 'LONGLONG' to     \
+#pragma warning(disable : 4244) /* 'return': conversion from 'LONGLONG' to                                             \
                                    'std::size_t', possible loss of data */
-#pragma warning(disable : 4267) /* 'function': conversion from 'size_t' to     \
+#pragma warning(disable : 4267) /* 'function': conversion from 'size_t' to                                             \
                                    'long', possible loss of data */
 #pragma intrinsic(_InterlockedExchangeAdd, _InterlockedCompareExchange)
 #pragma intrinsic(_InterlockedExchangeAdd64, _InterlockedCompareExchange64)
@@ -85,13 +83,13 @@ typedef union {
 #define MDBX_c11a_rw(type, ptr) (&(ptr)->c11a)
 #endif /* Crutches for C11 atomic compiler's bugs */
 
-#define mo_c11_store(fence)                                                    \
-  (((fence) == mo_Relaxed)          ? memory_order_relaxed                     \
-   : ((fence) == mo_AcquireRelease) ? memory_order_release                     \
+#define mo_c11_store(fence)                                                                                            \
+  (((fence) == mo_Relaxed)          ? memory_order_relaxed                                                             \
+   : ((fence) == mo_AcquireRelease) ? memory_order_release                                                             \
                                     : memory_order_seq_cst)
-#define mo_c11_load(fence)                                                     \
-  (((fence) == mo_Relaxed)          ? memory_order_relaxed                     \
-   : ((fence) == mo_AcquireRelease) ? memory_order_acquire                     \
+#define mo_c11_load(fence)                                                                                             \
+  (((fence) == mo_Relaxed)          ? memory_order_relaxed                                                             \
+   : ((fence) == mo_AcquireRelease) ? memory_order_acquire                                                             \
                                     : memory_order_seq_cst)
 
 #endif /* MDBX_HAVE_C11ATOMICS */

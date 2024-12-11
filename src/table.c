@@ -19,11 +19,8 @@ int tbl_setup(const MDBX_env *env, kvx_t *const kvx, const tree_t *const db) {
   kvx->clc.v.lmax = env_valsize_max(env, db->flags);
 
   if ((db->flags & (MDBX_DUPFIXED | MDBX_INTEGERDUP)) != 0 && db->dupfix_size) {
-    if (!MDBX_DISABLE_VALIDATION &&
-        unlikely(db->dupfix_size < kvx->clc.v.lmin ||
-                 db->dupfix_size > kvx->clc.v.lmax)) {
-      ERROR("db.dupfix_size (%u) <> min/max value-length (%zu/%zu)",
-            db->dupfix_size, kvx->clc.v.lmin, kvx->clc.v.lmax);
+    if (!MDBX_DISABLE_VALIDATION && unlikely(db->dupfix_size < kvx->clc.v.lmin || db->dupfix_size > kvx->clc.v.lmax)) {
+      ERROR("db.dupfix_size (%u) <> min/max value-length (%zu/%zu)", db->dupfix_size, kvx->clc.v.lmin, kvx->clc.v.lmax);
       return MDBX_CORRUPTED;
     }
     kvx->clc.v.lmin = kvx->clc.v.lmax = db->dupfix_size;
@@ -41,10 +38,8 @@ int tbl_fetch(MDBX_txn *txn, size_t dbi) {
   rc = tree_search(&couple.outer, &kvx->name, 0);
   if (unlikely(rc != MDBX_SUCCESS)) {
   bailout:
-    NOTICE("dbi %zu refs to inaccessible table `%*s` for txn %" PRIaTXN
-           " (err %d)",
-           dbi, (int)kvx->name.iov_len, (const char *)kvx->name.iov_base,
-           txn->txnid, rc);
+    NOTICE("dbi %zu refs to inaccessible table `%*s` for txn %" PRIaTXN " (err %d)", dbi, (int)kvx->name.iov_len,
+           (const char *)kvx->name.iov_base, txn->txnid, rc);
     return (rc == MDBX_NOTFOUND) ? MDBX_BAD_DBI : rc;
   }
 
@@ -55,21 +50,18 @@ int tbl_fetch(MDBX_txn *txn, size_t dbi) {
     goto bailout;
   }
   if (unlikely((node_flags(nsr.node) & (N_DUP | N_TREE)) != N_TREE)) {
-    NOTICE("dbi %zu refs to not a named table `%*s` for txn %" PRIaTXN " (%s)",
-           dbi, (int)kvx->name.iov_len, (const char *)kvx->name.iov_base,
-           txn->txnid, "wrong flags");
+    NOTICE("dbi %zu refs to not a named table `%*s` for txn %" PRIaTXN " (%s)", dbi, (int)kvx->name.iov_len,
+           (const char *)kvx->name.iov_base, txn->txnid, "wrong flags");
     return MDBX_INCOMPATIBLE; /* not a named DB */
   }
 
-  rc = node_read(&couple.outer, nsr.node, &data,
-                 couple.outer.pg[couple.outer.top]);
+  rc = node_read(&couple.outer, nsr.node, &data, couple.outer.pg[couple.outer.top]);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
   if (unlikely(data.iov_len != sizeof(tree_t))) {
-    NOTICE("dbi %zu refs to not a named table `%*s` for txn %" PRIaTXN " (%s)",
-           dbi, (int)kvx->name.iov_len, (const char *)kvx->name.iov_base,
-           txn->txnid, "wrong rec-size");
+    NOTICE("dbi %zu refs to not a named table `%*s` for txn %" PRIaTXN " (%s)", dbi, (int)kvx->name.iov_len,
+           (const char *)kvx->name.iov_base, txn->txnid, "wrong rec-size");
     return MDBX_INCOMPATIBLE; /* not a named DB */
   }
 
@@ -80,8 +72,8 @@ int tbl_fetch(MDBX_txn *txn, size_t dbi) {
   if (unlikely((db->flags & DB_PERSISTENT_FLAGS) != flags)) {
     NOTICE("dbi %zu refs to the re-created table `%*s` for txn %" PRIaTXN
            " with different flags (present 0x%X != wanna 0x%X)",
-           dbi, (int)kvx->name.iov_len, (const char *)kvx->name.iov_base,
-           txn->txnid, db->flags & DB_PERSISTENT_FLAGS, flags);
+           dbi, (int)kvx->name.iov_len, (const char *)kvx->name.iov_base, txn->txnid, db->flags & DB_PERSISTENT_FLAGS,
+           flags);
     return MDBX_INCOMPATIBLE;
   }
 
@@ -90,8 +82,7 @@ int tbl_fetch(MDBX_txn *txn, size_t dbi) {
   const txnid_t pp_txnid = couple.outer.pg[couple.outer.top]->txnid;
   tASSERT(txn, txn->front_txnid >= pp_txnid);
   if (unlikely(db->mod_txnid > pp_txnid)) {
-    ERROR("db.mod_txnid (%" PRIaTXN ") > page-txnid (%" PRIaTXN ")",
-          db->mod_txnid, pp_txnid);
+    ERROR("db.mod_txnid (%" PRIaTXN ") > page-txnid (%" PRIaTXN ")", db->mod_txnid, pp_txnid);
     return MDBX_CORRUPTED;
   }
 #endif /* !MDBX_DISABLE_VALIDATION */

@@ -18,8 +18,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#if (defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)) &&    \
-    !defined(__USE_MINGW_ANSI_STDIO)
+#if (defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)) && !defined(__USE_MINGW_ANSI_STDIO)
 #define __USE_MINGW_ANSI_STDIO 1
 #endif /* MinGW */
 
@@ -59,33 +58,23 @@ int main(int argc, char *argv[]) {
          pagesize_min, pagesize_max, pagesize_default);
   printf("\tKey size: minimum %zu, maximum ≈¼ pagesize (%zu bytes for default"
          " %zuK pagesize, %zu bytes for %zuK pagesize).\n",
-         (size_t)0, mdbx_limits_keysize_max(-1, MDBX_DB_DEFAULTS),
-         pagesize_default / 1024,
-         mdbx_limits_keysize_max(pagesize_max, MDBX_DB_DEFAULTS),
-         pagesize_max / 1024);
+         (size_t)0, mdbx_limits_keysize_max(-1, MDBX_DB_DEFAULTS), pagesize_default / 1024,
+         mdbx_limits_keysize_max(pagesize_max, MDBX_DB_DEFAULTS), pagesize_max / 1024);
   printf("\tValue size: minimum %zu, maximum %zu (0x%08zX) bytes for maps,"
          " ≈¼ pagesize for multimaps (%zu bytes for default %zuK pagesize,"
          " %zu bytes for %zuK pagesize).\n",
          (size_t)0, mdbx_limits_valsize_max(pagesize_min, MDBX_DB_DEFAULTS),
-         mdbx_limits_valsize_max(pagesize_min, MDBX_DB_DEFAULTS),
-         mdbx_limits_valsize_max(-1, MDBX_DUPSORT), pagesize_default / 1024,
-         mdbx_limits_valsize_max(pagesize_max, MDBX_DUPSORT),
-         pagesize_max / 1024);
+         mdbx_limits_valsize_max(pagesize_min, MDBX_DB_DEFAULTS), mdbx_limits_valsize_max(-1, MDBX_DUPSORT),
+         pagesize_default / 1024, mdbx_limits_valsize_max(pagesize_max, MDBX_DUPSORT), pagesize_max / 1024);
   printf("\tWrite transaction size: up to %zu (0x%zX) pages (%f %s for default "
          "%zuK pagesize, %f %s for %zuK pagesize).\n",
-         mdbx_limits_txnsize_max(pagesize_min) / pagesize_min,
-         mdbx_limits_txnsize_max(pagesize_min) / pagesize_min,
-         mdbx_limits_txnsize_max(-1) / scale_factor, scale_unit,
-         pagesize_default / 1024,
-         mdbx_limits_txnsize_max(pagesize_max) / scale_factor, scale_unit,
-         pagesize_max / 1024);
+         mdbx_limits_txnsize_max(pagesize_min) / pagesize_min, mdbx_limits_txnsize_max(pagesize_min) / pagesize_min,
+         mdbx_limits_txnsize_max(-1) / scale_factor, scale_unit, pagesize_default / 1024,
+         mdbx_limits_txnsize_max(pagesize_max) / scale_factor, scale_unit, pagesize_max / 1024);
   printf("\tDatabase size: up to %zu pages (%f %s for default %zuK "
          "pagesize, %f %s for %zuK pagesize).\n",
-         mdbx_limits_dbsize_max(pagesize_min) / pagesize_min,
-         mdbx_limits_dbsize_max(-1) / scale_factor, scale_unit,
-         pagesize_default / 1024,
-         mdbx_limits_dbsize_max(pagesize_max) / scale_factor, scale_unit,
-         pagesize_max / 1024);
+         mdbx_limits_dbsize_max(pagesize_min) / pagesize_min, mdbx_limits_dbsize_max(-1) / scale_factor, scale_unit,
+         pagesize_default / 1024, mdbx_limits_dbsize_max(pagesize_max) / scale_factor, scale_unit, pagesize_max / 1024);
   printf("\tMaximum sub-databases: %u.\n", MDBX_MAX_DBI);
   printf("-----\n");
 
@@ -94,8 +83,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "mdbx_env_create: (%d) %s\n", rc, mdbx_strerror(rc));
     goto bailout;
   }
-  rc = mdbx_env_open(env, "./example-db", MDBX_NOSUBDIR | MDBX_LIFORECLAIM,
-                     0664);
+  rc = mdbx_env_open(env, "./example-db", MDBX_NOSUBDIR | MDBX_LIFORECLAIM, 0664);
   if (rc != MDBX_SUCCESS) {
     fprintf(stderr, "mdbx_env_open: (%d) %s\n", rc, mdbx_strerror(rc));
     goto bailout;
@@ -143,9 +131,8 @@ int main(int argc, char *argv[]) {
 
   int found = 0;
   while ((rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT)) == 0) {
-    printf("key: %p %.*s, data: %p %.*s\n", key.iov_base, (int)key.iov_len,
-           (char *)key.iov_base, data.iov_base, (int)data.iov_len,
-           (char *)data.iov_base);
+    printf("key: %p %.*s, data: %p %.*s\n", key.iov_base, (int)key.iov_len, (char *)key.iov_base, data.iov_base,
+           (int)data.iov_len, (char *)data.iov_base);
     found += 1;
   }
   if (rc != MDBX_NOTFOUND || found == 0) {

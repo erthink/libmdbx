@@ -125,13 +125,11 @@ enum cursor_state {
   z_fresh_mark = z_poor_mark | z_fresh
 };
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
-is_inner(const MDBX_cursor *mc) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_inner(const MDBX_cursor *mc) {
   return (mc->flags & z_inner) != 0;
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
-is_poor(const MDBX_cursor *mc) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_poor(const MDBX_cursor *mc) {
   const bool r = mc->top < 0;
   cASSERT(mc, r == (mc->top_and_flags < 0));
   if (r && mc->subcur)
@@ -139,8 +137,7 @@ is_poor(const MDBX_cursor *mc) {
   return r;
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
-is_pointed(const MDBX_cursor *mc) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_pointed(const MDBX_cursor *mc) {
   const bool r = mc->top >= 0;
   cASSERT(mc, r == (mc->top_and_flags >= 0));
   if (!r && mc->subcur)
@@ -148,49 +145,41 @@ is_pointed(const MDBX_cursor *mc) {
   return r;
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
-is_hollow(const MDBX_cursor *mc) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_hollow(const MDBX_cursor *mc) {
   const bool r = mc->flags < 0;
   if (!r) {
     cASSERT(mc, mc->top >= 0);
-    cASSERT(mc, (mc->flags & z_eof_hard) ||
-                    mc->ki[mc->top] < page_numkeys(mc->pg[mc->top]));
+    cASSERT(mc, (mc->flags & z_eof_hard) || mc->ki[mc->top] < page_numkeys(mc->pg[mc->top]));
   } else if (mc->subcur)
     cASSERT(mc, is_poor(&mc->subcur->cursor));
   return r;
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
-is_eof(const MDBX_cursor *mc) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_eof(const MDBX_cursor *mc) {
   const bool r = z_eof_soft <= (uint8_t)mc->flags;
   return r;
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
-is_filled(const MDBX_cursor *mc) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_filled(const MDBX_cursor *mc) {
   const bool r = z_eof_hard > (uint8_t)mc->flags;
   return r;
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
-inner_filled(const MDBX_cursor *mc) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool inner_filled(const MDBX_cursor *mc) {
   return mc->subcur && is_filled(&mc->subcur->cursor);
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
-inner_pointed(const MDBX_cursor *mc) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool inner_pointed(const MDBX_cursor *mc) {
   return mc->subcur && is_pointed(&mc->subcur->cursor);
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
-inner_hollow(const MDBX_cursor *mc) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool inner_hollow(const MDBX_cursor *mc) {
   return !mc->subcur || is_hollow(&mc->subcur->cursor);
 }
 
 MDBX_MAYBE_UNUSED static inline void inner_gone(MDBX_cursor *mc) {
   if (mc->subcur) {
-    TRACE("reset inner cursor %p",
-          __Wpedantic_format_voidptr(&mc->subcur->cursor));
+    TRACE("reset inner cursor %p", __Wpedantic_format_voidptr(&mc->subcur->cursor));
     mc->subcur->nested_tree.root = 0;
     mc->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
   }
@@ -218,8 +207,7 @@ MDBX_MAYBE_UNUSED static inline void be_filled(MDBX_cursor *mc) {
   cASSERT(mc, inner == is_inner(mc));
 }
 
-MDBX_MAYBE_UNUSED static inline bool is_related(const MDBX_cursor *base,
-                                                const MDBX_cursor *scan) {
+MDBX_MAYBE_UNUSED static inline bool is_related(const MDBX_cursor *base, const MDBX_cursor *scan) {
   cASSERT(base, base->top >= 0);
   return base->top <= scan->top && base != scan;
 }
@@ -238,36 +226,30 @@ enum cursor_checking {
 
 MDBX_INTERNAL int __must_check_result cursor_check(const MDBX_cursor *mc);
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline size_t
-cursor_dbi(const MDBX_cursor *mc) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline size_t cursor_dbi(const MDBX_cursor *mc) {
   cASSERT(mc, mc->txn && mc->txn->signature == txn_signature);
   size_t dbi = mc->dbi_state - mc->txn->dbi_state;
   cASSERT(mc, dbi < mc->txn->env->n_dbi);
   return dbi;
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
-cursor_dbi_changed(const MDBX_cursor *mc) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool cursor_dbi_changed(const MDBX_cursor *mc) {
   return dbi_changed(mc->txn, cursor_dbi(mc));
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint8_t *
-cursor_dbi_state(const MDBX_cursor *mc) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint8_t *cursor_dbi_state(const MDBX_cursor *mc) {
   return mc->dbi_state;
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
-cursor_is_gc(const MDBX_cursor *mc) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool cursor_is_gc(const MDBX_cursor *mc) {
   return mc->dbi_state == mc->txn->dbi_state + FREE_DBI;
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
-cursor_is_main(const MDBX_cursor *mc) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool cursor_is_main(const MDBX_cursor *mc) {
   return mc->dbi_state == mc->txn->dbi_state + MAIN_DBI;
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
-cursor_is_core(const MDBX_cursor *mc) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool cursor_is_core(const MDBX_cursor *mc) {
   return mc->dbi_state < mc->txn->dbi_state + CORE_DBS;
 }
 
@@ -277,10 +259,8 @@ MDBX_MAYBE_UNUSED static inline int cursor_dbi_dbg(const MDBX_cursor *mc) {
   return (mc->flags & z_inner) ? -dbi : dbi;
 }
 
-MDBX_MAYBE_UNUSED static inline int __must_check_result
-cursor_push(MDBX_cursor *mc, page_t *mp, indx_t ki) {
-  TRACE("pushing page %" PRIaPGNO " on db %d cursor %p", mp->pgno,
-        cursor_dbi_dbg(mc), __Wpedantic_format_voidptr(mc));
+MDBX_MAYBE_UNUSED static inline int __must_check_result cursor_push(MDBX_cursor *mc, page_t *mp, indx_t ki) {
+  TRACE("pushing page %" PRIaPGNO " on db %d cursor %p", mp->pgno, cursor_dbi_dbg(mc), __Wpedantic_format_voidptr(mc));
   if (unlikely(mc->top >= CURSOR_STACK_SIZE - 1)) {
     be_poor(mc);
     mc->txn->flags |= MDBX_TXN_ERROR;
@@ -293,43 +273,32 @@ cursor_push(MDBX_cursor *mc, page_t *mp, indx_t ki) {
 }
 
 MDBX_MAYBE_UNUSED static inline void cursor_pop(MDBX_cursor *mc) {
-  TRACE("popped page %" PRIaPGNO " off db %d cursor %p", mc->pg[mc->top]->pgno,
-        cursor_dbi_dbg(mc), __Wpedantic_format_voidptr(mc));
+  TRACE("popped page %" PRIaPGNO " off db %d cursor %p", mc->pg[mc->top]->pgno, cursor_dbi_dbg(mc),
+        __Wpedantic_format_voidptr(mc));
   cASSERT(mc, mc->top >= 0);
   mc->top -= 1;
 }
 
-MDBX_NOTHROW_PURE_FUNCTION static inline bool
-check_leaf_type(const MDBX_cursor *mc, const page_t *mp) {
-  return (((page_type(mp) ^ mc->checking) &
-           (z_branch | z_leaf | z_largepage | z_dupfix)) == 0);
+MDBX_NOTHROW_PURE_FUNCTION static inline bool check_leaf_type(const MDBX_cursor *mc, const page_t *mp) {
+  return (((page_type(mp) ^ mc->checking) & (z_branch | z_leaf | z_largepage | z_dupfix)) == 0);
 }
 
 MDBX_INTERNAL void cursor_eot(MDBX_cursor *mc, const bool merge);
-MDBX_INTERNAL int cursor_shadow(MDBX_cursor *parent_cursor,
-                                MDBX_txn *nested_txn, const size_t dbi);
+MDBX_INTERNAL int cursor_shadow(MDBX_cursor *parent_cursor, MDBX_txn *nested_txn, const size_t dbi);
 
-MDBX_INTERNAL MDBX_cursor *cursor_cpstk(const MDBX_cursor *csrc,
-                                        MDBX_cursor *cdst);
+MDBX_INTERNAL MDBX_cursor *cursor_cpstk(const MDBX_cursor *csrc, MDBX_cursor *cdst);
 
-MDBX_INTERNAL int __must_check_result cursor_ops(MDBX_cursor *mc, MDBX_val *key,
-                                                 MDBX_val *data,
+MDBX_INTERNAL int __must_check_result cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
                                                  const MDBX_cursor_op op);
 
-MDBX_INTERNAL int __must_check_result cursor_put_checklen(MDBX_cursor *mc,
-                                                          const MDBX_val *key,
-                                                          MDBX_val *data,
+MDBX_INTERNAL int __must_check_result cursor_put_checklen(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
                                                           unsigned flags);
 
-MDBX_INTERNAL int __must_check_result cursor_put(MDBX_cursor *mc,
-                                                 const MDBX_val *key,
-                                                 MDBX_val *data,
-                                                 unsigned flags);
+MDBX_INTERNAL int __must_check_result cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsigned flags);
 
 MDBX_INTERNAL int __must_check_result cursor_check_updating(MDBX_cursor *mc);
 
-MDBX_INTERNAL int __must_check_result cursor_del(MDBX_cursor *mc,
-                                                 unsigned flags);
+MDBX_INTERNAL int __must_check_result cursor_del(MDBX_cursor *mc, unsigned flags);
 
 MDBX_INTERNAL int __must_check_result cursor_sibling_left(MDBX_cursor *mc);
 MDBX_INTERNAL int __must_check_result cursor_sibling_right(MDBX_cursor *mc);
@@ -339,56 +308,37 @@ typedef struct cursor_set_result {
   bool exact;
 } csr_t;
 
-MDBX_INTERNAL csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
-                                MDBX_cursor_op op);
+MDBX_INTERNAL csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cursor_op op);
 
-MDBX_INTERNAL int __must_check_result inner_first(MDBX_cursor *__restrict mc,
+MDBX_INTERNAL int __must_check_result inner_first(MDBX_cursor *__restrict mc, MDBX_val *__restrict data);
+MDBX_INTERNAL int __must_check_result inner_last(MDBX_cursor *__restrict mc, MDBX_val *__restrict data);
+MDBX_INTERNAL int __must_check_result outer_first(MDBX_cursor *__restrict mc, MDBX_val *__restrict key,
                                                   MDBX_val *__restrict data);
-MDBX_INTERNAL int __must_check_result inner_last(MDBX_cursor *__restrict mc,
-                                                 MDBX_val *__restrict data);
-MDBX_INTERNAL int __must_check_result outer_first(MDBX_cursor *__restrict mc,
-                                                  MDBX_val *__restrict key,
-                                                  MDBX_val *__restrict data);
-MDBX_INTERNAL int __must_check_result outer_last(MDBX_cursor *__restrict mc,
-                                                 MDBX_val *__restrict key,
+MDBX_INTERNAL int __must_check_result outer_last(MDBX_cursor *__restrict mc, MDBX_val *__restrict key,
                                                  MDBX_val *__restrict data);
 
-MDBX_INTERNAL int __must_check_result inner_next(MDBX_cursor *__restrict mc,
-                                                 MDBX_val *__restrict data);
-MDBX_INTERNAL int __must_check_result inner_prev(MDBX_cursor *__restrict mc,
-                                                 MDBX_val *__restrict data);
-MDBX_INTERNAL int __must_check_result outer_next(MDBX_cursor *__restrict mc,
-                                                 MDBX_val *__restrict key,
-                                                 MDBX_val *__restrict data,
-                                                 MDBX_cursor_op op);
-MDBX_INTERNAL int __must_check_result outer_prev(MDBX_cursor *__restrict mc,
-                                                 MDBX_val *__restrict key,
-                                                 MDBX_val *__restrict data,
-                                                 MDBX_cursor_op op);
+MDBX_INTERNAL int __must_check_result inner_next(MDBX_cursor *__restrict mc, MDBX_val *__restrict data);
+MDBX_INTERNAL int __must_check_result inner_prev(MDBX_cursor *__restrict mc, MDBX_val *__restrict data);
+MDBX_INTERNAL int __must_check_result outer_next(MDBX_cursor *__restrict mc, MDBX_val *__restrict key,
+                                                 MDBX_val *__restrict data, MDBX_cursor_op op);
+MDBX_INTERNAL int __must_check_result outer_prev(MDBX_cursor *__restrict mc, MDBX_val *__restrict key,
+                                                 MDBX_val *__restrict data, MDBX_cursor_op op);
 
-MDBX_INTERNAL int cursor_init4walk(cursor_couple_t *couple,
-                                   const MDBX_txn *const txn,
-                                   tree_t *const tree, kvx_t *const kvx);
+MDBX_INTERNAL int cursor_init4walk(cursor_couple_t *couple, const MDBX_txn *const txn, tree_t *const tree,
+                                   kvx_t *const kvx);
 
-MDBX_INTERNAL int __must_check_result cursor_init(MDBX_cursor *mc,
-                                                  const MDBX_txn *txn,
-                                                  size_t dbi);
+MDBX_INTERNAL int __must_check_result cursor_init(MDBX_cursor *mc, const MDBX_txn *txn, size_t dbi);
 
-MDBX_INTERNAL int __must_check_result cursor_dupsort_setup(MDBX_cursor *mc,
-                                                           const node_t *node,
-                                                           const page_t *mp);
+MDBX_INTERNAL int __must_check_result cursor_dupsort_setup(MDBX_cursor *mc, const node_t *node, const page_t *mp);
 
-MDBX_INTERNAL int __must_check_result cursor_touch(MDBX_cursor *const mc,
-                                                   const MDBX_val *key,
-                                                   const MDBX_val *data);
+MDBX_INTERNAL int __must_check_result cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_val *data);
 
 /*----------------------------------------------------------------------------*/
 
 /* Update sub-page pointer, if any, in mc->subcur.
  * Needed when the node which contains the sub-page may have moved.
  * Called with mp = mc->pg[mc->top], ki = mc->ki[mc->top]. */
-MDBX_MAYBE_UNUSED static inline void
-cursor_inner_refresh(const MDBX_cursor *mc, const page_t *mp, unsigned ki) {
+MDBX_MAYBE_UNUSED static inline void cursor_inner_refresh(const MDBX_cursor *mc, const page_t *mp, unsigned ki) {
   cASSERT(mc, is_leaf(mp));
   const node_t *node = page_node(mp, ki);
   if ((node_flags(node) & (N_DUP | N_TREE)) == N_DUP)

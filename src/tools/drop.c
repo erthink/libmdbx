@@ -54,8 +54,7 @@ static void usage(void) {
 
 static void error(const char *func, int rc) {
   if (!quiet)
-    fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc,
-            mdbx_strerror(rc));
+    fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc, mdbx_strerror(rc));
 }
 
 int main(int argc, char *argv[]) {
@@ -86,12 +85,9 @@ int main(int argc, char *argv[]) {
              " - build: %s for %s by %s\n"
              " - flags: %s\n"
              " - options: %s\n",
-             mdbx_version.major, mdbx_version.minor, mdbx_version.patch,
-             mdbx_version.tweak, mdbx_version.git.describe,
-             mdbx_version.git.datetime, mdbx_version.git.commit,
-             mdbx_version.git.tree, mdbx_sourcery_anchor, mdbx_build.datetime,
-             mdbx_build.target, mdbx_build.compiler, mdbx_build.flags,
-             mdbx_build.options);
+             mdbx_version.major, mdbx_version.minor, mdbx_version.patch, mdbx_version.tweak, mdbx_version.git.describe,
+             mdbx_version.git.datetime, mdbx_version.git.commit, mdbx_version.git.tree, mdbx_sourcery_anchor,
+             mdbx_build.datetime, mdbx_build.target, mdbx_build.compiler, mdbx_build.flags, mdbx_build.options);
       return EXIT_SUCCESS;
     case 'q':
       quiet = true;
@@ -127,8 +123,7 @@ int main(int argc, char *argv[]) {
 
   envname = argv[optind];
   if (!quiet) {
-    printf("mdbx_drop %s (%s, T-%s)\nRunning for %s/%s...\n",
-           mdbx_version.git.describe, mdbx_version.git.datetime,
+    printf("mdbx_drop %s (%s, T-%s)\nRunning for %s/%s...\n", mdbx_version.git.describe, mdbx_version.git.datetime,
            mdbx_version.git.tree, envname, subname ? subname : "@MAIN");
     fflush(nullptr);
   }

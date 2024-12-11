@@ -7,12 +7,12 @@
 
 #ifdef _MSC_VER
 #pragma warning(push, 1)
-#pragma warning(disable : 4548) /* expression before comma has no effect;      \
+#pragma warning(disable : 4548) /* expression before comma has no effect;                                              \
                                    expected expression with side - effect */
-#pragma warning(disable : 4530) /* C++ exception handler used, but unwind      \
+#pragma warning(disable : 4530) /* C++ exception handler used, but unwind                                              \
                                    semantics are not enabled. Specify /EHsc */
-#pragma warning(disable : 4577) /* 'noexcept' used with no exception handling  \
-                                   mode specified; termination on exception    \
+#pragma warning(disable : 4577) /* 'noexcept' used with no exception handling                                          \
+                                   mode specified; termination on exception                                            \
                                    is not guaranteed. Specify /EHsc */
 #endif                          /* _MSC_VER (warnings) */
 
@@ -71,24 +71,22 @@
 
 #ifdef _MSC_VER
 #pragma warning(pop)
-#pragma warning(disable : 4201) /* nonstandard extension used: nameless        \
+#pragma warning(disable : 4201) /* nonstandard extension used: nameless                                                \
                                    struct/union */
 #pragma warning(disable : 4127) /* conditional expression is constant */
 #if _MSC_VER < 1900
-#pragma warning(disable : 4510) /* default constructor could                   \
+#pragma warning(disable : 4510) /* default constructor could                                                           \
                                    not be generated */
-#pragma warning(disable : 4512) /* assignment operator could                   \
+#pragma warning(disable : 4512) /* assignment operator could                                                           \
                                    not be generated  */
 #pragma warning(disable : 4610) /* user-defined constructor required */
 #ifndef snprintf
-#define snprintf(buffer, buffer_size, format, ...)                             \
-  _snprintf_s(buffer, buffer_size, _TRUNCATE, format, __VA_ARGS__)
+#define snprintf(buffer, buffer_size, format, ...) _snprintf_s(buffer, buffer_size, _TRUNCATE, format, __VA_ARGS__)
 #endif
 #ifndef vsnprintf
-#define vsnprintf(buffer, buffer_size, format, args)                           \
-  _vsnprintf_s(buffer, buffer_size, _TRUNCATE, format, args)
+#define vsnprintf(buffer, buffer_size, format, args) _vsnprintf_s(buffer, buffer_size, _TRUNCATE, format, args)
 #endif
-#pragma warning(disable : 4996) /* 'vsnprintf': This function or variable      \
+#pragma warning(disable : 4996) /* 'vsnprintf': This function or variable                                              \
                                    may be unsafe */
 #endif
 #endif /* _MSC_VER */

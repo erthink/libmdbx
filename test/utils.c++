@@ -24,8 +24,7 @@ std::string format(const char *fmt, ...) {
   std::string result;
   result.reserve((size_t)needed + 1);
   result.resize((size_t)needed, '\0');
-  MDBX_MAYBE_UNUSED int actual =
-      vsnprintf((char *)result.data(), result.capacity(), fmt, ones);
+  MDBX_MAYBE_UNUSED int actual = vsnprintf((char *)result.data(), result.capacity(), fmt, ones);
   assert(actual == needed);
   (void)actual;
   va_end(ones);
@@ -50,8 +49,7 @@ std::string data2hex(const void *ptr, size_t bytes, simple_checksum &checksum) {
   return result;
 }
 
-bool hex2data(const char *hex_begin, const char *hex_end, void *ptr,
-              size_t bytes, simple_checksum &checksum) {
+bool hex2data(const char *hex_begin, const char *hex_end, void *ptr, size_t bytes, simple_checksum &checksum) {
   if (bytes * 2 != (size_t)(hex_end - hex_begin))
     return false;
 
@@ -85,8 +83,7 @@ bool hex2data(const char *hex_begin, const char *hex_end, void *ptr,
 }
 
 bool is_samedata(const MDBX_val *a, const MDBX_val *b) {
-  return a->iov_len == b->iov_len &&
-         memcmp(a->iov_base, b->iov_base, a->iov_len) == 0;
+  return a->iov_len == b->iov_len && memcmp(a->iov_base, b->iov_base, a->iov_len) == 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -96,13 +93,9 @@ uint64_t prng64_white(uint64_t &state) {
   return bleach64(state);
 }
 
-uint32_t prng32_fast(uint64_t &state) {
-  return uint32_t(prng64_careless(state) >> 32);
-}
+uint32_t prng32_fast(uint64_t &state) { return uint32_t(prng64_careless(state) >> 32); }
 
-uint32_t prng32_white(uint64_t &state) {
-  return bleach32(uint32_t(prng64_careless(state) >> 32));
-}
+uint32_t prng32_white(uint64_t &state) { return bleach32(uint32_t(prng64_careless(state) >> 32)); }
 
 void prng_fill(uint64_t &state, void *ptr, size_t bytes) {
   uint32_t u32 = prng32_fast(state);
@@ -174,9 +167,7 @@ bool flipcoin() { return prng32() & 1; }
 bool flipcoin_x2() { return (prng32() & 3) == 0; }
 bool flipcoin_x3() { return (prng32() & 7) == 0; }
 bool flipcoin_x4() { return (prng32() & 15) == 0; }
-bool flipcoin_n(unsigned n) {
-  return (prng64() & ((UINT64_C(1) << n) - 1)) == 0;
-}
+bool flipcoin_n(unsigned n) { return (prng64() & ((UINT64_C(1) << n) - 1)) == 0; }
 
 bool jitter(unsigned probability_percent) {
   const uint32_t top = UINT32_MAX - UINT32_MAX % 100;
@@ -201,8 +192,7 @@ void jitter_delay(bool extra) {
         osal_yield();
         cpu_relax();
         if (dice > 2) {
-          size_t us =
-              prng32() & (extra ? 0xffff /* 656 ms */ : 0x3ff /* 1 ms */);
+          size_t us = prng32() & (extra ? 0xffff /* 656 ms */ : 0x3ff /* 1 ms */);
           log_trace("== jitter.delay: %0.6f", us / 1000000.0);
           osal_udelay(us);
         }

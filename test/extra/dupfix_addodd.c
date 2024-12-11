@@ -37,8 +37,7 @@ int main() {
     exit(EXIT_FAILURE);
   }
 
-  rc = mdbx_env_open(env, "./example-db", MDBX_NOSUBDIR | MDBX_LIFORECLAIM,
-                     0664);
+  rc = mdbx_env_open(env, "./example-db", MDBX_NOSUBDIR | MDBX_LIFORECLAIM, 0664);
   if (rc != MDBX_SUCCESS) {
     fprintf(stderr, "mdbx_env_open: (%d) %s\n", rc, mdbx_strerror(rc));
     exit(EXIT_FAILURE);
@@ -50,8 +49,7 @@ int main() {
     exit(EXIT_FAILURE);
   }
 
-  rc = mdbx_dbi_open(txn, "test", MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_CREATE,
-                     &dbi);
+  rc = mdbx_dbi_open(txn, "test", MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_CREATE, &dbi);
   if (rc != MDBX_SUCCESS) {
     fprintf(stderr, "mdbx_dbi_open: (%d) %s\n", rc, mdbx_strerror(rc));
     exit(EXIT_FAILURE);

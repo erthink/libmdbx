@@ -156,9 +156,8 @@ enum txn_flags {
   txn_shrink_allowed = UINT32_C(0x40000000),
   txn_parked = MDBX_TXN_PARKED,
   txn_gc_drained = 0x40 /* GC was depleted up to oldest reader */,
-  txn_state_flags = MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_DIRTY |
-                    MDBX_TXN_SPILLS | MDBX_TXN_HAS_CHILD | MDBX_TXN_INVALID |
-                    txn_gc_drained
+  txn_state_flags = MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_DIRTY | MDBX_TXN_SPILLS | MDBX_TXN_HAS_CHILD |
+                    MDBX_TXN_INVALID | txn_gc_drained
 };
 
 /* A database transaction.
@@ -336,12 +335,9 @@ enum env_flags {
   /* Only a subset of the mdbx_env flags can be changed
    * at runtime. Changing other flags requires closing the
    * environment and re-opening it with the new flags. */
-  ENV_CHANGEABLE_FLAGS = MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC |
-                         DEPRECATED_MAPASYNC | MDBX_NOMEMINIT |
-                         DEPRECATED_COALESCE | MDBX_PAGEPERTURB | MDBX_ACCEDE |
-                         MDBX_VALIDATION,
-  ENV_CHANGELESS_FLAGS = MDBX_NOSUBDIR | MDBX_RDONLY | MDBX_WRITEMAP |
-                         MDBX_NOSTICKYTHREADS | MDBX_NORDAHEAD |
+  ENV_CHANGEABLE_FLAGS = MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC | DEPRECATED_MAPASYNC | MDBX_NOMEMINIT |
+                         DEPRECATED_COALESCE | MDBX_PAGEPERTURB | MDBX_ACCEDE | MDBX_VALIDATION,
+  ENV_CHANGELESS_FLAGS = MDBX_NOSUBDIR | MDBX_RDONLY | MDBX_WRITEMAP | MDBX_NOSTICKYTHREADS | MDBX_NORDAHEAD |
                          MDBX_LIFORECLAIM | MDBX_EXCLUSIVE,
   ENV_USABLE_FLAGS = ENV_CHANGEABLE_FLAGS | ENV_CHANGELESS_FLAGS
 };
@@ -368,8 +364,8 @@ struct MDBX_env {
   uint16_t subpage_reserve_prereq;
   uint16_t subpage_reserve_limit;
   atomic_pgno_t mlocked_pgno;
-  uint8_t ps2ln;     /* log2 of DB page size */
-  int8_t stuck_meta; /* recovery-only: target meta page or less that zero */
+  uint8_t ps2ln;                                /* log2 of DB page size */
+  int8_t stuck_meta;                            /* recovery-only: target meta page or less that zero */
   uint16_t merge_threshold, merge_threshold_gc; /* pages emptier than this are
                                                    candidates for merging */
   unsigned max_readers;                         /* size of the reader table */
@@ -385,7 +381,7 @@ struct MDBX_env {
   kvx_t *kvs;                     /* array of auxiliary key-value properties */
   uint8_t *__restrict dbs_flags;  /* array of flags from tree_t.flags */
   mdbx_atomic_uint32_t *dbi_seqs; /* array of dbi sequence numbers */
-  unsigned maxgc_large1page; /* Number of pgno_t fit in a single large page */
+  unsigned maxgc_large1page;      /* Number of pgno_t fit in a single large page */
   unsigned maxgc_per_branch;
   uint32_t registered_reader_pid; /* have liveness lock in reader table */
   void *userctx;                  /* User-settable context */
@@ -492,9 +488,7 @@ struct MDBX_env {
 #endif
 
   /* ------------------------------------------------- stub for lck-less mode */
-  mdbx_atomic_uint64_t
-      lckless_placeholder[(sizeof(lck_t) + MDBX_CACHELINE_SIZE - 1) /
-                          sizeof(mdbx_atomic_uint64_t)];
+  mdbx_atomic_uint64_t lckless_placeholder[(sizeof(lck_t) + MDBX_CACHELINE_SIZE - 1) / sizeof(mdbx_atomic_uint64_t)];
 };
 
 /*----------------------------------------------------------------------------*/
@@ -509,8 +503,8 @@ struct MDBX_env {
 #define DEFAULT_READERS 61
 
 enum db_flags {
-  DB_PERSISTENT_FLAGS = MDBX_REVERSEKEY | MDBX_DUPSORT | MDBX_INTEGERKEY |
-                        MDBX_DUPFIXED | MDBX_INTEGERDUP | MDBX_REVERSEDUP,
+  DB_PERSISTENT_FLAGS =
+      MDBX_REVERSEKEY | MDBX_DUPSORT | MDBX_INTEGERKEY | MDBX_DUPFIXED | MDBX_INTEGERDUP | MDBX_REVERSEDUP,
 
   /* mdbx_dbi_open() flags */
   DB_USABLE_FLAGS = DB_PERSISTENT_FLAGS | MDBX_CREATE | MDBX_DB_ACCEDE,
@@ -524,27 +518,19 @@ enum db_flags {
 MDBX_MAYBE_UNUSED static void static_checks(void) {
   STATIC_ASSERT(MDBX_WORDBITS == sizeof(void *) * CHAR_BIT);
   STATIC_ASSERT(UINT64_C(0x80000000) == (uint32_t)ENV_FATAL_ERROR);
-  STATIC_ASSERT_MSG(INT16_MAX - CORE_DBS == MDBX_MAX_DBI,
-                    "Oops, MDBX_MAX_DBI or CORE_DBS?");
+  STATIC_ASSERT_MSG(INT16_MAX - CORE_DBS == MDBX_MAX_DBI, "Oops, MDBX_MAX_DBI or CORE_DBS?");
   STATIC_ASSERT_MSG((unsigned)(MDBX_DB_ACCEDE | MDBX_CREATE) ==
-                        ((DB_USABLE_FLAGS | DB_INTERNAL_FLAGS) &
-                         (ENV_USABLE_FLAGS | ENV_INTERNAL_FLAGS)),
+                        ((DB_USABLE_FLAGS | DB_INTERNAL_FLAGS) & (ENV_USABLE_FLAGS | ENV_INTERNAL_FLAGS)),
                     "Oops, some flags overlapped or wrong");
-  STATIC_ASSERT_MSG((DB_INTERNAL_FLAGS & DB_USABLE_FLAGS) == 0,
-                    "Oops, some flags overlapped or wrong");
-  STATIC_ASSERT_MSG((DB_PERSISTENT_FLAGS & ~DB_USABLE_FLAGS) == 0,
-                    "Oops, some flags overlapped or wrong");
+  STATIC_ASSERT_MSG((DB_INTERNAL_FLAGS & DB_USABLE_FLAGS) == 0, "Oops, some flags overlapped or wrong");
+  STATIC_ASSERT_MSG((DB_PERSISTENT_FLAGS & ~DB_USABLE_FLAGS) == 0, "Oops, some flags overlapped or wrong");
   STATIC_ASSERT(DB_PERSISTENT_FLAGS <= UINT8_MAX);
-  STATIC_ASSERT_MSG((ENV_INTERNAL_FLAGS & ENV_USABLE_FLAGS) == 0,
-                    "Oops, some flags overlapped or wrong");
+  STATIC_ASSERT_MSG((ENV_INTERNAL_FLAGS & ENV_USABLE_FLAGS) == 0, "Oops, some flags overlapped or wrong");
 
-  STATIC_ASSERT_MSG(
-      (txn_state_flags & (txn_rw_begin_flags | txn_ro_begin_flags)) == 0,
-      "Oops, some txn flags overlapped or wrong");
-  STATIC_ASSERT_MSG(
-      ((txn_rw_begin_flags | txn_ro_begin_flags | txn_state_flags) &
-       txn_shrink_allowed) == 0,
-      "Oops, some txn flags overlapped or wrong");
+  STATIC_ASSERT_MSG((txn_state_flags & (txn_rw_begin_flags | txn_ro_begin_flags)) == 0,
+                    "Oops, some txn flags overlapped or wrong");
+  STATIC_ASSERT_MSG(((txn_rw_begin_flags | txn_ro_begin_flags | txn_state_flags) & txn_shrink_allowed) == 0,
+                    "Oops, some txn flags overlapped or wrong");
 
   STATIC_ASSERT(sizeof(reader_slot_t) == 32);
 #if MDBX_LOCKING > 0

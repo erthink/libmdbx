@@ -9,12 +9,10 @@ static inline size_t dpl_size2bytes(ptrdiff_t size) {
   size += size;
 #endif /* MDBX_DPL_PREALLOC_FOR_RADIXSORT */
   STATIC_ASSERT(MDBX_ASSUME_MALLOC_OVERHEAD + sizeof(dpl_t) +
-                    (PAGELIST_LIMIT * (MDBX_DPL_PREALLOC_FOR_RADIXSORT + 1)) *
-                        sizeof(dp_t) +
+                    (PAGELIST_LIMIT * (MDBX_DPL_PREALLOC_FOR_RADIXSORT + 1)) * sizeof(dp_t) +
                     MDBX_PNL_GRANULATE * sizeof(void *) * 2 <
                 SIZE_MAX / 4 * 3);
-  size_t bytes = ceil_powerof2(MDBX_ASSUME_MALLOC_OVERHEAD + sizeof(dpl_t) +
-                                   size * sizeof(dp_t),
+  size_t bytes = ceil_powerof2(MDBX_ASSUME_MALLOC_OVERHEAD + sizeof(dpl_t) + size * sizeof(dp_t),
                                MDBX_PNL_GRANULATE * sizeof(void *) * 2) -
                  MDBX_ASSUME_MALLOC_OVERHEAD;
   return bytes;
@@ -22,8 +20,7 @@ static inline size_t dpl_size2bytes(ptrdiff_t size) {
 
 static inline size_t dpl_bytes2size(const ptrdiff_t bytes) {
   size_t size = (bytes - sizeof(dpl_t)) / sizeof(dp_t);
-  assert(size > CURSOR_STACK_SIZE &&
-         size <= PAGELIST_LIMIT + MDBX_PNL_GRANULATE);
+  assert(size > CURSOR_STACK_SIZE && size <= PAGELIST_LIMIT + MDBX_PNL_GRANULATE);
 #if MDBX_DPL_PREALLOC_FOR_RADIXSORT
   size >>= 1;
 #endif /* MDBX_DPL_PREALLOC_FOR_RADIXSORT */
@@ -41,8 +38,7 @@ dpl_t *dpl_reserve(MDBX_txn *txn, size_t size) {
   tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
-  size_t bytes =
-      dpl_size2bytes((size < PAGELIST_LIMIT) ? size : PAGELIST_LIMIT);
+  size_t bytes = dpl_size2bytes((size < PAGELIST_LIMIT) ? size : PAGELIST_LIMIT);
   dpl_t *const dl = osal_realloc(txn->tw.dirtylist, bytes);
   if (likely(dl)) {
 #if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
@@ -59,16 +55,13 @@ int dpl_alloc(MDBX_txn *txn) {
   tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
-  const size_t wanna = (txn->env->options.dp_initial < txn->geo.upper)
-                           ? txn->env->options.dp_initial
-                           : txn->geo.upper;
+  const size_t wanna = (txn->env->options.dp_initial < txn->geo.upper) ? txn->env->options.dp_initial : txn->geo.upper;
 #if MDBX_FORCE_ASSERTIONS || MDBX_DEBUG
   if (txn->tw.dirtylist)
     /* обнуляем чтобы не сработал ассерт внутри dpl_reserve() */
     txn->tw.dirtylist->sorted = txn->tw.dirtylist->length = 0;
 #endif /* asertions enabled */
-  if (unlikely(!txn->tw.dirtylist || txn->tw.dirtylist->detent < wanna ||
-               txn->tw.dirtylist->detent > wanna + wanna) &&
+  if (unlikely(!txn->tw.dirtylist || txn->tw.dirtylist->detent < wanna || txn->tw.dirtylist->detent > wanna + wanna) &&
       unlikely(!dpl_reserve(txn, wanna)))
     return MDBX_ENOMEM;
 
@@ -77,8 +70,7 @@ int dpl_alloc(MDBX_txn *txn) {
 }
 
 #define MDBX_DPL_EXTRACT_KEY(ptr) ((ptr)->pgno)
-RADIXSORT_IMPL(dp, dp_t, MDBX_DPL_EXTRACT_KEY, MDBX_DPL_PREALLOC_FOR_RADIXSORT,
-               1)
+RADIXSORT_IMPL(dp, dp_t, MDBX_DPL_EXTRACT_KEY, MDBX_DPL_PREALLOC_FOR_RADIXSORT, 1)
 
 #define DP_SORT_CMP(first, last) ((first).pgno < (last).pgno)
 SORT_IMPL(dp_sort, false, dp_t, DP_SORT_CMP)
@@ -90,16 +82,13 @@ __hot __noinline dpl_t *dpl_sort_slowpath(const MDBX_txn *txn) {
   dpl_t *dl = txn->tw.dirtylist;
   assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   const size_t unsorted = dl->length - dl->sorted;
-  if (likely(unsorted < MDBX_RADIXSORT_THRESHOLD) ||
-      unlikely(!dp_radixsort(dl->items + 1, dl->length))) {
+  if (likely(unsorted < MDBX_RADIXSORT_THRESHOLD) || unlikely(!dp_radixsort(dl->items + 1, dl->length))) {
     if (dl->sorted > unsorted / 4 + 4 &&
-        (MDBX_DPL_PREALLOC_FOR_RADIXSORT ||
-         dl->length + unsorted < dl->detent + dpl_gap_mergesort)) {
+        (MDBX_DPL_PREALLOC_FOR_RADIXSORT || dl->length + unsorted < dl->detent + dpl_gap_mergesort)) {
       dp_t *const sorted_begin = dl->items + 1;
       dp_t *const sorted_end = sorted_begin + dl->sorted;
-      dp_t *const end = dl->items + (MDBX_DPL_PREALLOC_FOR_RADIXSORT
-                                         ? dl->length + dl->length + 1
-                                         : dl->detent + dpl_reserve_gap);
+      dp_t *const end =
+          dl->items + (MDBX_DPL_PREALLOC_FOR_RADIXSORT ? dl->length + dl->length + 1 : dl->detent + dpl_reserve_gap);
       dp_t *const tmp = end - unsorted;
       assert(dl->items + dl->length + 1 < tmp);
       /* copy unsorted to the end of allocated space and sort it */
@@ -120,19 +109,16 @@ __hot __noinline dpl_t *dpl_sort_slowpath(const MDBX_txn *txn) {
 #endif
       } while (likely(--w > l));
       assert(r == tmp - 1);
-      assert(dl->items[0].pgno == 0 &&
-             dl->items[dl->length + 1].pgno == P_INVALID);
+      assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
       if (ASSERT_ENABLED())
         for (size_t i = 0; i <= dl->length; ++i)
           assert(dl->items[i].pgno < dl->items[i + 1].pgno);
     } else {
       dp_sort(dl->items + 1, dl->items + dl->length + 1);
-      assert(dl->items[0].pgno == 0 &&
-             dl->items[dl->length + 1].pgno == P_INVALID);
+      assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
     }
   } else {
-    assert(dl->items[0].pgno == 0 &&
-           dl->items[dl->length + 1].pgno == P_INVALID);
+    assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   }
   dl->sorted = dl->length;
   return dl;
@@ -143,8 +129,7 @@ __hot __noinline dpl_t *dpl_sort_slowpath(const MDBX_txn *txn) {
 #define DP_SEARCH_CMP(dp, id) ((dp).pgno < (id))
 SEARCH_IMPL(dp_bsearch, dp_t, pgno_t, DP_SEARCH_CMP)
 
-__hot __noinline MDBX_INTERNAL size_t dpl_search(const MDBX_txn *txn,
-                                                 pgno_t pgno) {
+__hot __noinline MDBX_INTERNAL size_t dpl_search(const MDBX_txn *txn, pgno_t pgno) {
   tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
@@ -166,10 +151,10 @@ __hot __noinline MDBX_INTERNAL size_t dpl_search(const MDBX_txn *txn,
     /* whole sorted cases */
     break;
 
-#define LINEAR_SEARCH_CASE(N)                                                  \
-  case N:                                                                      \
-    if (dl->items[dl->length - N + 1].pgno == pgno)                            \
-      return dl->length - N + 1;                                               \
+#define LINEAR_SEARCH_CASE(N)                                                                                          \
+  case N:                                                                                                              \
+    if (dl->items[dl->length - N + 1].pgno == pgno)                                                                    \
+      return dl->length - N + 1;                                                                                       \
     __fallthrough
 
     /* use linear scan until the threshold */
@@ -193,8 +178,7 @@ const page_t *debug_dpl_find(const MDBX_txn *txn, const pgno_t pgno) {
   const dpl_t *dl = txn->tw.dirtylist;
   if (dl) {
     tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
-    assert(dl->items[0].pgno == 0 &&
-           dl->items[dl->length + 1].pgno == P_INVALID);
+    assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
     for (size_t i = dl->length; i > dl->sorted; --i)
       if (dl->items[i].pgno == pgno)
         return dl->items[i].ptr;
@@ -220,13 +204,11 @@ void dpl_remove_ex(const MDBX_txn *txn, size_t i, size_t npages) {
   dl->pages_including_loose -= npages;
   dl->sorted -= dl->sorted >= i;
   dl->length -= 1;
-  memmove(dl->items + i, dl->items + i + 1,
-          (dl->length - i + 2) * sizeof(dl->items[0]));
+  memmove(dl->items + i, dl->items + i + 1, (dl->length - i + 2) * sizeof(dl->items[0]));
   assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
 }
 
-int __must_check_result dpl_append(MDBX_txn *txn, pgno_t pgno, page_t *page,
-                                   size_t npages) {
+int __must_check_result dpl_append(MDBX_txn *txn, pgno_t pgno, page_t *page, size_t npages) {
   tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
   const dp_t dp = {page, pgno, (pgno_t)npages};
@@ -237,8 +219,7 @@ int __must_check_result dpl_append(MDBX_txn *txn, pgno_t pgno, page_t *page,
 
   dpl_t *dl = txn->tw.dirtylist;
   tASSERT(txn, dl->length <= PAGELIST_LIMIT + MDBX_PNL_GRANULATE);
-  tASSERT(txn, dl->items[0].pgno == 0 &&
-                   dl->items[dl->length + 1].pgno == P_INVALID);
+  tASSERT(txn, dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   if (AUDIT_ENABLED()) {
     for (size_t i = dl->length; i > 0; --i) {
       assert(dl->items[i].pgno != dp.pgno);
@@ -254,9 +235,7 @@ int __must_check_result dpl_append(MDBX_txn *txn, pgno_t pgno, page_t *page,
       ERROR("DPL is full (PAGELIST_LIMIT %zu)", PAGELIST_LIMIT);
       return MDBX_TXN_FULL;
     }
-    const size_t size = (dl->detent < MDBX_PNL_INITIAL * 42)
-                            ? dl->detent + dl->detent
-                            : dl->detent + dl->detent / 2;
+    const size_t size = (dl->detent < MDBX_PNL_INITIAL * 42) ? dl->detent + dl->detent : dl->detent + dl->detent / 2;
     dl = dpl_reserve(txn, size);
     if (unlikely(!dl))
       return MDBX_ENOMEM;
@@ -288,10 +267,7 @@ int __must_check_result dpl_append(MDBX_txn *txn, pgno_t pgno, page_t *page,
   const ptrdiff_t pivot = (ptrdiff_t)dl->length - dpl_insertion_threshold;
 #if MDBX_HAVE_CMOV
   const pgno_t pivot_pgno =
-      dl->items[(dl->length < dpl_insertion_threshold)
-                    ? 0
-                    : dl->length - dpl_insertion_threshold]
-          .pgno;
+      dl->items[(dl->length < dpl_insertion_threshold) ? 0 : dl->length - dpl_insertion_threshold].pgno;
 #endif /* MDBX_HAVE_CMOV */
 
   /* copy the stub beyond the end */
@@ -310,9 +286,7 @@ int __must_check_result dpl_append(MDBX_txn *txn, pgno_t pgno, page_t *page,
     while (i >= dl->items + dl->sorted) {
 #if !defined(__GNUC__) /* пытаемся избежать вызова memmove() */
       i[1] = *i;
-#elif MDBX_WORDBITS == 64 &&                                                   \
-    (defined(__SIZEOF_INT128__) ||                                             \
-     (defined(_INTEGRAL_MAX_BITS) && _INTEGRAL_MAX_BITS >= 128))
+#elif MDBX_WORDBITS == 64 && (defined(__SIZEOF_INT128__) || (defined(_INTEGRAL_MAX_BITS) && _INTEGRAL_MAX_BITS >= 128))
       STATIC_ASSERT(sizeof(dp) == sizeof(__uint128_t));
       ((__uint128_t *)i)[1] = *(volatile __uint128_t *)i;
 #else
@@ -347,9 +321,8 @@ __cold bool dpl_check(MDBX_txn *txn) {
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
   assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
-  tASSERT(txn, txn->tw.dirtyroom + dl->length ==
-                   (txn->parent ? txn->parent->tw.dirtyroom
-                                : txn->env->options.dp_limit));
+  tASSERT(txn,
+          txn->tw.dirtyroom + dl->length == (txn->parent ? txn->parent->tw.dirtyroom : txn->env->options.dp_limit));
 
   if (!AUDIT_ENABLED())
     return true;
@@ -389,16 +362,12 @@ __cold bool dpl_check(MDBX_txn *txn) {
         return false;
     }
 
-    const size_t rpa =
-        pnl_search(txn->tw.relist, dp->pgno, txn->geo.first_unallocated);
-    tASSERT(txn, rpa > MDBX_PNL_GETSIZE(txn->tw.relist) ||
-                     txn->tw.relist[rpa] != dp->pgno);
-    if (rpa <= MDBX_PNL_GETSIZE(txn->tw.relist) &&
-        unlikely(txn->tw.relist[rpa] == dp->pgno))
+    const size_t rpa = pnl_search(txn->tw.relist, dp->pgno, txn->geo.first_unallocated);
+    tASSERT(txn, rpa > MDBX_PNL_GETSIZE(txn->tw.relist) || txn->tw.relist[rpa] != dp->pgno);
+    if (rpa <= MDBX_PNL_GETSIZE(txn->tw.relist) && unlikely(txn->tw.relist[rpa] == dp->pgno))
       return false;
     if (num > 1) {
-      const size_t rpb = pnl_search(txn->tw.relist, dp->pgno + num - 1,
-                                    txn->geo.first_unallocated);
+      const size_t rpb = pnl_search(txn->tw.relist, dp->pgno + num - 1, txn->geo.first_unallocated);
       tASSERT(txn, rpa == rpb);
       if (unlikely(rpa != rpb))
         return false;
@@ -432,8 +401,7 @@ __noinline void dpl_lru_reduce(MDBX_txn *txn) {
     txn->tw.dirtylru >>= 1;
     dpl_t *dl = txn->tw.dirtylist;
     for (size_t i = 1; i <= dl->length; ++i) {
-      size_t *const ptr =
-          ptr_disp(dl->items[i].ptr, -(ptrdiff_t)sizeof(size_t));
+      size_t *const ptr = ptr_disp(dl->items[i].ptr, -(ptrdiff_t)sizeof(size_t));
       *ptr >>= 1;
     }
     txn = txn->parent;
@@ -444,8 +412,7 @@ void dpl_sift(MDBX_txn *const txn, pnl_t pl, const bool spilled) {
   tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
   if (MDBX_PNL_GETSIZE(pl) && txn->tw.dirtylist->length) {
-    tASSERT(txn, pnl_check_allocated(pl, (size_t)txn->geo.first_unallocated
-                                             << spilled));
+    tASSERT(txn, pnl_check_allocated(pl, (size_t)txn->geo.first_unallocated << spilled));
     dpl_t *dl = dpl_sort(txn);
 
     /* Scanning in ascend order */
@@ -501,8 +468,7 @@ void dpl_sift(MDBX_txn *const txn, pnl_t pl, const bool spilled) {
       dl->sorted = dpl_setlen(dl, w - 1);
       txn->tw.dirtyroom += r - w;
       tASSERT(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
-                       (txn->parent ? txn->parent->tw.dirtyroom
-                                    : txn->env->options.dp_limit));
+                       (txn->parent ? txn->parent->tw.dirtyroom : txn->env->options.dp_limit));
       return;
     }
   }

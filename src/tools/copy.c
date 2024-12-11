@@ -37,20 +37,19 @@ static void signal_handler(int sig) {
 #endif /* !WINDOWS */
 
 static void usage(const char *prog) {
-  fprintf(
-      stderr,
-      "usage: %s [-V] [-q] [-c] [-d] [-p] [-u|U] src_path [dest_path]\n"
-      "  -V\t\tprint version and exit\n"
-      "  -q\t\tbe quiet\n"
-      "  -c\t\tenable compactification (skip unused pages)\n"
-      "  -d\t\tenforce copy to be a dynamic size DB\n"
-      "  -p\t\tusing transaction parking/ousting during copying MVCC-snapshot\n"
-      "    \t\tto avoid stopping recycling and overflowing the DB\n"
-      "  -u\t\twarmup database before copying\n"
-      "  -U\t\twarmup and try lock database pages in memory before copying\n"
-      "  src_path\tsource database\n"
-      "  dest_path\tdestination (stdout if not specified)\n",
-      prog);
+  fprintf(stderr,
+          "usage: %s [-V] [-q] [-c] [-d] [-p] [-u|U] src_path [dest_path]\n"
+          "  -V\t\tprint version and exit\n"
+          "  -q\t\tbe quiet\n"
+          "  -c\t\tenable compactification (skip unused pages)\n"
+          "  -d\t\tenforce copy to be a dynamic size DB\n"
+          "  -p\t\tusing transaction parking/ousting during copying MVCC-snapshot\n"
+          "    \t\tto avoid stopping recycling and overflowing the DB\n"
+          "  -u\t\twarmup database before copying\n"
+          "  -U\t\twarmup and try lock database pages in memory before copying\n"
+          "  src_path\tsource database\n"
+          "  dest_path\tdestination (stdout if not specified)\n",
+          prog);
   exit(EXIT_FAILURE);
 }
 
@@ -79,10 +78,8 @@ int main(int argc, char *argv[]) {
       warmup = true;
     else if (argv[1][1] == 'U' && argv[1][2] == '\0') {
       warmup = true;
-      warmup_flags =
-          MDBX_warmup_force | MDBX_warmup_touchlimit | MDBX_warmup_lock;
-    } else if ((argv[1][1] == 'h' && argv[1][2] == '\0') ||
-               strcmp(argv[1], "--help") == 0)
+      warmup_flags = MDBX_warmup_force | MDBX_warmup_touchlimit | MDBX_warmup_lock;
+    } else if ((argv[1][1] == 'h' && argv[1][2] == '\0') || strcmp(argv[1], "--help") == 0)
       usage(progname);
     else if (argv[1][1] == 'V' && argv[1][2] == '\0') {
       printf("mdbx_copy version %d.%d.%d.%d\n"
@@ -91,12 +88,9 @@ int main(int argc, char *argv[]) {
              " - build: %s for %s by %s\n"
              " - flags: %s\n"
              " - options: %s\n",
-             mdbx_version.major, mdbx_version.minor, mdbx_version.patch,
-             mdbx_version.tweak, mdbx_version.git.describe,
-             mdbx_version.git.datetime, mdbx_version.git.commit,
-             mdbx_version.git.tree, mdbx_sourcery_anchor, mdbx_build.datetime,
-             mdbx_build.target, mdbx_build.compiler, mdbx_build.flags,
-             mdbx_build.options);
+             mdbx_version.major, mdbx_version.minor, mdbx_version.patch, mdbx_version.tweak, mdbx_version.git.describe,
+             mdbx_version.git.datetime, mdbx_version.git.commit, mdbx_version.git.tree, mdbx_sourcery_anchor,
+             mdbx_build.datetime, mdbx_build.target, mdbx_build.compiler, mdbx_build.flags, mdbx_build.options);
       return EXIT_SUCCESS;
     } else
       argc = 0;
@@ -119,10 +113,9 @@ int main(int argc, char *argv[]) {
 #endif /* !WINDOWS */
 
   if (!quiet) {
-    fprintf((argc == 2) ? stderr : stdout,
-            "mdbx_copy %s (%s, T-%s)\nRunning for copy %s to %s...\n",
-            mdbx_version.git.describe, mdbx_version.git.datetime,
-            mdbx_version.git.tree, argv[1], (argc == 2) ? "stdout" : argv[2]);
+    fprintf((argc == 2) ? stderr : stdout, "mdbx_copy %s (%s, T-%s)\nRunning for copy %s to %s...\n",
+            mdbx_version.git.describe, mdbx_version.git.datetime, mdbx_version.git.tree, argv[1],
+            (argc == 2) ? "stdout" : argv[2]);
     fflush(nullptr);
   }
 
@@ -150,8 +143,7 @@ int main(int argc, char *argv[]) {
       rc = mdbx_env_copy(env, argv[2], cpflags);
   }
   if (rc)
-    fprintf(stderr, "%s: %s failed, error %d (%s)\n", progname, act, rc,
-            mdbx_strerror(rc));
+    fprintf(stderr, "%s: %s failed, error %d (%s)\n", progname, act, rc, mdbx_strerror(rc));
   mdbx_env_close(env);
 
   return rc ? EXIT_FAILURE : EXIT_SUCCESS;

@@ -18,9 +18,7 @@ uint32_t ns2fractional(uint32_t ns) {
   return uint32_t((uint64_t(ns) << 32) / NSEC_PER_SEC);
 }
 
-uint32_t fractional2ns(uint32_t fractional) {
-  return uint32_t((fractional * uint64_t(NSEC_PER_SEC)) >> 32);
-}
+uint32_t fractional2ns(uint32_t fractional) { return uint32_t((fractional * uint64_t(NSEC_PER_SEC)) >> 32); }
 
 #ifndef USEC_PER_SEC
 #define USEC_PER_SEC 1000000u
@@ -51,33 +49,27 @@ uint32_t ms2fractional(uint32_t ms) {
   return uint32_t((uint64_t(ms) << 32) / MSEC_PER_SEC);
 }
 
-uint32_t fractional2ms(uint32_t fractional) {
-  return uint32_t((fractional * uint64_t(MSEC_PER_SEC)) >> 32);
-}
+uint32_t fractional2ms(uint32_t fractional) { return uint32_t((fractional * uint64_t(MSEC_PER_SEC)) >> 32); }
 
 time from_ns(uint64_t ns) {
   time result;
-  result.fixedpoint =
-      ((ns / NSEC_PER_SEC) << 32) | ns2fractional(uint32_t(ns % NSEC_PER_SEC));
+  result.fixedpoint = ((ns / NSEC_PER_SEC) << 32) | ns2fractional(uint32_t(ns % NSEC_PER_SEC));
   return result;
 }
 
 time from_us(uint64_t us) {
   time result;
-  result.fixedpoint =
-      ((us / USEC_PER_SEC) << 32) | us2fractional(uint32_t(us % USEC_PER_SEC));
+  result.fixedpoint = ((us / USEC_PER_SEC) << 32) | us2fractional(uint32_t(us % USEC_PER_SEC));
   return result;
 }
 
 time from_ms(uint64_t ms) {
   time result;
-  result.fixedpoint =
-      ((ms / MSEC_PER_SEC) << 32) | ms2fractional(uint32_t(ms % MSEC_PER_SEC));
+  result.fixedpoint = ((ms / MSEC_PER_SEC) << 32) | ms2fractional(uint32_t(ms % MSEC_PER_SEC));
   return result;
 }
 
-#if __GNUC_PREREQ(8, 0) &&                                                     \
-    (defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__))
+#if __GNUC_PREREQ(8, 0) && (defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__))
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-function-type"
 #endif /* GCC/MINGW */
@@ -88,16 +80,14 @@ time now_realtime() {
   if (unlikely(!query_time)) {
     HMODULE hModule = GetModuleHandle(TEXT("kernel32.dll"));
     if (hModule)
-      query_time = (void(WINAPI *)(LPFILETIME))GetProcAddress(
-          hModule, "GetSystemTimePreciseAsFileTime");
+      query_time = (void(WINAPI *)(LPFILETIME))GetProcAddress(hModule, "GetSystemTimePreciseAsFileTime");
     if (!query_time)
       query_time = GetSystemTimeAsFileTime;
   }
 
   FILETIME filetime;
   query_time(&filetime);
-  uint64_t ns100 =
-      (uint64_t)filetime.dwHighDateTime << 32 | filetime.dwLowDateTime;
+  uint64_t ns100 = (uint64_t)filetime.dwHighDateTime << 32 | filetime.dwLowDateTime;
   return from_ns((ns100 - UINT64_C(116444736000000000)) * 100u);
 #else
   struct timespec ts;
@@ -115,8 +105,7 @@ time now_monotonic() {
   if (reciprocal == 0) {
     if (!QueryPerformanceFrequency(&Frequency))
       failure_perror("QueryPerformanceFrequency()", GetLastError());
-    reciprocal = (((UINT64_C(1) << 48) + Frequency.QuadPart / 2 + 1) /
-                  Frequency.QuadPart);
+    reciprocal = (((UINT64_C(1) << 48) + Frequency.QuadPart / 2 + 1) / Frequency.QuadPart);
     assert(reciprocal);
   }
 
@@ -138,8 +127,7 @@ time now_monotonic() {
 #endif
 }
 
-#if __GNUC_PREREQ(8, 0) &&                                                     \
-    (defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__))
+#if __GNUC_PREREQ(8, 0) && (defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__))
 #pragma GCC diagnostic pop
 #endif /* GCC/MINGW */
 

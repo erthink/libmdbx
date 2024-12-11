@@ -11,12 +11,12 @@
 
 #ifdef _MSC_VER
 #pragma warning(push, 1)
-#pragma warning(disable : 4548) /* expression before comma has no effect;      \
+#pragma warning(disable : 4548) /* expression before comma has no effect;                                              \
                                    expected expression with side - effect */
-#pragma warning(disable : 4530) /* C++ exception handler used, but unwind      \
+#pragma warning(disable : 4530) /* C++ exception handler used, but unwind                                              \
                                  * semantics are not enabled. Specify /EHsc */
-#pragma warning(disable : 4577) /* 'noexcept' used with no exception handling  \
-                                 * mode specified; termination on exception is \
+#pragma warning(disable : 4577) /* 'noexcept' used with no exception handling                                          \
+                                 * mode specified; termination on exception is                                         \
                                  * not guaranteed. Specify /EHsc */
 #if !defined(_CRT_SECURE_NO_WARNINGS)
 #define _CRT_SECURE_NO_WARNINGS
@@ -70,8 +70,7 @@ int getopt(int argc, char *const argv[], const char *opts) {
     if (argv[optind][sp + 1] != '\0')
       optarg = &argv[optind++][sp + 1];
     else if (++optind >= argc) {
-      fprintf(stderr, "%s: %s -- %c\n", argv[0], "option requires an argument",
-              c);
+      fprintf(stderr, "%s: %s -- %c\n", argv[0], "option requires an argument", c);
       sp = 1;
       return '?';
     } else

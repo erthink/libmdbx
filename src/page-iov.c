@@ -3,17 +3,14 @@
 
 #include "internals.h"
 
-int iov_init(MDBX_txn *const txn, iov_ctx_t *ctx, size_t items, size_t npages,
-             mdbx_filehandle_t fd, bool check_coherence) {
+int iov_init(MDBX_txn *const txn, iov_ctx_t *ctx, size_t items, size_t npages, mdbx_filehandle_t fd,
+             bool check_coherence) {
   ctx->env = txn->env;
   ctx->ior = &txn->env->ioring;
   ctx->fd = fd;
   ctx->coherency_timestamp =
-      (check_coherence || txn->env->lck->pgops.incoherence.weak)
-          ? 0
-          : UINT64_MAX /* не выполнять сверку */;
-  ctx->err = osal_ioring_prepare(ctx->ior, items,
-                                 pgno_align2os_bytes(txn->env, npages));
+      (check_coherence || txn->env->lck->pgops.incoherence.weak) ? 0 : UINT64_MAX /* не выполнять сверку */;
+  ctx->err = osal_ioring_prepare(ctx->ior, items, pgno_align2os_bytes(txn->env, npages));
   if (likely(ctx->err == MDBX_SUCCESS)) {
 #if MDBX_NEED_WRITTEN_RANGE
     ctx->flush_begin = MAX_PAGENO;
@@ -24,8 +21,7 @@ int iov_init(MDBX_txn *const txn, iov_ctx_t *ctx, size_t items, size_t npages,
   return ctx->err;
 }
 
-static void iov_callback4dirtypages(iov_ctx_t *ctx, size_t offset, void *data,
-                                    size_t bytes) {
+static void iov_callback4dirtypages(iov_ctx_t *ctx, size_t offset, void *data, size_t bytes) {
   MDBX_env *const env = ctx->env;
   eASSERT(env, (env->flags & MDBX_WRITEMAP) == 0);
 
@@ -89,19 +85,15 @@ static void iov_callback4dirtypages(iov_ctx_t *ctx, size_t offset, void *data,
 #ifndef MDBX_FORCE_CHECK_MMAP_COHERENCY
 #define MDBX_FORCE_CHECK_MMAP_COHERENCY 0
 #endif /* MDBX_FORCE_CHECK_MMAP_COHERENCY */
-    if ((MDBX_FORCE_CHECK_MMAP_COHERENCY ||
-         ctx->coherency_timestamp != UINT64_MAX) &&
+    if ((MDBX_FORCE_CHECK_MMAP_COHERENCY || ctx->coherency_timestamp != UINT64_MAX) &&
         unlikely(memcmp(wp, rp, bytes))) {
       ctx->coherency_timestamp = 0;
       env->lck->pgops.incoherence.weak =
-          (env->lck->pgops.incoherence.weak >= INT32_MAX)
-              ? INT32_MAX
-              : env->lck->pgops.incoherence.weak + 1;
+          (env->lck->pgops.incoherence.weak >= INT32_MAX) ? INT32_MAX : env->lck->pgops.incoherence.weak + 1;
       WARNING("catch delayed/non-arrived page %" PRIaPGNO " %s", wp->pgno,
               "(workaround for incoherent flaw of unified page/buffer cache)");
       do
-        if (coherency_timeout(&ctx->coherency_timestamp, wp->pgno, env) !=
-            MDBX_RESULT_TRUE) {
+        if (coherency_timeout(&ctx->coherency_timestamp, wp->pgno, env) != MDBX_RESULT_TRUE) {
           ctx->err = MDBX_PROBLEM;
           break;
         }
@@ -160,8 +152,7 @@ int iov_page(MDBX_txn *txn, iov_ctx_t *ctx, page_t *dp, size_t npages) {
 #if MDBX_AVOID_MSYNC
   doit:;
 #endif /* MDBX_AVOID_MSYNC */
-    int err = osal_ioring_add(ctx->ior, pgno2bytes(env, dp->pgno), dp,
-                              pgno2bytes(env, npages));
+    int err = osal_ioring_add(ctx->ior, pgno2bytes(env, dp->pgno), dp, pgno2bytes(env, npages));
     if (unlikely(err != MDBX_SUCCESS)) {
       ctx->err = err;
       if (unlikely(err != MDBX_RESULT_TRUE)) {
@@ -171,8 +162,7 @@ int iov_page(MDBX_txn *txn, iov_ctx_t *ctx, page_t *dp, size_t npages) {
       err = iov_write(ctx);
       tASSERT(txn, iov_empty(ctx));
       if (likely(err == MDBX_SUCCESS)) {
-        err = osal_ioring_add(ctx->ior, pgno2bytes(env, dp->pgno), dp,
-                              pgno2bytes(env, npages));
+        err = osal_ioring_add(ctx->ior, pgno2bytes(env, dp->pgno), dp, pgno2bytes(env, npages));
         if (unlikely(err != MDBX_SUCCESS)) {
           iov_complete(ctx);
           return ctx->err = err;
@@ -188,11 +178,8 @@ int iov_page(MDBX_txn *txn, iov_ctx_t *ctx, page_t *dp, size_t npages) {
   }
 
 #if MDBX_NEED_WRITTEN_RANGE
-  ctx->flush_begin =
-      (ctx->flush_begin < dp->pgno) ? ctx->flush_begin : dp->pgno;
-  ctx->flush_end = (ctx->flush_end > dp->pgno + (pgno_t)npages)
-                       ? ctx->flush_end
-                       : dp->pgno + (pgno_t)npages;
+  ctx->flush_begin = (ctx->flush_begin < dp->pgno) ? ctx->flush_begin : dp->pgno;
+  ctx->flush_end = (ctx->flush_end > dp->pgno + (pgno_t)npages) ? ctx->flush_end : dp->pgno + (pgno_t)npages;
 #endif /* MDBX_NEED_WRITTEN_RANGE */
   return MDBX_SUCCESS;
 }

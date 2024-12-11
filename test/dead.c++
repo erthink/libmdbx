@@ -5,8 +5,7 @@
 
 class testcase_deadread : public testcase {
 public:
-  testcase_deadread(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid) {}
+  testcase_deadread(const actor_config &config, const mdbx_pid_t pid) : testcase(config, pid) {}
   bool run() override;
 };
 REGISTER_TESTCASE(deadread);
@@ -24,8 +23,7 @@ bool testcase_deadread::run() {
 
 class testcase_deadwrite : public testcase {
 public:
-  testcase_deadwrite(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid) {}
+  testcase_deadwrite(const actor_config &config, const mdbx_pid_t pid) : testcase(config, pid) {}
   bool run() override;
 };
 

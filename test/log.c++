@@ -26,15 +26,13 @@ MDBX_NORETURN void failure_perror(const char *what, int errnum) {
 
 //-----------------------------------------------------------------------------
 
-static void mdbx_logger(MDBX_log_level_t priority, const char *function,
-                        int line, const char *fmt,
+static void mdbx_logger(MDBX_log_level_t priority, const char *function, int line, const char *fmt,
                         va_list args) MDBX_CXX17_NOEXCEPT {
   if (function) {
     if (priority == MDBX_LOG_FATAL)
       log_error("mdbx: fatal failure: %s, %d", function, line);
-    logging::output_nocheckloglevel(
-        logging::loglevel(priority),
-        strncmp(function, "mdbx_", 5) == 0 ? "%s: " : "mdbx %s: ", function);
+    logging::output_nocheckloglevel(logging::loglevel(priority),
+                                    strncmp(function, "mdbx_", 5) == 0 ? "%s: " : "mdbx %s: ", function);
     logging::feed_ap(fmt, args);
   } else
     logging::feed_ap(fmt, args);
@@ -58,9 +56,7 @@ static FILE *flow;
 void setlevel(loglevel priority) {
   level = priority;
   int rc = mdbx_setup_debug(MDBX_log_level_t(priority),
-                            MDBX_DBG_ASSERT | MDBX_DBG_AUDIT | MDBX_DBG_JITTER |
-                                MDBX_DBG_DUMP,
-                            mdbx_logger);
+                            MDBX_DBG_ASSERT | MDBX_DBG_AUDIT | MDBX_DBG_JITTER | MDBX_DBG_DUMP, mdbx_logger);
   log_trace("set mdbx debug-opts: 0x%02x", rc);
 }
 
@@ -117,8 +113,7 @@ void ln() {
   }
 }
 
-void output_nocheckloglevel_ap(const logging::loglevel priority,
-                               const char *format, va_list ap) {
+void output_nocheckloglevel_ap(const logging::loglevel priority, const char *format, va_list ap) {
   ln();
   chrono::time now = chrono::now_realtime();
   struct tm tm;
@@ -134,11 +129,9 @@ void output_nocheckloglevel_ap(const logging::loglevel priority,
   if (rc != MDBX_SUCCESS)
     failure_perror("localtime_r()", rc);
 
-  fprintf(stdout,
-          "[ %02d%02d%02d-%02d:%02d:%02d.%06d_%05lu %-10s %.4s ] %s" /* TODO */,
-          tm.tm_year - 100, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min,
-          tm.tm_sec, chrono::fractional2us(now.fractional), (long)osal_getpid(),
-          prefix_buf, level2str(priority), suffix_ptr);
+  fprintf(stdout, "[ %02d%02d%02d-%02d:%02d:%02d.%06d_%05lu %-10s %.4s ] %s" /* TODO */, tm.tm_year - 100,
+          tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, chrono::fractional2us(now.fractional),
+          (long)osal_getpid(), prefix_buf, level2str(priority), suffix_ptr);
 
   va_list ones;
   memset(&ones, 0, sizeof(ones)) /* zap MSVC and other goofy compilers */;
@@ -171,8 +164,7 @@ void output_nocheckloglevel_ap(const logging::loglevel priority,
   if (same_or_higher(priority, error)) {
     if (flow)
       flow = stderr;
-    fprintf(stderr, "[ %05lu %-10s %.4s ] %s", (long)osal_getpid(), prefix_buf,
-            level2str(priority), suffix_ptr);
+    fprintf(stderr, "[ %05lu %-10s %.4s ] %s", (long)osal_getpid(), prefix_buf, level2str(priority), suffix_ptr);
     vfprintf(stderr, format, ones);
     va_end(ones);
   }
@@ -206,14 +198,12 @@ bool feed(const char *format, ...) {
   return true;
 }
 
-local_suffix::local_suffix(const char *c_str)
-    : trim_pos(suffix_buf.size()), indent(0) {
+local_suffix::local_suffix(const char *c_str) : trim_pos(suffix_buf.size()), indent(0) {
   suffix_buf.append(c_str);
   suffix_ptr = suffix_buf.c_str();
 }
 
-local_suffix::local_suffix(const std::string &str)
-    : trim_pos(suffix_buf.size()), indent(0) {
+local_suffix::local_suffix(const std::string &str) : trim_pos(suffix_buf.size()), indent(0) {
   suffix_buf.append(str);
   suffix_ptr = suffix_buf.c_str();
 }
@@ -242,8 +232,7 @@ void progress_canary(bool active) {
   static chrono::time progress_timestamp;
   chrono::time now = chrono::now_monotonic();
 
-  if (now.fixedpoint - progress_timestamp.fixedpoint <
-      chrono::from_ms(42).fixedpoint)
+  if (now.fixedpoint - progress_timestamp.fixedpoint < chrono::from_ms(42).fixedpoint)
     return;
 
   if (osal_progress_push(active)) {
@@ -262,20 +251,17 @@ void progress_canary(bool active) {
         progress_timestamp = now;
         fprintf(stderr, "%c\b", "-\\|/"[last_point = point]);
       }
-    } else if (now.fixedpoint - progress_timestamp.fixedpoint >
-               chrono::from_seconds(2).fixedpoint) {
+    } else if (now.fixedpoint - progress_timestamp.fixedpoint > chrono::from_seconds(2).fixedpoint) {
       progress_timestamp = now;
       fprintf(stderr, "%c\b", "@*"[now.utc & 1]);
     }
   } else {
     static int count;
-    if (active && now.fixedpoint - progress_timestamp.fixedpoint >
-                      chrono::from_seconds(1).fixedpoint) {
+    if (active && now.fixedpoint - progress_timestamp.fixedpoint > chrono::from_seconds(1).fixedpoint) {
       putc('.', stderr);
       progress_timestamp = now;
       ++count;
-    } else if (now.fixedpoint - progress_timestamp.fixedpoint >
-               chrono::from_seconds(5).fixedpoint) {
+    } else if (now.fixedpoint - progress_timestamp.fixedpoint > chrono::from_seconds(5).fixedpoint) {
       putc("@*"[now.utc & 1], stderr);
       progress_timestamp = now;
       ++count;
@@ -364,9 +350,7 @@ void log_trouble(const char *where, const char *what, int errnum) {
   log_error("%s: %s %s", where, what, test_strerror(errnum));
 }
 
-bool log_enabled(const logging::loglevel priority) {
-  return logging::same_or_higher(priority, logging::level);
-}
+bool log_enabled(const logging::loglevel priority) { return logging::same_or_higher(priority, logging::level); }
 
 void log_flush(void) {
   logging::ln();

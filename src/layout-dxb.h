@@ -17,10 +17,8 @@
 /* FROZEN: The version number for a database's datafile format. */
 #define MDBX_DATA_VERSION 3
 
-#define MDBX_DATA_MAGIC                                                        \
-  ((MDBX_MAGIC << 8) + MDBX_PNL_ASCENDING * 64 + MDBX_DATA_VERSION)
-#define MDBX_DATA_MAGIC_LEGACY_COMPAT                                          \
-  ((MDBX_MAGIC << 8) + MDBX_PNL_ASCENDING * 64 + 2)
+#define MDBX_DATA_MAGIC ((MDBX_MAGIC << 8) + MDBX_PNL_ASCENDING * 64 + MDBX_DATA_VERSION)
+#define MDBX_DATA_MAGIC_LEGACY_COMPAT ((MDBX_MAGIC << 8) + MDBX_PNL_ASCENDING * 64 + 2)
 #define MDBX_DATA_MAGIC_LEGACY_DEVEL ((MDBX_MAGIC << 8) + 255)
 
 /* handle for the DB used to track free pages. */
@@ -261,40 +259,30 @@ typedef enum node_flags {
 
 #pragma pack(pop)
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint8_t
-page_type(const page_t *mp) {
-  return mp->flags;
-}
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint8_t page_type(const page_t *mp) { return mp->flags; }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint8_t
-page_type_compat(const page_t *mp) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint8_t page_type_compat(const page_t *mp) {
   /* Drop legacy P_DIRTY flag for sub-pages for compatilibity,
    * for assertions only. */
-  return unlikely(mp->flags & P_SUBP) ? mp->flags & ~(P_SUBP | P_LEGACY_DIRTY)
-                                      : mp->flags;
+  return unlikely(mp->flags & P_SUBP) ? mp->flags & ~(P_SUBP | P_LEGACY_DIRTY) : mp->flags;
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
-is_leaf(const page_t *mp) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_leaf(const page_t *mp) {
   return (mp->flags & P_LEAF) != 0;
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
-is_dupfix_leaf(const page_t *mp) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_dupfix_leaf(const page_t *mp) {
   return (mp->flags & P_DUPFIX) != 0;
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
-is_branch(const page_t *mp) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_branch(const page_t *mp) {
   return (mp->flags & P_BRANCH) != 0;
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
-is_largepage(const page_t *mp) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_largepage(const page_t *mp) {
   return (mp->flags & P_LARGE) != 0;
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
-is_subpage(const page_t *mp) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_subpage(const page_t *mp) {
   return (mp->flags & P_SUBP) != 0;
 }

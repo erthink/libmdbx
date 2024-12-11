@@ -28,8 +28,7 @@ typedef struct MDBX_chk_internal {
 
 __cold static int chk_check_break(MDBX_chk_scope_t *const scope) {
   MDBX_chk_internal_t *const chk = scope->internal;
-  return (chk->got_break || (chk->cb->check_break &&
-                             (chk->got_break = chk->cb->check_break(chk->usr))))
+  return (chk->got_break || (chk->cb->check_break && (chk->got_break = chk->cb->check_break(chk->usr))))
              ? MDBX_RESULT_TRUE
              : MDBX_RESULT_FALSE;
 }
@@ -37,15 +36,14 @@ __cold static int chk_check_break(MDBX_chk_scope_t *const scope) {
 __cold static void chk_line_end(MDBX_chk_line_t *line) {
   if (likely(line)) {
     MDBX_chk_internal_t *chk = line->ctx->internal;
-    assert(line->begin <= line->end && line->begin <= line->out &&
-           line->out <= line->end);
+    assert(line->begin <= line->end && line->begin <= line->out && line->out <= line->end);
     if (likely(chk->cb->print_done))
       chk->cb->print_done(line);
   }
 }
 
-__cold __must_check_result static MDBX_chk_line_t *
-chk_line_begin(MDBX_chk_scope_t *const scope, enum MDBX_chk_severity severity) {
+__cold __must_check_result static MDBX_chk_line_t *chk_line_begin(MDBX_chk_scope_t *const scope,
+                                                                  enum MDBX_chk_severity severity) {
   MDBX_chk_internal_t *const chk = scope->internal;
   if (severity < MDBX_chk_warning)
     mdbx_env_chk_encount_problem(chk->usr);
@@ -54,8 +52,7 @@ chk_line_begin(MDBX_chk_scope_t *const scope, enum MDBX_chk_severity severity) {
     line = chk->cb->print_begin(chk->usr, severity);
     if (likely(line)) {
       assert(line->ctx == nullptr || (line->ctx == chk->usr && line->empty));
-      assert(line->begin <= line->end && line->begin <= line->out &&
-             line->out <= line->end);
+      assert(line->begin <= line->end && line->begin <= line->out && line->out <= line->end);
       line->ctx = chk->usr;
     }
   }
@@ -75,12 +72,10 @@ __cold static MDBX_chk_line_t *chk_line_feed(MDBX_chk_line_t *line) {
 __cold static MDBX_chk_line_t *chk_flush(MDBX_chk_line_t *line) {
   if (likely(line)) {
     MDBX_chk_internal_t *chk = line->ctx->internal;
-    assert(line->begin <= line->end && line->begin <= line->out &&
-           line->out <= line->end);
+    assert(line->begin <= line->end && line->begin <= line->out && line->out <= line->end);
     if (likely(chk->cb->print_flush)) {
       chk->cb->print_flush(line);
-      assert(line->begin <= line->end && line->begin <= line->out &&
-             line->out <= line->end);
+      assert(line->begin <= line->end && line->begin <= line->out && line->out <= line->end);
       line->out = line->begin;
     }
   }
@@ -90,8 +85,7 @@ __cold static MDBX_chk_line_t *chk_flush(MDBX_chk_line_t *line) {
 __cold static size_t chk_print_wanna(MDBX_chk_line_t *line, size_t need) {
   if (likely(line && need)) {
     size_t have = line->end - line->out;
-    assert(line->begin <= line->end && line->begin <= line->out &&
-           line->out <= line->end);
+    assert(line->begin <= line->end && line->begin <= line->out && line->out <= line->end);
     if (need > have) {
       line = chk_flush(line);
       have = line->end - line->out;
@@ -101,17 +95,14 @@ __cold static size_t chk_print_wanna(MDBX_chk_line_t *line, size_t need) {
   return 0;
 }
 
-__cold static MDBX_chk_line_t *chk_puts(MDBX_chk_line_t *line,
-                                        const char *str) {
+__cold static MDBX_chk_line_t *chk_puts(MDBX_chk_line_t *line, const char *str) {
   if (likely(line && str && *str)) {
     MDBX_chk_internal_t *chk = line->ctx->internal;
     size_t left = strlen(str);
-    assert(line->begin <= line->end && line->begin <= line->out &&
-           line->out <= line->end);
+    assert(line->begin <= line->end && line->begin <= line->out && line->out <= line->end);
     if (chk->cb->print_chars) {
       chk->cb->print_chars(line, str, left);
-      assert(line->begin <= line->end && line->begin <= line->out &&
-             line->out <= line->end);
+      assert(line->begin <= line->end && line->begin <= line->out && line->out <= line->end);
     } else
       do {
         size_t chunk = chk_print_wanna(line, left);
@@ -120,8 +111,7 @@ __cold static MDBX_chk_line_t *chk_puts(MDBX_chk_line_t *line,
           break;
         memcpy(line->out, str, chunk);
         line->out += chunk;
-        assert(line->begin <= line->end && line->begin <= line->out &&
-               line->out <= line->end);
+        assert(line->begin <= line->end && line->begin <= line->out && line->out <= line->end);
         str += chunk;
         left -= chunk;
       } while (left);
@@ -130,16 +120,13 @@ __cold static MDBX_chk_line_t *chk_puts(MDBX_chk_line_t *line,
   return line;
 }
 
-__cold static MDBX_chk_line_t *chk_print_va(MDBX_chk_line_t *line,
-                                            const char *fmt, va_list args) {
+__cold static MDBX_chk_line_t *chk_print_va(MDBX_chk_line_t *line, const char *fmt, va_list args) {
   if (likely(line)) {
     MDBX_chk_internal_t *chk = line->ctx->internal;
-    assert(line->begin <= line->end && line->begin <= line->out &&
-           line->out <= line->end);
+    assert(line->begin <= line->end && line->begin <= line->out && line->out <= line->end);
     if (chk->cb->print_format) {
       chk->cb->print_format(line, fmt, args);
-      assert(line->begin <= line->end && line->begin <= line->out &&
-             line->out <= line->end);
+      assert(line->begin <= line->end && line->begin <= line->out && line->out <= line->end);
     } else {
       va_list ones;
       va_copy(ones, args);
@@ -151,8 +138,7 @@ __cold static MDBX_chk_line_t *chk_print_va(MDBX_chk_line_t *line,
           int written = vsnprintf(line->out, have, fmt, args);
           if (likely(written > 0))
             line->out += written;
-          assert(line->begin <= line->end && line->begin <= line->out &&
-                 line->out <= line->end);
+          assert(line->begin <= line->end && line->begin <= line->out && line->out <= line->end);
         }
       }
     }
@@ -161,8 +147,7 @@ __cold static MDBX_chk_line_t *chk_print_va(MDBX_chk_line_t *line,
   return line;
 }
 
-__cold static MDBX_chk_line_t *MDBX_PRINTF_ARGS(2, 3)
-    chk_print(MDBX_chk_line_t *line, const char *fmt, ...) {
+__cold static MDBX_chk_line_t *MDBX_PRINTF_ARGS(2, 3) chk_print(MDBX_chk_line_t *line, const char *fmt, ...) {
   if (likely(line)) {
     // MDBX_chk_internal_t *chk = line->ctx->internal;
     va_list args;
@@ -174,12 +159,9 @@ __cold static MDBX_chk_line_t *MDBX_PRINTF_ARGS(2, 3)
   return line;
 }
 
-__cold static MDBX_chk_line_t *chk_print_size(MDBX_chk_line_t *line,
-                                              const char *prefix,
-                                              const uint64_t value,
+__cold static MDBX_chk_line_t *chk_print_size(MDBX_chk_line_t *line, const char *prefix, const uint64_t value,
                                               const char *suffix) {
-  static const char sf[] =
-      "KMGTPEZY"; /* LY: Kilo, Mega, Giga, Tera, Peta, Exa, Zetta, Yotta! */
+  static const char sf[] = "KMGTPEZY"; /* LY: Kilo, Mega, Giga, Tera, Peta, Exa, Zetta, Yotta! */
   if (likely(line)) {
     MDBX_chk_internal_t *chk = line->ctx->internal;
     prefix = prefix ? prefix : "";
@@ -191,33 +173,27 @@ __cold static MDBX_chk_line_t *chk_print_size(MDBX_chk_line_t *line,
         const unsigned scale = 10 + i * 10;
         const uint64_t rounded = value + (UINT64_C(5) << (scale - 10));
         const uint64_t integer = rounded >> scale;
-        const uint64_t fractional =
-            (rounded - (integer << scale)) * 100u >> scale;
+        const uint64_t fractional = (rounded - (integer << scale)) * 100u >> scale;
         if ((rounded >> scale) <= 1000)
-          return chk_print(line, "%s%" PRIu64 " (%u.%02u %ciB)%s", prefix,
-                           value, (unsigned)integer, (unsigned)fractional,
-                           sf[i], suffix);
+          return chk_print(line, "%s%" PRIu64 " (%u.%02u %ciB)%s", prefix, value, (unsigned)integer,
+                           (unsigned)fractional, sf[i], suffix);
       }
     line->empty = false;
   }
   return line;
 }
 
-__cold static int chk_error_rc(MDBX_chk_scope_t *const scope, int err,
-                               const char *subj) {
+__cold static int chk_error_rc(MDBX_chk_scope_t *const scope, int err, const char *subj) {
   MDBX_chk_line_t *line = chk_line_begin(scope, MDBX_chk_error);
   if (line)
-    chk_line_end(chk_flush(chk_print(line, "%s() failed, error %s (%d)", subj,
-                                     mdbx_strerror(err), err)));
+    chk_line_end(chk_flush(chk_print(line, "%s() failed, error %s (%d)", subj, mdbx_strerror(err), err)));
   else
-    debug_log(MDBX_LOG_ERROR, "mdbx_env_chk", 0, "%s() failed, error %s (%d)",
-              subj, mdbx_strerror(err), err);
+    debug_log(MDBX_LOG_ERROR, "mdbx_env_chk", 0, "%s() failed, error %s (%d)", subj, mdbx_strerror(err), err);
   return err;
 }
 
 __cold static void MDBX_PRINTF_ARGS(5, 6)
-    chk_object_issue(MDBX_chk_scope_t *const scope, const char *object,
-                     uint64_t entry_number, const char *caption,
+    chk_object_issue(MDBX_chk_scope_t *const scope, const char *object, uint64_t entry_number, const char *caption,
                      const char *extra_fmt, ...) {
   MDBX_chk_internal_t *const chk = scope->internal;
   MDBX_chk_issue_t *issue = chk->usr->scope->issues;
@@ -258,8 +234,7 @@ __cold static void MDBX_PRINTF_ARGS(5, 6)
   va_end(args);
 }
 
-__cold static void MDBX_PRINTF_ARGS(2, 3)
-    chk_scope_issue(MDBX_chk_scope_t *const scope, const char *fmt, ...) {
+__cold static void MDBX_PRINTF_ARGS(2, 3) chk_scope_issue(MDBX_chk_scope_t *const scope, const char *fmt, ...) {
   MDBX_chk_internal_t *const chk = scope->internal;
   va_list args;
   va_start(args, fmt);
@@ -267,8 +242,7 @@ __cold static void MDBX_PRINTF_ARGS(2, 3)
     mdbx_env_chk_encount_problem(chk->usr);
     chk->cb->issue(chk->usr, nullptr, 0, nullptr, fmt, args);
   } else
-    chk_line_end(
-        chk_print_va(chk_line_begin(scope, MDBX_chk_error), fmt, args));
+    chk_line_end(chk_print_va(chk_line_begin(scope, MDBX_chk_error), fmt, args));
   va_end(args);
 }
 
@@ -306,26 +280,19 @@ __cold static int chk_scope_end(MDBX_chk_internal_t *chk, int err) {
   return err;
 }
 
-__cold static int chk_scope_begin_args(MDBX_chk_internal_t *chk,
-                                       int verbosity_adjustment,
-                                       enum MDBX_chk_stage stage,
-                                       const void *object, size_t *problems,
-                                       const char *fmt, va_list args) {
+__cold static int chk_scope_begin_args(MDBX_chk_internal_t *chk, int verbosity_adjustment, enum MDBX_chk_stage stage,
+                                       const void *object, size_t *problems, const char *fmt, va_list args) {
   if (unlikely(chk->scope_depth + 1u >= ARRAY_LENGTH(chk->scope_stack)))
     return MDBX_BACKLOG_DEPLETED;
 
   MDBX_chk_scope_t *const outer = chk->scope_stack + chk->scope_depth;
-  const int verbosity =
-      outer->verbosity +
-      (verbosity_adjustment - 1) * (1 << MDBX_chk_severity_prio_shift);
+  const int verbosity = outer->verbosity + (verbosity_adjustment - 1) * (1 << MDBX_chk_severity_prio_shift);
   MDBX_chk_scope_t *const inner = outer + 1;
   memset(inner, 0, sizeof(*inner));
   inner->internal = outer->internal;
   inner->stage = stage ? stage : (stage = outer->stage);
   inner->object = object;
-  inner->verbosity = (verbosity < MDBX_chk_warning)
-                         ? MDBX_chk_warning
-                         : (enum MDBX_chk_severity)verbosity;
+  inner->verbosity = (verbosity < MDBX_chk_warning) ? MDBX_chk_warning : (enum MDBX_chk_severity)verbosity;
   if (problems)
     chk->problem_counter = problems;
   else if (!chk->problem_counter || outer->stage != stage)
@@ -351,13 +318,11 @@ __cold static int chk_scope_begin_args(MDBX_chk_internal_t *chk,
 }
 
 __cold static int MDBX_PRINTF_ARGS(6, 7)
-    chk_scope_begin(MDBX_chk_internal_t *chk, int verbosity_adjustment,
-                    enum MDBX_chk_stage stage, const void *object,
+    chk_scope_begin(MDBX_chk_internal_t *chk, int verbosity_adjustment, enum MDBX_chk_stage stage, const void *object,
                     size_t *problems, const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  int rc = chk_scope_begin_args(chk, verbosity_adjustment, stage, object,
-                                problems, fmt, args);
+  int rc = chk_scope_begin_args(chk, verbosity_adjustment, stage, object, problems, fmt, args);
   va_end(args);
   return rc;
 }
@@ -376,19 +341,16 @@ __cold void chk_scope_pop(MDBX_chk_scope_t *const inner) {
 }
 
 __cold static MDBX_chk_scope_t *MDBX_PRINTF_ARGS(3, 4)
-    chk_scope_push(MDBX_chk_scope_t *const scope, int verbosity_adjustment,
-                   const char *fmt, ...) {
+    chk_scope_push(MDBX_chk_scope_t *const scope, int verbosity_adjustment, const char *fmt, ...) {
   chk_scope_restore(scope, MDBX_SUCCESS);
   va_list args;
   va_start(args, fmt);
-  int err = chk_scope_begin_args(scope->internal, verbosity_adjustment,
-                                 scope->stage, nullptr, nullptr, fmt, args);
+  int err = chk_scope_begin_args(scope->internal, verbosity_adjustment, scope->stage, nullptr, nullptr, fmt, args);
   va_end(args);
   return err ? nullptr : scope + 1;
 }
 
-__cold static const char *chk_v2a(MDBX_chk_internal_t *chk,
-                                  const MDBX_val *val) {
+__cold static const char *chk_v2a(MDBX_chk_internal_t *chk, const MDBX_val *val) {
   if (val == MDBX_CHK_MAIN)
     return "@MAIN";
   if (val == MDBX_CHK_GC)
@@ -418,8 +380,7 @@ __cold static const char *chk_v2a(MDBX_chk_internal_t *chk,
       chk->v2a_buf.iov_base = ptr;
       chk->v2a_buf.iov_len = enough;
     }
-    snprintf(chk->v2a_buf.iov_base, chk->v2a_buf.iov_len,
-             "<too-long.%" PRIuSIZE ">", len);
+    snprintf(chk->v2a_buf.iov_base, chk->v2a_buf.iov_len, "<too-long.%" PRIuSIZE ">", len);
     return chk->v2a_buf.iov_base;
   }
 
@@ -428,8 +389,7 @@ __cold static const char *chk_v2a(MDBX_chk_internal_t *chk,
   size_t xchars = 0;
   for (size_t i = 0; i < len && printable; ++i) {
     quoting = quoting || !(data[i] == '_' || isalnum(data[i]));
-    printable =
-        isprint(data[i]) || (data[i] < ' ' && ++xchars < 4 && len > xchars * 4);
+    printable = isprint(data[i]) || (data[i] < ' ' && ++xchars < 4 && len > xchars * 4);
   }
 
   size_t need = len + 1;
@@ -525,10 +485,8 @@ static void histogram_reduce(struct MDBX_chk_histogram *p) {
   // ищем пару для слияния с минимальной ошибкой
   size_t min_err = SIZE_MAX, min_i = last - 1;
   for (size_t i = 0; i < last; ++i) {
-    const size_t b1 = p->ranges[i].begin, e1 = p->ranges[i].end,
-                 s1 = p->ranges[i].amount;
-    const size_t b2 = p->ranges[i + 1].begin, e2 = p->ranges[i + 1].end,
-                 s2 = p->ranges[i + 1].amount;
+    const size_t b1 = p->ranges[i].begin, e1 = p->ranges[i].end, s1 = p->ranges[i].amount;
+    const size_t b2 = p->ranges[i + 1].begin, e2 = p->ranges[i + 1].end, s2 = p->ranges[i + 1].amount;
     const size_t l1 = e1 - b1, l2 = e2 - b2, lx = e2 - b1, sx = s1 + s2;
     assert(s1 > 0 && b1 > 0 && b1 < e1);
     assert(s2 > 0 && b2 > 0 && b2 < e2);
@@ -550,8 +508,7 @@ static void histogram_reduce(struct MDBX_chk_histogram *p) {
   p->ranges[min_i].count += p->ranges[min_i + 1].count;
   if (min_i < last)
     // перемещаем хвост
-    memmove(p->ranges + min_i, p->ranges + min_i + 1,
-            (last - min_i) * sizeof(p->ranges[0]));
+    memmove(p->ranges + min_i, p->ranges + min_i + 1, (last - min_i) * sizeof(p->ranges[0]));
   // обнуляем последний элемент и продолжаем
   p->ranges[last].count = 0;
 }
@@ -585,8 +542,7 @@ static void histogram_acc(const size_t n, struct MDBX_chk_histogram *p) {
 #ifdef __COVERITY__
           if (i < last) /* avoid Coverity false-positive issue */
 #endif                  /* __COVERITY__ */
-            memmove(p->ranges + i + 1, p->ranges + i,
-                    (last - i) * sizeof(p->ranges[0]));
+            memmove(p->ranges + i + 1, p->ranges + i, (last - i) * sizeof(p->ranges[0]));
         }
         p->ranges[i].begin = n;
         p->ranges[i].end = n + 1;
@@ -598,10 +554,8 @@ static void histogram_acc(const size_t n, struct MDBX_chk_histogram *p) {
     }
 }
 
-__cold static MDBX_chk_line_t *
-histogram_dist(MDBX_chk_line_t *line,
-               const struct MDBX_chk_histogram *histogram, const char *prefix,
-               const char *first, bool amount) {
+__cold static MDBX_chk_line_t *histogram_dist(MDBX_chk_line_t *line, const struct MDBX_chk_histogram *histogram,
+                                              const char *prefix, const char *first, bool amount) {
   line = chk_print(line, "%s:", prefix);
   const char *comma = "";
   const size_t first_val = amount ? histogram->ones : histogram->pad;
@@ -614,36 +568,28 @@ histogram_dist(MDBX_chk_line_t *line,
       chk_print(line, "%s %" PRIuSIZE, comma, histogram->ranges[n].begin);
       if (histogram->ranges[n].begin != histogram->ranges[n].end - 1)
         chk_print(line, "-%" PRIuSIZE, histogram->ranges[n].end - 1);
-      line = chk_print(line, "=%" PRIuSIZE,
-                       amount ? histogram->ranges[n].amount
-                              : histogram->ranges[n].count);
+      line = chk_print(line, "=%" PRIuSIZE, amount ? histogram->ranges[n].amount : histogram->ranges[n].count);
       comma = ",";
     }
   return line;
 }
 
-__cold static MDBX_chk_line_t *
-histogram_print(MDBX_chk_scope_t *scope, MDBX_chk_line_t *line,
-                const struct MDBX_chk_histogram *histogram, const char *prefix,
-                const char *first, bool amount) {
+__cold static MDBX_chk_line_t *histogram_print(MDBX_chk_scope_t *scope, MDBX_chk_line_t *line,
+                                               const struct MDBX_chk_histogram *histogram, const char *prefix,
+                                               const char *first, bool amount) {
   if (histogram->count) {
-    line = chk_print(line, "%s %" PRIuSIZE, prefix,
-                     amount ? histogram->amount : histogram->count);
+    line = chk_print(line, "%s %" PRIuSIZE, prefix, amount ? histogram->amount : histogram->count);
     if (scope->verbosity > MDBX_chk_info)
-      line = chk_puts(
-          histogram_dist(line, histogram, " (distribution", first, amount),
-          ")");
+      line = chk_puts(histogram_dist(line, histogram, " (distribution", first, amount), ")");
   }
   return line;
 }
 
 //-----------------------------------------------------------------------------
 
-__cold static int chk_get_tbl(MDBX_chk_scope_t *const scope,
-                              const walk_tbl_t *in, MDBX_chk_table_t **out) {
+__cold static int chk_get_tbl(MDBX_chk_scope_t *const scope, const walk_tbl_t *in, MDBX_chk_table_t **out) {
   MDBX_chk_internal_t *const chk = scope->internal;
-  if (chk->last_lookup &&
-      chk->last_lookup->name.iov_base == in->name.iov_base) {
+  if (chk->last_lookup && chk->last_lookup->name.iov_base == in->name.iov_base) {
     *out = chk->last_lookup;
     return MDBX_SUCCESS;
   }
@@ -665,34 +611,27 @@ __cold static int chk_get_tbl(MDBX_chk_scope_t *const scope,
       if (tbl->id < 0) {
         tbl->id = (int)i;
         tbl->cookie =
-            chk->cb->table_filter
-                ? chk->cb->table_filter(chk->usr, &tbl->name, tbl->flags)
-                : (void *)(intptr_t)-1;
+            chk->cb->table_filter ? chk->cb->table_filter(chk->usr, &tbl->name, tbl->flags) : (void *)(intptr_t)-1;
       }
       *out = (chk->last_lookup = tbl);
       return MDBX_SUCCESS;
     }
   }
-  chk_scope_issue(scope, "too many tables > %u",
-                  (unsigned)ARRAY_LENGTH(chk->table) - CORE_DBS - /* meta */ 1);
+  chk_scope_issue(scope, "too many tables > %u", (unsigned)ARRAY_LENGTH(chk->table) - CORE_DBS - /* meta */ 1);
   *out = nullptr;
   return MDBX_PROBLEM;
 }
 
 //------------------------------------------------------------------------------
 
-__cold static void chk_verbose_meta(MDBX_chk_scope_t *const scope,
-                                    const unsigned num) {
+__cold static void chk_verbose_meta(MDBX_chk_scope_t *const scope, const unsigned num) {
   MDBX_chk_line_t *line = chk_line_begin(scope, MDBX_chk_verbose);
   MDBX_chk_internal_t *const chk = scope->internal;
   if (line) {
     MDBX_env *const env = chk->usr->env;
-    const bool have_bootid = (chk->envinfo.mi_bootid.current.x |
-                              chk->envinfo.mi_bootid.current.y) != 0;
-    const bool bootid_match =
-        have_bootid && memcmp(&chk->envinfo.mi_bootid.meta[num],
-                              &chk->envinfo.mi_bootid.current,
-                              sizeof(chk->envinfo.mi_bootid.current)) == 0;
+    const bool have_bootid = (chk->envinfo.mi_bootid.current.x | chk->envinfo.mi_bootid.current.y) != 0;
+    const bool bootid_match = have_bootid && memcmp(&chk->envinfo.mi_bootid.meta[num], &chk->envinfo.mi_bootid.current,
+                                                    sizeof(chk->envinfo.mi_bootid.current)) == 0;
 
     const char *status = "stay";
     if (num == chk->troika.recent)
@@ -707,9 +646,7 @@ __cold static void chk_verbose_meta(MDBX_chk_scope_t *const scope,
       break;
     case DATASIGN_WEAK:
       line = chk_print(line, "weak-%s",
-                       have_bootid
-                           ? (bootid_match ? "intact (same boot-id)" : "dead")
-                           : "unknown (no boot-id)");
+                       have_bootid ? (bootid_match ? "intact (same boot-id)" : "dead") : "unknown (no boot-id)");
       break;
     default:
       line = chk_puts(line, "steady");
@@ -718,10 +655,8 @@ __cold static void chk_verbose_meta(MDBX_chk_scope_t *const scope,
     const txnid_t meta_txnid = chk->envinfo.mi_meta_txnid[num];
     line = chk_print(line, " txn#%" PRIaTXN ", ", meta_txnid);
     if (chk->envinfo.mi_bootid.meta[num].x | chk->envinfo.mi_bootid.meta[num].y)
-      line = chk_print(line, "boot-id %" PRIx64 "-%" PRIx64 " (%s)",
-                       chk->envinfo.mi_bootid.meta[num].x,
-                       chk->envinfo.mi_bootid.meta[num].y,
-                       bootid_match ? "live" : "not match");
+      line = chk_print(line, "boot-id %" PRIx64 "-%" PRIx64 " (%s)", chk->envinfo.mi_bootid.meta[num].x,
+                       chk->envinfo.mi_bootid.meta[num].y, bootid_match ? "live" : "not match");
     else
       line = chk_puts(line, "no boot-id");
 
@@ -730,22 +665,16 @@ __cold static void chk_verbose_meta(MDBX_chk_scope_t *const scope,
         line = chk_print(line, ", %s", "forced for checking");
     } else if (meta_txnid > chk->envinfo.mi_recent_txnid &&
                (env->flags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) == MDBX_EXCLUSIVE)
-      line = chk_print(line,
-                       ", rolled-back %" PRIu64 " commit(s) (%" PRIu64
-                       " >>> %" PRIu64 ")",
-                       meta_txnid - chk->envinfo.mi_recent_txnid, meta_txnid,
-                       chk->envinfo.mi_recent_txnid);
+      line = chk_print(line, ", rolled-back %" PRIu64 " commit(s) (%" PRIu64 " >>> %" PRIu64 ")",
+                       meta_txnid - chk->envinfo.mi_recent_txnid, meta_txnid, chk->envinfo.mi_recent_txnid);
     chk_line_end(line);
   }
 }
 
-__cold static int
-chk_pgvisitor(const size_t pgno, const unsigned npages, void *const ctx,
-              const int deep, const walk_tbl_t *tbl_info,
-              const size_t page_size, const page_type_t pagetype,
-              const MDBX_error_t page_err, const size_t nentries,
-              const size_t payload_bytes, const size_t header_bytes,
-              const size_t unused_bytes) {
+__cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *const ctx, const int deep,
+                                const walk_tbl_t *tbl_info, const size_t page_size, const page_type_t pagetype,
+                                const MDBX_error_t page_err, const size_t nentries, const size_t payload_bytes,
+                                const size_t header_bytes, const size_t unused_bytes) {
   MDBX_chk_scope_t *const scope = ctx;
   MDBX_chk_internal_t *const chk = scope->internal;
   MDBX_chk_context_t *const usr = chk->usr;
@@ -772,9 +701,8 @@ chk_pgvisitor(const size_t pgno, const unsigned npages, void *const ctx,
     if (tbl->flags & MDBX_DUPSORT)
       height -= tbl_info->internal->height;
     else {
-      chk_object_issue(scope, "nested tree", pgno, "unexpected",
-                       "table %s flags 0x%x, deep %i", chk_v2a(chk, &tbl->name),
-                       tbl->flags, deep);
+      chk_object_issue(scope, "nested tree", pgno, "unexpected", "table %s flags 0x%x, deep %i",
+                       chk_v2a(chk, &tbl->name), tbl->flags, deep);
       nested = nullptr;
     }
   } else
@@ -784,8 +712,7 @@ chk_pgvisitor(const size_t pgno, const unsigned npages, void *const ctx,
   bool branch = false;
   switch (pagetype) {
   default:
-    chk_object_issue(scope, "page", pgno, "unknown page-type",
-                     "type %u, deep %i", (unsigned)pagetype, deep);
+    chk_object_issue(scope, "page", pgno, "unknown page-type", "type %u, deep %i", (unsigned)pagetype, deep);
     pagetype_caption = "unknown";
     tbl->pages.other += npages;
     break;
@@ -803,10 +730,8 @@ chk_pgvisitor(const size_t pgno, const unsigned npages, void *const ctx,
     pagetype_caption = "large";
     histogram_acc(npages, &tbl->histogram.large_pages);
     if (tbl->flags & MDBX_DUPSORT)
-      chk_object_issue(scope, "page", pgno, "unexpected",
-                       "type %u, table %s flags 0x%x, deep %i",
-                       (unsigned)pagetype, chk_v2a(chk, &tbl->name), tbl->flags,
-                       deep);
+      chk_object_issue(scope, "page", pgno, "unexpected", "type %u, table %s flags 0x%x, deep %i", (unsigned)pagetype,
+                       chk_v2a(chk, &tbl->name), tbl->flags, deep);
     break;
   case page_branch:
     branch = true;
@@ -820,10 +745,8 @@ chk_pgvisitor(const size_t pgno, const unsigned npages, void *const ctx,
     break;
   case page_dupfix_leaf:
     if (!nested)
-      chk_object_issue(scope, "page", pgno, "unexpected",
-                       "type %u, table %s flags 0x%x, deep %i",
-                       (unsigned)pagetype, chk_v2a(chk, &tbl->name), tbl->flags,
-                       deep);
+      chk_object_issue(scope, "page", pgno, "unexpected", "type %u, table %s flags 0x%x, deep %i", (unsigned)pagetype,
+                       chk_v2a(chk, &tbl->name), tbl->flags, deep);
     /* fall through */
     __fallthrough;
   case page_leaf:
@@ -831,33 +754,27 @@ chk_pgvisitor(const size_t pgno, const unsigned npages, void *const ctx,
       pagetype_caption = "leaf";
       tbl->pages.leaf += 1;
       if (height != tbl_info->internal->height)
-        chk_object_issue(scope, "page", pgno, "wrong tree height",
-                         "actual %i != %i table %s", height,
+        chk_object_issue(scope, "page", pgno, "wrong tree height", "actual %i != %i table %s", height,
                          tbl_info->internal->height, chk_v2a(chk, &tbl->name));
     } else {
-      pagetype_caption =
-          (pagetype == page_leaf) ? "nested-leaf" : "nested-leaf-dupfix";
+      pagetype_caption = (pagetype == page_leaf) ? "nested-leaf" : "nested-leaf-dupfix";
       tbl->pages.nested_leaf += 1;
       if (chk->last_nested != nested) {
         histogram_acc(height, &tbl->histogram.nested_tree);
         chk->last_nested = nested;
       }
       if (height != nested->height)
-        chk_object_issue(scope, "page", pgno, "wrong nested-tree height",
-                         "actual %i != %i dupsort-node %s", height,
+        chk_object_issue(scope, "page", pgno, "wrong nested-tree height", "actual %i != %i dupsort-node %s", height,
                          nested->height, chk_v2a(chk, &tbl->name));
     }
     break;
   case page_sub_dupfix_leaf:
   case page_sub_leaf:
-    pagetype_caption =
-        (pagetype == page_sub_leaf) ? "subleaf-dupsort" : "subleaf-dupfix";
+    pagetype_caption = (pagetype == page_sub_leaf) ? "subleaf-dupsort" : "subleaf-dupfix";
     tbl->pages.nested_subleaf += 1;
     if ((tbl->flags & MDBX_DUPSORT) == 0 || nested)
-      chk_object_issue(scope, "page", pgno, "unexpected",
-                       "type %u, table %s flags 0x%x, deep %i",
-                       (unsigned)pagetype, chk_v2a(chk, &tbl->name), tbl->flags,
-                       deep);
+      chk_object_issue(scope, "page", pgno, "unexpected", "type %u, table %s flags 0x%x, deep %i", (unsigned)pagetype,
+                       chk_v2a(chk, &tbl->name), tbl->flags, deep);
     break;
   }
 
@@ -867,33 +784,24 @@ chk_pgvisitor(const size_t pgno, const unsigned npages, void *const ctx,
       if (npages == 1)
         chk_print(line, "%s-page %" PRIuSIZE, pagetype_caption, pgno);
       else
-        chk_print(line, "%s-span %" PRIuSIZE "[%u]", pagetype_caption, pgno,
-                  npages);
-      chk_line_end(chk_print(line,
-                             " of %s: header %" PRIiPTR ", %s %" PRIiPTR
-                             ", payload %" PRIiPTR ", unused %" PRIiPTR
-                             ", deep %i",
-                             chk_v2a(chk, &tbl->name), header_bytes,
-                             (pagetype == page_branch) ? "keys" : "entries",
-                             nentries, payload_bytes, unused_bytes, deep));
+        chk_print(line, "%s-span %" PRIuSIZE "[%u]", pagetype_caption, pgno, npages);
+      chk_line_end(chk_print(
+          line, " of %s: header %" PRIiPTR ", %s %" PRIiPTR ", payload %" PRIiPTR ", unused %" PRIiPTR ", deep %i",
+          chk_v2a(chk, &tbl->name), header_bytes, (pagetype == page_branch) ? "keys" : "entries", nentries,
+          payload_bytes, unused_bytes, deep));
     }
 
     bool already_used = false;
     for (unsigned n = 0; n < npages; ++n) {
       const size_t spanpgno = pgno + n;
       if (spanpgno >= usr->result.alloc_pages) {
-        chk_object_issue(scope, "page", spanpgno, "wrong page-no",
-                         "%s-page: %" PRIuSIZE " > %" PRIuSIZE ", deep %i",
-                         pagetype_caption, spanpgno, usr->result.alloc_pages,
-                         deep);
+        chk_object_issue(scope, "page", spanpgno, "wrong page-no", "%s-page: %" PRIuSIZE " > %" PRIuSIZE ", deep %i",
+                         pagetype_caption, spanpgno, usr->result.alloc_pages, deep);
         tbl->pages.all += 1;
       } else if (chk->pagemap[spanpgno]) {
-        const MDBX_chk_table_t *const rival =
-            chk->table[chk->pagemap[spanpgno] - 1];
-        chk_object_issue(scope, "page", spanpgno,
-                         (branch && rival == tbl) ? "loop" : "already used",
-                         "%s-page: by %s, deep %i", pagetype_caption,
-                         chk_v2a(chk, &rival->name), deep);
+        const MDBX_chk_table_t *const rival = chk->table[chk->pagemap[spanpgno] - 1];
+        chk_object_issue(scope, "page", spanpgno, (branch && rival == tbl) ? "loop" : "already used",
+                         "%s-page: by %s, deep %i", pagetype_caption, chk_v2a(chk, &rival->name), deep);
         already_used = true;
       } else {
         chk->pagemap[spanpgno] = (int16_t)tbl->id + 1;
@@ -907,36 +815,30 @@ chk_pgvisitor(const size_t pgno, const unsigned npages, void *const ctx,
   }
 
   if (MDBX_IS_ERROR(page_err)) {
-    chk_object_issue(scope, "page", pgno, "invalid/corrupted", "%s-page",
-                     pagetype_caption);
+    chk_object_issue(scope, "page", pgno, "invalid/corrupted", "%s-page", pagetype_caption);
   } else {
     if (unused_bytes > page_size)
-      chk_object_issue(scope, "page", pgno, "illegal unused-bytes",
-                       "%s-page: %u < %" PRIuSIZE " < %u", pagetype_caption, 0,
-                       unused_bytes, env->ps);
+      chk_object_issue(scope, "page", pgno, "illegal unused-bytes", "%s-page: %u < %" PRIuSIZE " < %u",
+                       pagetype_caption, 0, unused_bytes, env->ps);
 
-    if (header_bytes < (int)sizeof(long) ||
-        (size_t)header_bytes >= env->ps - sizeof(long)) {
+    if (header_bytes < (int)sizeof(long) || (size_t)header_bytes >= env->ps - sizeof(long)) {
       chk_object_issue(scope, "page", pgno, "illegal header-length",
-                       "%s-page: %" PRIuSIZE " < %" PRIuSIZE " < %" PRIuSIZE,
-                       pagetype_caption, sizeof(long), header_bytes,
-                       env->ps - sizeof(long));
+                       "%s-page: %" PRIuSIZE " < %" PRIuSIZE " < %" PRIuSIZE, pagetype_caption, sizeof(long),
+                       header_bytes, env->ps - sizeof(long));
     }
     if (nentries < 1 || (pagetype == page_branch && nentries < 2)) {
       chk_object_issue(scope, "page", pgno, nentries ? "half-empty" : "empty",
-                       "%s-page: payload %" PRIuSIZE " bytes, %" PRIuSIZE
-                       " entries, deep %i",
-                       pagetype_caption, payload_bytes, nentries, deep);
+                       "%s-page: payload %" PRIuSIZE " bytes, %" PRIuSIZE " entries, deep %i", pagetype_caption,
+                       payload_bytes, nentries, deep);
       tbl->pages.empty += 1;
     }
 
     if (npages) {
       if (page_bytes != page_size) {
         chk_object_issue(scope, "page", pgno, "misused",
-                         "%s-page: %" PRIuPTR " != %" PRIuPTR " (%" PRIuPTR
-                         "h + %" PRIuPTR "p + %" PRIuPTR "u), deep %i",
-                         pagetype_caption, page_size, page_bytes, header_bytes,
-                         payload_bytes, unused_bytes, deep);
+                         "%s-page: %" PRIuPTR " != %" PRIuPTR " (%" PRIuPTR "h + %" PRIuPTR "p + %" PRIuPTR
+                         "u), deep %i",
+                         pagetype_caption, page_size, page_bytes, header_bytes, payload_bytes, unused_bytes, deep);
         if (page_size > page_bytes)
           tbl->lost_bytes += page_size - page_bytes;
       } else {
@@ -1001,76 +903,53 @@ __cold static int chk_tree(MDBX_chk_scope_t *const scope) {
     chk_line_end(chk_print(chk_line_begin(usr->scope, MDBX_chk_resolution),
                            "walked %zu pages, left/unused %zu"
                            ", %" PRIuSIZE " problem(s)",
-                           usr->result.processed_pages,
-                           usr->result.unused_pages,
-                           usr->scope->subtotal_issues));
+                           usr->result.processed_pages, usr->result.unused_pages, usr->scope->subtotal_issues));
 
   err = chk_scope_restore(scope, err);
   if (scope->verbosity > MDBX_chk_info) {
     for (size_t i = 0; i < ARRAY_LENGTH(chk->table) && chk->table[i]; ++i) {
       MDBX_chk_table_t *const tbl = chk->table[i];
-      MDBX_chk_scope_t *inner =
-          chk_scope_push(scope, 0, "tree %s:", chk_v2a(chk, &tbl->name));
+      MDBX_chk_scope_t *inner = chk_scope_push(scope, 0, "tree %s:", chk_v2a(chk, &tbl->name));
       if (tbl->pages.all == 0)
-        chk_line_end(
-            chk_print(chk_line_begin(inner, MDBX_chk_resolution), "empty"));
+        chk_line_end(chk_print(chk_line_begin(inner, MDBX_chk_resolution), "empty"));
       else {
         MDBX_chk_line_t *line = chk_line_begin(inner, MDBX_chk_info);
         if (line) {
-          line = chk_print(line, "page usage: subtotal %" PRIuSIZE,
-                           tbl->pages.all);
-          const size_t branch_pages =
-              tbl->pages.branch + tbl->pages.nested_branch;
-          const size_t leaf_pages = tbl->pages.leaf + tbl->pages.nested_leaf +
-                                    tbl->pages.nested_subleaf;
+          line = chk_print(line, "page usage: subtotal %" PRIuSIZE, tbl->pages.all);
+          const size_t branch_pages = tbl->pages.branch + tbl->pages.nested_branch;
+          const size_t leaf_pages = tbl->pages.leaf + tbl->pages.nested_leaf + tbl->pages.nested_subleaf;
           if (tbl->pages.other)
             line = chk_print(line, ", other %" PRIuSIZE, tbl->pages.other);
-          if (tbl->pages.other == 0 ||
-              (branch_pages | leaf_pages | tbl->histogram.large_pages.count) !=
-                  0) {
-            line = chk_print(line, ", branch %" PRIuSIZE ", leaf %" PRIuSIZE,
-                             branch_pages, leaf_pages);
-            if (tbl->histogram.large_pages.count ||
-                (tbl->flags & MDBX_DUPSORT) == 0) {
-              line = chk_print(line, ", large %" PRIuSIZE,
-                               tbl->histogram.large_pages.count);
-              if (tbl->histogram.large_pages.amount |
-                  tbl->histogram.large_pages.count)
-                line = histogram_print(inner, line, &tbl->histogram.large_pages,
-                                       " amount", "single", true);
+          if (tbl->pages.other == 0 || (branch_pages | leaf_pages | tbl->histogram.large_pages.count) != 0) {
+            line = chk_print(line, ", branch %" PRIuSIZE ", leaf %" PRIuSIZE, branch_pages, leaf_pages);
+            if (tbl->histogram.large_pages.count || (tbl->flags & MDBX_DUPSORT) == 0) {
+              line = chk_print(line, ", large %" PRIuSIZE, tbl->histogram.large_pages.count);
+              if (tbl->histogram.large_pages.amount | tbl->histogram.large_pages.count)
+                line = histogram_print(inner, line, &tbl->histogram.large_pages, " amount", "single", true);
             }
           }
-          line = histogram_dist(chk_line_feed(line), &tbl->histogram.deep,
-                                "tree deep density", "1", false);
+          line = histogram_dist(chk_line_feed(line), &tbl->histogram.deep, "tree deep density", "1", false);
           if (tbl != &chk->table_gc && tbl->histogram.nested_tree.count) {
-            line = chk_print(chk_line_feed(line), "nested tree(s) %" PRIuSIZE,
-                             tbl->histogram.nested_tree.count);
-            line = histogram_dist(line, &tbl->histogram.nested_tree, " density",
-                                  "1", false);
+            line = chk_print(chk_line_feed(line), "nested tree(s) %" PRIuSIZE, tbl->histogram.nested_tree.count);
+            line = histogram_dist(line, &tbl->histogram.nested_tree, " density", "1", false);
             line = chk_print(chk_line_feed(line),
-                             "nested tree(s) pages %" PRIuSIZE
-                             ": branch %" PRIuSIZE ", leaf %" PRIuSIZE
+                             "nested tree(s) pages %" PRIuSIZE ": branch %" PRIuSIZE ", leaf %" PRIuSIZE
                              ", subleaf %" PRIuSIZE,
-                             tbl->pages.nested_branch + tbl->pages.nested_leaf,
-                             tbl->pages.nested_branch, tbl->pages.nested_leaf,
-                             tbl->pages.nested_subleaf);
+                             tbl->pages.nested_branch + tbl->pages.nested_leaf, tbl->pages.nested_branch,
+                             tbl->pages.nested_leaf, tbl->pages.nested_subleaf);
           }
 
           const size_t bytes = pgno2bytes(env, tbl->pages.all);
-          line = chk_print(
-              chk_line_feed(line),
-              "page filling: subtotal %" PRIuSIZE
-              " bytes (%.1f%%), payload %" PRIuSIZE
-              " (%.1f%%), unused %" PRIuSIZE " (%.1f%%)",
-              bytes, bytes * 100.0 / total_page_bytes, tbl->payload_bytes,
-              tbl->payload_bytes * 100.0 / bytes, bytes - tbl->payload_bytes,
-              (bytes - tbl->payload_bytes) * 100.0 / bytes);
+          line =
+              chk_print(chk_line_feed(line),
+                        "page filling: subtotal %" PRIuSIZE " bytes (%.1f%%), payload %" PRIuSIZE
+                        " (%.1f%%), unused %" PRIuSIZE " (%.1f%%)",
+                        bytes, bytes * 100.0 / total_page_bytes, tbl->payload_bytes, tbl->payload_bytes * 100.0 / bytes,
+                        bytes - tbl->payload_bytes, (bytes - tbl->payload_bytes) * 100.0 / bytes);
           if (tbl->pages.empty)
-            line = chk_print(line, ", %" PRIuSIZE " empty pages",
-                             tbl->pages.empty);
+            line = chk_print(line, ", %" PRIuSIZE " empty pages", tbl->pages.empty);
           if (tbl->lost_bytes)
-            line =
-                chk_print(line, ", %" PRIuSIZE " bytes lost", tbl->lost_bytes);
+            line = chk_print(line, ", %" PRIuSIZE " bytes lost", tbl->lost_bytes);
           chk_line_end(line);
         }
       }
@@ -1080,14 +959,12 @@ __cold static int chk_tree(MDBX_chk_scope_t *const scope) {
 
   MDBX_chk_line_t *line = chk_line_begin(scope, MDBX_chk_resolution);
   line = chk_print(line,
-                   "summary: total %" PRIuSIZE " bytes, payload %" PRIuSIZE
-                   " (%.1f%%), unused %" PRIuSIZE " (%.1f%%),"
+                   "summary: total %" PRIuSIZE " bytes, payload %" PRIuSIZE " (%.1f%%), unused %" PRIuSIZE " (%.1f%%),"
                    " average fill %.1f%%",
                    total_page_bytes, usr->result.total_payload_bytes,
                    usr->result.total_payload_bytes * 100.0 / total_page_bytes,
                    total_page_bytes - usr->result.total_payload_bytes,
-                   (total_page_bytes - usr->result.total_payload_bytes) *
-                       100.0 / total_page_bytes,
+                   (total_page_bytes - usr->result.total_payload_bytes) * 100.0 / total_page_bytes,
                    usr->result.total_payload_bytes * 100.0 / total_page_bytes);
   if (total.pages.empty)
     line = chk_print(line, ", %" PRIuSIZE " empty pages", total.pages.empty);
@@ -1097,14 +974,11 @@ __cold static int chk_tree(MDBX_chk_scope_t *const scope) {
   return err;
 }
 
-typedef int(chk_kv_visitor)(MDBX_chk_scope_t *const scope,
-                            MDBX_chk_table_t *tbl, const size_t record_number,
+typedef int(chk_kv_visitor)(MDBX_chk_scope_t *const scope, MDBX_chk_table_t *tbl, const size_t record_number,
                             const MDBX_val *key, const MDBX_val *data);
 
-__cold static int chk_handle_kv(MDBX_chk_scope_t *const scope,
-                                MDBX_chk_table_t *tbl,
-                                const size_t record_number, const MDBX_val *key,
-                                const MDBX_val *data) {
+__cold static int chk_handle_kv(MDBX_chk_scope_t *const scope, MDBX_chk_table_t *tbl, const size_t record_number,
+                                const MDBX_val *key, const MDBX_val *data) {
   MDBX_chk_internal_t *const chk = scope->internal;
   int err = MDBX_SUCCESS;
   assert(tbl->cookie);
@@ -1113,8 +987,7 @@ __cold static int chk_handle_kv(MDBX_chk_scope_t *const scope,
   return err ? err : chk_check_break(scope);
 }
 
-__cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi,
-                         MDBX_chk_table_t *tbl, chk_kv_visitor *handler) {
+__cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi, MDBX_chk_table_t *tbl, chk_kv_visitor *handler) {
   MDBX_chk_internal_t *const chk = scope->internal;
   MDBX_chk_context_t *const usr = chk->usr;
   MDBX_env *const env = usr->env;
@@ -1124,27 +997,22 @@ __cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi,
   int err;
 
   if ((MDBX_TXN_FINISHED | MDBX_TXN_ERROR) & txn->flags) {
-    chk_line_end(
-        chk_flush(chk_print(chk_line_begin(scope, MDBX_chk_error),
-                            "abort processing %s due to a previous error",
-                            chk_v2a(chk, &tbl->name))));
+    chk_line_end(chk_flush(chk_print(chk_line_begin(scope, MDBX_chk_error),
+                                     "abort processing %s due to a previous error", chk_v2a(chk, &tbl->name))));
     err = MDBX_BAD_TXN;
     goto bailout;
   }
 
   if (0 > (int)dbi) {
-    err = dbi_open(
-        txn, &tbl->name, MDBX_DB_ACCEDE, &dbi,
-        (chk->flags & MDBX_CHK_IGNORE_ORDER) ? cmp_equal_or_greater : nullptr,
-        (chk->flags & MDBX_CHK_IGNORE_ORDER) ? cmp_equal_or_greater : nullptr);
+    err = dbi_open(txn, &tbl->name, MDBX_DB_ACCEDE, &dbi,
+                   (chk->flags & MDBX_CHK_IGNORE_ORDER) ? cmp_equal_or_greater : nullptr,
+                   (chk->flags & MDBX_CHK_IGNORE_ORDER) ? cmp_equal_or_greater : nullptr);
     if (unlikely(err)) {
-      tASSERT(txn, dbi >= txn->env->n_dbi ||
-                       (txn->env->dbs_flags[dbi] & DB_VALID) == 0);
+      tASSERT(txn, dbi >= txn->env->n_dbi || (txn->env->dbs_flags[dbi] & DB_VALID) == 0);
       chk_error_rc(scope, err, "mdbx_dbi_open");
       goto bailout;
     }
-    tASSERT(txn, dbi < txn->env->n_dbi &&
-                     (txn->env->dbs_flags[dbi] & DB_VALID) != 0);
+    tASSERT(txn, dbi < txn->env->n_dbi && (txn->env->dbs_flags[dbi] & DB_VALID) != 0);
   }
 
   const tree_t *const db = txn->dbs + dbi;
@@ -1165,13 +1033,11 @@ __cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi,
       break;
     default:
       key_mode = "inconsistent";
-      chk_scope_issue(scope, "wrong key-mode (0x%x)",
-                      tbl->flags & (MDBX_REVERSEKEY | MDBX_INTEGERKEY));
+      chk_scope_issue(scope, "wrong key-mode (0x%x)", tbl->flags & (MDBX_REVERSEKEY | MDBX_INTEGERKEY));
     }
 
     const char *value_mode = nullptr;
-    switch (tbl->flags & (MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_DUPFIXED |
-                          MDBX_INTEGERDUP)) {
+    switch (tbl->flags & (MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_DUPFIXED | MDBX_INTEGERDUP)) {
     case 0:
       value_mode = "single";
       break;
@@ -1199,69 +1065,51 @@ __cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi,
     default:
       value_mode = "inconsistent";
       chk_scope_issue(scope, "wrong value-mode (0x%x)",
-                      tbl->flags & (MDBX_DUPSORT | MDBX_REVERSEDUP |
-                                    MDBX_DUPFIXED | MDBX_INTEGERDUP));
+                      tbl->flags & (MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_DUPFIXED | MDBX_INTEGERDUP));
     }
 
     MDBX_chk_line_t *line = chk_line_begin(scope, MDBX_chk_info);
-    line = chk_print(line, "key-value kind: %s-key => %s-value", key_mode,
-                     value_mode);
+    line = chk_print(line, "key-value kind: %s-key => %s-value", key_mode, value_mode);
     line = chk_print(line, ", flags:");
     if (!tbl->flags)
       line = chk_print(line, " none");
     else {
-      const uint8_t f[] = {MDBX_DUPSORT,
-                           MDBX_INTEGERKEY,
-                           MDBX_REVERSEKEY,
-                           MDBX_DUPFIXED,
-                           MDBX_REVERSEDUP,
-                           MDBX_INTEGERDUP,
-                           0};
-      const char *const t[] = {"dupsort", "integerkey", "reversekey",
-                               "dupfix",  "reversedup", "integerdup"};
+      const uint8_t f[] = {
+          MDBX_DUPSORT, MDBX_INTEGERKEY, MDBX_REVERSEKEY, MDBX_DUPFIXED, MDBX_REVERSEDUP, MDBX_INTEGERDUP, 0};
+      const char *const t[] = {"dupsort", "integerkey", "reversekey", "dupfix", "reversedup", "integerdup"};
       for (size_t i = 0; f[i]; i++)
         if (tbl->flags & f[i])
           line = chk_print(line, " %s", t[i]);
     }
     chk_line_end(chk_print(line, " (0x%02X)", tbl->flags));
 
-    line = chk_print(chk_line_begin(scope, MDBX_chk_verbose),
-                     "entries %" PRIu64 ", sequence %" PRIu64, db->items,
+    line = chk_print(chk_line_begin(scope, MDBX_chk_verbose), "entries %" PRIu64 ", sequence %" PRIu64, db->items,
                      db->sequence);
     if (db->mod_txnid)
-      line =
-          chk_print(line, ", last modification txn#%" PRIaTXN, db->mod_txnid);
+      line = chk_print(line, ", last modification txn#%" PRIaTXN, db->mod_txnid);
     if (db->root != P_INVALID)
       line = chk_print(line, ", root #%" PRIaPGNO, db->root);
     chk_line_end(line);
     chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_verbose),
-                           "b-tree depth %u, pages: branch %" PRIaPGNO
-                           ", leaf %" PRIaPGNO ", large %" PRIaPGNO,
-                           db->height, db->branch_pages, db->leaf_pages,
-                           db->large_pages));
+                           "b-tree depth %u, pages: branch %" PRIaPGNO ", leaf %" PRIaPGNO ", large %" PRIaPGNO,
+                           db->height, db->branch_pages, db->leaf_pages, db->large_pages));
 
     if ((chk->flags & MDBX_CHK_SKIP_BTREE_TRAVERSAL) == 0) {
       const size_t branch_pages = tbl->pages.branch + tbl->pages.nested_branch;
       const size_t leaf_pages = tbl->pages.leaf + tbl->pages.nested_leaf;
-      const size_t subtotal_pages =
-          db->branch_pages + db->leaf_pages + db->large_pages;
+      const size_t subtotal_pages = db->branch_pages + db->leaf_pages + db->large_pages;
       if (subtotal_pages != tbl->pages.all)
-        chk_scope_issue(
-            scope, "%s pages mismatch (%" PRIuSIZE " != walked %" PRIuSIZE ")",
-            "subtotal", subtotal_pages, tbl->pages.all);
+        chk_scope_issue(scope, "%s pages mismatch (%" PRIuSIZE " != walked %" PRIuSIZE ")", "subtotal", subtotal_pages,
+                        tbl->pages.all);
       if (db->branch_pages != branch_pages)
-        chk_scope_issue(
-            scope, "%s pages mismatch (%" PRIaPGNO " != walked %" PRIuSIZE ")",
-            "branch", db->branch_pages, branch_pages);
+        chk_scope_issue(scope, "%s pages mismatch (%" PRIaPGNO " != walked %" PRIuSIZE ")", "branch", db->branch_pages,
+                        branch_pages);
       if (db->leaf_pages != leaf_pages)
-        chk_scope_issue(
-            scope, "%s pages mismatch (%" PRIaPGNO " != walked %" PRIuSIZE ")",
-            "all-leaf", db->leaf_pages, leaf_pages);
+        chk_scope_issue(scope, "%s pages mismatch (%" PRIaPGNO " != walked %" PRIuSIZE ")", "all-leaf", db->leaf_pages,
+                        leaf_pages);
       if (db->large_pages != tbl->histogram.large_pages.amount)
-        chk_scope_issue(
-            scope, "%s pages mismatch (%" PRIaPGNO " != walked %" PRIuSIZE ")",
-            "large/overlow", db->large_pages,
-            tbl->histogram.large_pages.amount);
+        chk_scope_issue(scope, "%s pages mismatch (%" PRIaPGNO " != walked %" PRIuSIZE ")", "large/overlow",
+                        db->large_pages, tbl->histogram.large_pages.amount);
     }
   }
 
@@ -1287,31 +1135,24 @@ __cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi,
 
     bool bad_key = false;
     if (key.iov_len > maxkeysize) {
-      chk_object_issue(scope, "entry", record_count,
-                       "key length exceeds max-key-size",
-                       "%" PRIuPTR " > %" PRIuPTR, key.iov_len, maxkeysize);
+      chk_object_issue(scope, "entry", record_count, "key length exceeds max-key-size", "%" PRIuPTR " > %" PRIuPTR,
+                       key.iov_len, maxkeysize);
       bad_key = true;
-    } else if ((tbl->flags & MDBX_INTEGERKEY) && key.iov_len != 8 &&
-               key.iov_len != 4) {
-      chk_object_issue(scope, "entry", record_count, "wrong key length",
-                       "%" PRIuPTR " != 4or8", key.iov_len);
+    } else if ((tbl->flags & MDBX_INTEGERKEY) && key.iov_len != 8 && key.iov_len != 4) {
+      chk_object_issue(scope, "entry", record_count, "wrong key length", "%" PRIuPTR " != 4or8", key.iov_len);
       bad_key = true;
     }
 
     bool bad_data = false;
-    if ((tbl->flags & MDBX_INTEGERDUP) && data.iov_len != 8 &&
-        data.iov_len != 4) {
-      chk_object_issue(scope, "entry", record_count, "wrong data length",
-                       "%" PRIuPTR " != 4or8", data.iov_len);
+    if ((tbl->flags & MDBX_INTEGERDUP) && data.iov_len != 8 && data.iov_len != 4) {
+      chk_object_issue(scope, "entry", record_count, "wrong data length", "%" PRIuPTR " != 4or8", data.iov_len);
       bad_data = true;
     }
 
     if (prev_key.iov_base) {
-      if (prev_data.iov_base && !bad_data && (tbl->flags & MDBX_DUPFIXED) &&
-          prev_data.iov_len != data.iov_len) {
-        chk_object_issue(scope, "entry", record_count, "different data length",
-                         "%" PRIuPTR " != %" PRIuPTR, prev_data.iov_len,
-                         data.iov_len);
+      if (prev_data.iov_base && !bad_data && (tbl->flags & MDBX_DUPFIXED) && prev_data.iov_len != data.iov_len) {
+        chk_object_issue(scope, "entry", record_count, "different data length", "%" PRIuPTR " != %" PRIuPTR,
+                         prev_data.iov_len, data.iov_len);
         bad_data = true;
       }
 
@@ -1320,38 +1161,30 @@ __cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi,
         if (cmp == 0) {
           ++dups;
           if ((tbl->flags & MDBX_DUPSORT) == 0) {
-            chk_object_issue(scope, "entry", record_count, "duplicated entries",
-                             nullptr);
+            chk_object_issue(scope, "entry", record_count, "duplicated entries", nullptr);
             if (prev_data.iov_base && data.iov_len == prev_data.iov_len &&
                 memcmp(data.iov_base, prev_data.iov_base, data.iov_len) == 0)
-              chk_object_issue(scope, "entry", record_count,
-                               "complete duplicate", nullptr);
+              chk_object_issue(scope, "entry", record_count, "complete duplicate", nullptr);
           } else if (!bad_data && prev_data.iov_base) {
             cmp = mdbx_dcmp(txn, dbi, &data, &prev_data);
             if (cmp == 0)
-              chk_object_issue(scope, "entry", record_count,
-                               "complete duplicate", nullptr);
+              chk_object_issue(scope, "entry", record_count, "complete duplicate", nullptr);
             else if (cmp < 0 && !(chk->flags & MDBX_CHK_IGNORE_ORDER))
-              chk_object_issue(scope, "entry", record_count,
-                               "wrong order of multi-values", nullptr);
+              chk_object_issue(scope, "entry", record_count, "wrong order of multi-values", nullptr);
           }
         } else if (cmp < 0 && !(chk->flags & MDBX_CHK_IGNORE_ORDER))
-          chk_object_issue(scope, "entry", record_count,
-                           "wrong order of entries", nullptr);
+          chk_object_issue(scope, "entry", record_count, "wrong order of entries", nullptr);
       }
     }
 
     if (!bad_key) {
       if (!prev_key.iov_base && (tbl->flags & MDBX_INTEGERKEY))
-        chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_info),
-                               "fixed key-size %" PRIuSIZE, key.iov_len));
+        chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_info), "fixed key-size %" PRIuSIZE, key.iov_len));
       prev_key = key;
     }
     if (!bad_data) {
-      if (!prev_data.iov_base &&
-          (tbl->flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED)))
-        chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_info),
-                               "fixed data-size %" PRIuSIZE, data.iov_len));
+      if (!prev_data.iov_base && (tbl->flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED)))
+        chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_info), "fixed data-size %" PRIuSIZE, data.iov_len));
       prev_data = data;
     }
 
@@ -1359,17 +1192,13 @@ __cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi,
     histogram_acc(key.iov_len, &tbl->histogram.key_len);
     histogram_acc(data.iov_len, &tbl->histogram.val_len);
 
-    const node_t *const node =
-        page_node(cursor->pg[cursor->top], cursor->ki[cursor->top]);
+    const node_t *const node = page_node(cursor->pg[cursor->top], cursor->ki[cursor->top]);
     if (node_flags(node) == N_TREE) {
-      if (dbi != MAIN_DBI || (tbl->flags & (MDBX_DUPSORT | MDBX_DUPFIXED |
-                                            MDBX_REVERSEDUP | MDBX_INTEGERDUP)))
-        chk_object_issue(scope, "entry", record_count, "unexpected table",
-                         "node-flags 0x%x", node_flags(node));
+      if (dbi != MAIN_DBI || (tbl->flags & (MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_REVERSEDUP | MDBX_INTEGERDUP)))
+        chk_object_issue(scope, "entry", record_count, "unexpected table", "node-flags 0x%x", node_flags(node));
       else if (data.iov_len != sizeof(tree_t))
-        chk_object_issue(scope, "entry", record_count, "wrong table node size",
-                         "node-size %" PRIuSIZE " != %" PRIuSIZE, data.iov_len,
-                         sizeof(tree_t));
+        chk_object_issue(scope, "entry", record_count, "wrong table node size", "node-size %" PRIuSIZE " != %" PRIuSIZE,
+                         data.iov_len, sizeof(tree_t));
       else if (scope->stage == MDBX_chk_maindb)
         /* подсчитываем table при первом проходе */
         sub_databases += 1;
@@ -1384,9 +1213,8 @@ __cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi,
         if (unlikely(err))
           goto bailout;
         if (table->cookie) {
-          err = chk_scope_begin(
-              chk, 0, MDBX_chk_tables, table, &usr->result.problems_kv,
-              "Processing table %s...", chk_v2a(chk, &table->name));
+          err = chk_scope_begin(chk, 0, MDBX_chk_tables, table, &usr->result.problems_kv, "Processing table %s...",
+                                chk_v2a(chk, &table->name));
           if (likely(!err)) {
             err = chk_db(usr->scope, (MDBX_dbi)-1, table, chk_handle_kv);
             if (err != MDBX_EINTR && err != MDBX_RESULT_TRUE)
@@ -1396,9 +1224,8 @@ __cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi,
           if (unlikely(err))
             goto bailout;
         } else
-          chk_line_end(chk_flush(
-              chk_print(chk_line_begin(scope, MDBX_chk_processing),
-                        "Skip processing %s...", chk_v2a(chk, &table->name))));
+          chk_line_end(chk_flush(chk_print(chk_line_begin(scope, MDBX_chk_processing), "Skip processing %s...",
+                                           chk_v2a(chk, &table->name))));
       }
     } else if (handler) {
       err = handler(scope, tbl, record_count, &key, &data);
@@ -1409,22 +1236,17 @@ __cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi,
     err = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT);
   }
 
-  err = (err != MDBX_NOTFOUND) ? chk_error_rc(scope, err, "mdbx_cursor_get")
-                               : MDBX_SUCCESS;
+  err = (err != MDBX_NOTFOUND) ? chk_error_rc(scope, err, "mdbx_cursor_get") : MDBX_SUCCESS;
   if (err == MDBX_SUCCESS && record_count != db->items)
-    chk_scope_issue(scope,
-                    "different number of entries %" PRIuSIZE " != %" PRIu64,
-                    record_count, db->items);
+    chk_scope_issue(scope, "different number of entries %" PRIuSIZE " != %" PRIu64, record_count, db->items);
 bailout:
   if (cursor) {
     if (handler) {
       if (tbl->histogram.key_len.count) {
         MDBX_chk_line_t *line = chk_line_begin(scope, MDBX_chk_info);
-        line = histogram_dist(line, &tbl->histogram.key_len,
-                              "key length density", "0/1", false);
+        line = histogram_dist(line, &tbl->histogram.key_len, "key length density", "0/1", false);
         chk_line_feed(line);
-        line = histogram_dist(line, &tbl->histogram.val_len,
-                              "value length density", "0/1", false);
+        line = histogram_dist(line, &tbl->histogram.val_len, "value length density", "0/1", false);
         chk_line_end(line);
       }
       if (scope->stage == MDBX_chk_maindb)
@@ -1433,8 +1255,7 @@ bailout:
         err = chk->cb->table_conclude(usr, tbl, cursor, err);
       MDBX_chk_line_t *line = chk_line_begin(scope, MDBX_chk_resolution);
       line = chk_print(line, "summary: %" PRIuSIZE " records,", record_count);
-      if (dups || (tbl->flags & (MDBX_DUPSORT | MDBX_DUPFIXED |
-                                 MDBX_REVERSEDUP | MDBX_INTEGERDUP)))
+      if (dups || (tbl->flags & (MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_REVERSEDUP | MDBX_INTEGERDUP)))
         line = chk_print(line, " %" PRIuSIZE " dups,", dups);
       if (sub_databases || dbi == MAIN_DBI)
         line = chk_print(line, " %" PRIuSIZE " tables,", sub_databases);
@@ -1442,8 +1263,7 @@ bailout:
                        " %" PRIuSIZE " key's bytes,"
                        " %" PRIuSIZE " data's bytes,"
                        " %" PRIuSIZE " problem(s)",
-                       tbl->histogram.key_len.amount,
-                       tbl->histogram.val_len.amount, scope->subtotal_issues);
+                       tbl->histogram.key_len.amount, tbl->histogram.val_len.amount, scope->subtotal_issues);
       chk_line_end(chk_flush(line));
     }
 
@@ -1454,10 +1274,8 @@ bailout:
   return err;
 }
 
-__cold static int chk_handle_gc(MDBX_chk_scope_t *const scope,
-                                MDBX_chk_table_t *tbl,
-                                const size_t record_number, const MDBX_val *key,
-                                const MDBX_val *data) {
+__cold static int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t *tbl, const size_t record_number,
+                                const MDBX_val *key, const MDBX_val *data) {
   MDBX_chk_internal_t *const chk = scope->internal;
   MDBX_chk_context_t *const usr = chk->usr;
   assert(tbl == &chk->table_gc);
@@ -1466,25 +1284,20 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope,
   pgno_t *iptr = data->iov_base;
 
   if (key->iov_len != sizeof(txnid_t))
-    chk_object_issue(scope, "entry", record_number, "wrong txn-id size",
-                     "key-size %" PRIuSIZE, key->iov_len);
+    chk_object_issue(scope, "entry", record_number, "wrong txn-id size", "key-size %" PRIuSIZE, key->iov_len);
   else {
     txnid_t txnid;
     memcpy(&txnid, key->iov_base, sizeof(txnid));
     if (txnid < 1 || txnid > usr->txn->txnid)
-      chk_object_issue(scope, "entry", record_number, "wrong txn-id",
-                       "%" PRIaTXN, txnid);
+      chk_object_issue(scope, "entry", record_number, "wrong txn-id", "%" PRIaTXN, txnid);
     else {
       if (data->iov_len < sizeof(pgno_t) || data->iov_len % sizeof(pgno_t))
-        chk_object_issue(scope, "entry", txnid, "wrong idl size", "%" PRIuPTR,
-                         data->iov_len);
+        chk_object_issue(scope, "entry", txnid, "wrong idl size", "%" PRIuPTR, data->iov_len);
       size_t number = (data->iov_len >= sizeof(pgno_t)) ? *iptr++ : 0;
       if (number > PAGELIST_LIMIT)
-        chk_object_issue(scope, "entry", txnid, "wrong idl length", "%" PRIuPTR,
-                         number);
+        chk_object_issue(scope, "entry", txnid, "wrong idl length", "%" PRIuPTR, number);
       else if ((number + 1) * sizeof(pgno_t) > data->iov_len) {
-        chk_object_issue(scope, "entry", txnid, "trimmed idl",
-                         "%" PRIuSIZE " > %" PRIuSIZE " (corruption)",
+        chk_object_issue(scope, "entry", txnid, "trimmed idl", "%" PRIuSIZE " > %" PRIuSIZE " (corruption)",
                          (number + 1) * sizeof(pgno_t), data->iov_len);
         number = data->iov_len / sizeof(pgno_t) - 1;
       } else if (data->iov_len - (number + 1) * sizeof(pgno_t) >=
@@ -1492,38 +1305,31 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope,
                   * and better than shink-and-retry inside gc_update() */
                  usr->env->ps)
         chk_object_issue(scope, "entry", txnid, "extra idl space",
-                         "%" PRIuSIZE " < %" PRIuSIZE " (minor, not a trouble)",
-                         (number + 1) * sizeof(pgno_t), data->iov_len);
+                         "%" PRIuSIZE " < %" PRIuSIZE " (minor, not a trouble)", (number + 1) * sizeof(pgno_t),
+                         data->iov_len);
 
       usr->result.gc_pages += number;
       if (chk->envinfo.mi_latter_reader_txnid > txnid)
         usr->result.reclaimable_pages += number;
 
-      size_t prev =
-          MDBX_PNL_ASCENDING ? NUM_METAS - 1 : usr->txn->geo.first_unallocated;
+      size_t prev = MDBX_PNL_ASCENDING ? NUM_METAS - 1 : usr->txn->geo.first_unallocated;
       size_t span = 1;
       for (size_t i = 0; i < number; ++i) {
         const size_t pgno = iptr[i];
         if (pgno < NUM_METAS)
-          chk_object_issue(scope, "entry", txnid, "wrong idl entry",
-                           "pgno %" PRIuSIZE " < meta-pages %u", pgno,
+          chk_object_issue(scope, "entry", txnid, "wrong idl entry", "pgno %" PRIuSIZE " < meta-pages %u", pgno,
                            NUM_METAS);
         else if (pgno >= usr->result.backed_pages)
-          chk_object_issue(scope, "entry", txnid, "wrong idl entry",
-                           "pgno %" PRIuSIZE " > backed-pages %" PRIuSIZE, pgno,
-                           usr->result.backed_pages);
+          chk_object_issue(scope, "entry", txnid, "wrong idl entry", "pgno %" PRIuSIZE " > backed-pages %" PRIuSIZE,
+                           pgno, usr->result.backed_pages);
         else if (pgno >= usr->result.alloc_pages)
-          chk_object_issue(scope, "entry", txnid, "wrong idl entry",
-                           "pgno %" PRIuSIZE " > alloc-pages %" PRIuSIZE, pgno,
-                           usr->result.alloc_pages - 1);
+          chk_object_issue(scope, "entry", txnid, "wrong idl entry", "pgno %" PRIuSIZE " > alloc-pages %" PRIuSIZE,
+                           pgno, usr->result.alloc_pages - 1);
         else {
           if (MDBX_PNL_DISORDERED(prev, pgno)) {
             bad = " [bad sequence]";
-            chk_object_issue(
-                scope, "entry", txnid, "bad sequence",
-                "%" PRIuSIZE " %c [%" PRIuSIZE "].%" PRIuSIZE, prev,
-                (prev == pgno) ? '=' : (MDBX_PNL_ASCENDING ? '>' : '<'), i,
-                pgno);
+            chk_object_issue(scope, "entry", txnid, "bad sequence", "%" PRIuSIZE " %c [%" PRIuSIZE "].%" PRIuSIZE, prev,
+                             (prev == pgno) ? '=' : (MDBX_PNL_ASCENDING ? '>' : '<'), i, pgno);
           }
           if (chk->pagemap) {
             const intptr_t id = chk->pagemap[pgno];
@@ -1531,38 +1337,31 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope,
               chk->pagemap[pgno] = -1 /* mark the pgno listed in GC */;
             else if (id > 0) {
               assert(id - 1 <= (intptr_t)ARRAY_LENGTH(chk->table));
-              chk_object_issue(scope, "page", pgno, "already used", "by %s",
-                               chk_v2a(chk, &chk->table[id - 1]->name));
+              chk_object_issue(scope, "page", pgno, "already used", "by %s", chk_v2a(chk, &chk->table[id - 1]->name));
             } else
-              chk_object_issue(scope, "page", pgno, "already listed in GC",
-                               nullptr);
+              chk_object_issue(scope, "page", pgno, "already listed in GC", nullptr);
           }
         }
         prev = pgno;
         while (i + span < number &&
-               iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pgno, span)
-                                                     : pgno_sub(pgno, span)))
+               iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pgno, span) : pgno_sub(pgno, span)))
           ++span;
       }
       if (tbl->cookie) {
         chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_details),
-                               "transaction %" PRIaTXN ", %" PRIuSIZE
-                               " pages, maxspan %" PRIuSIZE "%s",
-                               txnid, number, span, bad));
+                               "transaction %" PRIaTXN ", %" PRIuSIZE " pages, maxspan %" PRIuSIZE "%s", txnid, number,
+                               span, bad));
         for (size_t i = 0; i < number; i += span) {
           const size_t pgno = iptr[i];
-          for (span = 1;
-               i + span < number &&
-               iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pgno, span)
-                                                     : pgno_sub(pgno, span));
+          for (span = 1; i + span < number &&
+                         iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pgno, span) : pgno_sub(pgno, span));
                ++span)
             ;
           histogram_acc(span, &tbl->histogram.nested_tree);
           MDBX_chk_line_t *line = chk_line_begin(scope, MDBX_chk_extra);
           if (line) {
             if (span > 1)
-              line =
-                  chk_print(line, "%9" PRIuSIZE "[%" PRIuSIZE "]", pgno, span);
+              line = chk_print(line, "%9" PRIuSIZE "[%" PRIuSIZE "]", pgno, span);
             else
               line = chk_print(line, "%9" PRIuSIZE, pgno);
             chk_line_end(line);
@@ -1582,26 +1381,21 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
   MDBX_chk_context_t *const usr = chk->usr;
   MDBX_env *const env = usr->env;
   MDBX_txn *const txn = usr->txn;
-  int err =
-      env_info(env, txn, &chk->envinfo, sizeof(chk->envinfo), &chk->troika);
+  int err = env_info(env, txn, &chk->envinfo, sizeof(chk->envinfo), &chk->troika);
   if (unlikely(err))
     return chk_error_rc(scope, err, "env_info");
 
   MDBX_chk_line_t *line =
-      chk_puts(chk_line_begin(scope, MDBX_chk_info -
-                                         (1 << MDBX_chk_severity_prio_shift)),
-               "dxb-id ");
+      chk_puts(chk_line_begin(scope, MDBX_chk_info - (1 << MDBX_chk_severity_prio_shift)), "dxb-id ");
   if (chk->envinfo.mi_dxbid.x | chk->envinfo.mi_dxbid.y)
-    line = chk_print(line, "%016" PRIx64 "-%016" PRIx64,
-                     chk->envinfo.mi_dxbid.x, chk->envinfo.mi_dxbid.y);
+    line = chk_print(line, "%016" PRIx64 "-%016" PRIx64, chk->envinfo.mi_dxbid.x, chk->envinfo.mi_dxbid.y);
   else
     line = chk_puts(line, "is absent");
   chk_line_end(line);
 
   line = chk_puts(chk_line_begin(scope, MDBX_chk_info), "current boot-id ");
   if (chk->envinfo.mi_bootid.current.x | chk->envinfo.mi_bootid.current.y)
-    line = chk_print(line, "%016" PRIx64 "-%016" PRIx64,
-                     chk->envinfo.mi_bootid.current.x,
+    line = chk_print(line, "%016" PRIx64 "-%016" PRIx64, chk->envinfo.mi_bootid.current.x,
                      chk->envinfo.mi_bootid.current.y);
   else
     line = chk_puts(line, "is unavailable");
@@ -1613,103 +1407,79 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
 
   //--------------------------------------------------------------------------
 
-  err = chk_scope_begin(chk, 1, MDBX_chk_meta, nullptr,
-                        &usr->result.problems_meta, "Peek the meta-pages...");
+  err = chk_scope_begin(chk, 1, MDBX_chk_meta, nullptr, &usr->result.problems_meta, "Peek the meta-pages...");
   if (likely(!err)) {
     MDBX_chk_scope_t *const inner = usr->scope;
     const uint64_t dxbfile_pages = env->dxb_mmap.filesize >> env->ps2ln;
     usr->result.alloc_pages = txn->geo.first_unallocated;
     usr->result.backed_pages = bytes2pgno(env, env->dxb_mmap.current);
     if (unlikely(usr->result.backed_pages > dxbfile_pages))
-      chk_scope_issue(inner, "backed-pages %zu > file-pages %" PRIu64,
-                      usr->result.backed_pages, dxbfile_pages);
+      chk_scope_issue(inner, "backed-pages %zu > file-pages %" PRIu64, usr->result.backed_pages, dxbfile_pages);
     if (unlikely(dxbfile_pages < NUM_METAS))
-      chk_scope_issue(inner, "file-pages %" PRIu64 " < %u", dxbfile_pages,
-                      NUM_METAS);
+      chk_scope_issue(inner, "file-pages %" PRIu64 " < %u", dxbfile_pages, NUM_METAS);
     if (unlikely(usr->result.backed_pages < NUM_METAS))
-      chk_scope_issue(inner, "backed-pages %zu < %u", usr->result.backed_pages,
-                      NUM_METAS);
+      chk_scope_issue(inner, "backed-pages %zu < %u", usr->result.backed_pages, NUM_METAS);
     if (unlikely(usr->result.backed_pages < NUM_METAS)) {
-      chk_scope_issue(inner, "backed-pages %zu < num-metas %u",
-                      usr->result.backed_pages, NUM_METAS);
+      chk_scope_issue(inner, "backed-pages %zu < num-metas %u", usr->result.backed_pages, NUM_METAS);
       return MDBX_CORRUPTED;
     }
     if (unlikely(dxbfile_pages < NUM_METAS)) {
-      chk_scope_issue(inner, "backed-pages %zu < num-metas %u",
-                      usr->result.backed_pages, NUM_METAS);
+      chk_scope_issue(inner, "backed-pages %zu < num-metas %u", usr->result.backed_pages, NUM_METAS);
       return MDBX_CORRUPTED;
     }
     if (unlikely(usr->result.backed_pages > (size_t)MAX_PAGENO + 1)) {
-      chk_scope_issue(inner, "backed-pages %zu > max-pages %zu",
-                      usr->result.backed_pages, (size_t)MAX_PAGENO + 1);
+      chk_scope_issue(inner, "backed-pages %zu > max-pages %zu", usr->result.backed_pages, (size_t)MAX_PAGENO + 1);
       usr->result.backed_pages = MAX_PAGENO + 1;
     }
 
     if ((env->flags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) != MDBX_RDONLY) {
       if (unlikely(usr->result.backed_pages > dxbfile_pages)) {
-        chk_scope_issue(inner, "backed-pages %zu > file-pages %" PRIu64,
-                        usr->result.backed_pages, dxbfile_pages);
+        chk_scope_issue(inner, "backed-pages %zu > file-pages %" PRIu64, usr->result.backed_pages, dxbfile_pages);
         usr->result.backed_pages = (size_t)dxbfile_pages;
       }
       if (unlikely(usr->result.alloc_pages > usr->result.backed_pages)) {
-        chk_scope_issue(scope, "alloc-pages %zu > backed-pages %zu",
-                        usr->result.alloc_pages, usr->result.backed_pages);
+        chk_scope_issue(scope, "alloc-pages %zu > backed-pages %zu", usr->result.alloc_pages, usr->result.backed_pages);
         usr->result.alloc_pages = usr->result.backed_pages;
       }
     } else {
       /* DB may be shrunk by writer down to the allocated (but unused) pages. */
       if (unlikely(usr->result.alloc_pages > usr->result.backed_pages)) {
-        chk_scope_issue(inner, "alloc-pages %zu > backed-pages %zu",
-                        usr->result.alloc_pages, usr->result.backed_pages);
+        chk_scope_issue(inner, "alloc-pages %zu > backed-pages %zu", usr->result.alloc_pages, usr->result.backed_pages);
         usr->result.alloc_pages = usr->result.backed_pages;
       }
       if (unlikely(usr->result.alloc_pages > dxbfile_pages)) {
-        chk_scope_issue(inner, "alloc-pages %zu > file-pages %" PRIu64,
-                        usr->result.alloc_pages, dxbfile_pages);
+        chk_scope_issue(inner, "alloc-pages %zu > file-pages %" PRIu64, usr->result.alloc_pages, dxbfile_pages);
         usr->result.alloc_pages = (size_t)dxbfile_pages;
       }
       if (unlikely(usr->result.backed_pages > dxbfile_pages))
         usr->result.backed_pages = (size_t)dxbfile_pages;
     }
 
-    line = chk_line_feed(chk_print(
-        chk_line_begin(inner, MDBX_chk_info),
-        "pagesize %u (%u system), max keysize %u..%u"
-        ", max readers %u",
-        env->ps, globals.sys_pagesize,
-        mdbx_env_get_maxkeysize_ex(env, MDBX_DUPSORT),
-        mdbx_env_get_maxkeysize_ex(env, MDBX_DB_DEFAULTS), env->max_readers));
-    line = chk_line_feed(
-        chk_print_size(line, "mapsize ", env->dxb_mmap.current, nullptr));
+    line = chk_line_feed(chk_print(chk_line_begin(inner, MDBX_chk_info),
+                                   "pagesize %u (%u system), max keysize %u..%u"
+                                   ", max readers %u",
+                                   env->ps, globals.sys_pagesize, mdbx_env_get_maxkeysize_ex(env, MDBX_DUPSORT),
+                                   mdbx_env_get_maxkeysize_ex(env, MDBX_DB_DEFAULTS), env->max_readers));
+    line = chk_line_feed(chk_print_size(line, "mapsize ", env->dxb_mmap.current, nullptr));
     if (txn->geo.lower == txn->geo.upper)
-      line = chk_print_size(
-          line, "fixed datafile: ", chk->envinfo.mi_geo.current, nullptr);
+      line = chk_print_size(line, "fixed datafile: ", chk->envinfo.mi_geo.current, nullptr);
     else {
-      line = chk_print_size(
-          line, "dynamic datafile: ", chk->envinfo.mi_geo.lower, nullptr);
+      line = chk_print_size(line, "dynamic datafile: ", chk->envinfo.mi_geo.lower, nullptr);
       line = chk_print_size(line, " .. ", chk->envinfo.mi_geo.upper, ", ");
       line = chk_print_size(line, "+", chk->envinfo.mi_geo.grow, ", ");
 
-      line = chk_line_feed(
-          chk_print_size(line, "-", chk->envinfo.mi_geo.shrink, nullptr));
-      line = chk_print_size(
-          line, "current datafile: ", chk->envinfo.mi_geo.current, nullptr);
+      line = chk_line_feed(chk_print_size(line, "-", chk->envinfo.mi_geo.shrink, nullptr));
+      line = chk_print_size(line, "current datafile: ", chk->envinfo.mi_geo.current, nullptr);
     }
-    tASSERT(txn, txn->geo.now == chk->envinfo.mi_geo.current /
-                                     chk->envinfo.mi_dxb_pagesize);
+    tASSERT(txn, txn->geo.now == chk->envinfo.mi_geo.current / chk->envinfo.mi_dxb_pagesize);
     chk_line_end(chk_print(line, ", %u pages", txn->geo.now));
 #if defined(_WIN32) || defined(_WIN64) || MDBX_DEBUG
-    if (txn->geo.shrink_pv && txn->geo.now != txn->geo.upper &&
-        scope->verbosity >= MDBX_chk_verbose) {
+    if (txn->geo.shrink_pv && txn->geo.now != txn->geo.upper && scope->verbosity >= MDBX_chk_verbose) {
       line = chk_line_begin(inner, MDBX_chk_notice);
-      chk_line_feed(chk_print(
-          line, " > WARNING: Due Windows system limitations a file couldn't"));
-      chk_line_feed(chk_print(
-          line, " > be truncated while the database is opened. So, the size"));
-      chk_line_feed(chk_print(
-          line, " > database file of may by large than the database itself,"));
-      chk_line_end(chk_print(
-          line, " > until it will be closed or reopened in read-write mode."));
+      chk_line_feed(chk_print(line, " > WARNING: Due Windows system limitations a file couldn't"));
+      chk_line_feed(chk_print(line, " > be truncated while the database is opened. So, the size"));
+      chk_line_feed(chk_print(line, " > database file of may by large than the database itself,"));
+      chk_line_end(chk_print(line, " > until it will be closed or reopened in read-write mode."));
     }
 #endif /* Windows || Debug */
     chk_verbose_meta(inner, 0);
@@ -1721,18 +1491,14 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
                              "skip checking meta-pages since the %u"
                              " is selected for verification",
                              env->stuck_meta));
-      line = chk_line_feed(
-          chk_print(chk_line_begin(inner, MDBX_chk_resolution),
-                    "transactions: recent %" PRIu64 ", "
-                    "selected for verification %" PRIu64 ", lag %" PRIi64,
-                    chk->envinfo.mi_recent_txnid,
-                    chk->envinfo.mi_meta_txnid[env->stuck_meta],
-                    chk->envinfo.mi_recent_txnid -
-                        chk->envinfo.mi_meta_txnid[env->stuck_meta]));
+      line = chk_line_feed(chk_print(chk_line_begin(inner, MDBX_chk_resolution),
+                                     "transactions: recent %" PRIu64 ", "
+                                     "selected for verification %" PRIu64 ", lag %" PRIi64,
+                                     chk->envinfo.mi_recent_txnid, chk->envinfo.mi_meta_txnid[env->stuck_meta],
+                                     chk->envinfo.mi_recent_txnid - chk->envinfo.mi_meta_txnid[env->stuck_meta]));
       chk_line_end(line);
     } else {
-      chk_line_end(chk_puts(chk_line_begin(inner, MDBX_chk_verbose),
-                            "performs check for meta-pages clashes"));
+      chk_line_end(chk_puts(chk_line_begin(inner, MDBX_chk_verbose), "performs check for meta-pages clashes"));
       const unsigned meta_clash_mask = meta_eq_mask(&chk->troika);
       if (meta_clash_mask & 1)
         chk_scope_issue(inner, "meta-%d and meta-%d are clashed", 0, 1);
@@ -1742,62 +1508,45 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
         chk_scope_issue(inner, "meta-%d and meta-%d are clashed", 2, 0);
 
       const unsigned prefer_steady_metanum = chk->troika.prefer_steady;
-      const uint64_t prefer_steady_txnid =
-          chk->troika.txnid[prefer_steady_metanum];
+      const uint64_t prefer_steady_txnid = chk->troika.txnid[prefer_steady_metanum];
       const unsigned recent_metanum = chk->troika.recent;
       const uint64_t recent_txnid = chk->troika.txnid[recent_metanum];
       if (env->flags & MDBX_EXCLUSIVE) {
         chk_line_end(
-            chk_puts(chk_line_begin(inner, MDBX_chk_verbose),
-                     "performs full check recent-txn-id with meta-pages"));
+            chk_puts(chk_line_begin(inner, MDBX_chk_verbose), "performs full check recent-txn-id with meta-pages"));
         eASSERT(env, recent_txnid == chk->envinfo.mi_recent_txnid);
         if (prefer_steady_txnid != recent_txnid) {
-          if ((chk->flags & MDBX_CHK_READWRITE) != 0 &&
-              (env->flags & MDBX_RDONLY) == 0 &&
+          if ((chk->flags & MDBX_CHK_READWRITE) != 0 && (env->flags & MDBX_RDONLY) == 0 &&
               recent_txnid > prefer_steady_txnid &&
-              (chk->envinfo.mi_bootid.current.x |
-               chk->envinfo.mi_bootid.current.y) != 0 &&
-              chk->envinfo.mi_bootid.current.x ==
-                  chk->envinfo.mi_bootid.meta[recent_metanum].x &&
-              chk->envinfo.mi_bootid.current.y ==
-                  chk->envinfo.mi_bootid.meta[recent_metanum].y) {
-            chk_line_end(
-                chk_print(chk_line_begin(inner, MDBX_chk_verbose),
-                          "recent meta-%u is weak, but boot-id match current"
-                          " (will synced upon successful check)",
-                          recent_metanum));
+              (chk->envinfo.mi_bootid.current.x | chk->envinfo.mi_bootid.current.y) != 0 &&
+              chk->envinfo.mi_bootid.current.x == chk->envinfo.mi_bootid.meta[recent_metanum].x &&
+              chk->envinfo.mi_bootid.current.y == chk->envinfo.mi_bootid.meta[recent_metanum].y) {
+            chk_line_end(chk_print(chk_line_begin(inner, MDBX_chk_verbose),
+                                   "recent meta-%u is weak, but boot-id match current"
+                                   " (will synced upon successful check)",
+                                   recent_metanum));
           } else
-            chk_scope_issue(
-                inner,
-                "steady meta-%d txn-id mismatch recent-txn-id (%" PRIi64
-                " != %" PRIi64 ")",
-                prefer_steady_metanum, prefer_steady_txnid, recent_txnid);
+            chk_scope_issue(inner, "steady meta-%d txn-id mismatch recent-txn-id (%" PRIi64 " != %" PRIi64 ")",
+                            prefer_steady_metanum, prefer_steady_txnid, recent_txnid);
         }
       } else if (chk->write_locked) {
-        chk_line_end(
-            chk_puts(chk_line_begin(inner, MDBX_chk_verbose),
-                     "performs lite check recent-txn-id with meta-pages (not a "
-                     "monopolistic mode)"));
+        chk_line_end(chk_puts(chk_line_begin(inner, MDBX_chk_verbose),
+                              "performs lite check recent-txn-id with meta-pages (not a "
+                              "monopolistic mode)"));
         if (recent_txnid != chk->envinfo.mi_recent_txnid) {
-          chk_scope_issue(inner,
-                          "weak meta-%d txn-id mismatch recent-txn-id (%" PRIi64
-                          " != %" PRIi64 ")",
-                          recent_metanum, recent_txnid,
-                          chk->envinfo.mi_recent_txnid);
+          chk_scope_issue(inner, "weak meta-%d txn-id mismatch recent-txn-id (%" PRIi64 " != %" PRIi64 ")",
+                          recent_metanum, recent_txnid, chk->envinfo.mi_recent_txnid);
         }
       } else {
-        chk_line_end(chk_puts(
-            chk_line_begin(inner, MDBX_chk_verbose),
-            "skip check recent-txn-id with meta-pages (monopolistic or "
-            "read-write mode only)"));
+        chk_line_end(chk_puts(chk_line_begin(inner, MDBX_chk_verbose),
+                              "skip check recent-txn-id with meta-pages (monopolistic or "
+                              "read-write mode only)"));
       }
 
-      chk_line_end(chk_print(
-          chk_line_begin(inner, MDBX_chk_resolution),
-          "transactions: recent %" PRIu64 ", latter reader %" PRIu64
-          ", lag %" PRIi64,
-          chk->envinfo.mi_recent_txnid, chk->envinfo.mi_latter_reader_txnid,
-          chk->envinfo.mi_recent_txnid - chk->envinfo.mi_latter_reader_txnid));
+      chk_line_end(chk_print(chk_line_begin(inner, MDBX_chk_resolution),
+                             "transactions: recent %" PRIu64 ", latter reader %" PRIu64 ", lag %" PRIi64,
+                             chk->envinfo.mi_recent_txnid, chk->envinfo.mi_latter_reader_txnid,
+                             chk->envinfo.mi_recent_txnid - chk->envinfo.mi_latter_reader_txnid));
     }
   }
   err = chk_scope_restore(scope, err);
@@ -1806,12 +1555,10 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
 
   const char *const subj_tree = "B-Trees";
   if (chk->flags & MDBX_CHK_SKIP_BTREE_TRAVERSAL)
-    chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_processing),
-                           "Skipping %s traversal...", subj_tree));
+    chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_processing), "Skipping %s traversal...", subj_tree));
   else {
-    err = chk_scope_begin(
-        chk, -1, MDBX_chk_tree, nullptr, &usr->result.tree_problems,
-        "Traversal %s by txn#%" PRIaTXN "...", subj_tree, txn->txnid);
+    err = chk_scope_begin(chk, -1, MDBX_chk_tree, nullptr, &usr->result.tree_problems,
+                          "Traversal %s by txn#%" PRIaTXN "...", subj_tree, txn->txnid);
     if (likely(!err))
       err = chk_tree(usr->scope);
     if (usr->result.tree_problems && usr->result.gc_tree_problems == 0)
@@ -1823,35 +1570,26 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
 
   const char *const subj_gc = chk_v2a(chk, MDBX_CHK_GC);
   if (usr->result.gc_tree_problems > 0)
-    chk_line_end(chk_print(
-        chk_line_begin(scope, MDBX_chk_processing),
-        "Skip processing %s since %s is corrupted (%" PRIuSIZE " problem(s))",
-        subj_gc, subj_tree,
-        usr->result.problems_gc = usr->result.gc_tree_problems));
+    chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_processing),
+                           "Skip processing %s since %s is corrupted (%" PRIuSIZE " problem(s))", subj_gc, subj_tree,
+                           usr->result.problems_gc = usr->result.gc_tree_problems));
   else {
-    err = chk_scope_begin(
-        chk, -1, MDBX_chk_gc, &chk->table_gc, &usr->result.problems_gc,
-        "Processing %s by txn#%" PRIaTXN "...", subj_gc, txn->txnid);
+    err = chk_scope_begin(chk, -1, MDBX_chk_gc, &chk->table_gc, &usr->result.problems_gc,
+                          "Processing %s by txn#%" PRIaTXN "...", subj_gc, txn->txnid);
     if (likely(!err))
       err = chk_db(usr->scope, FREE_DBI, &chk->table_gc, chk_handle_gc);
     line = chk_line_begin(scope, MDBX_chk_info);
     if (line) {
-      histogram_print(scope, line, &chk->table_gc.histogram.nested_tree,
-                      "span(s)", "single", false);
+      histogram_print(scope, line, &chk->table_gc.histogram.nested_tree, "span(s)", "single", false);
       chk_line_end(line);
     }
-    if (usr->result.problems_gc == 0 &&
-        (chk->flags & MDBX_CHK_SKIP_BTREE_TRAVERSAL) == 0) {
+    if (usr->result.problems_gc == 0 && (chk->flags & MDBX_CHK_SKIP_BTREE_TRAVERSAL) == 0) {
       const size_t used_pages = usr->result.alloc_pages - usr->result.gc_pages;
       if (usr->result.processed_pages != used_pages)
-        chk_scope_issue(usr->scope,
-                        "used pages mismatch (%" PRIuSIZE
-                        "(walked) != %" PRIuSIZE "(allocated - GC))",
+        chk_scope_issue(usr->scope, "used pages mismatch (%" PRIuSIZE "(walked) != %" PRIuSIZE "(allocated - GC))",
                         usr->result.processed_pages, used_pages);
       if (usr->result.unused_pages != usr->result.gc_pages)
-        chk_scope_issue(usr->scope,
-                        "GC pages mismatch (%" PRIuSIZE
-                        "(expected) != %" PRIuSIZE "(GC))",
+        chk_scope_issue(usr->scope, "GC pages mismatch (%" PRIuSIZE "(expected) != %" PRIuSIZE "(GC))",
                         usr->result.unused_pages, usr->result.gc_pages);
     }
   }
@@ -1859,99 +1597,70 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
 
   //--------------------------------------------------------------------------
 
-  err = chk_scope_begin(chk, 1, MDBX_chk_space, nullptr, nullptr,
-                        "Page allocation:");
+  err = chk_scope_begin(chk, 1, MDBX_chk_space, nullptr, nullptr, "Page allocation:");
   const double percent_boundary_reciprocal = 100.0 / txn->geo.upper;
   const double percent_backed_reciprocal = 100.0 / usr->result.backed_pages;
   const size_t detained = usr->result.gc_pages - usr->result.reclaimable_pages;
-  const size_t available2boundary =
-      txn->geo.upper - usr->result.alloc_pages + usr->result.reclaimable_pages;
-  const size_t available2backed = usr->result.backed_pages -
-                                  usr->result.alloc_pages +
-                                  usr->result.reclaimable_pages;
+  const size_t available2boundary = txn->geo.upper - usr->result.alloc_pages + usr->result.reclaimable_pages;
+  const size_t available2backed = usr->result.backed_pages - usr->result.alloc_pages + usr->result.reclaimable_pages;
   const size_t remained2boundary = txn->geo.upper - usr->result.alloc_pages;
-  const size_t remained2backed =
-      usr->result.backed_pages - usr->result.alloc_pages;
+  const size_t remained2backed = usr->result.backed_pages - usr->result.alloc_pages;
 
-  const size_t used = (chk->flags & MDBX_CHK_SKIP_BTREE_TRAVERSAL)
-                          ? usr->result.alloc_pages - usr->result.gc_pages
-                          : usr->result.processed_pages;
+  const size_t used = (chk->flags & MDBX_CHK_SKIP_BTREE_TRAVERSAL) ? usr->result.alloc_pages - usr->result.gc_pages
+                                                                   : usr->result.processed_pages;
 
   line = chk_line_begin(usr->scope, MDBX_chk_info);
   line = chk_print(line,
                    "backed by file: %" PRIuSIZE " pages (%.1f%%)"
                    ", %" PRIuSIZE " left to boundary (%.1f%%)",
-                   usr->result.backed_pages,
-                   usr->result.backed_pages * percent_boundary_reciprocal,
+                   usr->result.backed_pages, usr->result.backed_pages * percent_boundary_reciprocal,
                    txn->geo.upper - usr->result.backed_pages,
-                   (txn->geo.upper - usr->result.backed_pages) *
-                       percent_boundary_reciprocal);
+                   (txn->geo.upper - usr->result.backed_pages) * percent_boundary_reciprocal);
   line = chk_line_feed(line);
 
-  line = chk_print(
-      line, "%s: %" PRIuSIZE " page(s), %.1f%% of backed, %.1f%% of boundary",
-      "used", used, used * percent_backed_reciprocal,
-      used * percent_boundary_reciprocal);
+  line = chk_print(line, "%s: %" PRIuSIZE " page(s), %.1f%% of backed, %.1f%% of boundary", "used", used,
+                   used * percent_backed_reciprocal, used * percent_boundary_reciprocal);
   line = chk_line_feed(line);
 
-  line = chk_print(
-      line,
-      "%s: %" PRIuSIZE " page(s) (%.1f%%) of backed, %" PRIuSIZE
-      " to boundary (%.1f%% of boundary)",
-      "remained", remained2backed, remained2backed * percent_backed_reciprocal,
-      remained2boundary, remained2boundary * percent_boundary_reciprocal);
+  line = chk_print(line, "%s: %" PRIuSIZE " page(s) (%.1f%%) of backed, %" PRIuSIZE " to boundary (%.1f%% of boundary)",
+                   "remained", remained2backed, remained2backed * percent_backed_reciprocal, remained2boundary,
+                   remained2boundary * percent_boundary_reciprocal);
   line = chk_line_feed(line);
 
-  line = chk_print(
-      line,
-      "reclaimable: %" PRIuSIZE " (%.1f%% of backed, %.1f%% of boundary)"
-      ", GC %" PRIuSIZE " (%.1f%% of backed, %.1f%% of boundary)",
-      usr->result.reclaimable_pages,
-      usr->result.reclaimable_pages * percent_backed_reciprocal,
-      usr->result.reclaimable_pages * percent_boundary_reciprocal,
-      usr->result.gc_pages, usr->result.gc_pages * percent_backed_reciprocal,
-      usr->result.gc_pages * percent_boundary_reciprocal);
-  line = chk_line_feed(line);
-
-  line = chk_print(
-      line,
-      "detained by reader(s): %" PRIuSIZE
-      " (%.1f%% of backed, %.1f%% of boundary)"
-      ", %u reader(s), lag %" PRIi64,
-      detained, detained * percent_backed_reciprocal,
-      detained * percent_boundary_reciprocal, chk->envinfo.mi_numreaders,
-      chk->envinfo.mi_recent_txnid - chk->envinfo.mi_latter_reader_txnid);
-  line = chk_line_feed(line);
-
-  line = chk_print(
-      line, "%s: %" PRIuSIZE " page(s), %.1f%% of backed, %.1f%% of boundary",
-      "allocated", usr->result.alloc_pages,
-      usr->result.alloc_pages * percent_backed_reciprocal,
-      usr->result.alloc_pages * percent_boundary_reciprocal);
+  line =
+      chk_print(line,
+                "reclaimable: %" PRIuSIZE " (%.1f%% of backed, %.1f%% of boundary)"
+                ", GC %" PRIuSIZE " (%.1f%% of backed, %.1f%% of boundary)",
+                usr->result.reclaimable_pages, usr->result.reclaimable_pages * percent_backed_reciprocal,
+                usr->result.reclaimable_pages * percent_boundary_reciprocal, usr->result.gc_pages,
+                usr->result.gc_pages * percent_backed_reciprocal, usr->result.gc_pages * percent_boundary_reciprocal);
   line = chk_line_feed(line);
 
   line = chk_print(line,
-                   "%s: %" PRIuSIZE " page(s) (%.1f%%) of backed, %" PRIuSIZE
-                   " to boundary (%.1f%% of boundary)",
-                   "available", available2backed,
-                   available2backed * percent_backed_reciprocal,
-                   available2boundary,
+                   "detained by reader(s): %" PRIuSIZE " (%.1f%% of backed, %.1f%% of boundary)"
+                   ", %u reader(s), lag %" PRIi64,
+                   detained, detained * percent_backed_reciprocal, detained * percent_boundary_reciprocal,
+                   chk->envinfo.mi_numreaders, chk->envinfo.mi_recent_txnid - chk->envinfo.mi_latter_reader_txnid);
+  line = chk_line_feed(line);
+
+  line = chk_print(line, "%s: %" PRIuSIZE " page(s), %.1f%% of backed, %.1f%% of boundary", "allocated",
+                   usr->result.alloc_pages, usr->result.alloc_pages * percent_backed_reciprocal,
+                   usr->result.alloc_pages * percent_boundary_reciprocal);
+  line = chk_line_feed(line);
+
+  line = chk_print(line, "%s: %" PRIuSIZE " page(s) (%.1f%%) of backed, %" PRIuSIZE " to boundary (%.1f%% of boundary)",
+                   "available", available2backed, available2backed * percent_backed_reciprocal, available2boundary,
                    available2boundary * percent_boundary_reciprocal);
   chk_line_end(line);
 
   line = chk_line_begin(usr->scope, MDBX_chk_resolution);
-  line = chk_print(line, "%s %" PRIaPGNO " pages",
-                   (txn->geo.upper == txn->geo.now) ? "total" : "upto",
-                   txn->geo.upper);
-  line = chk_print(line, ", backed %" PRIuSIZE " (%.1f%%)",
-                   usr->result.backed_pages,
+  line = chk_print(line, "%s %" PRIaPGNO " pages", (txn->geo.upper == txn->geo.now) ? "total" : "upto", txn->geo.upper);
+  line = chk_print(line, ", backed %" PRIuSIZE " (%.1f%%)", usr->result.backed_pages,
                    usr->result.backed_pages * percent_boundary_reciprocal);
-  line = chk_print(line, ", allocated %" PRIuSIZE " (%.1f%%)",
-                   usr->result.alloc_pages,
+  line = chk_print(line, ", allocated %" PRIuSIZE " (%.1f%%)", usr->result.alloc_pages,
                    usr->result.alloc_pages * percent_boundary_reciprocal);
-  line =
-      chk_print(line, ", available %" PRIuSIZE " (%.1f%%)", available2boundary,
-                available2boundary * percent_boundary_reciprocal);
+  line = chk_print(line, ", available %" PRIuSIZE " (%.1f%%)", available2boundary,
+                   available2boundary * percent_boundary_reciprocal);
   chk_line_end(line);
   chk_scope_restore(scope, err);
 
@@ -1959,17 +1668,13 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
 
   const char *const subj_main = chk_v2a(chk, MDBX_CHK_MAIN);
   if (chk->flags & MDBX_CHK_SKIP_KV_TRAVERSAL)
-    chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_processing),
-                           "Skip processing %s...", subj_main));
+    chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_processing), "Skip processing %s...", subj_main));
   else if ((usr->result.problems_kv = usr->result.kv_tree_problems) > 0)
-    chk_line_end(chk_print(
-        chk_line_begin(scope, MDBX_chk_processing),
-        "Skip processing %s since %s is corrupted (%" PRIuSIZE " problem(s))",
-        subj_main, subj_tree,
-        usr->result.problems_kv = usr->result.kv_tree_problems));
+    chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_processing),
+                           "Skip processing %s since %s is corrupted (%" PRIuSIZE " problem(s))", subj_main, subj_tree,
+                           usr->result.problems_kv = usr->result.kv_tree_problems));
   else {
-    err = chk_scope_begin(chk, 0, MDBX_chk_maindb, &chk->table_main,
-                          &usr->result.problems_kv, "Processing %s...",
+    err = chk_scope_begin(chk, 0, MDBX_chk_maindb, &chk->table_main, &usr->result.problems_kv, "Processing %s...",
                           subj_main);
     if (likely(!err))
       err = chk_db(usr->scope, MAIN_DBI, &chk->table_main, chk_handle_kv);
@@ -1977,35 +1682,28 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
 
     const char *const subj_tables = "table(s)";
     if (usr->result.problems_kv && usr->result.table_total)
-      chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_processing),
-                             "Skip processing %s", subj_tables));
+      chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_processing), "Skip processing %s", subj_tables));
     else if (usr->result.problems_kv == 0 && usr->result.table_total == 0)
-      chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_info), "No %s",
-                             subj_tables));
+      chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_info), "No %s", subj_tables));
     else if (usr->result.problems_kv == 0 && usr->result.table_total) {
-      err = chk_scope_begin(
-          chk, 1, MDBX_chk_tables, nullptr, &usr->result.problems_kv,
-          "Processing %s by txn#%" PRIaTXN "...", subj_tables, txn->txnid);
+      err = chk_scope_begin(chk, 1, MDBX_chk_tables, nullptr, &usr->result.problems_kv,
+                            "Processing %s by txn#%" PRIaTXN "...", subj_tables, txn->txnid);
       if (!err)
         err = chk_db(usr->scope, MAIN_DBI, &chk->table_main, nullptr);
       if (usr->scope->subtotal_issues)
         chk_line_end(chk_print(chk_line_begin(usr->scope, MDBX_chk_resolution),
-                               "processed %" PRIuSIZE " of %" PRIuSIZE
-                               " %s, %" PRIuSIZE " problems(s)",
-                               usr->result.table_processed,
-                               usr->result.table_total, subj_tables,
+                               "processed %" PRIuSIZE " of %" PRIuSIZE " %s, %" PRIuSIZE " problems(s)",
+                               usr->result.table_processed, usr->result.table_total, subj_tables,
                                usr->scope->subtotal_issues));
     }
     chk_scope_restore(scope, err);
   }
 
-  return chk_scope_end(chk, chk_scope_begin(chk, 0, MDBX_chk_conclude, nullptr,
-                                            nullptr, nullptr));
+  return chk_scope_end(chk, chk_scope_begin(chk, 0, MDBX_chk_conclude, nullptr, nullptr, nullptr));
 }
 
 __cold int mdbx_env_chk_encount_problem(MDBX_chk_context_t *ctx) {
-  if (likely(ctx && ctx->internal && ctx->internal->usr == ctx &&
-             ctx->internal->problem_counter && ctx->scope)) {
+  if (likely(ctx && ctx->internal && ctx->internal->usr == ctx && ctx->internal->problem_counter && ctx->scope)) {
     *ctx->internal->problem_counter += 1;
     ctx->scope->subtotal_issues += 1;
     return MDBX_SUCCESS;
@@ -2013,10 +1711,8 @@ __cold int mdbx_env_chk_encount_problem(MDBX_chk_context_t *ctx) {
   return MDBX_EINVAL;
 }
 
-__cold int mdbx_env_chk(MDBX_env *env, const struct MDBX_chk_callbacks *cb,
-                        MDBX_chk_context_t *ctx, const MDBX_chk_flags_t flags,
-                        MDBX_chk_severity_t verbosity,
-                        unsigned timeout_seconds_16dot16) {
+__cold int mdbx_env_chk(MDBX_env *env, const struct MDBX_chk_callbacks *cb, MDBX_chk_context_t *ctx,
+                        const MDBX_chk_flags_t flags, MDBX_chk_severity_t verbosity, unsigned timeout_seconds_16dot16) {
   int err, rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
@@ -2042,9 +1738,7 @@ __cold int mdbx_env_chk(MDBX_env *env, const struct MDBX_chk_callbacks *cb,
   chk->table[MAIN_DBI] = &chk->table_main;
 
   chk->monotime_timeout =
-      timeout_seconds_16dot16
-          ? osal_16dot16_to_monotime(timeout_seconds_16dot16) + osal_monotime()
-          : 0;
+      timeout_seconds_16dot16 ? osal_16dot16_to_monotime(timeout_seconds_16dot16) + osal_monotime() : 0;
   chk->usr->scope_nesting = 0;
   chk->usr->result.tables = (const void *)&chk->table;
 
@@ -2053,16 +1747,13 @@ __cold int mdbx_env_chk(MDBX_env *env, const struct MDBX_chk_callbacks *cb,
   top->internal = chk;
 
   // init
-  rc = chk_scope_end(
-      chk, chk_scope_begin(chk, 0, MDBX_chk_init, nullptr, nullptr, nullptr));
+  rc = chk_scope_end(chk, chk_scope_begin(chk, 0, MDBX_chk_init, nullptr, nullptr, nullptr));
 
   // lock
   if (likely(!rc))
-    rc = chk_scope_begin(
-        chk, 0, MDBX_chk_lock, nullptr, nullptr, "Taking %slock...",
-        (env->flags & (MDBX_RDONLY | MDBX_EXCLUSIVE)) ? "" : "read ");
-  if (likely(!rc) && (env->flags & (MDBX_RDONLY | MDBX_EXCLUSIVE)) == 0 &&
-      (flags & MDBX_CHK_READWRITE)) {
+    rc = chk_scope_begin(chk, 0, MDBX_chk_lock, nullptr, nullptr, "Taking %slock...",
+                         (env->flags & (MDBX_RDONLY | MDBX_EXCLUSIVE)) ? "" : "read ");
+  if (likely(!rc) && (env->flags & (MDBX_RDONLY | MDBX_EXCLUSIVE)) == 0 && (flags & MDBX_CHK_READWRITE)) {
     rc = mdbx_txn_lock(env, false);
     if (unlikely(rc))
       chk_error_rc(ctx->scope, rc, "mdbx_txn_lock");

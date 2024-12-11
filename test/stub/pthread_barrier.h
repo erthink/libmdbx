@@ -61,12 +61,10 @@ typedef struct {
 int pthread_barrierattr_init(pthread_barrierattr_t *attr);
 int pthread_barrierattr_destroy(pthread_barrierattr_t *attr);
 
-int pthread_barrierattr_getpshared(const pthread_barrierattr_t *__restrict attr,
-                                   int *__restrict pshared);
+int pthread_barrierattr_getpshared(const pthread_barrierattr_t *__restrict attr, int *__restrict pshared);
 int pthread_barrierattr_setpshared(pthread_barrierattr_t *attr, int pshared);
 
-int pthread_barrier_init(pthread_barrier_t *__restrict barrier,
-                         const pthread_barrierattr_t *__restrict attr,
+int pthread_barrier_init(pthread_barrier_t *__restrict barrier, const pthread_barrierattr_t *__restrict attr,
                          unsigned int count);
 int pthread_barrier_destroy(pthread_barrier_t *barrier);
 

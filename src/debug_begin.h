@@ -9,28 +9,22 @@
 #pragma push_macro("eASSERT")
 
 #undef TRACE
-#define TRACE(fmt, ...)                                                        \
-  debug_log(MDBX_LOG_TRACE, __func__, __LINE__, fmt "\n", __VA_ARGS__)
+#define TRACE(fmt, ...) debug_log(MDBX_LOG_TRACE, __func__, __LINE__, fmt "\n", __VA_ARGS__)
 
 #undef DEBUG
-#define DEBUG(fmt, ...)                                                        \
-  debug_log(MDBX_LOG_DEBUG, __func__, __LINE__, fmt "\n", __VA_ARGS__)
+#define DEBUG(fmt, ...) debug_log(MDBX_LOG_DEBUG, __func__, __LINE__, fmt "\n", __VA_ARGS__)
 
 #undef VERBOSE
-#define VERBOSE(fmt, ...)                                                      \
-  debug_log(MDBX_LOG_VERBOSE, __func__, __LINE__, fmt "\n", __VA_ARGS__)
+#define VERBOSE(fmt, ...) debug_log(MDBX_LOG_VERBOSE, __func__, __LINE__, fmt "\n", __VA_ARGS__)
 
 #undef NOTICE
-#define NOTICE(fmt, ...)                                                       \
-  debug_log(MDBX_LOG_NOTICE, __func__, __LINE__, fmt "\n", __VA_ARGS__)
+#define NOTICE(fmt, ...) debug_log(MDBX_LOG_NOTICE, __func__, __LINE__, fmt "\n", __VA_ARGS__)
 
 #undef WARNING
-#define WARNING(fmt, ...)                                                      \
-  debug_log(MDBX_LOG_WARN, __func__, __LINE__, fmt "\n", __VA_ARGS__)
+#define WARNING(fmt, ...) debug_log(MDBX_LOG_WARN, __func__, __LINE__, fmt "\n", __VA_ARGS__)
 
 #undef ERROR
-#define ERROR(fmt, ...)                                                        \
-  debug_log(MDBX_LOG_ERROR, __func__, __LINE__, fmt "\n", __VA_ARGS__)
+#define ERROR(fmt, ...) debug_log(MDBX_LOG_ERROR, __func__, __LINE__, fmt "\n", __VA_ARGS__)
 
 #undef eASSERT
 #define eASSERT(env, expr) ENSURE(env, expr)

@@ -3,15 +3,13 @@
 
 #include "internals.h"
 
-__cold void debug_log_va(int level, const char *function, int line,
-                         const char *fmt, va_list args) {
+__cold void debug_log_va(int level, const char *function, int line, const char *fmt, va_list args) {
   ENSURE(nullptr, osal_fastmutex_acquire(&globals.debug_lock) == 0);
   if (globals.logger.ptr) {
     if (globals.logger_buffer == nullptr)
       globals.logger.fmt(level, function, line, fmt, args);
     else {
-      const int len = vsnprintf(globals.logger_buffer,
-                                globals.logger_buffer_size, fmt, args);
+      const int len = vsnprintf(globals.logger_buffer, globals.logger_buffer_size, fmt, args);
       if (len > 0)
         globals.logger.nofmt(level, function, line, globals.logger_buffer, len);
     }
@@ -51,8 +49,7 @@ __cold void debug_log_va(int level, const char *function, int line,
   ENSURE(nullptr, osal_fastmutex_release(&globals.debug_lock) == 0);
 }
 
-__cold void debug_log(int level, const char *function, int line,
-                      const char *fmt, ...) {
+__cold void debug_log(int level, const char *function, int line, const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
   debug_log_va(level, function, line, fmt, args);
@@ -62,18 +59,15 @@ __cold void debug_log(int level, const char *function, int line,
 __cold int log_error(const int err, const char *func, unsigned line) {
   assert(err != MDBX_SUCCESS);
   if (unlikely(globals.loglevel >= MDBX_LOG_DEBUG) &&
-      (globals.loglevel >= MDBX_LOG_TRACE ||
-       !(err == MDBX_RESULT_TRUE || err == MDBX_NOTFOUND))) {
+      (globals.loglevel >= MDBX_LOG_TRACE || !(err == MDBX_RESULT_TRUE || err == MDBX_NOTFOUND))) {
     char buf[256];
-    debug_log(MDBX_LOG_ERROR, func, line, "error %d (%s)\n", err,
-              mdbx_strerror_r(err, buf, sizeof(buf)));
+    debug_log(MDBX_LOG_ERROR, func, line, "error %d (%s)\n", err, mdbx_strerror_r(err, buf, sizeof(buf)));
   }
   return err;
 }
 
 /* Dump a val in ascii or hexadecimal. */
-__cold const char *mdbx_dump_val(const MDBX_val *val, char *const buf,
-                                 const size_t bufsize) {
+__cold const char *mdbx_dump_val(const MDBX_val *val, char *const buf, const size_t bufsize) {
   if (!val)
     return "<null>";
   if (!val->iov_len)
@@ -97,9 +91,7 @@ __cold const char *mdbx_dump_val(const MDBX_val *val, char *const buf,
     }
 
   if (is_ascii) {
-    int len =
-        snprintf(buf, bufsize, "%.*s",
-                 (val->iov_len > INT_MAX) ? INT_MAX : (int)val->iov_len, data);
+    int len = snprintf(buf, bufsize, "%.*s", (val->iov_len > INT_MAX) ? INT_MAX : (int)val->iov_len, data);
     assert(len > 0 && (size_t)len < bufsize);
     (void)len;
   } else {
@@ -107,8 +99,7 @@ __cold const char *mdbx_dump_val(const MDBX_val *val, char *const buf,
     char *ptr = buf;
     *ptr++ = '<';
     for (size_t i = 0; i < val->iov_len && ptr < detent; i++) {
-      const char hex[16] = {'0', '1', '2', '3', '4', '5', '6', '7',
-                            '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+      const char hex[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
       *ptr++ = hex[data[i] >> 4];
       *ptr++ = hex[data[i] & 15];
     }
@@ -145,11 +136,8 @@ __cold const char *pagetype_caption(const uint8_t type, char buf4unknown[16]) {
 }
 
 __cold static const char *leafnode_type(node_t *n) {
-  static const char *const tp[2][2] = {{"", ": DB"},
-                                       {": sub-page", ": sub-DB"}};
-  return (node_flags(n) & N_BIG)
-             ? ": large page"
-             : tp[!!(node_flags(n) & N_DUP)][!!(node_flags(n) & N_TREE)];
+  static const char *const tp[2][2] = {{"", ": DB"}, {": sub-page", ": sub-DB"}};
+  return (node_flags(n) & N_BIG) ? ": large page" : tp[!!(node_flags(n) & N_DUP)][!!(node_flags(n) & N_TREE)];
 }
 
 /* Display all the keys in the page. */
@@ -181,8 +169,7 @@ __cold void page_list(page_t *mp) {
     VERBOSE("Overflow page %" PRIaPGNO " pages %u\n", pgno, mp->pages);
     return;
   case P_META:
-    VERBOSE("Meta-page %" PRIaPGNO " txnid %" PRIu64 "\n", pgno,
-            unaligned_peek_u64(4, page_meta(mp)->txnid_a));
+    VERBOSE("Meta-page %" PRIaPGNO " txnid %" PRIu64 "\n", pgno, unaligned_peek_u64(4, page_meta(mp)->txnid_a));
     return;
   default:
     VERBOSE("Bad page %" PRIaPGNO " flags 0x%X\n", pgno, mp->flags);
@@ -193,8 +180,7 @@ __cold void page_list(page_t *mp) {
   VERBOSE("%s %" PRIaPGNO " numkeys %zu\n", type, pgno, nkeys);
 
   for (i = 0; i < nkeys; i++) {
-    if (is_dupfix_leaf(
-            mp)) { /* DUPFIX pages have no entries[] or node headers */
+    if (is_dupfix_leaf(mp)) { /* DUPFIX pages have no entries[] or node headers */
       key = page_dupfix_key(mp, i, nsize = mp->dupfix_ksize);
       total += nsize;
       VERBOSE("key %zu: nsize %zu, %s\n", i, nsize, DKEY(&key));
@@ -205,8 +191,7 @@ __cold void page_list(page_t *mp) {
     key.iov_base = node->payload;
     nsize = NODESIZE + key.iov_len;
     if (is_branch(mp)) {
-      VERBOSE("key %zu: page %" PRIaPGNO ", %s\n", i, node_pgno(node),
-              DKEY(&key));
+      VERBOSE("key %zu: page %" PRIaPGNO ", %s\n", i, node_pgno(node), DKEY(&key));
       total += nsize;
     } else {
       if (node_flags(node) & N_BIG)
@@ -215,18 +200,15 @@ __cold void page_list(page_t *mp) {
         nsize += node_ds(node);
       total += nsize;
       nsize += sizeof(indx_t);
-      VERBOSE("key %zu: nsize %zu, %s%s\n", i, nsize, DKEY(&key),
-              leafnode_type(node));
+      VERBOSE("key %zu: nsize %zu, %s%s\n", i, nsize, DKEY(&key), leafnode_type(node));
     }
     total = EVEN_CEIL(total);
   }
-  VERBOSE("Total: header %u + contents %zu + unused %zu\n",
-          is_dupfix_leaf(mp) ? PAGEHDRSZ : PAGEHDRSZ + mp->lower, total,
-          page_room(mp));
+  VERBOSE("Total: header %u + contents %zu + unused %zu\n", is_dupfix_leaf(mp) ? PAGEHDRSZ : PAGEHDRSZ + mp->lower,
+          total, page_room(mp));
 }
 
-__cold static int setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags,
-                              union logger_union logger, char *buffer,
+__cold static int setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags, union logger_union logger, char *buffer,
                               size_t buffer_size) {
   ENSURE(nullptr, osal_fastmutex_acquire(&globals.debug_lock) == 0);
 
@@ -239,8 +221,7 @@ __cold static int setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags,
 #if MDBX_DEBUG
         MDBX_DBG_ASSERT | MDBX_DBG_AUDIT | MDBX_DBG_JITTER |
 #endif
-        MDBX_DBG_DUMP | MDBX_DBG_LEGACY_MULTIOPEN | MDBX_DBG_LEGACY_OVERLAP |
-        MDBX_DBG_DONT_UPGRADE;
+        MDBX_DBG_DUMP | MDBX_DBG_LEGACY_MULTIOPEN | MDBX_DBG_LEGACY_OVERLAP | MDBX_DBG_DONT_UPGRADE;
     globals.runtime_flags = (uint8_t)flags;
   }
 
@@ -255,18 +236,14 @@ __cold static int setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags,
   return rc;
 }
 
-__cold int mdbx_setup_debug_nofmt(MDBX_log_level_t level,
-                                  MDBX_debug_flags_t flags,
-                                  MDBX_debug_func_nofmt *logger, char *buffer,
-                                  size_t buffer_size) {
+__cold int mdbx_setup_debug_nofmt(MDBX_log_level_t level, MDBX_debug_flags_t flags, MDBX_debug_func_nofmt *logger,
+                                  char *buffer, size_t buffer_size) {
   union logger_union thunk;
-  thunk.nofmt =
-      (logger && buffer && buffer_size) ? logger : MDBX_LOGGER_NOFMT_DONTCHANGE;
+  thunk.nofmt = (logger && buffer && buffer_size) ? logger : MDBX_LOGGER_NOFMT_DONTCHANGE;
   return setup_debug(level, flags, thunk, buffer, buffer_size);
 }
 
-__cold int mdbx_setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags,
-                            MDBX_debug_func *logger) {
+__cold int mdbx_setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags, MDBX_debug_func *logger) {
   union logger_union thunk;
   thunk.fmt = logger;
   return setup_debug(level, flags, thunk, nullptr, 0);

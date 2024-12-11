@@ -24,17 +24,14 @@ REGISTER_TESTCASE(ttl);
 
 unsigned testcase_ttl::edge2count(uint64_t edge) {
   const double rnd = u64_to_double1(prng64_map1_white(edge));
-  const unsigned count =
-      unsigned(std::lrint(std::pow(sliding.max_step_size, rnd)));
+  const unsigned count = unsigned(std::lrint(std::pow(sliding.max_step_size, rnd)));
   // average value: (X - 1) / ln(X), where X = sliding.max_step_size
   return count;
 }
 
 unsigned testcase_ttl::edge2window(uint64_t edge) {
   const double rnd = u64_to_double1(bleach64(edge));
-  const unsigned size =
-      sliding.max_window_size -
-      unsigned(std::lrint(std::pow(sliding.max_window_size, rnd)));
+  const unsigned size = sliding.max_window_size - unsigned(std::lrint(std::pow(sliding.max_window_size, rnd)));
   // average value: Y - (Y - 1) / ln(Y), where Y = sliding.max_window_size
   return size;
 }
@@ -48,20 +45,17 @@ static inline double estimate(const double x, const double y) {
 }
 
 bool testcase_ttl::setup() {
-  const unsigned window_top_lower =
-      7 /* нижний предел для верхней границы диапазона, в котором будет
-           стохастически колебаться размер окна */
+  const unsigned window_top_lower = 7 /* нижний предел для верхней границы диапазона, в котором будет
+                                         стохастически колебаться размер окна */
       ;
-  const unsigned count_top_lower =
-      7 /* нижний предел для верхней границы диапазона, в котором будет
-           стохастически колебаться кол-во записей добавляемых на одном шаге */
+  const unsigned count_top_lower = 7 /* нижний предел для верхней границы диапазона, в котором будет
+                                        стохастически колебаться кол-во записей добавляемых на одном шаге */
       ;
 
   /* для параметризации используем подходящие параметры,
    * которые не имеют здесь смысла в первоначальном значении. */
-  const double ratio =
-      double(config.params.batch_read ? config.params.batch_read : 1) /
-      double(config.params.batch_write ? config.params.batch_write : 1);
+  const double ratio = double(config.params.batch_read ? config.params.batch_read : 1) /
+                       double(config.params.batch_write ? config.params.batch_write : 1);
 
   /* проще найти двоичным поиском (вариация метода Ньютона) */
   double hi = config.params.test_nops, lo = 1;
@@ -82,8 +76,7 @@ bool testcase_ttl::setup() {
   if (sliding.max_window_size < window_top_lower)
     sliding.max_window_size = window_top_lower;
 
-  while (estimate(sliding.max_step_size, sliding.max_window_size) >
-         config.params.test_nops * 2.0) {
+  while (estimate(sliding.max_step_size, sliding.max_window_size) > config.params.test_nops * 2.0) {
     if (ratio * sliding.max_step_size > sliding.max_window_size) {
       if (sliding.max_step_size < count_top_lower)
         break;
@@ -95,8 +88,7 @@ bool testcase_ttl::setup() {
     }
   }
 
-  log_verbose("come up window_max %u from `batch_read`",
-              sliding.max_window_size);
+  log_verbose("come up window_max %u from `batch_read`", sliding.max_window_size);
   log_verbose("come up step_max %u from `batch_write`", sliding.max_step_size);
   return inherited::setup();
 }
@@ -113,9 +105,7 @@ bool testcase_ttl::run() {
   key = keygen::alloc(config.params.keylen_max);
   data = keygen::alloc(config.params.datalen_max);
   const MDBX_put_flags_t insert_flags =
-      (config.params.table_flags & MDBX_DUPSORT)
-          ? MDBX_NODUPDATA
-          : MDBX_NODUPDATA | MDBX_NOOVERWRITE;
+      (config.params.table_flags & MDBX_DUPSORT) ? MDBX_NODUPDATA : MDBX_NODUPDATA | MDBX_NOOVERWRITE;
 
   std::deque<std::pair<uint64_t, unsigned>> fifo;
   uint64_t serial = 0;
@@ -128,20 +118,17 @@ bool testcase_ttl::run() {
   while (true) {
     const uint64_t salt = prng64_white(seed) /* mdbx_txn_id(txn_guard.get()) */;
 
-    const unsigned window_width =
-        (!should_continue() || flipcoin_x4()) ? 0 : edge2window(salt);
+    const unsigned window_width = (!should_continue() || flipcoin_x4()) ? 0 : edge2window(salt);
     unsigned head_count = edge2count(salt);
-    log_debug("ttl: step #%" PRIu64 " (serial %" PRIu64
-              ", window %u, count %u) salt %" PRIu64,
-              nops_completed, serial, window_width, head_count, salt);
+    log_debug("ttl: step #%" PRIu64 " (serial %" PRIu64 ", window %u, count %u) salt %" PRIu64, nops_completed, serial,
+              window_width, head_count, salt);
 
     if (window_width || flipcoin()) {
       clear_stepbystep_passed += window_width == 0;
       while (fifo.size() > window_width) {
         uint64_t tail_serial = fifo.back().first;
         const unsigned tail_count = fifo.back().second;
-        log_trace("ttl: pop-tail (serial %" PRIu64 ", count %u)", tail_serial,
-                  tail_count);
+        log_trace("ttl: pop-tail (serial %" PRIu64 ", count %u)", tail_serial, tail_count);
         fifo.pop_back();
         for (unsigned n = 0; n < tail_count; ++n) {
           log_trace("ttl: remove-tail %" PRIu64, tail_serial);
@@ -177,10 +164,8 @@ bool testcase_ttl::run() {
       return false;
     }
 
-    if (!keyspace_overflow && (should_continue() || !clear_wholetable_passed ||
-                               !clear_stepbystep_passed)) {
-      unsigned underutilization_x256 =
-          txn_underutilization_x256(txn_guard.get());
+    if (!keyspace_overflow && (should_continue() || !clear_wholetable_passed || !clear_stepbystep_passed)) {
+      unsigned underutilization_x256 = txn_underutilization_x256(txn_guard.get());
       if (dbfull_passed > underutilization_x256) {
         log_notice("ttl: skip head-grow to avoid one more dbfull (was %u, "
                    "underutilization %.2f%%)",
@@ -194,8 +179,7 @@ bool testcase_ttl::run() {
         generate_pair(serial);
         err = insert(key, data, insert_flags);
         if (unlikely(err != MDBX_SUCCESS)) {
-          if ((err == MDBX_TXN_FULL || err == MDBX_MAP_FULL) &&
-              config.params.ignore_dbfull) {
+          if ((err == MDBX_TXN_FULL || err == MDBX_MAP_FULL) && config.params.ignore_dbfull) {
             log_notice("ttl: head-insert skip due '%s'", mdbx_strerror(err));
             txn_restart(true, false);
             serial = fifo.front().first;
@@ -227,8 +211,7 @@ bool testcase_ttl::run() {
       }
       loops += 1;
     } else if (fifo.empty()) {
-      log_notice("ttl: done %u whole loops, %" PRIu64 " ops, %" PRIu64 " items",
-                 loops, nops_completed, serial);
+      log_notice("ttl: done %u whole loops, %" PRIu64 " ops, %" PRIu64 " items", loops, nops_completed, serial);
       rc = true;
       break;
     } else {

@@ -23,14 +23,11 @@ int main(int argc, char *argv[]) {
   // 1); assert(err == MDBX_SUCCESS);
 
   intptr_t lowerbound(0), size(0), upperbound(mdbx::env::geometry::GiB / 2);
-  intptr_t step(128 * mdbx::env::geometry::MiB),
-      shrink(256 * mdbx::env::geometry::MiB), pagesize(-1);
-  err = mdbx_env_set_geometry(environment, lowerbound, size, upperbound, step,
-                              shrink, pagesize);
+  intptr_t step(128 * mdbx::env::geometry::MiB), shrink(256 * mdbx::env::geometry::MiB), pagesize(-1);
+  err = mdbx_env_set_geometry(environment, lowerbound, size, upperbound, step, shrink, pagesize);
   assert(err == MDBX_SUCCESS);
 
-  MDBX_env_flags_t flags(MDBX_NOSUBDIR | MDBX_WRITEMAP | MDBX_LIFORECLAIM |
-                         MDBX_NORDAHEAD);
+  MDBX_env_flags_t flags(MDBX_NOSUBDIR | MDBX_WRITEMAP | MDBX_LIFORECLAIM | MDBX_NORDAHEAD);
   err = mdbx_env_openT(environment, db_filename.c_str(), flags, 0644);
   assert(err == MDBX_SUCCESS);
 

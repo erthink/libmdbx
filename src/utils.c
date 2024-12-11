@@ -3,10 +3,8 @@
 
 #include "internals.h"
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION MDBX_INTERNAL unsigned
-log2n_powerof2(size_t value_uintptr) {
-  assert(value_uintptr > 0 && value_uintptr < INT32_MAX &&
-         is_powerof2(value_uintptr));
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION MDBX_INTERNAL unsigned log2n_powerof2(size_t value_uintptr) {
+  assert(value_uintptr > 0 && value_uintptr < INT32_MAX && is_powerof2(value_uintptr));
   assert((value_uintptr & -(intptr_t)value_uintptr) == value_uintptr);
   const uint32_t value_uint32 = (uint32_t)value_uintptr;
 #if __GNUC_PREREQ(4, 1) || __has_builtin(__builtin_ctz)
@@ -18,9 +16,8 @@ log2n_powerof2(size_t value_uintptr) {
   _BitScanForward(&index, value_uint32);
   return index;
 #else
-  static const uint8_t debruijn_ctz32[32] = {
-      0,  1,  28, 2,  29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4,  8,
-      31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6,  11, 5,  10, 9};
+  static const uint8_t debruijn_ctz32[32] = {0,  1,  28, 2,  29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4,  8,
+                                             31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6,  11, 5,  10, 9};
   return debruijn_ctz32[(uint32_t)(value_uint32 * 0x077CB531ul) >> 27];
 #endif
 }

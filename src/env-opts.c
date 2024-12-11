@@ -6,17 +6,11 @@
 __cold static unsigned default_rp_augment_limit(const MDBX_env *env) {
   const size_t timeframe = /* 16 секунд */ 16 << 16;
   const size_t remain_1sec =
-      (env->options.gc_time_limit < timeframe)
-          ? timeframe - (size_t)env->options.gc_time_limit
-          : 0;
-  const size_t minimum = (env->maxgc_large1page * 2 > MDBX_PNL_INITIAL)
-                             ? env->maxgc_large1page * 2
-                             : MDBX_PNL_INITIAL;
+      (env->options.gc_time_limit < timeframe) ? timeframe - (size_t)env->options.gc_time_limit : 0;
+  const size_t minimum = (env->maxgc_large1page * 2 > MDBX_PNL_INITIAL) ? env->maxgc_large1page * 2 : MDBX_PNL_INITIAL;
   const size_t one_third = env->geo_in_bytes.now / 3 >> env->ps2ln;
   const size_t augment_limit =
-      (one_third > minimum)
-          ? minimum + (one_third - minimum) / timeframe * remain_1sec
-          : minimum;
+      (one_third > minimum) ? minimum + (one_third - minimum) / timeframe * remain_1sec : minimum;
   eASSERT(env, augment_limit < PAGELIST_LIMIT);
   return pnl_bytes2size(pnl_size2bytes(augment_limit));
 }
@@ -86,29 +80,23 @@ void env_options_adjust_defaults(MDBX_env *env) {
   const size_t basis = env->geo_in_bytes.now;
   /* TODO: use options? */
   const unsigned factor = 9;
-  size_t threshold = (basis < ((size_t)65536 << factor))
-                         ? 65536 /* minimal threshold */
-                     : (basis > (MEGABYTE * 4 << factor))
-                         ? MEGABYTE * 4 /* maximal threshold */
-                         : basis >> factor;
+  size_t threshold = (basis < ((size_t)65536 << factor))  ? 65536        /* minimal threshold */
+                     : (basis > (MEGABYTE * 4 << factor)) ? MEGABYTE * 4 /* maximal threshold */
+                                                          : basis >> factor;
   threshold =
-      (threshold < env->geo_in_bytes.shrink || !env->geo_in_bytes.shrink)
-          ? threshold
-          : env->geo_in_bytes.shrink;
+      (threshold < env->geo_in_bytes.shrink || !env->geo_in_bytes.shrink) ? threshold : env->geo_in_bytes.shrink;
 
   env->madv_threshold = bytes2pgno(env, bytes_align2os_bytes(env, threshold));
 }
 
 //------------------------------------------------------------------------------
 
-__cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
-                               uint64_t value) {
+__cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option, uint64_t value) {
   int err = check_env(env, false);
   if (unlikely(err != MDBX_SUCCESS))
     return LOG_IFERR(err);
 
-  const bool lock_needed =
-      ((env->flags & ENV_ACTIVE) && env->basal_txn && !env_txn0_owned(env));
+  const bool lock_needed = ((env->flags & ENV_ACTIVE) && env->basal_txn && !env_txn0_owned(env));
   bool should_unlock = false;
   switch (option) {
   case MDBX_opt_sync_bytes:
@@ -121,10 +109,8 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     if (unlikely(value > SIZE_MAX - 65536))
       return LOG_IFERR(MDBX_EINVAL);
     value = bytes2pgno(env, (size_t)value + env->ps - 1);
-    if ((uint32_t)value !=
-            atomic_load32(&env->lck->autosync_threshold, mo_AcquireRelease) &&
-        atomic_store32(&env->lck->autosync_threshold, (uint32_t)value,
-                       mo_Relaxed)
+    if ((uint32_t)value != atomic_load32(&env->lck->autosync_threshold, mo_AcquireRelease) &&
+        atomic_store32(&env->lck->autosync_threshold, (uint32_t)value, mo_Relaxed)
         /* Дергаем sync(force=off) только если задано новое не-нулевое значение
          * и мы вне транзакции */
         && lock_needed) {
@@ -248,8 +234,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
       err = MDBX_EPERM /* unable change during transaction */;
     else {
       const pgno_t value32 = (pgno_t)value;
-      if (option == MDBX_opt_txn_dp_initial &&
-          env->options.dp_initial != value32) {
+      if (option == MDBX_opt_txn_dp_initial && env->options.dp_initial != value32) {
         env->options.dp_initial = value32;
         if (env->options.dp_limit < value32) {
           env->options.dp_limit = value32;
@@ -308,8 +293,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
 #if defined(_WIN32) || defined(_WIN64)
     /* позволяем "установить" значение по-умолчанию и совпадающее
      * с поведением соответствующим текущей установке MDBX_NOMETASYNC */
-    if (value == /* default */ UINT64_MAX &&
-        value != ((env->flags & MDBX_NOMETASYNC) ? 0 : UINT_MAX))
+    if (value == /* default */ UINT64_MAX && value != ((env->flags & MDBX_NOMETASYNC) ? 0 : UINT_MAX))
       err = MDBX_EINVAL;
 #else
     if (value == /* default */ UINT64_MAX)
@@ -335,8 +319,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
 
   case MDBX_opt_prefer_waf_insteadof_balance:
     if (value == /* default */ UINT64_MAX)
-      env->options.prefer_waf_insteadof_balance =
-          default_prefer_waf_insteadof_balance(env);
+      env->options.prefer_waf_insteadof_balance = default_prefer_waf_insteadof_balance(env);
     else if (value > 1)
       err = MDBX_EINVAL;
     else
@@ -400,8 +383,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
   return LOG_IFERR(err);
 }
 
-__cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
-                               uint64_t *pvalue) {
+__cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option, uint64_t *pvalue) {
   int err = check_env(env, false);
   if (unlikely(err != MDBX_SUCCESS))
     return LOG_IFERR(err);
@@ -412,15 +394,13 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
   case MDBX_opt_sync_bytes:
     if (unlikely(!(env->flags & ENV_ACTIVE)))
       return LOG_IFERR(MDBX_EPERM);
-    *pvalue = pgno2bytes(
-        env, atomic_load32(&env->lck->autosync_threshold, mo_Relaxed));
+    *pvalue = pgno2bytes(env, atomic_load32(&env->lck->autosync_threshold, mo_Relaxed));
     break;
 
   case MDBX_opt_sync_period:
     if (unlikely(!(env->flags & ENV_ACTIVE)))
       return LOG_IFERR(MDBX_EPERM);
-    *pvalue = osal_monotime_to_16dot16(
-        atomic_load64(&env->lck->autosync_period, mo_Relaxed));
+    *pvalue = osal_monotime_to_16dot16(atomic_load64(&env->lck->autosync_period, mo_Relaxed));
     break;
 
   case MDBX_opt_max_db:

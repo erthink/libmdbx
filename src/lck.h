@@ -23,8 +23,7 @@ MDBX_INTERNAL int lck_ipclock_destroy(osal_ipclock_t *ipc);
 ///     MUST NOT initialize shared synchronization objects in memory-mapped
 ///     LCK-file that are already in use.
 /// \return Error code or zero on success.
-MDBX_INTERNAL int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor,
-                           int global_uniqueness_flag);
+MDBX_INTERNAL int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor, int global_uniqueness_flag);
 
 /// \brief Disconnects from shared interprocess objects and destructs
 ///   synchronization objects linked with MDBX_env instance
@@ -43,8 +42,7 @@ MDBX_INTERNAL int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor,
 ///     of other instances of MDBX_env within the current process, e.g.
 ///     restore POSIX-fcntl locks after the closing of file descriptors.
 /// \return Error code (MDBX_PANIC) or zero on success.
-MDBX_INTERNAL int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor,
-                              const uint32_t current_pid);
+MDBX_INTERNAL int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const uint32_t current_pid);
 
 /// \brief Connects to shared interprocess locking objects and tries to acquire
 ///   the maximum lock level (shared if exclusive is not available)

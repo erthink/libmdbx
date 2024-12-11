@@ -5,15 +5,13 @@
 
 #include "internals.h"
 
-__hot int __must_check_result node_add_dupfix(MDBX_cursor *mc, size_t indx,
-                                              const MDBX_val *key) {
+__hot int __must_check_result node_add_dupfix(MDBX_cursor *mc, size_t indx, const MDBX_val *key) {
   page_t *mp = mc->pg[mc->top];
   MDBX_ANALYSIS_ASSUME(key != nullptr);
   DKBUF_DEBUG;
   DEBUG("add to leaf2-%spage %" PRIaPGNO " index %zi, "
         " key size %" PRIuPTR " [%s]",
-        is_subpage(mp) ? "sub-" : "", mp->pgno, indx, key ? key->iov_len : 0,
-        DKEY_DEBUG(key));
+        is_subpage(mp) ? "sub-" : "", mp->pgno, indx, key ? key->iov_len : 0, DKEY_DEBUG(key));
 
   cASSERT(mc, key);
   cASSERT(mc, page_type_compat(mp) == (P_LEAF | P_DUPFIX));
@@ -45,14 +43,11 @@ __hot int __must_check_result node_add_dupfix(MDBX_cursor *mc, size_t indx,
   return MDBX_SUCCESS;
 }
 
-int __must_check_result node_add_branch(MDBX_cursor *mc, size_t indx,
-                                        const MDBX_val *key, pgno_t pgno) {
+int __must_check_result node_add_branch(MDBX_cursor *mc, size_t indx, const MDBX_val *key, pgno_t pgno) {
   page_t *mp = mc->pg[mc->top];
   DKBUF_DEBUG;
-  DEBUG("add to branch-%spage %" PRIaPGNO " index %zi, node-pgno %" PRIaPGNO
-        " key size %" PRIuPTR " [%s]",
-        is_subpage(mp) ? "sub-" : "", mp->pgno, indx, pgno,
-        key ? key->iov_len : 0, DKEY_DEBUG(key));
+  DEBUG("add to branch-%spage %" PRIaPGNO " index %zi, node-pgno %" PRIaPGNO " key size %" PRIuPTR " [%s]",
+        is_subpage(mp) ? "sub-" : "", mp->pgno, indx, pgno, key ? key->iov_len : 0, DKEY_DEBUG(key));
 
   cASSERT(mc, page_type(mp) == P_BRANCH);
   STATIC_ASSERT(NODESIZE % 2 == 0);
@@ -87,17 +82,15 @@ int __must_check_result node_add_branch(MDBX_cursor *mc, size_t indx,
   return MDBX_SUCCESS;
 }
 
-__hot int __must_check_result node_add_leaf(MDBX_cursor *mc, size_t indx,
-                                            const MDBX_val *key, MDBX_val *data,
+__hot int __must_check_result node_add_leaf(MDBX_cursor *mc, size_t indx, const MDBX_val *key, MDBX_val *data,
                                             unsigned flags) {
   MDBX_ANALYSIS_ASSUME(key != nullptr);
   MDBX_ANALYSIS_ASSUME(data != nullptr);
   page_t *mp = mc->pg[mc->top];
   DKBUF_DEBUG;
-  DEBUG("add to leaf-%spage %" PRIaPGNO " index %zi, data size %" PRIuPTR
-        " key size %" PRIuPTR " [%s]",
-        is_subpage(mp) ? "sub-" : "", mp->pgno, indx, data ? data->iov_len : 0,
-        key ? key->iov_len : 0, DKEY_DEBUG(key));
+  DEBUG("add to leaf-%spage %" PRIaPGNO " index %zi, data size %" PRIuPTR " key size %" PRIuPTR " [%s]",
+        is_subpage(mp) ? "sub-" : "", mp->pgno, indx, data ? data->iov_len : 0, key ? key->iov_len : 0,
+        DKEY_DEBUG(key));
   cASSERT(mc, key != nullptr && data != nullptr);
   cASSERT(mc, page_type_compat(mp) == P_LEAF);
   page_t *largepage = nullptr;
@@ -106,19 +99,16 @@ __hot int __must_check_result node_add_leaf(MDBX_cursor *mc, size_t indx,
   if (unlikely(flags & N_BIG)) {
     /* Data already on large/overflow page. */
     STATIC_ASSERT(sizeof(pgno_t) % 2 == 0);
-    node_bytes =
-        node_size_len(key->iov_len, 0) + sizeof(pgno_t) + sizeof(indx_t);
+    node_bytes = node_size_len(key->iov_len, 0) + sizeof(pgno_t) + sizeof(indx_t);
     cASSERT(mc, page_room(mp) >= node_bytes);
   } else if (unlikely(node_size(key, data) > mc->txn->env->leaf_nodemax)) {
     /* Put data on large/overflow page. */
     if (unlikely(mc->tree->flags & MDBX_DUPSORT)) {
-      ERROR("Unexpected target %s flags 0x%x for large data-item", "dupsort-db",
-            mc->tree->flags);
+      ERROR("Unexpected target %s flags 0x%x for large data-item", "dupsort-db", mc->tree->flags);
       return MDBX_PROBLEM;
     }
     if (unlikely(flags & (N_DUP | N_TREE))) {
-      ERROR("Unexpected target %s flags 0x%x for large data-item", "node",
-            flags);
+      ERROR("Unexpected target %s flags 0x%x for large data-item", "node", flags);
       return MDBX_PROBLEM;
     }
     cASSERT(mc, page_room(mp) >= leaf_size(mc->txn->env, key, data));
@@ -127,12 +117,10 @@ __hot int __must_check_result node_add_leaf(MDBX_cursor *mc, size_t indx,
     if (unlikely(npr.err != MDBX_SUCCESS))
       return npr.err;
     largepage = npr.page;
-    DEBUG("allocated %u large/overflow page(s) %" PRIaPGNO "for %" PRIuPTR
-          " data bytes",
-          largepage->pages, largepage->pgno, data->iov_len);
+    DEBUG("allocated %u large/overflow page(s) %" PRIaPGNO "for %" PRIuPTR " data bytes", largepage->pages,
+          largepage->pgno, data->iov_len);
     flags |= N_BIG;
-    node_bytes =
-        node_size_len(key->iov_len, 0) + sizeof(pgno_t) + sizeof(indx_t);
+    node_bytes = node_size_len(key->iov_len, 0) + sizeof(pgno_t) + sizeof(indx_t);
     cASSERT(mc, node_bytes == leaf_size(mc->txn->env, key, data));
   } else {
     cASSERT(mc, page_room(mp) >= leaf_size(mc->txn->env, key, data));
@@ -186,8 +174,7 @@ __hot void node_del(MDBX_cursor *mc, size_t ksize) {
   const size_t hole = mc->ki[mc->top];
   const size_t nkeys = page_numkeys(mp);
 
-  DEBUG("delete node %zu on %s page %" PRIaPGNO, hole,
-        is_leaf(mp) ? "leaf" : "branch", mp->pgno);
+  DEBUG("delete node %zu on %s page %" PRIaPGNO, hole, is_leaf(mp) ? "leaf" : "branch", mp->pgno);
   cASSERT(mc, hole < nkeys);
 
   if (is_dupfix_leaf(mp)) {
@@ -215,9 +202,7 @@ __hot void node_del(MDBX_cursor *mc, size_t ksize) {
   size_t r, w;
   for (r = w = 0; r < nkeys; r++)
     if (r != hole)
-      mp->entries[w++] = (mp->entries[r] < hole_offset)
-                             ? mp->entries[r] + (indx_t)hole_size
-                             : mp->entries[r];
+      mp->entries[w++] = (mp->entries[r] < hole_offset) ? mp->entries[r] + (indx_t)hole_size : mp->entries[r];
 
   void *const base = ptr_disp(mp, mp->upper + PAGEHDRSZ);
   memmove(ptr_disp(base, hole_size), base, hole_offset - mp->upper);
@@ -236,14 +221,12 @@ __hot void node_del(MDBX_cursor *mc, size_t ksize) {
   }
 }
 
-__noinline int node_read_bigdata(MDBX_cursor *mc, const node_t *node,
-                                 MDBX_val *data, const page_t *mp) {
+__noinline int node_read_bigdata(MDBX_cursor *mc, const node_t *node, MDBX_val *data, const page_t *mp) {
   cASSERT(mc, node_flags(node) == N_BIG && data->iov_len == node_ds(node));
 
   pgr_t lp = page_get_large(mc, node_largedata_pgno(node), mp->txnid);
   if (unlikely((lp.err != MDBX_SUCCESS))) {
-    DEBUG("read large/overflow page %" PRIaPGNO " failed",
-          node_largedata_pgno(node));
+    DEBUG("read large/overflow page %" PRIaPGNO " failed", node_largedata_pgno(node));
     return lp.err;
   }
 
@@ -254,9 +237,7 @@ __noinline int node_read_bigdata(MDBX_cursor *mc, const node_t *node,
     const size_t dsize = data->iov_len;
     const unsigned npages = largechunk_npages(env, dsize);
     if (unlikely(lp.page->pages < npages))
-      return bad_page(lp.page,
-                      "too less n-pages %u for bigdata-node (%zu bytes)",
-                      lp.page->pages, dsize);
+      return bad_page(lp.page, "too less n-pages %u for bigdata-node (%zu bytes)", lp.page->pages, dsize);
   }
   return MDBX_SUCCESS;
 }
@@ -265,8 +246,7 @@ node_t *node_shrink(page_t *mp, size_t indx, node_t *node) {
   assert(node == page_node(mp, indx));
   page_t *sp = (page_t *)node_data(node);
   assert(is_subpage(sp) && page_numkeys(sp) > 0);
-  const size_t delta =
-      EVEN_FLOOR(page_room(sp) /* avoid the node uneven-sized */);
+  const size_t delta = EVEN_FLOOR(page_room(sp) /* avoid the node uneven-sized */);
   if (unlikely(delta) == 0)
     return node;
 
@@ -303,15 +283,13 @@ node_t *node_shrink(page_t *mp, size_t indx, node_t *node) {
   return ptr_disp(node, delta);
 }
 
-__hot struct node_search_result node_search(MDBX_cursor *mc,
-                                            const MDBX_val *key) {
+__hot struct node_search_result node_search(MDBX_cursor *mc, const MDBX_val *key) {
   page_t *mp = mc->pg[mc->top];
   const intptr_t nkeys = page_numkeys(mp);
   DKBUF_DEBUG;
 
-  DEBUG("searching %zu keys in %s %spage %" PRIaPGNO, nkeys,
-        is_leaf(mp) ? "leaf" : "branch", is_subpage(mp) ? "sub-" : "",
-        mp->pgno);
+  DEBUG("searching %zu keys in %s %spage %" PRIaPGNO, nkeys, is_leaf(mp) ? "leaf" : "branch",
+        is_subpage(mp) ? "sub-" : "", mp->pgno);
 
   struct node_search_result ret;
   ret.exact = false;
@@ -333,8 +311,7 @@ __hot struct node_search_result node_search(MDBX_cursor *mc,
     do {
       i = (low + high) >> 1;
       nodekey.iov_base = page_dupfix_ptr(mp, i, nodekey.iov_len);
-      cASSERT(mc, ptr_disp(mp, mc->txn->env->ps) >=
-                      ptr_disp(nodekey.iov_base, nodekey.iov_len));
+      cASSERT(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(nodekey.iov_base, nodekey.iov_len));
       int cr = cmp(key, &nodekey);
       DEBUG("found leaf index %zu [%s], rc = %i", i, DKEY_DEBUG(&nodekey), cr);
       if (cr > 0)
@@ -349,10 +326,8 @@ __hot struct node_search_result node_search(MDBX_cursor *mc,
 
     /* store the key index */
     mc->ki[mc->top] = (indx_t)i;
-    ret.node =
-        (i < nkeys)
-            ? /* fake for DUPFIX */ (node_t *)(intptr_t)-1
-            : /* There is no entry larger or equal to the key. */ nullptr;
+    ret.node = (i < nkeys) ? /* fake for DUPFIX */ (node_t *)(intptr_t)-1
+                           : /* There is no entry larger or equal to the key. */ nullptr;
     return ret;
   }
 
@@ -367,14 +342,12 @@ __hot struct node_search_result node_search(MDBX_cursor *mc,
     node = page_node(mp, i);
     nodekey.iov_len = node_ks(node);
     nodekey.iov_base = node_key(node);
-    cASSERT(mc, ptr_disp(mp, mc->txn->env->ps) >=
-                    ptr_disp(nodekey.iov_base, nodekey.iov_len));
+    cASSERT(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(nodekey.iov_base, nodekey.iov_len));
     int cr = cmp(key, &nodekey);
     if (is_leaf(mp))
       DEBUG("found leaf index %zu [%s], rc = %i", i, DKEY_DEBUG(&nodekey), cr);
     else
-      DEBUG("found branch index %zu [%s -> %" PRIaPGNO "], rc = %i", i,
-            DKEY_DEBUG(&nodekey), node_pgno(node), cr);
+      DEBUG("found branch index %zu [%s -> %" PRIaPGNO "], rc = %i", i, DKEY_DEBUG(&nodekey), node_pgno(node), cr);
     if (cr > 0)
       low = ++i;
     else if (cr < 0)
@@ -387,8 +360,6 @@ __hot struct node_search_result node_search(MDBX_cursor *mc,
 
   /* store the key index */
   mc->ki[mc->top] = (indx_t)i;
-  ret.node = (i < nkeys)
-                 ? page_node(mp, i)
-                 : /* There is no entry larger or equal to the key. */ nullptr;
+  ret.node = (i < nkeys) ? page_node(mp, i) : /* There is no entry larger or equal to the key. */ nullptr;
   return ret;
 }

@@ -122,8 +122,7 @@ extern void __gmon_start__(void) __attribute__((__weak__));
 #endif /* ENABLE_GPROF */
 
 MDBX_EXCLUDE_FOR_GPROF
-__cold static __attribute__((__constructor__)) void
-mdbx_global_constructor(void) {
+__cold static __attribute__((__constructor__)) void mdbx_global_constructor(void) {
 #ifdef ENABLE_GPROF
   if (!&__gmon_start__)
     monstartup((uintptr_t)&_init, (uintptr_t)&_fini);
@@ -154,9 +153,8 @@ mdbx_global_constructor(void) {
      * So, the REQUIREMENTS for this code:
      *  1. MUST detect WSL1 without false-negatives.
      *  2. DESIRABLE detect WSL2 but without the risk of violating the first. */
-    globals.running_on_WSL1 = probe_for_WSL(buffer.version) == 1 ||
-                              probe_for_WSL(buffer.sysname) == 1 ||
-                              probe_for_WSL(buffer.release) == 1;
+    globals.running_on_WSL1 =
+        probe_for_WSL(buffer.version) == 1 || probe_for_WSL(buffer.sysname) == 1 || probe_for_WSL(buffer.release) == 1;
   }
 #endif /* Linux */
 
@@ -164,8 +162,7 @@ mdbx_global_constructor(void) {
 }
 
 MDBX_EXCLUDE_FOR_GPROF
-__cold static __attribute__((__destructor__)) void
-mdbx_global_destructor(void) {
+__cold static __attribute__((__destructor__)) void mdbx_global_destructor(void) {
   mdbx_fini();
 #ifdef ENABLE_GPROF
   if (!&__gmon_start__)
@@ -180,13 +177,11 @@ mdbx_global_destructor(void) {
 struct libmdbx_globals globals;
 
 __cold static void mdbx_init(void) {
-  globals.runtime_flags = ((MDBX_DEBUG) > 0) * MDBX_DBG_ASSERT +
-                          ((MDBX_DEBUG) > 1) * MDBX_DBG_AUDIT;
+  globals.runtime_flags = ((MDBX_DEBUG) > 0) * MDBX_DBG_ASSERT + ((MDBX_DEBUG) > 1) * MDBX_DBG_AUDIT;
   globals.loglevel = MDBX_LOG_FATAL;
   ENSURE(nullptr, osal_fastmutex_init(&globals.debug_lock) == 0);
   osal_ctor();
-  assert(globals.sys_pagesize > 0 &&
-         (globals.sys_pagesize & (globals.sys_pagesize - 1)) == 0);
+  assert(globals.sys_pagesize > 0 && (globals.sys_pagesize & (globals.sys_pagesize - 1)) == 0);
   rthc_ctor();
 #if MDBX_DEBUG
   ENSURE(nullptr, troika_verify_fsm());

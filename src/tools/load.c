@@ -44,11 +44,10 @@ static size_t lineno;
 static void error(const char *func, int rc) {
   if (!quiet) {
     if (lineno)
-      fprintf(stderr, "%s: at input line %" PRIiSIZE ": %s() error %d, %s\n",
-              prog, lineno, func, rc, mdbx_strerror(rc));
-    else
-      fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc,
+      fprintf(stderr, "%s: at input line %" PRIiSIZE ": %s() error %d, %s\n", prog, lineno, func, rc,
               mdbx_strerror(rc));
+    else
+      fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc, mdbx_strerror(rc));
   }
 }
 
@@ -60,9 +59,7 @@ static char *valstr(char *line, const char *item) {
     if (line[len] > ' ')
       return nullptr;
     if (!quiet)
-      fprintf(stderr,
-              "%s: line %" PRIiSIZE ": unexpected line format for '%s'\n", prog,
-              lineno, item);
+      fprintf(stderr, "%s: line %" PRIiSIZE ": unexpected line format for '%s'\n", prog, lineno, item);
     exit(EXIT_FAILURE);
   }
   char *ptr = strchr(line, '\n');
@@ -80,9 +77,7 @@ static bool valnum(char *line, const char *item, uint64_t *value) {
   *value = strtoull(str, &end, 0);
   if (end && *end) {
     if (!quiet)
-      fprintf(stderr,
-              "%s: line %" PRIiSIZE ": unexpected number format for '%s'\n",
-              prog, lineno, item);
+      fprintf(stderr, "%s: line %" PRIiSIZE ": unexpected number format for '%s'\n", prog, lineno, item);
     exit(EXIT_FAILURE);
   }
   return true;
@@ -95,8 +90,7 @@ static bool valbool(char *line, const char *item, bool *value) {
 
   if (u64 > 1) {
     if (!quiet)
-      fprintf(stderr, "%s: line %" PRIiSIZE ": unexpected value for '%s'\n",
-              prog, lineno, item);
+      fprintf(stderr, "%s: line %" PRIiSIZE ": unexpected value for '%s'\n", prog, lineno, item);
     exit(EXIT_FAILURE);
   }
   *value = u64 != 0;
@@ -129,11 +123,10 @@ typedef struct flagbit {
 
 #define S(s) STRLENOF(s), s
 
-flagbit dbflags[] = {
-    {MDBX_REVERSEKEY, S("reversekey")}, {MDBX_DUPSORT, S("duplicates")},
-    {MDBX_DUPSORT, S("dupsort")},       {MDBX_INTEGERKEY, S("integerkey")},
-    {MDBX_DUPFIXED, S("dupfix")},       {MDBX_INTEGERDUP, S("integerdup")},
-    {MDBX_REVERSEDUP, S("reversedup")}, {0, 0, nullptr}};
+flagbit dbflags[] = {{MDBX_REVERSEKEY, S("reversekey")}, {MDBX_DUPSORT, S("duplicates")},
+                     {MDBX_DUPSORT, S("dupsort")},       {MDBX_INTEGERKEY, S("integerkey")},
+                     {MDBX_DUPFIXED, S("dupfix")},       {MDBX_INTEGERDUP, S("integerdup")},
+                     {MDBX_REVERSEDUP, S("reversedup")}, {0, 0, nullptr}};
 
 static int readhdr(void) {
   /* reset parameters */
@@ -158,10 +151,8 @@ static int readhdr(void) {
     if (valnum(dbuf.iov_base, "VERSION", &u64)) {
       if (u64 != 3) {
         if (!quiet)
-          fprintf(stderr,
-                  "%s: line %" PRIiSIZE ": unsupported value %" PRIu64
-                  " for %s\n",
-                  prog, lineno, u64, "VERSION");
+          fprintf(stderr, "%s: line %" PRIiSIZE ": unsupported value %" PRIu64 " for %s\n", prog, lineno, u64,
+                  "VERSION");
         exit(EXIT_FAILURE);
       }
       continue;
@@ -170,16 +161,12 @@ static int readhdr(void) {
     if (valnum(dbuf.iov_base, "db_pagesize", &u64)) {
       if (!(mode & GLOBAL) && envinfo.mi_dxb_pagesize != u64) {
         if (!quiet)
-          fprintf(stderr,
-                  "%s: line %" PRIiSIZE ": ignore value %" PRIu64
-                  " for '%s' in non-global context\n",
-                  prog, lineno, u64, "db_pagesize");
+          fprintf(stderr, "%s: line %" PRIiSIZE ": ignore value %" PRIu64 " for '%s' in non-global context\n", prog,
+                  lineno, u64, "db_pagesize");
       } else if (u64 < MDBX_MIN_PAGESIZE || u64 > MDBX_MAX_PAGESIZE) {
         if (!quiet)
-          fprintf(stderr,
-                  "%s: line %" PRIiSIZE ": ignore unsupported value %" PRIu64
-                  " for %s\n",
-                  prog, lineno, u64, "db_pagesize");
+          fprintf(stderr, "%s: line %" PRIiSIZE ": ignore unsupported value %" PRIu64 " for %s\n", prog, lineno, u64,
+                  "db_pagesize");
       } else
         envinfo.mi_dxb_pagesize = (uint32_t)u64;
       continue;
@@ -196,9 +183,7 @@ static int readhdr(void) {
         continue;
       }
       if (!quiet)
-        fprintf(stderr,
-                "%s: line %" PRIiSIZE ": unsupported value '%s' for %s\n", prog,
-                lineno, str, "format");
+        fprintf(stderr, "%s: line %" PRIiSIZE ": unsupported value '%s' for %s\n", prog, lineno, str, "format");
       exit(EXIT_FAILURE);
     }
 
@@ -220,9 +205,7 @@ static int readhdr(void) {
     if (str) {
       if (strcmp(str, "btree") != 0) {
         if (!quiet)
-          fprintf(stderr,
-                  "%s: line %" PRIiSIZE ": unsupported value '%s' for %s\n",
-                  prog, lineno, str, "type");
+          fprintf(stderr, "%s: line %" PRIiSIZE ": unsupported value '%s' for %s\n", prog, lineno, str, "type");
         free(subname);
         exit(EXIT_FAILURE);
       }
@@ -232,10 +215,8 @@ static int readhdr(void) {
     if (valnum(dbuf.iov_base, "mapaddr", &u64)) {
       if (u64) {
         if (!quiet)
-          fprintf(stderr,
-                  "%s: line %" PRIiSIZE ": ignore unsupported value 0x%" PRIx64
-                  " for %s\n",
-                  prog, lineno, u64, "mapaddr");
+          fprintf(stderr, "%s: line %" PRIiSIZE ": ignore unsupported value 0x%" PRIx64 " for %s\n", prog, lineno, u64,
+                  "mapaddr");
       }
       continue;
     }
@@ -243,16 +224,12 @@ static int readhdr(void) {
     if (valnum(dbuf.iov_base, "mapsize", &u64)) {
       if (!(mode & GLOBAL)) {
         if (!quiet)
-          fprintf(stderr,
-                  "%s: line %" PRIiSIZE ": ignore value %" PRIu64
-                  " for '%s' in non-global context\n",
-                  prog, lineno, u64, "mapsize");
+          fprintf(stderr, "%s: line %" PRIiSIZE ": ignore value %" PRIu64 " for '%s' in non-global context\n", prog,
+                  lineno, u64, "mapsize");
       } else if (u64 < MIN_MAPSIZE || u64 > MAX_MAPSIZE64) {
         if (!quiet)
-          fprintf(stderr,
-                  "%s: line %" PRIiSIZE ": ignore unsupported value 0x%" PRIx64
-                  " for %s\n",
-                  prog, lineno, u64, "mapsize");
+          fprintf(stderr, "%s: line %" PRIiSIZE ": ignore unsupported value 0x%" PRIx64 " for %s\n", prog, lineno, u64,
+                  "mapsize");
       } else
         envinfo.mi_mapsize = (size_t)u64;
       continue;
@@ -261,16 +238,12 @@ static int readhdr(void) {
     if (valnum(dbuf.iov_base, "maxreaders", &u64)) {
       if (!(mode & GLOBAL)) {
         if (!quiet)
-          fprintf(stderr,
-                  "%s: line %" PRIiSIZE ": ignore value %" PRIu64
-                  " for '%s' in non-global context\n",
-                  prog, lineno, u64, "maxreaders");
+          fprintf(stderr, "%s: line %" PRIiSIZE ": ignore value %" PRIu64 " for '%s' in non-global context\n", prog,
+                  lineno, u64, "maxreaders");
       } else if (u64 < 1 || u64 > MDBX_READERS_LIMIT) {
         if (!quiet)
-          fprintf(stderr,
-                  "%s: line %" PRIiSIZE ": ignore unsupported value 0x%" PRIx64
-                  " for %s\n",
-                  prog, lineno, u64, "maxreaders");
+          fprintf(stderr, "%s: line %" PRIiSIZE ": ignore unsupported value 0x%" PRIx64 " for %s\n", prog, lineno, u64,
+                  "maxreaders");
       } else
         envinfo.mi_maxreaders = (int)u64;
       continue;
@@ -279,10 +252,8 @@ static int readhdr(void) {
     if (valnum(dbuf.iov_base, "txnid", &u64)) {
       if (u64 < MIN_TXNID || u64 > MAX_TXNID) {
         if (!quiet)
-          fprintf(stderr,
-                  "%s: line %" PRIiSIZE ": ignore unsupported value 0x%" PRIx64
-                  " for %s\n",
-                  prog, lineno, u64, "txnid");
+          fprintf(stderr, "%s: line %" PRIiSIZE ": ignore unsupported value 0x%" PRIx64 " for %s\n", prog, lineno, u64,
+                  "txnid");
       } else
         txnid = u64;
       continue;
@@ -301,16 +272,11 @@ static int readhdr(void) {
                   "%s: line %" PRIiSIZE ": ignore values %s"
                   " for '%s' in non-global context\n",
                   prog, lineno, str, "geometry");
-      } else if (sscanf(str,
-                        "l%" PRIu64 ",c%" PRIu64 ",u%" PRIu64 ",s%" PRIu64
-                        ",g%" PRIu64,
-                        &envinfo.mi_geo.lower, &envinfo.mi_geo.current,
-                        &envinfo.mi_geo.upper, &envinfo.mi_geo.shrink,
+      } else if (sscanf(str, "l%" PRIu64 ",c%" PRIu64 ",u%" PRIu64 ",s%" PRIu64 ",g%" PRIu64, &envinfo.mi_geo.lower,
+                        &envinfo.mi_geo.current, &envinfo.mi_geo.upper, &envinfo.mi_geo.shrink,
                         &envinfo.mi_geo.grow) != 5) {
         if (!quiet)
-          fprintf(stderr,
-                  "%s: line %" PRIiSIZE ": unexpected line format for '%s'\n",
-                  prog, lineno, "geometry");
+          fprintf(stderr, "%s: line %" PRIiSIZE ": unexpected line format for '%s'\n", prog, lineno, "geometry");
         exit(EXIT_FAILURE);
       }
       continue;
@@ -324,12 +290,10 @@ static int readhdr(void) {
                   "%s: line %" PRIiSIZE ": ignore values %s"
                   " for '%s' in non-global context\n",
                   prog, lineno, str, "canary");
-      } else if (sscanf(str, "v%" PRIu64 ",x%" PRIu64 ",y%" PRIu64 ",z%" PRIu64,
-                        &canary.v, &canary.x, &canary.y, &canary.z) != 4) {
+      } else if (sscanf(str, "v%" PRIu64 ",x%" PRIu64 ",y%" PRIu64 ",z%" PRIu64, &canary.v, &canary.x, &canary.y,
+                        &canary.z) != 4) {
         if (!quiet)
-          fprintf(stderr,
-                  "%s: line %" PRIiSIZE ": unexpected line format for '%s'\n",
-                  prog, lineno, "canary");
+          fprintf(stderr, "%s: line %" PRIiSIZE ": unexpected line format for '%s'\n", prog, lineno, "canary");
         exit(EXIT_FAILURE);
       }
       continue;
@@ -353,9 +317,8 @@ static int readhdr(void) {
     }
 
     if (!quiet)
-      fprintf(stderr,
-              "%s: line %" PRIiSIZE ": unrecognized keyword ignored: %s\n",
-              prog, lineno, (char *)dbuf.iov_base);
+      fprintf(stderr, "%s: line %" PRIiSIZE ": unrecognized keyword ignored: %s\n", prog, lineno,
+              (char *)dbuf.iov_base);
   next:;
   }
   return EOF;
@@ -363,8 +326,7 @@ static int readhdr(void) {
 
 static int badend(void) {
   if (!quiet)
-    fprintf(stderr, "%s: line %" PRIiSIZE ": unexpected end of input\n", prog,
-            lineno);
+    fprintf(stderr, "%s: line %" PRIiSIZE ": unexpected end of input\n", prog, lineno);
   return errno ? errno : MDBX_ENODATA;
 }
 
@@ -416,9 +378,7 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
     buf->iov_base = osal_realloc(buf->iov_base, buf->iov_len * 2);
     if (!buf->iov_base) {
       if (!quiet)
-        fprintf(stderr,
-                "%s: line %" PRIiSIZE ": out of memory, line too long\n", prog,
-                lineno);
+        fprintf(stderr, "%s: line %" PRIiSIZE ": out of memory, line too long\n", prog, lineno);
       return MDBX_ENOMEM;
     }
     c1 = buf->iov_base;
@@ -490,10 +450,7 @@ static void usage(void) {
 }
 
 static int equal_or_greater(const MDBX_val *a, const MDBX_val *b) {
-  return (a->iov_len == b->iov_len &&
-          memcmp(a->iov_base, b->iov_base, a->iov_len) == 0)
-             ? 0
-             : 1;
+  return (a->iov_len == b->iov_len && memcmp(a->iov_base, b->iov_base, a->iov_len) == 0) ? 0 : 1;
 }
 
 int main(int argc, char *argv[]) {
@@ -530,12 +487,9 @@ int main(int argc, char *argv[]) {
              " - build: %s for %s by %s\n"
              " - flags: %s\n"
              " - options: %s\n",
-             mdbx_version.major, mdbx_version.minor, mdbx_version.patch,
-             mdbx_version.tweak, mdbx_version.git.describe,
-             mdbx_version.git.datetime, mdbx_version.git.commit,
-             mdbx_version.git.tree, mdbx_sourcery_anchor, mdbx_build.datetime,
-             mdbx_build.target, mdbx_build.compiler, mdbx_build.flags,
-             mdbx_build.options);
+             mdbx_version.major, mdbx_version.minor, mdbx_version.patch, mdbx_version.tweak, mdbx_version.git.describe,
+             mdbx_version.git.datetime, mdbx_version.git.commit, mdbx_version.git.tree, mdbx_sourcery_anchor,
+             mdbx_build.datetime, mdbx_build.target, mdbx_build.compiler, mdbx_build.flags, mdbx_build.options);
       return EXIT_SUCCESS;
     case 'a':
       putflags |= MDBX_APPEND;
@@ -543,8 +497,7 @@ int main(int argc, char *argv[]) {
     case 'f':
       if (freopen(optarg, "r", stdin) == nullptr) {
         if (!quiet)
-          fprintf(stderr, "%s: %s: open: %s\n", prog, optarg,
-                  mdbx_strerror(errno));
+          fprintf(stderr, "%s: %s: open: %s\n", prog, optarg, mdbx_strerror(errno));
         exit(EXIT_FAILURE);
       }
       break;
@@ -592,8 +545,7 @@ int main(int argc, char *argv[]) {
 
   envname = argv[optind];
   if (!quiet)
-    printf("mdbx_load %s (%s, T-%s)\nRunning for %s...\n",
-           mdbx_version.git.describe, mdbx_version.git.datetime,
+    printf("mdbx_load %s (%s, T-%s)\nRunning for %s...\n", mdbx_version.git.describe, mdbx_version.git.datetime,
            mdbx_version.git.tree, envname);
   fflush(nullptr);
 
@@ -638,25 +590,22 @@ int main(int argc, char *argv[]) {
 
   if (envinfo.mi_geo.current | envinfo.mi_mapsize) {
     if (envinfo.mi_geo.current) {
-      err = mdbx_env_set_geometry(
-          env, (intptr_t)envinfo.mi_geo.lower, (intptr_t)envinfo.mi_geo.current,
-          (intptr_t)envinfo.mi_geo.upper, (intptr_t)envinfo.mi_geo.shrink,
-          (intptr_t)envinfo.mi_geo.grow,
-          envinfo.mi_dxb_pagesize ? (intptr_t)envinfo.mi_dxb_pagesize : -1);
+      err = mdbx_env_set_geometry(env, (intptr_t)envinfo.mi_geo.lower, (intptr_t)envinfo.mi_geo.current,
+                                  (intptr_t)envinfo.mi_geo.upper, (intptr_t)envinfo.mi_geo.shrink,
+                                  (intptr_t)envinfo.mi_geo.grow,
+                                  envinfo.mi_dxb_pagesize ? (intptr_t)envinfo.mi_dxb_pagesize : -1);
     } else {
       if (envinfo.mi_mapsize > MAX_MAPSIZE) {
         if (!quiet)
-          fprintf(
-              stderr,
-              "Database size is too large for current system (mapsize=%" PRIu64
-              " is great than system-limit %zu)\n",
-              envinfo.mi_mapsize, (size_t)MAX_MAPSIZE);
+          fprintf(stderr,
+                  "Database size is too large for current system (mapsize=%" PRIu64
+                  " is great than system-limit %zu)\n",
+                  envinfo.mi_mapsize, (size_t)MAX_MAPSIZE);
         goto bailout;
       }
-      err = mdbx_env_set_geometry(
-          env, (intptr_t)envinfo.mi_mapsize, (intptr_t)envinfo.mi_mapsize,
-          (intptr_t)envinfo.mi_mapsize, 0, 0,
-          envinfo.mi_dxb_pagesize ? (intptr_t)envinfo.mi_dxb_pagesize : -1);
+      err = mdbx_env_set_geometry(env, (intptr_t)envinfo.mi_mapsize, (intptr_t)envinfo.mi_mapsize,
+                                  (intptr_t)envinfo.mi_mapsize, 0, 0,
+                                  envinfo.mi_dxb_pagesize ? (intptr_t)envinfo.mi_dxb_pagesize : -1);
     }
     if (unlikely(err != MDBX_SUCCESS)) {
       error("mdbx_env_set_geometry", err);
@@ -673,8 +622,7 @@ int main(int argc, char *argv[]) {
   kbuf.iov_len = mdbx_env_get_maxvalsize_ex(env, 0) + (size_t)1;
   if (kbuf.iov_len >= INTPTR_MAX / 2) {
     if (!quiet)
-      fprintf(stderr, "mdbx_env_get_maxkeysize() failed, returns %zu\n",
-              kbuf.iov_len);
+      fprintf(stderr, "mdbx_env_get_maxkeysize() failed, returns %zu\n", kbuf.iov_len);
     goto bailout;
   }
 
@@ -709,10 +657,9 @@ int main(int argc, char *argv[]) {
     }
 
     const char *const dbi_name = subname ? subname : "@MAIN";
-    err =
-        mdbx_dbi_open_ex(txn, subname, dbi_flags | MDBX_CREATE, &dbi,
-                         (putflags & MDBX_APPEND) ? equal_or_greater : nullptr,
-                         (putflags & MDBX_APPEND) ? equal_or_greater : nullptr);
+    err = mdbx_dbi_open_ex(txn, subname, dbi_flags | MDBX_CREATE, &dbi,
+                           (putflags & MDBX_APPEND) ? equal_or_greater : nullptr,
+                           (putflags & MDBX_APPEND) ? equal_or_greater : nullptr);
     if (unlikely(err != MDBX_SUCCESS)) {
       error("mdbx_dbi_open_ex", err);
       goto bailout;
@@ -726,9 +673,7 @@ int main(int argc, char *argv[]) {
     }
     if (present_sequence > sequence) {
       if (!quiet)
-        fprintf(stderr,
-                "present sequence for '%s' value (%" PRIu64
-                ") is greater than loaded (%" PRIu64 ")\n",
+        fprintf(stderr, "present sequence for '%s' value (%" PRIu64 ") is greater than loaded (%" PRIu64 ")\n",
                 dbi_name, present_sequence, sequence);
       err = MDBX_RESULT_TRUE;
       goto bailout;
@@ -750,8 +695,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (putflags & MDBX_APPEND)
-      putflags = (dbi_flags & MDBX_DUPSORT) ? putflags | MDBX_APPENDDUP
-                                            : putflags & ~MDBX_APPENDDUP;
+      putflags = (dbi_flags & MDBX_DUPSORT) ? putflags | MDBX_APPENDDUP : putflags & ~MDBX_APPENDDUP;
 
     err = mdbx_cursor_open(txn, dbi, &mc);
     if (unlikely(err != MDBX_SUCCESS)) {
@@ -770,8 +714,7 @@ int main(int argc, char *argv[]) {
         err = readline(&data, &dbuf);
       if (err) {
         if (!quiet)
-          fprintf(stderr, "%s: line %" PRIiSIZE ": failed to read key value\n",
-                  prog, lineno);
+          fprintf(stderr, "%s: line %" PRIiSIZE ": failed to read key value\n", prog, lineno);
         goto bailout;
       }
 
@@ -780,8 +723,7 @@ int main(int argc, char *argv[]) {
         continue;
       if (err == MDBX_BAD_VALSIZE && rescue) {
         if (!quiet)
-          fprintf(stderr, "%s: skip line %" PRIiSIZE ": due %s\n", prog, lineno,
-                  mdbx_strerror(err));
+          fprintf(stderr, "%s: skip line %" PRIiSIZE ": due %s\n", prog, lineno, mdbx_strerror(err));
         continue;
       }
       if (unlikely(err != MDBX_SUCCESS)) {

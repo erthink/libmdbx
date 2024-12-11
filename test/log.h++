@@ -29,25 +29,20 @@ inline bool lower(loglevel left, loglevel right) {
   return left > right;
 }
 
-inline bool same_or_higher(loglevel left, loglevel right) {
-  return left <= right;
-}
+inline bool same_or_higher(loglevel left, loglevel right) { return left <= right; }
 
 const char *level2str(const loglevel level);
 void setup(loglevel priority, const std::string &prefix);
 void setup(const std::string &prefix);
 void setlevel(loglevel priority);
 
-void output_nocheckloglevel_ap(const loglevel priority, const char *format,
-                               va_list ap);
-bool MDBX_PRINTF_ARGS(2, 3)
-    output(const loglevel priority, const char *format, ...);
+void output_nocheckloglevel_ap(const loglevel priority, const char *format, va_list ap);
+bool MDBX_PRINTF_ARGS(2, 3) output(const loglevel priority, const char *format, ...);
 bool feed_ap(const char *format, va_list ap);
 bool MDBX_PRINTF_ARGS(1, 2) feed(const char *format, ...);
 void ln();
 
-void inline MDBX_PRINTF_ARGS(2, 3)
-    output_nocheckloglevel(const loglevel priority, const char *format, ...) {
+void inline MDBX_PRINTF_ARGS(2, 3) output_nocheckloglevel(const loglevel priority, const char *format, ...) {
   va_list ap;
   va_start(ap, format);
   output_nocheckloglevel_ap(priority, format, ap);
@@ -75,9 +70,7 @@ public:
 
 } // namespace logging
 
-void MDBX_PRINTF_ARGS(1, 2) static inline log_null(const char *msg, ...) {
-  return (void)msg;
-}
+void MDBX_PRINTF_ARGS(1, 2) static inline log_null(const char *msg, ...) { return (void)msg; }
 void MDBX_PRINTF_ARGS(1, 2) log_extra(const char *msg, ...);
 void MDBX_PRINTF_ARGS(1, 2) log_trace(const char *msg, ...);
 void MDBX_PRINTF_ARGS(1, 2) log_debug(const char *msg, ...);

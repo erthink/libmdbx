@@ -19,8 +19,7 @@ typedef void osal_ipclock_t;
 #define MDBX_LCK_SIGN UINT32_C(0xF18D)
 typedef mdbx_pid_t osal_ipclock_t;
 
-#elif MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                \
-    MDBX_LOCKING == MDBX_LOCKING_POSIX2008
+#elif MDBX_LOCKING == MDBX_LOCKING_POSIX2001 || MDBX_LOCKING == MDBX_LOCKING_POSIX2008
 
 #define MDBX_LCK_SIGN UINT32_C(0x8017)
 typedef pthread_mutex_t osal_ipclock_t;
@@ -64,19 +63,15 @@ typedef struct pgops {
   mdbx_atomic_uint64_t merge;   /* Page merges */
   mdbx_atomic_uint64_t spill;   /* Quantity of spilled dirty pages */
   mdbx_atomic_uint64_t unspill; /* Quantity of unspilled/reloaded pages */
-  mdbx_atomic_uint64_t
-      wops; /* Number of explicit write operations (not a pages) to a disk */
-  mdbx_atomic_uint64_t
-      msync; /* Number of explicit msync/flush-to-disk operations */
-  mdbx_atomic_uint64_t
-      fsync; /* Number of explicit fsync/flush-to-disk operations */
+  mdbx_atomic_uint64_t wops;    /* Number of explicit write operations (not a pages) to a disk */
+  mdbx_atomic_uint64_t msync;   /* Number of explicit msync/flush-to-disk operations */
+  mdbx_atomic_uint64_t fsync;   /* Number of explicit fsync/flush-to-disk operations */
 
   mdbx_atomic_uint64_t prefault; /* Number of prefault write operations */
   mdbx_atomic_uint64_t mincore;  /* Number of mincore() calls */
 
-  mdbx_atomic_uint32_t
-      incoherence; /* number of https://libmdbx.dqdkfa.ru/dead-github/issues/269
-                      caught */
+  mdbx_atomic_uint32_t incoherence; /* number of https://libmdbx.dqdkfa.ru/dead-github/issues/269
+                                       caught */
   mdbx_atomic_uint32_t reserved;
 
   /* Статистика для профилирования GC.
@@ -202,8 +197,7 @@ typedef struct shared_lck {
    * i.e. for sync-polling in the MDBX_NOMETASYNC mode. */
 #define MDBX_NOMETASYNC_LAZY_UNK (UINT32_MAX / 3)
 #define MDBX_NOMETASYNC_LAZY_FD (MDBX_NOMETASYNC_LAZY_UNK + UINT32_MAX / 8)
-#define MDBX_NOMETASYNC_LAZY_WRITEMAP                                          \
-  (MDBX_NOMETASYNC_LAZY_UNK - UINT32_MAX / 8)
+#define MDBX_NOMETASYNC_LAZY_WRITEMAP (MDBX_NOMETASYNC_LAZY_UNK - UINT32_MAX / 8)
   mdbx_atomic_uint32_t meta_sync_txnid;
 
   /* Period for timed auto-sync feature, i.e. at the every steady checkpoint
@@ -277,12 +271,10 @@ typedef struct shared_lck {
   reader_slot_t rdt[] /* dynamic size */;
 
 /* Lockfile format signature: version, features and field layout */
-#define MDBX_LOCK_FORMAT                                                       \
-  (MDBX_LCK_SIGN * 27733 + (unsigned)sizeof(reader_slot_t) * 13 +              \
-   (unsigned)offsetof(reader_slot_t, snapshot_pages_used) * 251 +              \
-   (unsigned)offsetof(lck_t, cached_oldest) * 83 +                             \
-   (unsigned)offsetof(lck_t, rdt_length) * 37 +                                \
-   (unsigned)offsetof(lck_t, rdt) * 29)
+#define MDBX_LOCK_FORMAT                                                                                               \
+  (MDBX_LCK_SIGN * 27733 + (unsigned)sizeof(reader_slot_t) * 13 +                                                      \
+   (unsigned)offsetof(reader_slot_t, snapshot_pages_used) * 251 + (unsigned)offsetof(lck_t, cached_oldest) * 83 +      \
+   (unsigned)offsetof(lck_t, rdt_length) * 37 + (unsigned)offsetof(lck_t, rdt) * 29)
 #endif /* FLEXIBLE_ARRAY_MEMBERS */
 } lck_t;
 

@@ -38,16 +38,12 @@ class testcase_nested : public testcase_ttl {
   bool trim_tail(unsigned window_width);
   bool grow_head(unsigned head_count);
   bool pop_txn(bool abort);
-  bool pop_txn() {
-    return pop_txn(inherited::is_nested_txn_available() ? flipcoin_x3()
-                                                        : flipcoin_x2());
-  }
+  bool pop_txn() { return pop_txn(inherited::is_nested_txn_available() ? flipcoin_x3() : flipcoin_x2()); }
   void push_txn();
   bool stochastic_breakable_restart_with_nested(bool force_restart = false);
 
 public:
-  testcase_nested(const actor_config &config, const mdbx_pid_t pid)
-      : inherited(config, pid) {}
+  testcase_nested(const actor_config &config, const mdbx_pid_t pid) : inherited(config, pid) {}
   bool setup() override;
   bool run() override;
   bool teardown() override;
@@ -84,8 +80,7 @@ bool testcase_nested::teardown() {
       txn_begin(false);
       db_table_drop(dbi);
       int err = breakable_commit();
-      if (unlikely(err != MDBX_SUCCESS) &&
-          (err != MDBX_MAP_FULL || !config.params.ignore_dbfull)) {
+      if (unlikely(err != MDBX_SUCCESS) && (err != MDBX_MAP_FULL || !config.params.ignore_dbfull)) {
         log_notice("nested: bailout-clean due '%s'", mdbx_strerror(err));
         ok = false;
       }
@@ -101,8 +96,7 @@ bool testcase_nested::teardown() {
 
 void testcase_nested::push_txn() {
   MDBX_txn *nested_txn;
-  MDBX_txn_flags_t flags = MDBX_txn_flags_t(
-      prng32() & uint32_t(MDBX_TXN_NOSYNC | MDBX_TXN_NOMETASYNC));
+  MDBX_txn_flags_t flags = MDBX_txn_flags_t(prng32() & uint32_t(MDBX_TXN_NOSYNC | MDBX_TXN_NOMETASYNC));
   int err = mdbx_txn_begin(db_guard.get(), txn_guard.get(), flags, &nested_txn);
   if (unlikely(err != MDBX_SUCCESS))
     failure_perror("mdbx_txn_begin(nested)", err);
@@ -114,10 +108,9 @@ void testcase_nested::push_txn() {
   scoped_txn_guard nested_txn_guard(nested_txn);
   txn_guard.swap(nested_txn_guard);
   SET speculum_snapshot(speculum);
-  stack.emplace(std::move(nested_txn_guard), serial, fifo,
-                std::move(speculum_snapshot));
-  log_verbose("begin level#%zu txn #%" PRIu64 ", flags 0x%x, serial %" PRIu64,
-              stack.size(), mdbx_txn_id(nested_txn), flags, serial);
+  stack.emplace(std::move(nested_txn_guard), serial, fifo, std::move(speculum_snapshot));
+  log_verbose("begin level#%zu txn #%" PRIu64 ", flags 0x%x, serial %" PRIu64, stack.size(), mdbx_txn_id(nested_txn),
+              flags, serial);
   if (!dbi && stack.size() == 1)
     dbi = db_table_open(true);
 }
@@ -128,18 +121,16 @@ bool testcase_nested::pop_txn(bool abort) {
   MDBX_txn *txn = txn_guard.release();
   bool committed = false;
   if (abort) {
-    log_verbose(
-        "abort level#%zu txn #%" PRIu64 ", undo serial %" PRIu64 " <- %" PRIu64,
-        stack.size(), mdbx_txn_id(txn), serial, std::get<1>(stack.top()));
-    if (dbi > 0 && stack.size() == 1 &&
-        is_handle_created_in_current_txn(dbi, txn))
+    log_verbose("abort level#%zu txn #%" PRIu64 ", undo serial %" PRIu64 " <- %" PRIu64, stack.size(), mdbx_txn_id(txn),
+                serial, std::get<1>(stack.top()));
+    if (dbi > 0 && stack.size() == 1 && is_handle_created_in_current_txn(dbi, txn))
       dbi = 0;
     int err = mdbx_txn_abort(txn);
     if (unlikely(err != MDBX_SUCCESS))
       failure_perror("mdbx_txn_abort()", err);
   } else {
-    log_verbose("commit level#%zu txn, nested serial %" PRIu64 " -> %" PRIu64,
-                stack.size(), serial, std::get<1>(stack.top()));
+    log_verbose("commit level#%zu txn, nested serial %" PRIu64 " -> %" PRIu64, stack.size(), serial,
+                std::get<1>(stack.top()));
     int err = mdbx_txn_commit(txn);
     if (likely(err == MDBX_SUCCESS))
       committed = true;
@@ -147,8 +138,7 @@ bool testcase_nested::pop_txn(bool abort) {
       should_continue = false;
       if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
         err = mdbx_txn_abort(txn);
-        if (unlikely(err != MDBX_SUCCESS && err != MDBX_THREAD_MISMATCH &&
-                     err != MDBX_BAD_TXN))
+        if (unlikely(err != MDBX_SUCCESS && err != MDBX_THREAD_MISMATCH && err != MDBX_BAD_TXN))
           failure_perror("mdbx_txn_abort()", err);
       } else
         failure_perror("mdbx_txn_commit()", err);
@@ -165,18 +155,15 @@ bool testcase_nested::pop_txn(bool abort) {
   return should_continue;
 }
 
-bool testcase_nested::stochastic_breakable_restart_with_nested(
-    bool force_restart) {
-  log_trace(">> stochastic_breakable_restart_with_nested%s",
-            force_restart ? ": force_restart" : "");
+bool testcase_nested::stochastic_breakable_restart_with_nested(bool force_restart) {
+  log_trace(">> stochastic_breakable_restart_with_nested%s", force_restart ? ": force_restart" : "");
 
   if (force_restart)
     while (txn_guard)
       pop_txn(true);
 
   bool should_continue = true;
-  while (!stack.empty() &&
-         (flipcoin() || txn_underutilization_x256(txn_guard.get()) < 42))
+  while (!stack.empty() && (flipcoin() || txn_underutilization_x256(txn_guard.get()) < 42))
     should_continue &= pop_txn();
 
   if (flipcoin_x3()) {
@@ -200,12 +187,10 @@ bool testcase_nested::stochastic_breakable_restart_with_nested(
   }
 
   if (should_continue)
-    while (stack.empty() ||
-           (is_nested_txn_available() && flipcoin() && stack.size() < 5))
+    while (stack.empty() || (is_nested_txn_available() && flipcoin() && stack.size() < 5))
       push_txn();
 
-  log_trace("<< stochastic_breakable_restart_with_nested: should_continue=%s",
-            should_continue ? "yes" : "no");
+  log_trace("<< stochastic_breakable_restart_with_nested: should_continue=%s", should_continue ? "yes" : "no");
   return should_continue;
 }
 
@@ -215,8 +200,7 @@ bool testcase_nested::trim_tail(unsigned window_width) {
     while (fifo.size() > window_width) {
       uint64_t tail_serial = fifo.back().first;
       const unsigned tail_count = fifo.back().second;
-      log_verbose("nested: trim-tail (serial %" PRIu64 ", count %u)",
-                  tail_serial, tail_count);
+      log_verbose("nested: trim-tail (serial %" PRIu64 ", count %u)", tail_serial, tail_count);
       fifo.pop_back();
       for (unsigned n = 0; n < tail_count; ++n) {
         log_trace("nested: remove-tail %" PRIu64, tail_serial);
@@ -235,9 +219,8 @@ bool testcase_nested::trim_tail(unsigned window_width) {
       report(tail_count);
     }
   } else if (!fifo.empty()) {
-    log_verbose("nested: purge state %" PRIu64 " - %" PRIu64 ", fifo-items %zu",
-                fifo.front().first, fifo.back().first + fifo.back().second,
-                fifo.size());
+    log_verbose("nested: purge state %" PRIu64 " - %" PRIu64 ", fifo-items %zu", fifo.front().first,
+                fifo.back().first + fifo.back().second, fifo.size());
     db_table_clear(dbi, txn_guard.get());
     fifo.clear();
     clear_wholetable_passed += 1;
@@ -248,9 +231,7 @@ bool testcase_nested::trim_tail(unsigned window_width) {
 
 bool testcase_nested::grow_head(unsigned head_count) {
   const MDBX_put_flags_t insert_flags =
-      (config.params.table_flags & MDBX_DUPSORT)
-          ? MDBX_NODUPDATA
-          : MDBX_NODUPDATA | MDBX_NOOVERWRITE;
+      (config.params.table_flags & MDBX_DUPSORT) ? MDBX_NODUPDATA : MDBX_NODUPDATA | MDBX_NOOVERWRITE;
 retry:
   fifo.push_front(std::make_pair(serial, head_count));
   for (unsigned n = 0; n < head_count; ++n) {
@@ -289,12 +270,10 @@ bool testcase_nested::run() {
   unsigned loops = 0;
   while (true) {
     const uint64_t salt = prng64_white(seed) /* mdbx_txn_id(txn_guard.get()) */;
-    const unsigned window_width =
-        (!should_continue() || flipcoin_x4()) ? 0 : edge2window(salt);
+    const unsigned window_width = (!should_continue() || flipcoin_x4()) ? 0 : edge2window(salt);
     const unsigned head_count = edge2count(salt);
-    log_debug("nested: step #%" PRIu64 " (serial %" PRIu64
-              ", window %u, count %u) salt %" PRIu64,
-              nops_completed, serial, window_width, head_count, salt);
+    log_debug("nested: step #%" PRIu64 " (serial %" PRIu64 ", window %u, count %u) salt %" PRIu64, nops_completed,
+              serial, window_width, head_count, salt);
 
     if (!trim_tail(window_width))
       return false;
@@ -307,10 +286,8 @@ bool testcase_nested::run() {
       return false;
     }
 
-    if (!keyspace_overflow && (should_continue() || !clear_wholetable_passed ||
-                               !clear_stepbystep_passed)) {
-      unsigned underutilization_x256 =
-          txn_underutilization_x256(txn_guard.get());
+    if (!keyspace_overflow && (should_continue() || !clear_wholetable_passed || !clear_stepbystep_passed)) {
+      unsigned underutilization_x256 = txn_underutilization_x256(txn_guard.get());
       if (dbfull_passed > underutilization_x256) {
         log_notice("nested: skip head-grow to avoid one more dbfull (was %u, "
                    "underutilization %.2f%%)",
@@ -327,9 +304,7 @@ bool testcase_nested::run() {
       }
       loops += 1;
     } else if (fifo.empty()) {
-      log_notice("nested: done %u whole loops, %" PRIu64 " ops, %" PRIu64
-                 " items",
-                 loops, nops_completed, serial);
+      log_notice("nested: done %u whole loops, %" PRIu64 " ops, %" PRIu64 " items", loops, nops_completed, serial);
       break;
     } else {
       log_notice("nested: done, wait for empty, skip head-grow");

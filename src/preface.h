@@ -4,8 +4,7 @@
 #pragma once
 
 /* Undefine the NDEBUG if debugging is enforced by MDBX_DEBUG */
-#if (defined(MDBX_DEBUG) && MDBX_DEBUG > 0) ||                                 \
-    (defined(MDBX_FORCE_ASSERTIONS) && MDBX_FORCE_ASSERTIONS)
+#if (defined(MDBX_DEBUG) && MDBX_DEBUG > 0) || (defined(MDBX_FORCE_ASSERTIONS) && MDBX_FORCE_ASSERTIONS)
 #undef NDEBUG
 #ifndef MDBX_DEBUG
 /* Чтобы избежать включения отладки только из-за включения assert-проверок */
@@ -29,8 +28,7 @@
 #endif /* MDBX_DISABLE_GNU_SOURCE */
 
 /* Should be defined before any includes */
-#if !defined(_FILE_OFFSET_BITS) && !defined(__ANDROID_API__) &&                \
-    !defined(ANDROID)
+#if !defined(_FILE_OFFSET_BITS) && !defined(__ANDROID_API__) && !defined(ANDROID)
 #define _FILE_OFFSET_BITS 64
 #endif /* _FILE_OFFSET_BITS */
 
@@ -38,8 +36,7 @@
 #define _DARWIN_C_SOURCE
 #endif /* _DARWIN_C_SOURCE */
 
-#if (defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)) &&    \
-    !defined(__USE_MINGW_ANSI_STDIO)
+#if (defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)) && !defined(__USE_MINGW_ANSI_STDIO)
 #define __USE_MINGW_ANSI_STDIO 1
 #endif /* MinGW */
 
@@ -56,8 +53,7 @@
 #define UNICODE
 #endif /* UNICODE */
 
-#if !defined(_NO_CRT_STDIO_INLINE) && MDBX_BUILD_SHARED_LIBRARY &&             \
-    !defined(xMDBX_TOOLS) && MDBX_WITHOUT_MSVC_CRT
+#if !defined(_NO_CRT_STDIO_INLINE) && MDBX_BUILD_SHARED_LIBRARY && !defined(xMDBX_TOOLS) && MDBX_WITHOUT_MSVC_CRT
 #define _NO_CRT_STDIO_INLINE
 #endif /* _NO_CRT_STDIO_INLINE */
 
@@ -72,8 +68,7 @@
 #endif /* NOMINMAX */
 
 /* Workaround for modern libstdc++ with CLANG < 4.x */
-#if defined(__SIZEOF_INT128__) && !defined(__GLIBCXX_TYPE_INT_N_0) &&          \
-    defined(__clang__) && __clang_major__ < 4
+#if defined(__SIZEOF_INT128__) && !defined(__GLIBCXX_TYPE_INT_N_0) && defined(__clang__) && __clang_major__ < 4
 #define __GLIBCXX_BITSIZE_INT_N_0 128
 #define __GLIBCXX_TYPE_INT_N_0 __int128
 #endif /* Workaround for modern libstdc++ with CLANG < 4.x */
@@ -107,8 +102,7 @@
  *   and how to and where you can obtain the latest "Visual Studio 2015" build
  *   with all fixes.
  */
-#error                                                                         \
-    "At least \"Microsoft C/C++ Compiler\" version 19.00.24234 (Visual Studio 2015 Update 3) is required."
+#error "At least \"Microsoft C/C++ Compiler\" version 19.00.24234 (Visual Studio 2015 Update 3) is required."
 #endif
 #if _MSC_VER > 1800
 #pragma warning(disable : 4464) /* relative include path contains '..' */
@@ -117,9 +111,8 @@
 #pragma warning(disable : 5045) /* will insert Spectre mitigation... */
 #endif
 #if _MSC_VER > 1914
-#pragma warning(                                                               \
-    disable : 5105) /* winbase.h(9531): warning C5105: macro expansion         \
-                       producing 'defined' has undefined behavior */
+#pragma warning(disable : 5105) /* winbase.h(9531): warning C5105: macro expansion                                     \
+                                   producing 'defined' has undefined behavior */
 #endif
 #if _MSC_VER < 1920
 /* avoid "error C2219: syntax error: type qualifier must be after '*'" */
@@ -127,33 +120,32 @@
 #endif
 #if _MSC_VER > 1930
 #pragma warning(disable : 6235) /* <expression> is always a constant */
-#pragma warning(disable : 6237) /* <expression> is never evaluated and might   \
+#pragma warning(disable : 6237) /* <expression> is never evaluated and might                                           \
                                    have side effects */
 #endif
 #pragma warning(disable : 4710) /* 'xyz': function not inlined */
-#pragma warning(disable : 4711) /* function 'xyz' selected for automatic       \
+#pragma warning(disable : 4711) /* function 'xyz' selected for automatic                                               \
                                    inline expansion */
-#pragma warning(disable : 4201) /* nonstandard extension used: nameless        \
+#pragma warning(disable : 4201) /* nonstandard extension used: nameless                                                \
                                    struct/union */
 #pragma warning(disable : 4702) /* unreachable code */
 #pragma warning(disable : 4706) /* assignment within conditional expression */
 #pragma warning(disable : 4127) /* conditional expression is constant */
-#pragma warning(disable : 4324) /* 'xyz': structure was padded due to          \
+#pragma warning(disable : 4324) /* 'xyz': structure was padded due to                                                  \
                                    alignment specifier */
 #pragma warning(disable : 4310) /* cast truncates constant value */
-#pragma warning(disable : 4820) /* bytes padding added after data member for   \
+#pragma warning(disable : 4820) /* bytes padding added after data member for                                           \
                                    alignment */
-#pragma warning(disable : 4548) /* expression before comma has no effect;      \
+#pragma warning(disable : 4548) /* expression before comma has no effect;                                              \
                                    expected expression with side - effect */
-#pragma warning(disable : 4366) /* the result of the unary '&' operator may be \
+#pragma warning(disable : 4366) /* the result of the unary '&' operator may be                                         \
                                    unaligned */
-#pragma warning(disable : 4200) /* nonstandard extension used: zero-sized      \
+#pragma warning(disable : 4200) /* nonstandard extension used: zero-sized                                              \
                                    array in struct/union */
-#pragma warning(disable : 4204) /* nonstandard extension used: non-constant    \
+#pragma warning(disable : 4204) /* nonstandard extension used: non-constant                                            \
                                    aggregate initializer */
-#pragma warning(                                                               \
-    disable : 4505) /* unreferenced local function has been removed */
-#endif              /* _MSC_VER (warnings) */
+#pragma warning(disable : 4505) /* unreferenced local function has been removed */
+#endif                          /* _MSC_VER (warnings) */
 
 #if defined(__GNUC__) && __GNUC__ < 9
 #pragma GCC diagnostic ignored "-Wattributes"
@@ -166,12 +158,12 @@
 
 #ifdef _MSC_VER
 #pragma warning(push, 1)
-#pragma warning(disable : 4548) /* expression before comma has no effect;      \
+#pragma warning(disable : 4548) /* expression before comma has no effect;                                              \
                                    expected expression with side - effect */
-#pragma warning(disable : 4530) /* C++ exception handler used, but unwind      \
+#pragma warning(disable : 4530) /* C++ exception handler used, but unwind                                              \
                                  * semantics are not enabled. Specify /EHsc */
-#pragma warning(disable : 4577) /* 'noexcept' used with no exception handling  \
-                                 * mode specified; termination on exception is \
+#pragma warning(disable : 4577) /* 'noexcept' used with no exception handling                                          \
+                                 * mode specified; termination on exception is                                         \
                                  * not guaranteed. Specify /EHsc */
 #endif                          /* _MSC_VER (warnings) */
 
@@ -232,8 +224,7 @@
 
 #ifndef __GNUC_PREREQ
 #if defined(__GNUC__) && defined(__GNUC_MINOR__)
-#define __GNUC_PREREQ(maj, min)                                                \
-  ((__GNUC__ << 16) + __GNUC_MINOR__ >= ((maj) << 16) + (min))
+#define __GNUC_PREREQ(maj, min) ((__GNUC__ << 16) + __GNUC_MINOR__ >= ((maj) << 16) + (min))
 #else
 #define __GNUC_PREREQ(maj, min) (0)
 #endif
@@ -241,8 +232,7 @@
 
 #ifndef __CLANG_PREREQ
 #ifdef __clang__
-#define __CLANG_PREREQ(maj, min)                                               \
-  ((__clang_major__ << 16) + __clang_minor__ >= ((maj) << 16) + (min))
+#define __CLANG_PREREQ(maj, min) ((__clang_major__ << 16) + __clang_minor__ >= ((maj) << 16) + (min))
 #else
 #define __CLANG_PREREQ(maj, min) (0)
 #endif
@@ -250,8 +240,7 @@
 
 #ifndef __GLIBC_PREREQ
 #if defined(__GLIBC__) && defined(__GLIBC_MINOR__)
-#define __GLIBC_PREREQ(maj, min)                                               \
-  ((__GLIBC__ << 16) + __GLIBC_MINOR__ >= ((maj) << 16) + (min))
+#define __GLIBC_PREREQ(maj, min) ((__GLIBC__ << 16) + __GLIBC_MINOR__ >= ((maj) << 16) + (min))
 #else
 #define __GLIBC_PREREQ(maj, min) (0)
 #endif
@@ -261,8 +250,7 @@
 /* pre-requirements */
 
 #if (-6 & 5) || CHAR_BIT != 8 || UINT_MAX < 0xffffffff || ULONG_MAX % 0xFFFF
-#error                                                                         \
-    "Sanity checking failed: Two's complement, reasonably sized integer types"
+#error "Sanity checking failed: Two's complement, reasonably sized integer types"
 #endif
 
 #ifndef SSIZE_MAX
@@ -294,8 +282,7 @@
 #endif
 
 #ifdef __SANITIZE_THREAD__
-#warning                                                                       \
-    "libmdbx don't compatible with ThreadSanitizer, you will get a lot of false-positive issues."
+#warning "libmdbx don't compatible with ThreadSanitizer, you will get a lot of false-positive issues."
 #endif /* __SANITIZE_THREAD__ */
 
 /*----------------------------------------------------------------------------*/
@@ -327,8 +314,7 @@
 #endif
 #endif /* __extern_C */
 
-#if !defined(nullptr) && !defined(__cplusplus) ||                              \
-    (__cplusplus < 201103L && !defined(_MSC_VER))
+#if !defined(nullptr) && !defined(__cplusplus) || (__cplusplus < 201103L && !defined(_MSC_VER))
 #define nullptr NULL
 #endif
 
@@ -340,9 +326,8 @@
 #endif
 #endif /* Apple OSX & iOS */
 
-#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||     \
-    defined(__BSD__) || defined(__bsdi__) || defined(__DragonFly__) ||         \
-    defined(__APPLE__) || defined(__MACH__)
+#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__BSD__) || defined(__bsdi__) ||    \
+    defined(__DragonFly__) || defined(__APPLE__) || defined(__MACH__)
 #include <sys/cdefs.h>
 #include <sys/mount.h>
 #include <sys/sysctl.h>
@@ -359,8 +344,7 @@
 #endif
 #else
 #include <malloc.h>
-#if !(defined(__sun) || defined(__SVR4) || defined(__svr4__) ||                \
-      defined(_WIN32) || defined(_WIN64))
+#if !(defined(__sun) || defined(__SVR4) || defined(__svr4__) || defined(_WIN32) || defined(_WIN64))
 #include <mntent.h>
 #endif /* !Solaris */
 #endif /* !xBSD */
@@ -469,43 +453,38 @@ __extern_C key_t ftok(const char *, int);
 /*----------------------------------------------------------------------------*/
 /* Byteorder */
 
-#if defined(i386) || defined(__386) || defined(__i386) || defined(__i386__) || \
-    defined(i486) || defined(__i486) || defined(__i486__) || defined(i586) ||  \
-    defined(__i586) || defined(__i586__) || defined(i686) ||                   \
-    defined(__i686) || defined(__i686__) || defined(_M_IX86) ||                \
-    defined(_X86_) || defined(__THW_INTEL__) || defined(__I86__) ||            \
-    defined(__INTEL__) || defined(__x86_64) || defined(__x86_64__) ||          \
-    defined(__amd64__) || defined(__amd64) || defined(_M_X64) ||               \
-    defined(_M_AMD64) || defined(__IA32__) || defined(__INTEL__)
+#if defined(i386) || defined(__386) || defined(__i386) || defined(__i386__) || defined(i486) || defined(__i486) ||     \
+    defined(__i486__) || defined(i586) || defined(__i586) || defined(__i586__) || defined(i686) || defined(__i686) ||  \
+    defined(__i686__) || defined(_M_IX86) || defined(_X86_) || defined(__THW_INTEL__) || defined(__I86__) ||           \
+    defined(__INTEL__) || defined(__x86_64) || defined(__x86_64__) || defined(__amd64__) || defined(__amd64) ||        \
+    defined(_M_X64) || defined(_M_AMD64) || defined(__IA32__) || defined(__INTEL__)
 #ifndef __ia32__
 /* LY: define neutral __ia32__ for x86 and x86-64 */
 #define __ia32__ 1
 #endif /* __ia32__ */
-#if !defined(__amd64__) &&                                                     \
-    (defined(__x86_64) || defined(__x86_64__) || defined(__amd64) ||           \
-     defined(_M_X64) || defined(_M_AMD64))
+#if !defined(__amd64__) &&                                                                                             \
+    (defined(__x86_64) || defined(__x86_64__) || defined(__amd64) || defined(_M_X64) || defined(_M_AMD64))
 /* LY: define trusty __amd64__ for all AMD64/x86-64 arch */
 #define __amd64__ 1
 #endif /* __amd64__ */
 #endif /* all x86 */
 
-#if !defined(__BYTE_ORDER__) || !defined(__ORDER_LITTLE_ENDIAN__) ||           \
-    !defined(__ORDER_BIG_ENDIAN__)
+#if !defined(__BYTE_ORDER__) || !defined(__ORDER_LITTLE_ENDIAN__) || !defined(__ORDER_BIG_ENDIAN__)
 
-#if defined(__GLIBC__) || defined(__GNU_LIBRARY__) ||                          \
-    defined(__ANDROID_API__) || defined(HAVE_ENDIAN_H) || __has_include(<endian.h>)
+#if defined(__GLIBC__) || defined(__GNU_LIBRARY__) || defined(__ANDROID_API__) || defined(HAVE_ENDIAN_H) ||            \
+    __has_include(<endian.h>)
 #include <endian.h>
-#elif defined(__APPLE__) || defined(__MACH__) || defined(__OpenBSD__) ||       \
-    defined(HAVE_MACHINE_ENDIAN_H) || __has_include(<machine/endian.h>)
+#elif defined(__APPLE__) || defined(__MACH__) || defined(__OpenBSD__) || defined(HAVE_MACHINE_ENDIAN_H) ||             \
+    __has_include(<machine/endian.h>)
 #include <machine/endian.h>
 #elif defined(HAVE_SYS_ISA_DEFS_H) || __has_include(<sys/isa_defs.h>)
 #include <sys/isa_defs.h>
-#elif (defined(HAVE_SYS_TYPES_H) && defined(HAVE_SYS_ENDIAN_H)) ||             \
+#elif (defined(HAVE_SYS_TYPES_H) && defined(HAVE_SYS_ENDIAN_H)) ||                                                     \
     (__has_include(<sys/types.h>) && __has_include(<sys/endian.h>))
 #include <sys/endian.h>
 #include <sys/types.h>
-#elif defined(__bsdi__) || defined(__DragonFly__) || defined(__FreeBSD__) ||   \
-    defined(__NetBSD__) || defined(HAVE_SYS_PARAM_H) || __has_include(<sys/param.h>)
+#elif defined(__bsdi__) || defined(__DragonFly__) || defined(__FreeBSD__) || defined(__NetBSD__) ||                    \
+    defined(HAVE_SYS_PARAM_H) || __has_include(<sys/param.h>)
 #include <sys/param.h>
 #endif /* OS */
 
@@ -521,27 +500,19 @@ __extern_C key_t ftok(const char *, int);
 #define __ORDER_LITTLE_ENDIAN__ 1234
 #define __ORDER_BIG_ENDIAN__ 4321
 
-#if defined(__LITTLE_ENDIAN__) ||                                              \
-    (defined(_LITTLE_ENDIAN) && !defined(_BIG_ENDIAN)) ||                      \
-    defined(__ARMEL__) || defined(__THUMBEL__) || defined(__AARCH64EL__) ||    \
-    defined(__MIPSEL__) || defined(_MIPSEL) || defined(__MIPSEL) ||            \
-    defined(_M_ARM) || defined(_M_ARM64) || defined(__e2k__) ||                \
-    defined(__elbrus_4c__) || defined(__elbrus_8c__) || defined(__bfin__) ||   \
-    defined(__BFIN__) || defined(__ia64__) || defined(_IA64) ||                \
-    defined(__IA64__) || defined(__ia64) || defined(_M_IA64) ||                \
-    defined(__itanium__) || defined(__ia32__) || defined(__CYGWIN__) ||        \
-    defined(_WIN64) || defined(_WIN32) || defined(__TOS_WIN__) ||              \
-    defined(__WINDOWS__)
+#if defined(__LITTLE_ENDIAN__) || (defined(_LITTLE_ENDIAN) && !defined(_BIG_ENDIAN)) || defined(__ARMEL__) ||          \
+    defined(__THUMBEL__) || defined(__AARCH64EL__) || defined(__MIPSEL__) || defined(_MIPSEL) || defined(__MIPSEL) ||  \
+    defined(_M_ARM) || defined(_M_ARM64) || defined(__e2k__) || defined(__elbrus_4c__) || defined(__elbrus_8c__) ||    \
+    defined(__bfin__) || defined(__BFIN__) || defined(__ia64__) || defined(_IA64) || defined(__IA64__) ||              \
+    defined(__ia64) || defined(_M_IA64) || defined(__itanium__) || defined(__ia32__) || defined(__CYGWIN__) ||         \
+    defined(_WIN64) || defined(_WIN32) || defined(__TOS_WIN__) || defined(__WINDOWS__)
 #define __BYTE_ORDER__ __ORDER_LITTLE_ENDIAN__
 
-#elif defined(__BIG_ENDIAN__) ||                                               \
-    (defined(_BIG_ENDIAN) && !defined(_LITTLE_ENDIAN)) ||                      \
-    defined(__ARMEB__) || defined(__THUMBEB__) || defined(__AARCH64EB__) ||    \
-    defined(__MIPSEB__) || defined(_MIPSEB) || defined(__MIPSEB) ||            \
-    defined(__m68k__) || defined(M68000) || defined(__hppa__) ||               \
-    defined(__hppa) || defined(__HPPA__) || defined(__sparc__) ||              \
-    defined(__sparc) || defined(__370__) || defined(__THW_370__) ||            \
-    defined(__s390__) || defined(__s390x__) || defined(__SYSC_ZARCH__)
+#elif defined(__BIG_ENDIAN__) || (defined(_BIG_ENDIAN) && !defined(_LITTLE_ENDIAN)) || defined(__ARMEB__) ||           \
+    defined(__THUMBEB__) || defined(__AARCH64EB__) || defined(__MIPSEB__) || defined(_MIPSEB) || defined(__MIPSEB) ||  \
+    defined(__m68k__) || defined(M68000) || defined(__hppa__) || defined(__hppa) || defined(__HPPA__) ||               \
+    defined(__sparc__) || defined(__sparc) || defined(__370__) || defined(__THW_370__) || defined(__s390__) ||         \
+    defined(__s390x__) || defined(__SYSC_ZARCH__)
 #define __BYTE_ORDER__ __ORDER_BIG_ENDIAN__
 
 #else
@@ -561,17 +532,14 @@ __extern_C key_t ftok(const char *, int);
 #define MDBX_HAVE_CMOV 1
 #elif defined(__thumb__) || defined(__thumb) || defined(__TARGET_ARCH_THUMB)
 #define MDBX_HAVE_CMOV 0
-#elif defined(_M_ARM) || defined(_M_ARM64) || defined(__aarch64__) ||          \
-    defined(__aarch64) || defined(__arm__) || defined(__arm) ||                \
-    defined(__CC_ARM)
+#elif defined(_M_ARM) || defined(_M_ARM64) || defined(__aarch64__) || defined(__aarch64) || defined(__arm__) ||        \
+    defined(__arm) || defined(__CC_ARM)
 #define MDBX_HAVE_CMOV 1
-#elif (defined(__riscv__) || defined(__riscv64)) &&                            \
-    (defined(__riscv_b) || defined(__riscv_bitmanip))
+#elif (defined(__riscv__) || defined(__riscv64)) && (defined(__riscv_b) || defined(__riscv_bitmanip))
 #define MDBX_HAVE_CMOV 1
-#elif defined(i686) || defined(__i686) || defined(__i686__) ||                 \
-    (defined(_M_IX86) && _M_IX86 > 600) || defined(__x86_64) ||                \
-    defined(__x86_64__) || defined(__amd64__) || defined(__amd64) ||           \
-    defined(_M_X64) || defined(_M_AMD64)
+#elif defined(i686) || defined(__i686) || defined(__i686__) || (defined(_M_IX86) && _M_IX86 > 600) ||                  \
+    defined(__x86_64) || defined(__x86_64__) || defined(__amd64__) || defined(__amd64) || defined(_M_X64) ||           \
+    defined(_M_AMD64)
 #define MDBX_HAVE_CMOV 1
 #else
 #define MDBX_HAVE_CMOV 0
@@ -597,8 +565,7 @@ __extern_C key_t ftok(const char *, int);
 #endif
 #elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
 #include <mbarrier.h>
-#elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) &&       \
-    (defined(HP_IA64) || defined(__ia64))
+#elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) && (defined(HP_IA64) || defined(__ia64))
 #include <machine/sys/inline.h>
 #elif defined(__IBMC__) && defined(__powerpc)
 #include <atomic.h>
@@ -620,29 +587,26 @@ __extern_C key_t ftok(const char *, int);
 #endif /* Compiler */
 
 #if !defined(__noop) && !defined(_MSC_VER)
-#define __noop                                                                 \
-  do {                                                                         \
+#define __noop                                                                                                         \
+  do {                                                                                                                 \
   } while (0)
 #endif /* __noop */
 
-#if defined(__fallthrough) &&                                                  \
-    (defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__))
+#if defined(__fallthrough) && (defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__))
 #undef __fallthrough
 #endif /* __fallthrough workaround for MinGW */
 
 #ifndef __fallthrough
-#if defined(__cplusplus) && (__has_cpp_attribute(fallthrough) &&               \
-                             (!defined(__clang__) || __clang__ > 4)) ||        \
+#if defined(__cplusplus) && (__has_cpp_attribute(fallthrough) && (!defined(__clang__) || __clang__ > 4)) ||            \
     __cplusplus >= 201703L
 #define __fallthrough [[fallthrough]]
 #elif __GNUC_PREREQ(8, 0) && defined(__cplusplus) && __cplusplus >= 201103L
 #define __fallthrough [[fallthrough]]
-#elif __GNUC_PREREQ(7, 0) &&                                                   \
-    (!defined(__LCC__) || (__LCC__ == 124 && __LCC_MINOR__ >= 12) ||           \
-     (__LCC__ == 125 && __LCC_MINOR__ >= 5) || (__LCC__ >= 126))
+#elif __GNUC_PREREQ(7, 0) && (!defined(__LCC__) || (__LCC__ == 124 && __LCC_MINOR__ >= 12) ||                          \
+                              (__LCC__ == 125 && __LCC_MINOR__ >= 5) || (__LCC__ >= 126))
 #define __fallthrough __attribute__((__fallthrough__))
-#elif defined(__clang__) && defined(__cplusplus) && __cplusplus >= 201103L &&  \
-    __has_feature(cxx_attributes) && __has_warning("-Wimplicit-fallthrough")
+#elif defined(__clang__) && defined(__cplusplus) && __cplusplus >= 201103L && __has_feature(cxx_attributes) &&         \
+    __has_warning("-Wimplicit-fallthrough")
 #define __fallthrough [[clang::fallthrough]]
 #else
 #define __fallthrough
@@ -655,8 +619,8 @@ __extern_C key_t ftok(const char *, int);
 #elif defined(_MSC_VER)
 #define __unreachable() __assume(0)
 #else
-#define __unreachable()                                                        \
-  do {                                                                         \
+#define __unreachable()                                                                                                \
+  do {                                                                                                                 \
   } while (1)
 #endif
 #endif /* __unreachable */
@@ -665,9 +629,9 @@ __extern_C key_t ftok(const char *, int);
 #if defined(__GNUC__) || defined(__clang__) || __has_builtin(__builtin_prefetch)
 #define __prefetch(ptr) __builtin_prefetch(ptr)
 #else
-#define __prefetch(ptr)                                                        \
-  do {                                                                         \
-    (void)(ptr);                                                               \
+#define __prefetch(ptr)                                                                                                \
+  do {                                                                                                                 \
+    (void)(ptr);                                                                                                       \
   } while (0)
 #endif
 #endif /* __prefetch */
@@ -677,8 +641,7 @@ __extern_C key_t ftok(const char *, int);
 #endif /* offsetof */
 
 #ifndef container_of
-#define container_of(ptr, type, member)                                        \
-  ((type *)((char *)(ptr) - offsetof(type, member)))
+#define container_of(ptr, type, member) ((type *)((char *)(ptr) - offsetof(type, member)))
 #endif /* container_of */
 
 /*----------------------------------------------------------------------------*/
@@ -750,8 +713,7 @@ __extern_C key_t ftok(const char *, int);
 
 #ifndef __hot
 #if defined(__OPTIMIZE__)
-#if defined(__clang__) && !__has_attribute(__hot__) &&                         \
-    __has_attribute(__section__) &&                                            \
+#if defined(__clang__) && !__has_attribute(__hot__) && __has_attribute(__section__) &&                                 \
     (defined(__linux__) || defined(__gnu_linux__))
 /* just put frequently used functions in separate section */
 #define __hot __attribute__((__section__("text.hot"))) __optimize("O3")
@@ -767,8 +729,7 @@ __extern_C key_t ftok(const char *, int);
 
 #ifndef __cold
 #if defined(__OPTIMIZE__)
-#if defined(__clang__) && !__has_attribute(__cold__) &&                        \
-    __has_attribute(__section__) &&                                            \
+#if defined(__clang__) && !__has_attribute(__cold__) && __has_attribute(__section__) &&                                \
     (defined(__linux__) || defined(__gnu_linux__))
 /* just put infrequently used functions in separate section */
 #define __cold __attribute__((__section__("text.unlikely"))) __optimize("Os")
@@ -791,8 +752,7 @@ __extern_C key_t ftok(const char *, int);
 #endif /* __flatten */
 
 #ifndef likely
-#if (defined(__GNUC__) || __has_builtin(__builtin_expect)) &&                  \
-    !defined(__COVERITY__)
+#if (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
 #define likely(cond) __builtin_expect(!!(cond), 1)
 #else
 #define likely(x) (!!(x))
@@ -800,8 +760,7 @@ __extern_C key_t ftok(const char *, int);
 #endif /* likely */
 
 #ifndef unlikely
-#if (defined(__GNUC__) || __has_builtin(__builtin_expect)) &&                  \
-    !defined(__COVERITY__)
+#if (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
 #define unlikely(cond) __builtin_expect(!!(cond), 0)
 #else
 #define unlikely(x) (!!(x))
@@ -821,8 +780,7 @@ __extern_C key_t ftok(const char *, int);
 #define MDBX_WEAK_IMPORT_ATTRIBUTE WEAK_IMPORT_ATTRIBUTE
 #elif __has_attribute(__weak__) && __has_attribute(__weak_import__)
 #define MDBX_WEAK_IMPORT_ATTRIBUTE __attribute__((__weak__, __weak_import__))
-#elif __has_attribute(__weak__) ||                                             \
-    (defined(__GNUC__) && __GNUC__ >= 4 && defined(__ELF__))
+#elif __has_attribute(__weak__) || (defined(__GNUC__) && __GNUC__ >= 4 && defined(__ELF__))
 #define MDBX_WEAK_IMPORT_ATTRIBUTE __attribute__((__weak__))
 #else
 #define MDBX_WEAK_IMPORT_ATTRIBUTE
@@ -835,9 +793,7 @@ __extern_C key_t ftok(const char *, int);
 
 #ifndef MDBX_EXCLUDE_FOR_GPROF
 #ifdef ENABLE_GPROF
-#define MDBX_EXCLUDE_FOR_GPROF                                                 \
-  __attribute__((__no_instrument_function__,                                   \
-                 __no_profile_instrument_function__))
+#define MDBX_EXCLUDE_FOR_GPROF __attribute__((__no_instrument_function__, __no_profile_instrument_function__))
 #else
 #define MDBX_EXCLUDE_FOR_GPROF
 #endif /* ENABLE_GPROF */
@@ -846,10 +802,9 @@ __extern_C key_t ftok(const char *, int);
 /*----------------------------------------------------------------------------*/
 
 #ifndef expect_with_probability
-#if defined(__builtin_expect_with_probability) ||                              \
-    __has_builtin(__builtin_expect_with_probability) || __GNUC_PREREQ(9, 0)
-#define expect_with_probability(expr, value, prob)                             \
-  __builtin_expect_with_probability(expr, value, prob)
+#if defined(__builtin_expect_with_probability) || __has_builtin(__builtin_expect_with_probability) ||                  \
+    __GNUC_PREREQ(9, 0)
+#define expect_with_probability(expr, value, prob) __builtin_expect_with_probability(expr, value, prob)
 #else
 #define expect_with_probability(expr, value, prob) (expr)
 #endif
@@ -866,11 +821,9 @@ __extern_C key_t ftok(const char *, int);
 #if MDBX_GOOFY_MSVC_STATIC_ANALYZER || (defined(_MSC_VER) && _MSC_VER > 1919)
 #define MDBX_ANALYSIS_ASSUME(expr) __analysis_assume(expr)
 #ifdef _PREFAST_
-#define MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(warn_id)                             \
-  __pragma(prefast(suppress : warn_id))
+#define MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(warn_id) __pragma(prefast(suppress : warn_id))
 #else
-#define MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(warn_id)                             \
-  __pragma(warning(suppress : warn_id))
+#define MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(warn_id) __pragma(warning(suppress : warn_id))
 #endif
 #else
 #define MDBX_ANALYSIS_ASSUME(expr) assert(expr)
@@ -878,8 +831,7 @@ __extern_C key_t ftok(const char *, int);
 #endif /* MDBX_GOOFY_MSVC_STATIC_ANALYZER */
 
 #ifndef FLEXIBLE_ARRAY_MEMBERS
-#if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L) ||              \
-    (!defined(__cplusplus) && defined(_MSC_VER))
+#if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L) || (!defined(__cplusplus) && defined(_MSC_VER))
 #define FLEXIBLE_ARRAY_MEMBERS 1
 #else
 #define FLEXIBLE_ARRAY_MEMBERS 0
@@ -938,8 +890,7 @@ template <typename T, size_t N> char (&__ArraySizeHelper(T (&array)[N]))[N];
 #define CONCAT(a, b) a##b
 #define XCONCAT(a, b) CONCAT(a, b)
 
-#define MDBX_TETRAD(a, b, c, d)                                                \
-  ((uint32_t)(a) << 24 | (uint32_t)(b) << 16 | (uint32_t)(c) << 8 | (d))
+#define MDBX_TETRAD(a, b, c, d) ((uint32_t)(a) << 24 | (uint32_t)(b) << 16 | (uint32_t)(c) << 8 | (d))
 
 #define MDBX_STRING_TETRAD(str) MDBX_TETRAD(str[0], str[1], str[2], str[3])
 
@@ -953,14 +904,13 @@ template <typename T, size_t N> char (&__ArraySizeHelper(T (&array)[N]))[N];
 #elif defined(_MSC_VER)
 #include <crtdbg.h>
 #define STATIC_ASSERT_MSG(expr, msg) _STATIC_ASSERT(expr)
-#elif (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L) ||            \
-    __has_feature(c_static_assert)
+#elif (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L) || __has_feature(c_static_assert)
 #define STATIC_ASSERT_MSG(expr, msg) _Static_assert(expr, msg)
 #else
-#define STATIC_ASSERT_MSG(expr, msg)                                           \
-  switch (0) {                                                                 \
-  case 0:                                                                      \
-  case (expr):;                                                                \
+#define STATIC_ASSERT_MSG(expr, msg)                                                                                   \
+  switch (0) {                                                                                                         \
+  case 0:                                                                                                              \
+  case (expr):;                                                                                                        \
   }
 #endif
 #endif /* STATIC_ASSERT */

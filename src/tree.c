@@ -5,8 +5,7 @@
 
 #include "internals.h"
 
-static MDBX_cursor *cursor_clone(const MDBX_cursor *csrc,
-                                 cursor_couple_t *couple) {
+static MDBX_cursor *cursor_clone(const MDBX_cursor *csrc, cursor_couple_t *couple) {
   cASSERT(csrc, csrc->txn->txnid >= csrc->txn->env->lck->cached_oldest.weak);
   couple->outer.next = nullptr;
   couple->outer.backup = nullptr;
@@ -40,13 +39,10 @@ static MDBX_cursor *cursor_clone(const MDBX_cursor *csrc,
 
 void recalculate_merge_thresholds(MDBX_env *env) {
   const size_t bytes = page_space(env);
-  env->merge_threshold =
-      (uint16_t)(bytes -
-                 (bytes * env->options.merge_threshold_16dot16_percent >> 16));
+  env->merge_threshold = (uint16_t)(bytes - (bytes * env->options.merge_threshold_16dot16_percent >> 16));
   env->merge_threshold_gc =
-      (uint16_t)(bytes - ((env->options.merge_threshold_16dot16_percent > 19005)
-                              ? bytes / 3 /* 33 % */
-                              : bytes / 4 /* 25 % */));
+      (uint16_t)(bytes - ((env->options.merge_threshold_16dot16_percent > 19005) ? bytes / 3 /* 33 % */
+                                                                                 : bytes / 4 /* 25 % */));
 }
 
 int tree_drop(MDBX_cursor *mc, const bool may_have_tables) {
@@ -60,9 +56,8 @@ int tree_drop(MDBX_cursor *mc, const bool may_have_tables) {
     if (!(may_have_tables | mc->tree->large_pages))
       cursor_pop(mc);
 
-    rc = pnl_need(&txn->tw.retired_pages, (size_t)mc->tree->branch_pages +
-                                              (size_t)mc->tree->leaf_pages +
-                                              (size_t)mc->tree->large_pages);
+    rc = pnl_need(&txn->tw.retired_pages,
+                  (size_t)mc->tree->branch_pages + (size_t)mc->tree->leaf_pages + (size_t)mc->tree->large_pages);
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
 
@@ -100,9 +95,7 @@ int tree_drop(MDBX_cursor *mc, const bool may_have_tables) {
         cASSERT(mc, mc->top + 1 < mc->tree->height);
         mc->checking |= z_retiring;
         const unsigned pagetype = (is_frozen(txn, mp) ? P_FROZEN : 0) +
-                                  ((mc->top + 2 == mc->tree->height)
-                                       ? (mc->checking & (P_LEAF | P_DUPFIX))
-                                       : P_BRANCH);
+                                  ((mc->top + 2 == mc->tree->height) ? (mc->checking & (P_LEAF | P_DUPFIX)) : P_BRANCH);
         for (size_t i = 0; i < nkeys; i++) {
           node_t *node = page_node(mp, i);
           tASSERT(txn, (node_flags(node) & (N_BIG | N_TREE | N_DUP)) == 0);
@@ -153,8 +146,7 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
   cASSERT(csrc, csrc->top == cdst->top);
   if (unlikely(page_type(psrc) != page_type(pdst))) {
   bailout:
-    ERROR("Wrong or mismatch pages's types (src %d, dst %d) to move node",
-          page_type(psrc), page_type(pdst));
+    ERROR("Wrong or mismatch pages's types (src %d, dst %d) to move node", page_type(psrc), page_type(pdst));
     csrc->txn->flags |= MDBX_TXN_ERROR;
     return MDBX_PROBLEM;
   }
@@ -225,8 +217,7 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
       mn->top = top;
       mn->ki[mn->top] = 0;
 
-      const intptr_t delta = EVEN_CEIL(key.iov_len) -
-                             EVEN_CEIL(node_ks(page_node(mn->pg[mn->top], 0)));
+      const intptr_t delta = EVEN_CEIL(key.iov_len) - EVEN_CEIL(node_ks(page_node(mn->pg[mn->top], 0)));
       const intptr_t needed = branch_size(cdst->txn->env, &key4move) + delta;
       const intptr_t have = page_room(pdst);
       if (unlikely(needed > have))
@@ -255,10 +246,8 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
       pdst = cdst->pg[cdst->top];
     }
 
-    DEBUG("moving %s-node %u [%s] on page %" PRIaPGNO
-          " to node %u on page %" PRIaPGNO,
-          "branch", csrc->ki[csrc->top], DKEY_DEBUG(&key4move), psrc->pgno,
-          cdst->ki[cdst->top], pdst->pgno);
+    DEBUG("moving %s-node %u [%s] on page %" PRIaPGNO " to node %u on page %" PRIaPGNO, "branch", csrc->ki[csrc->top],
+          DKEY_DEBUG(&key4move), psrc->pgno, cdst->ki[cdst->top], pdst->pgno);
     /* Add the node to the destination page. */
     rc = node_add_branch(cdst, cdst->ki[cdst->top], &key4move, srcpg);
   } break;
@@ -275,13 +264,10 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
     data.iov_base = node_data(srcnode);
     key4move.iov_len = node_ks(srcnode);
     key4move.iov_base = node_key(srcnode);
-    DEBUG("moving %s-node %u [%s] on page %" PRIaPGNO
-          " to node %u on page %" PRIaPGNO,
-          "leaf", csrc->ki[csrc->top], DKEY_DEBUG(&key4move), psrc->pgno,
-          cdst->ki[cdst->top], pdst->pgno);
+    DEBUG("moving %s-node %u [%s] on page %" PRIaPGNO " to node %u on page %" PRIaPGNO, "leaf", csrc->ki[csrc->top],
+          DKEY_DEBUG(&key4move), psrc->pgno, cdst->ki[cdst->top], pdst->pgno);
     /* Add the node to the destination page. */
-    rc = node_add_leaf(cdst, cdst->ki[cdst->top], &key4move, &data,
-                       node_flags(srcnode));
+    rc = node_add_leaf(cdst, cdst->ki[cdst->top], &key4move, &data, node_flags(srcnode));
   } break;
 
   case P_LEAF | P_DUPFIX: {
@@ -290,12 +276,9 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
       return rc;
     psrc = csrc->pg[csrc->top];
     pdst = cdst->pg[cdst->top];
-    key4move =
-        page_dupfix_key(psrc, csrc->ki[csrc->top], csrc->tree->dupfix_size);
-    DEBUG("moving %s-node %u [%s] on page %" PRIaPGNO
-          " to node %u on page %" PRIaPGNO,
-          "leaf2", csrc->ki[csrc->top], DKEY_DEBUG(&key4move), psrc->pgno,
-          cdst->ki[cdst->top], pdst->pgno);
+    key4move = page_dupfix_key(psrc, csrc->ki[csrc->top], csrc->tree->dupfix_size);
+    DEBUG("moving %s-node %u [%s] on page %" PRIaPGNO " to node %u on page %" PRIaPGNO, "leaf2", csrc->ki[csrc->top],
+          DKEY_DEBUG(&key4move), psrc->pgno, cdst->ki[cdst->top], pdst->pgno);
     /* Add the node to the destination page. */
     rc = node_add_dupfix(cdst, cdst->ki[cdst->top], &key4move);
   } break;
@@ -329,13 +312,11 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
         if (!is_related(csrc, m3))
           continue;
 
-        if (m3 != cdst && m3->pg[csrc->top] == pdst &&
-            m3->ki[csrc->top] >= cdst->ki[csrc->top]) {
+        if (m3 != cdst && m3->pg[csrc->top] == pdst && m3->ki[csrc->top] >= cdst->ki[csrc->top]) {
           m3->ki[csrc->top] += 1;
         }
 
-        if (/* m3 != csrc && */ m3->pg[csrc->top] == psrc &&
-            m3->ki[csrc->top] == csrc->ki[csrc->top]) {
+        if (/* m3 != csrc && */ m3->pg[csrc->top] == psrc && m3->ki[csrc->top] == csrc->ki[csrc->top]) {
           m3->pg[csrc->top] = pdst;
           m3->ki[csrc->top] = cdst->ki[cdst->top];
           cASSERT(csrc, csrc->top > 0);
@@ -387,8 +368,7 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
         key.iov_len = node_ks(srcnode);
         key.iov_base = node_key(srcnode);
       }
-      DEBUG("update separator for source page %" PRIaPGNO " to [%s]",
-            psrc->pgno, DKEY_DEBUG(&key));
+      DEBUG("update separator for source page %" PRIaPGNO " to [%s]", psrc->pgno, DKEY_DEBUG(&key));
 
       cursor_couple_t couple;
       MDBX_cursor *const mn = cursor_clone(csrc, &couple);
@@ -423,8 +403,7 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
         key.iov_len = node_ks(srcnode);
         key.iov_base = node_key(srcnode);
       }
-      DEBUG("update separator for destination page %" PRIaPGNO " to [%s]",
-            pdst->pgno, DKEY_DEBUG(&key));
+      DEBUG("update separator for destination page %" PRIaPGNO " to [%s]", pdst->pgno, DKEY_DEBUG(&key));
       cursor_couple_t couple;
       MDBX_cursor *const mn = cursor_clone(cdst, &couple);
       cASSERT(cdst, mn->top > 0);
@@ -465,12 +444,10 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   cASSERT(csrc, csrc->clc == cdst->clc && csrc->tree == cdst->tree);
   cASSERT(csrc, csrc->top > 0); /* can't merge root page */
   cASSERT(cdst, cdst->top > 0);
-  cASSERT(cdst, cdst->top + 1 < cdst->tree->height ||
-                    is_leaf(cdst->pg[cdst->tree->height - 1]));
-  cASSERT(csrc, csrc->top + 1 < csrc->tree->height ||
-                    is_leaf(csrc->pg[csrc->tree->height - 1]));
-  cASSERT(cdst, csrc->txn->env->options.prefer_waf_insteadof_balance ||
-                    page_room(pdst) >= page_used(cdst->txn->env, psrc));
+  cASSERT(cdst, cdst->top + 1 < cdst->tree->height || is_leaf(cdst->pg[cdst->tree->height - 1]));
+  cASSERT(csrc, csrc->top + 1 < csrc->tree->height || is_leaf(csrc->pg[csrc->tree->height - 1]));
+  cASSERT(cdst,
+          csrc->txn->env->options.prefer_waf_insteadof_balance || page_room(pdst) >= page_used(cdst->txn->env, psrc));
   const int pagetype = page_type(psrc);
 
   /* Move all nodes from src to dst */
@@ -560,10 +537,8 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
     }
 
     pdst = cdst->pg[cdst->top];
-    DEBUG("dst page %" PRIaPGNO " now has %zu keys (%u.%u%% filled)",
-          pdst->pgno, page_numkeys(pdst),
-          page_fill_percentum_x10(cdst->txn->env, pdst) / 10,
-          page_fill_percentum_x10(cdst->txn->env, pdst) % 10);
+    DEBUG("dst page %" PRIaPGNO " now has %zu keys (%u.%u%% filled)", pdst->pgno, page_numkeys(pdst),
+          page_fill_percentum_x10(cdst->txn->env, pdst) / 10, page_fill_percentum_x10(cdst->txn->env, pdst) % 10);
 
     cASSERT(csrc, psrc == csrc->pg[csrc->top]);
     cASSERT(cdst, pdst == cdst->pg[cdst->top]);
@@ -598,11 +573,8 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
         m3->pg[csrc->top] = pdst;
         m3->ki[csrc->top] += (indx_t)dst_nkeys;
         m3->ki[csrc->top - 1] = cdst->ki[csrc->top - 1];
-      } else if (m3->pg[csrc->top - 1] == csrc->pg[csrc->top - 1] &&
-                 m3->ki[csrc->top - 1] > csrc->ki[csrc->top - 1]) {
-        cASSERT(m3, m3->ki[csrc->top - 1] > 0 &&
-                        m3->ki[csrc->top - 1] <=
-                            page_numkeys(m3->pg[csrc->top - 1]));
+      } else if (m3->pg[csrc->top - 1] == csrc->pg[csrc->top - 1] && m3->ki[csrc->top - 1] > csrc->ki[csrc->top - 1]) {
+        cASSERT(m3, m3->ki[csrc->top - 1] > 0 && m3->ki[csrc->top - 1] <= page_numkeys(m3->pg[csrc->top - 1]));
         m3->ki[csrc->top - 1] -= 1;
       }
 
@@ -641,8 +613,7 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
 
   if (is_leaf(cdst->pg[cdst->top])) {
     /* LY: don't touch cursor if top-page is a LEAF */
-    cASSERT(cdst, is_leaf(cdst->pg[cdst->top]) ||
-                      page_type(cdst->pg[cdst->top]) == pagetype);
+    cASSERT(cdst, is_leaf(cdst->pg[cdst->top]) || page_type(cdst->pg[cdst->top]) == pagetype);
     return MDBX_SUCCESS;
   }
 
@@ -656,8 +627,7 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   if (top_page == cdst->pg[cdst->top]) {
     /* LY: don't touch cursor if prev top-page already on the top */
     cASSERT(cdst, cdst->ki[cdst->top] == top_indx);
-    cASSERT(cdst, is_leaf(cdst->pg[cdst->top]) ||
-                      page_type(cdst->pg[cdst->top]) == pagetype);
+    cASSERT(cdst, is_leaf(cdst->pg[cdst->top]) || page_type(cdst->pg[cdst->top]) == pagetype);
     return MDBX_SUCCESS;
   }
 
@@ -671,18 +641,15 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
     cASSERT(cdst, cdst->ki[new_top] == top_indx);
     /* LY: restore cursor stack */
     cdst->top = (int8_t)new_top;
-    cASSERT(cdst, cdst->top + 1 < cdst->tree->height ||
-                      is_leaf(cdst->pg[cdst->tree->height - 1]));
-    cASSERT(cdst, is_leaf(cdst->pg[cdst->top]) ||
-                      page_type(cdst->pg[cdst->top]) == pagetype);
+    cASSERT(cdst, cdst->top + 1 < cdst->tree->height || is_leaf(cdst->pg[cdst->tree->height - 1]));
+    cASSERT(cdst, is_leaf(cdst->pg[cdst->top]) || page_type(cdst->pg[cdst->top]) == pagetype);
     return MDBX_SUCCESS;
   }
 
   page_t *const stub_page = (page_t *)(~(uintptr_t)top_page);
   const indx_t stub_indx = top_indx;
-  if (save_height > cdst->tree->height &&
-      ((cdst->pg[save_top] == top_page && cdst->ki[save_top] == top_indx) ||
-       (cdst->pg[save_top] == stub_page && cdst->ki[save_top] == stub_indx))) {
+  if (save_height > cdst->tree->height && ((cdst->pg[save_top] == top_page && cdst->ki[save_top] == top_indx) ||
+                                           (cdst->pg[save_top] == stub_page && cdst->ki[save_top] == stub_indx))) {
     /* LY: restore cursor stack */
     cdst->pg[new_top] = top_page;
     cdst->ki[new_top] = top_indx;
@@ -691,10 +658,8 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
     cdst->ki[new_top + 1] = INT16_MAX;
 #endif
     cdst->top = (int8_t)new_top;
-    cASSERT(cdst, cdst->top + 1 < cdst->tree->height ||
-                      is_leaf(cdst->pg[cdst->tree->height - 1]));
-    cASSERT(cdst, is_leaf(cdst->pg[cdst->top]) ||
-                      page_type(cdst->pg[cdst->top]) == pagetype);
+    cASSERT(cdst, cdst->top + 1 < cdst->tree->height || is_leaf(cdst->pg[cdst->tree->height - 1]));
+    cASSERT(cdst, is_leaf(cdst->pg[cdst->top]) || page_type(cdst->pg[cdst->top]) == pagetype);
     return MDBX_SUCCESS;
   }
 
@@ -707,8 +672,7 @@ bailout:
 int tree_rebalance(MDBX_cursor *mc) {
   cASSERT(mc, cursor_is_tracked(mc));
   cASSERT(mc, mc->top >= 0);
-  cASSERT(mc, mc->top + 1 < mc->tree->height ||
-                  is_leaf(mc->pg[mc->tree->height - 1]));
+  cASSERT(mc, mc->top + 1 < mc->tree->height || is_leaf(mc->pg[mc->tree->height - 1]));
   const page_t *const tp = mc->pg[mc->top];
   const uint8_t pagetype = page_type(tp);
 
@@ -716,29 +680,22 @@ int tree_rebalance(MDBX_cursor *mc) {
   const size_t minkeys = (pagetype & P_BRANCH) + (size_t)1;
 
   /* Pages emptier than this are candidates for merging. */
-  size_t room_threshold = likely(mc->tree != &mc->txn->dbs[FREE_DBI])
-                              ? mc->txn->env->merge_threshold
-                              : mc->txn->env->merge_threshold_gc;
+  size_t room_threshold =
+      likely(mc->tree != &mc->txn->dbs[FREE_DBI]) ? mc->txn->env->merge_threshold : mc->txn->env->merge_threshold_gc;
 
   const size_t numkeys = page_numkeys(tp);
   const size_t room = page_room(tp);
-  DEBUG("rebalancing %s page %" PRIaPGNO
-        " (has %zu keys, fill %u.%u%%, used %zu, room %zu bytes)",
-        is_leaf(tp) ? "leaf" : "branch", tp->pgno, numkeys,
-        page_fill_percentum_x10(mc->txn->env, tp) / 10,
-        page_fill_percentum_x10(mc->txn->env, tp) % 10,
-        page_used(mc->txn->env, tp), room);
+  DEBUG("rebalancing %s page %" PRIaPGNO " (has %zu keys, fill %u.%u%%, used %zu, room %zu bytes)",
+        is_leaf(tp) ? "leaf" : "branch", tp->pgno, numkeys, page_fill_percentum_x10(mc->txn->env, tp) / 10,
+        page_fill_percentum_x10(mc->txn->env, tp) % 10, page_used(mc->txn->env, tp), room);
   cASSERT(mc, is_modifable(mc->txn, tp));
 
   if (unlikely(numkeys < minkeys)) {
-    DEBUG("page %" PRIaPGNO " must be merged due keys < %zu threshold",
-          tp->pgno, minkeys);
+    DEBUG("page %" PRIaPGNO " must be merged due keys < %zu threshold", tp->pgno, minkeys);
   } else if (unlikely(room > room_threshold)) {
-    DEBUG("page %" PRIaPGNO " should be merged due room %zu > %zu threshold",
-          tp->pgno, room, room_threshold);
+    DEBUG("page %" PRIaPGNO " should be merged due room %zu > %zu threshold", tp->pgno, room, room_threshold);
   } else {
-    DEBUG("no need to rebalance page %" PRIaPGNO ", room %zu < %zu threshold",
-          tp->pgno, room, room_threshold);
+    DEBUG("no need to rebalance page %" PRIaPGNO ", room %zu < %zu threshold", tp->pgno, room, room_threshold);
     cASSERT(mc, mc->tree->items > 0);
     return MDBX_SUCCESS;
   }
@@ -752,11 +709,9 @@ int tree_rebalance(MDBX_cursor *mc) {
       DEBUG("%s", "tree is completely empty");
       cASSERT(mc, is_leaf(mp));
       cASSERT(mc, (*cursor_dbi_state(mc) & DBI_DIRTY) != 0);
-      cASSERT(mc, mc->tree->branch_pages == 0 && mc->tree->large_pages == 0 &&
-                      mc->tree->leaf_pages == 1);
+      cASSERT(mc, mc->tree->branch_pages == 0 && mc->tree->large_pages == 0 && mc->tree->leaf_pages == 1);
       /* Adjust cursors pointing to mp */
-      for (MDBX_cursor *m2 = mc->txn->cursors[cursor_dbi(mc)]; m2;
-           m2 = m2->next) {
+      for (MDBX_cursor *m2 = mc->txn->cursors[cursor_dbi(mc)]; m2; m2 = m2->next) {
         MDBX_cursor *m3 = (mc->flags & z_inner) ? &m2->subcur->cursor : m2;
         if (!is_poor(m3) && m3->pg[0] == mp) {
           be_poor(m3);
@@ -790,8 +745,7 @@ int tree_rebalance(MDBX_cursor *mc) {
       }
 
       /* Adjust other cursors pointing to mp */
-      for (MDBX_cursor *m2 = mc->txn->cursors[cursor_dbi(mc)]; m2;
-           m2 = m2->next) {
+      for (MDBX_cursor *m2 = mc->txn->cursors[cursor_dbi(mc)]; m2; m2 = m2->next) {
         MDBX_cursor *m3 = (mc->flags & z_inner) ? &m2->subcur->cursor : m2;
         if (is_related(mc, m3) && m3->pg[0] == mp) {
           for (intptr_t i = 0; i < mc->tree->height; i++) {
@@ -801,14 +755,11 @@ int tree_rebalance(MDBX_cursor *mc) {
           m3->top -= 1;
         }
       }
-      cASSERT(mc, is_leaf(mc->pg[mc->top]) ||
-                      page_type(mc->pg[mc->top]) == pagetype);
-      cASSERT(mc, mc->top + 1 < mc->tree->height ||
-                      is_leaf(mc->pg[mc->tree->height - 1]));
+      cASSERT(mc, is_leaf(mc->pg[mc->top]) || page_type(mc->pg[mc->top]) == pagetype);
+      cASSERT(mc, mc->top + 1 < mc->tree->height || is_leaf(mc->pg[mc->tree->height - 1]));
       return page_retire(mc, mp);
     }
-    DEBUG("root page %" PRIaPGNO " doesn't need rebalancing (flags 0x%x)",
-          mp->pgno, mp->flags);
+    DEBUG("root page %" PRIaPGNO " doesn't need rebalancing (flags 0x%x)", mp->pgno, mp->flags);
     return MDBX_SUCCESS;
   }
 
@@ -829,17 +780,14 @@ int tree_rebalance(MDBX_cursor *mc) {
 
   page_t *left = nullptr, *right = nullptr;
   if (mn->ki[pre_top] > 0) {
-    rc =
-        page_get(mn, node_pgno(page_node(mn->pg[pre_top], mn->ki[pre_top] - 1)),
-                 &left, mc->pg[mc->top]->txnid);
+    rc = page_get(mn, node_pgno(page_node(mn->pg[pre_top], mn->ki[pre_top] - 1)), &left, mc->pg[mc->top]->txnid);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
     cASSERT(mc, page_type(left) == page_type(mc->pg[mc->top]));
   }
   if (mn->ki[pre_top] + (size_t)1 < page_numkeys(mn->pg[pre_top])) {
-    rc = page_get(
-        mn, node_pgno(page_node(mn->pg[pre_top], mn->ki[pre_top] + (size_t)1)),
-        &right, mc->pg[mc->top]->txnid);
+    rc = page_get(mn, node_pgno(page_node(mn->pg[pre_top], mn->ki[pre_top] + (size_t)1)), &right,
+                  mc->pg[mc->top]->txnid);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
     cASSERT(mc, page_type(right) == page_type(mc->pg[mc->top]));
@@ -857,8 +805,7 @@ int tree_rebalance(MDBX_cursor *mc) {
   bool involve = !(left && right);
 retry:
   cASSERT(mc, mc->top > 0);
-  if (left_room > room_threshold && left_room >= right_room &&
-      (is_modifable(mc->txn, left) || involve)) {
+  if (left_room > room_threshold && left_room >= right_room && (is_modifable(mc->txn, left) || involve)) {
     /* try merge with left */
     cASSERT(mc, left_nkeys >= minkeys);
     mn->pg[mn->top] = left;
@@ -878,8 +825,7 @@ retry:
       return rc;
     }
   }
-  if (right_room > room_threshold &&
-      (is_modifable(mc->txn, right) || involve)) {
+  if (right_room > room_threshold && (is_modifable(mc->txn, right) || involve)) {
     /* try merge with right */
     cASSERT(mc, right_nkeys >= minkeys);
     mn->pg[mn->top] = right;
@@ -897,8 +843,7 @@ retry:
     }
   }
 
-  if (left_nkeys > minkeys &&
-      (right_nkeys <= left_nkeys || right_room >= left_room) &&
+  if (left_nkeys > minkeys && (right_nkeys <= left_nkeys || right_room >= left_room) &&
       (is_modifable(mc->txn, left) || involve)) {
     /* try move from left */
     mn->pg[mn->top] = left;
@@ -939,16 +884,13 @@ retry:
     return MDBX_SUCCESS;
   }
 
-  if (mc->txn->env->options.prefer_waf_insteadof_balance &&
-      likely(room_threshold > 0)) {
+  if (mc->txn->env->options.prefer_waf_insteadof_balance && likely(room_threshold > 0)) {
     room_threshold = 0;
     goto retry;
   }
   if (likely(!involve) &&
-      (likely(mc->tree != &mc->txn->dbs[FREE_DBI]) || mc->txn->tw.loose_pages ||
-       MDBX_PNL_GETSIZE(mc->txn->tw.relist) ||
-       (mc->flags & z_gcu_preparation) || (mc->txn->flags & txn_gc_drained) ||
-       room_threshold)) {
+      (likely(mc->tree != &mc->txn->dbs[FREE_DBI]) || mc->txn->tw.loose_pages || MDBX_PNL_GETSIZE(mc->txn->tw.relist) ||
+       (mc->flags & z_gcu_preparation) || (mc->txn->flags & txn_gc_drained) || room_threshold)) {
     involve = true;
     goto retry;
   }
@@ -957,17 +899,14 @@ retry:
     goto retry;
   }
 
-  ERROR("Unable to merge/rebalance %s page %" PRIaPGNO
-        " (has %zu keys, fill %u.%u%%, used %zu, room %zu bytes)",
-        is_leaf(tp) ? "leaf" : "branch", tp->pgno, numkeys,
-        page_fill_percentum_x10(mc->txn->env, tp) / 10,
-        page_fill_percentum_x10(mc->txn->env, tp) % 10,
-        page_used(mc->txn->env, tp), room);
+  ERROR("Unable to merge/rebalance %s page %" PRIaPGNO " (has %zu keys, fill %u.%u%%, used %zu, room %zu bytes)",
+        is_leaf(tp) ? "leaf" : "branch", tp->pgno, numkeys, page_fill_percentum_x10(mc->txn->env, tp) / 10,
+        page_fill_percentum_x10(mc->txn->env, tp) % 10, page_used(mc->txn->env, tp), room);
   return MDBX_PROBLEM;
 }
 
-int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
-               MDBX_val *const newdata, pgno_t newpgno, const unsigned naf) {
+int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *const newdata, pgno_t newpgno,
+               const unsigned naf) {
   unsigned flags;
   int rc = MDBX_SUCCESS, foliage = 0;
   MDBX_env *const env = mc->txn->env;
@@ -988,11 +927,8 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
   STATIC_ASSERT(P_BRANCH == 1);
   const size_t minkeys = (mp->flags & P_BRANCH) + (size_t)1;
 
-  DEBUG(">> splitting %s-page %" PRIaPGNO
-        " and adding %zu+%zu [%s] at %i, nkeys %zi",
-        is_leaf(mp) ? "leaf" : "branch", mp->pgno, newkey->iov_len,
-        newdata ? newdata->iov_len : 0, DKEY_DEBUG(newkey), mc->ki[mc->top],
-        nkeys);
+  DEBUG(">> splitting %s-page %" PRIaPGNO " and adding %zu+%zu [%s] at %i, nkeys %zi", is_leaf(mp) ? "leaf" : "branch",
+        mp->pgno, newkey->iov_len, newdata ? newdata->iov_len : 0, DKEY_DEBUG(newkey), mc->ki[mc->top], nkeys);
   cASSERT(mc, nkeys + 1 >= minkeys * 2);
 
   /* Create a new sibling page. */
@@ -1057,10 +993,8 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
   mn->ki[mn->top] = 0;
   mn->ki[prev_top] = mc->ki[prev_top] + 1;
 
-  size_t split_indx =
-      (newindx < nkeys)
-          ? /* split at the middle */ (nkeys + 1) >> 1
-          : /* split at the end (i.e. like append-mode ) */ nkeys - minkeys + 1;
+  size_t split_indx = (newindx < nkeys) ? /* split at the middle */ (nkeys + 1) >> 1
+                                        : /* split at the end (i.e. like append-mode ) */ nkeys - minkeys + 1;
   eASSERT(env, split_indx >= minkeys && split_indx <= nkeys - minkeys + 1);
 
   cASSERT(mc, !is_branch(mp) || newindx > 0);
@@ -1094,11 +1028,9 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
       if (foliage) {
         TRACE("pure-left: foliage %u, top %i, ptop %zu, split_indx %zi, "
               "minkeys %zi, sepkey %s, parent-room %zu, need4split %zu",
-              foliage, mc->top, prev_top, split_indx, minkeys,
-              DKEY_DEBUG(&sepkey), page_room(mc->pg[prev_top]),
+              foliage, mc->top, prev_top, split_indx, minkeys, DKEY_DEBUG(&sepkey), page_room(mc->pg[prev_top]),
               branch_size(env, &sepkey));
-        TRACE("pure-left: newkey %s, newdata %s, newindx %zu",
-              DKEY_DEBUG(newkey), DVAL_DEBUG(newdata), newindx);
+        TRACE("pure-left: newkey %s, newdata %s, newindx %zu", DKEY_DEBUG(newkey), DVAL_DEBUG(newdata), newindx);
       }
     }
   }
@@ -1112,8 +1044,7 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
     sepkey = *newkey;
   } else if (unlikely(pure_left)) {
     /* newindx == split_indx == 0 */
-    TRACE("pure-left: no-split, but add new pure page at the %s",
-          "left/before");
+    TRACE("pure-left: no-split, but add new pure page at the %s", "left/before");
     cASSERT(mc, newindx == 0 && split_indx == 0 && minkeys == 1);
     TRACE("pure-left: old-first-key is %s", DKEY_DEBUG(&sepkey));
   } else {
@@ -1139,8 +1070,7 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
         void *const ins = page_dupfix_ptr(mp, mc->ki[mc->top], ksize);
         memcpy(sister->entries, split, rsize);
         sepkey.iov_base = sister->entries;
-        memmove(ptr_disp(ins, ksize), ins,
-                (split_indx - mc->ki[mc->top]) * ksize);
+        memmove(ptr_disp(ins, ksize), ins, (split_indx - mc->ki[mc->top]) * ksize);
         memcpy(ins, newkey->iov_base, ksize);
         cASSERT(mc, UINT16_MAX - mp->lower >= (int)sizeof(indx_t));
         mp->lower += sizeof(indx_t);
@@ -1151,16 +1081,14 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
         memcpy(sister->entries, split, distance * ksize);
         void *const ins = page_dupfix_ptr(sister, distance, ksize);
         memcpy(ins, newkey->iov_base, ksize);
-        memcpy(ptr_disp(ins, ksize), ptr_disp(split, distance * ksize),
-               rsize - distance * ksize);
+        memcpy(ptr_disp(ins, ksize), ptr_disp(split, distance * ksize), rsize - distance * ksize);
         cASSERT(mc, UINT16_MAX - sister->lower >= (int)sizeof(indx_t));
         sister->lower += sizeof(indx_t);
         cASSERT(mc, sister->upper >= ksize - sizeof(indx_t));
         sister->upper -= (indx_t)(ksize - sizeof(indx_t));
         cASSERT(mc, distance <= (int)UINT16_MAX);
         mc->ki[mc->top] = (indx_t)distance;
-        cASSERT(mc,
-                (((ksize & page_numkeys(sister)) ^ sister->upper) & 1) == 0);
+        cASSERT(mc, (((ksize & page_numkeys(sister)) ^ sister->upper) & 1) == 0);
       }
 
       if (AUDIT_ENABLED()) {
@@ -1180,8 +1108,7 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
       }
 
       const size_t max_space = page_space(env);
-      const size_t new_size = is_leaf(mp) ? leaf_size(env, newkey, newdata)
-                                          : branch_size(env, newkey);
+      const size_t new_size = is_leaf(mp) ? leaf_size(env, newkey, newdata) : branch_size(env, newkey);
 
       /* prepare to insert */
       size_t i = 0;
@@ -1218,8 +1145,7 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
         split_indx += mp->flags & P_BRANCH;
       }
       eASSERT(env, split_indx >= minkeys && split_indx <= nkeys + 1 - minkeys);
-      const size_t dim_nodes =
-          (newindx >= split_indx) ? split_indx : nkeys - split_indx;
+      const size_t dim_nodes = (newindx >= split_indx) ? split_indx : nkeys - split_indx;
       const size_t dim_used = (sizeof(indx_t) + NODESIZE + 1) * dim_nodes;
       if (new_size >= dim_used) {
         /* Search for best acceptable split point */
@@ -1239,15 +1165,13 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
             node_t *node = ptr_disp(mp, tmp_ki_copy->entries[i] + PAGEHDRSZ);
             size = NODESIZE + node_ks(node) + sizeof(indx_t);
             if (is_leaf(mp))
-              size +=
-                  (node_flags(node) & N_BIG) ? sizeof(pgno_t) : node_ds(node);
+              size += (node_flags(node) & N_BIG) ? sizeof(pgno_t) : node_ds(node);
             size = EVEN_CEIL(size);
           }
 
           before += size;
           after -= size;
-          TRACE("step %zu, size %zu, before %zu, after %zu, max %zu", i, size,
-                before, after, max_space);
+          TRACE("step %zu, size %zu, before %zu, after %zu, max %zu", i, size, before, after, max_space);
 
           if (before <= max_space && after <= max_space) {
             const size_t split = i + (dir > 0);
@@ -1271,8 +1195,7 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
 
       sepkey = *newkey;
       if (split_indx != newindx) {
-        node_t *node =
-            ptr_disp(mp, tmp_ki_copy->entries[split_indx] + PAGEHDRSZ);
+        node_t *node = ptr_disp(mp, tmp_ki_copy->entries[split_indx] + PAGEHDRSZ);
         sepkey.iov_len = node_ks(node);
         sepkey.iov_base = node_key(node);
       }
@@ -1308,8 +1231,7 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
 
     /* Right page might now have changed parent.
      * Check if left page also changed parent. */
-    if (mn->pg[prev_top] != mc->pg[prev_top] &&
-        mc->ki[prev_top] >= page_numkeys(mc->pg[prev_top])) {
+    if (mn->pg[prev_top] != mc->pg[prev_top] && mc->ki[prev_top] >= page_numkeys(mc->pg[prev_top])) {
       for (intptr_t i = 0; i < prev_top; i++) {
         mc->pg[i] = mn->pg[i];
         mc->ki[i] = mn->ki[i];
@@ -1334,14 +1256,11 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
     page_t *ptop_page = mc->pg[prev_top];
     TRACE("pure-left: adding to parent page %u node[%u] left-leaf page #%u key "
           "%s",
-          ptop_page->pgno, mc->ki[prev_top], sister->pgno,
-          DKEY(mc->ki[prev_top] ? newkey : nullptr));
+          ptop_page->pgno, mc->ki[prev_top], sister->pgno, DKEY(mc->ki[prev_top] ? newkey : nullptr));
     assert(mc->top == prev_top + 1);
     mc->top = (uint8_t)prev_top;
-    rc = node_add_branch(mc, mc->ki[prev_top],
-                         mc->ki[prev_top] ? newkey : nullptr, sister->pgno);
-    cASSERT(mc, mp == mc->pg[prev_top + 1] && newindx == mc->ki[prev_top + 1] &&
-                    prev_top == mc->top);
+    rc = node_add_branch(mc, mc->ki[prev_top], mc->ki[prev_top] ? newkey : nullptr, sister->pgno);
+    cASSERT(mc, mp == mc->pg[prev_top + 1] && newindx == mc->ki[prev_top + 1] && prev_top == mc->top);
 
     if (likely(rc == MDBX_SUCCESS) && mc->ki[prev_top] == 0) {
       node_t *node = page_node(mc->pg[prev_top], 1);
@@ -1351,12 +1270,10 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
       mc->ki[prev_top] = 1;
       rc = tree_propagate_key(mc, &sepkey);
       cASSERT(mc, mc->top == prev_top && mc->ki[prev_top] == 1);
-      cASSERT(mc,
-              mp == mc->pg[prev_top + 1] && newindx == mc->ki[prev_top + 1]);
+      cASSERT(mc, mp == mc->pg[prev_top + 1] && newindx == mc->ki[prev_top + 1]);
       mc->ki[prev_top] = 0;
     } else {
-      TRACE("pure-left: no-need-update prev-first key on parent %s",
-            DKEY(&sepkey));
+      TRACE("pure-left: no-need-update prev-first key on parent %s", DKEY(&sepkey));
     }
 
     mc->top++;
@@ -1367,8 +1284,7 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
     cASSERT(mc, node_pgno(node) == mp->pgno && mc->pg[prev_top] == ptop_page);
   } else {
     mn->top -= 1;
-    TRACE("add-to-parent the right-entry[%u] for new sibling-page",
-          mn->ki[prev_top]);
+    TRACE("add-to-parent the right-entry[%u] for new sibling-page", mn->ki[prev_top]);
     rc = node_add_branch(mn, mn->ki[prev_top], &sepkey, sister->pgno);
     mn->top += 1;
     if (unlikely(rc != MDBX_SUCCESS))
@@ -1403,8 +1319,8 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
           sepkey = get_key(page_node(mc->pg[mc->top - i], mc->ki[mc->top - i]));
           if (mc->clc->k.cmp(newkey, &sepkey) < 0) {
             mc->top -= (int8_t)i;
-            DEBUG("pure-left: update new-first on parent [%i] page %u key %s",
-                  mc->ki[mc->top], mc->pg[mc->top]->pgno, DKEY(newkey));
+            DEBUG("pure-left: update new-first on parent [%i] page %u key %s", mc->ki[mc->top], mc->pg[mc->top]->pgno,
+                  DKEY(newkey));
             rc = tree_propagate_key(mc, newkey);
             mc->top += (int8_t)i;
             if (unlikely(rc != MDBX_SUCCESS))
@@ -1474,16 +1390,14 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
       }
     } while (ii != split_indx);
 
-    TRACE("ii %zu, nkeys %zu, n %zu, pgno #%u", ii, nkeys, n,
-          mc->pg[mc->top]->pgno);
+    TRACE("ii %zu, nkeys %zu, n %zu, pgno #%u", ii, nkeys, n, mc->pg[mc->top]->pgno);
 
     nkeys = page_numkeys(tmp_ki_copy);
     for (size_t i = 0; i < nkeys; i++)
       mp->entries[i] = tmp_ki_copy->entries[i];
     mp->lower = tmp_ki_copy->lower;
     mp->upper = tmp_ki_copy->upper;
-    memcpy(page_node(mp, nkeys - 1), page_node(tmp_ki_copy, nkeys - 1),
-           env->ps - tmp_ki_copy->upper - PAGEHDRSZ);
+    memcpy(page_node(mp, nkeys - 1), page_node(tmp_ki_copy, nkeys - 1), env->ps - tmp_ki_copy->upper - PAGEHDRSZ);
 
     /* reset back to original page */
     if (newindx < split_indx) {
@@ -1492,8 +1406,7 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
       mc->pg[mc->top] = sister;
       mc->ki[prev_top]++;
       /* Make sure ki is still valid. */
-      if (mn->pg[prev_top] != mc->pg[prev_top] &&
-          mc->ki[prev_top] >= page_numkeys(mc->pg[prev_top])) {
+      if (mn->pg[prev_top] != mc->pg[prev_top] && mc->ki[prev_top] >= page_numkeys(mc->pg[prev_top])) {
         for (intptr_t i = 0; i <= prev_top; i++) {
           mc->pg[i] = mn->pg[i];
           mc->ki[i] = mn->ki[i];
@@ -1504,8 +1417,7 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
     mc->pg[mc->top] = sister;
     mc->ki[prev_top]++;
     /* Make sure ki is still valid. */
-    if (mn->pg[prev_top] != mc->pg[prev_top] &&
-        mc->ki[prev_top] >= page_numkeys(mc->pg[prev_top])) {
+    if (mn->pg[prev_top] != mc->pg[prev_top] && mc->ki[prev_top] >= page_numkeys(mc->pg[prev_top])) {
       for (intptr_t i = 0; i <= prev_top; i++) {
         mc->pg[i] = mn->pg[i];
         mc->ki[i] = mn->ki[i];
@@ -1545,16 +1457,14 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
           m3->pg[i] = mn->pg[i];
         }
       }
-    } else if (!did_split_parent && m3->top >= prev_top &&
-               m3->pg[prev_top] == mc->pg[prev_top] &&
+    } else if (!did_split_parent && m3->top >= prev_top && m3->pg[prev_top] == mc->pg[prev_top] &&
                m3->ki[prev_top] >= mc->ki[prev_top]) {
       m3->ki[prev_top]++; /* also for the `pure-left` case */
     }
     if (inner_pointed(m3) && is_leaf(mp))
       cursor_inner_refresh(m3, m3->pg[mc->top], m3->ki[mc->top]);
   }
-  TRACE("mp #%u left: %zd, sister #%u left: %zd", mp->pgno, page_room(mp),
-        sister->pgno, page_room(sister));
+  TRACE("mp #%u left: %zd, sister #%u left: %zd", mp->pgno, page_room(mp), sister->pgno, page_room(sister));
 
 done:
   if (tmp_ki_copy)
@@ -1596,8 +1506,8 @@ int tree_propagate_key(MDBX_cursor *mc, const MDBX_val *key) {
   MDBX_val k2;
   k2.iov_base = node_key(node);
   k2.iov_len = node_ks(node);
-  DEBUG("update key %zi (offset %zu) [%s] to [%s] on page %" PRIaPGNO, indx,
-        ptr, DVAL_DEBUG(&k2), DKEY_DEBUG(key), mp->pgno);
+  DEBUG("update key %zi (offset %zu) [%s] to [%s] on page %" PRIaPGNO, indx, ptr, DVAL_DEBUG(&k2), DKEY_DEBUG(key),
+        mp->pgno);
 #endif /* MDBX_DEBUG */
 
   /* Sizes must be 2-byte aligned. */

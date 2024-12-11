@@ -30,13 +30,11 @@ void osal_wait4barrier(void) {
   DWORD rc = WaitForSingleObject(hBarrierSemaphore, 0);
   switch (rc) {
   default:
-    failure_perror("WaitForSingleObject(BarrierSemaphore)",
-                   waitstatus2errcode(rc));
+    failure_perror("WaitForSingleObject(BarrierSemaphore)", waitstatus2errcode(rc));
   case WAIT_OBJECT_0:
     rc = WaitForSingleObject(hBarrierEvent, INFINITE);
     if (rc != WAIT_OBJECT_0)
-      failure_perror("WaitForSingleObject(BarrierEvent)",
-                     waitstatus2errcode(rc));
+      failure_perror("WaitForSingleObject(BarrierEvent)", waitstatus2errcode(rc));
     break;
   case WAIT_TIMEOUT:
     if (!SetEvent(hBarrierEvent))
@@ -47,8 +45,7 @@ void osal_wait4barrier(void) {
 
 static HANDLE make_inheritable(HANDLE hHandle) {
   assert(hHandle != NULL && hHandle != INVALID_HANDLE_VALUE);
-  if (!DuplicateHandle(GetCurrentProcess(), hHandle, GetCurrentProcess(),
-                       &hHandle, 0, TRUE,
+  if (!DuplicateHandle(GetCurrentProcess(), hHandle, GetCurrentProcess(), &hHandle, 0, TRUE,
                        DUPLICATE_CLOSE_SOURCE | DUPLICATE_SAME_ACCESS))
     failure_perror("DuplicateHandle()", GetLastError());
   return hHandle;
@@ -108,8 +105,7 @@ int osal_delay(unsigned seconds) {
 
 //-----------------------------------------------------------------------------
 
-const std::string
-actor_config::osal_serialize(simple_checksum &checksum) const {
+const std::string actor_config::osal_serialize(simple_checksum &checksum) const {
   checksum.push(hBarrierSemaphore);
   checksum.push(hBarrierEvent);
   checksum.push(hProgressActiveEvent);
@@ -127,12 +123,11 @@ actor_config::osal_serialize(simple_checksum &checksum) const {
     checksum.push(hSignal);
   }
 
-  return format("%p.%p.%p.%p.%p.%p", hBarrierSemaphore, hBarrierEvent, hWait,
-                hSignal, hProgressActiveEvent, hProgressPassiveEvent);
+  return format("%p.%p.%p.%p.%p.%p", hBarrierSemaphore, hBarrierEvent, hWait, hSignal, hProgressActiveEvent,
+                hProgressPassiveEvent);
 }
 
-bool actor_config::osal_deserialize(const char *str, const char *end,
-                                    simple_checksum &checksum) {
+bool actor_config::osal_deserialize(const char *str, const char *end, simple_checksum &checksum) {
 
   std::string copy(str, end - str);
   TRACE(">> osal_deserialize(%s)\n", copy.c_str());
@@ -144,9 +139,8 @@ bool actor_config::osal_deserialize(const char *str, const char *end,
   assert(events.empty());
 
   HANDLE hWait, hSignal;
-  if (sscanf_s(copy.c_str(), "%p.%p.%p.%p.%p.%p", &hBarrierSemaphore,
-               &hBarrierEvent, &hWait, &hSignal, &hProgressActiveEvent,
-               &hProgressPassiveEvent) != 6) {
+  if (sscanf_s(copy.c_str(), "%p.%p.%p.%p.%p.%p", &hBarrierSemaphore, &hBarrierEvent, &hWait, &hSignal,
+               &hProgressActiveEvent, &hProgressPassiveEvent) != 6) {
     TRACE("<< osal_deserialize: failed\n");
     return false;
   }
@@ -175,23 +169,19 @@ bool actor_config::osal_deserialize(const char *str, const char *end,
 typedef std::pair<HANDLE, actor_status> child;
 static std::unordered_map<mdbx_pid_t, child> children;
 
-bool osal_multiactor_mode(void) {
-  return hProgressActiveEvent || hProgressPassiveEvent;
-}
+bool osal_multiactor_mode(void) { return hProgressActiveEvent || hProgressPassiveEvent; }
 
 bool osal_progress_push(bool active) {
   if (!children.empty()) {
     if (!SetEvent(active ? hProgressActiveEvent : hProgressPassiveEvent))
-      failure_perror("osal_progress_push: SetEvent(overlord.progress)",
-                     GetLastError());
+      failure_perror("osal_progress_push: SetEvent(overlord.progress)", GetLastError());
     return true;
   }
 
   return false;
 }
 
-static void ArgvQuote(std::string &CommandLine, const std::string &Argument,
-                      bool Force = false)
+static void ArgvQuote(std::string &CommandLine, const std::string &Argument, bool Force = false)
 
 /*++
 
@@ -232,8 +222,7 @@ Environment:
   // parse quotes properly
   //
 
-  if (Force == false && Argument.empty() == false &&
-      Argument.find_first_of(" \t\n\v\"") == Argument.npos) {
+  if (Force == false && Argument.empty() == false && Argument.find_first_of(" \t\n\v\"") == Argument.npos) {
     CommandLine.append(Argument);
   } else {
     CommandLine.push_back('"');
@@ -276,8 +265,7 @@ Environment:
 
 int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
   if (children.size() == MAXIMUM_WAIT_OBJECTS)
-    failure("Couldn't manage more that %u actors on Windows\n",
-            MAXIMUM_WAIT_OBJECTS);
+    failure("Couldn't manage more that %u actors on Windows\n", MAXIMUM_WAIT_OBJECTS);
 
   _flushall();
 
@@ -286,8 +274,7 @@ int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
 
   char exename[_MAX_PATH + 1];
   DWORD exename_size = sizeof(exename);
-  if (!QueryFullProcessImageNameA(GetCurrentProcess(), 0, exename,
-                                  &exename_size))
+  if (!QueryFullProcessImageNameA(GetCurrentProcess(), 0, exename, &exename_size))
     failure_perror("QueryFullProcessImageName()", GetLastError());
 
   if (exename[1] != ':') {
@@ -383,8 +370,7 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
 
   while (true) {
     DWORD rc =
-        MsgWaitForMultipleObjectsEx((DWORD)handles.size(), &handles[0],
-                                    (timeout > 60) ? 60 * 1000 : timeout * 1000,
+        MsgWaitForMultipleObjectsEx((DWORD)handles.size(), &handles[0], (timeout > 60) ? 60 * 1000 : timeout * 1000,
                                     QS_ALLINPUT | QS_ALLPOSTMESSAGE, 0);
 
     if (rc == WAIT_OBJECT_0) {

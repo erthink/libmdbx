@@ -9,8 +9,8 @@
 
 namespace config {
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  const char **value, const char *default_value) {
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, const char **value,
+                  const char *default_value) {
   assert(narg < argc);
   const char *current = argv[narg];
   const size_t optlen = strlen(option);
@@ -49,14 +49,11 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
   failure("No value given for '--%s' option\n", option);
 }
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  std::string &value, bool allow_empty) {
-  return parse_option(argc, argv, narg, option, value, allow_empty,
-                      allow_empty ? "" : nullptr);
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, std::string &value, bool allow_empty) {
+  return parse_option(argc, argv, narg, option, value, allow_empty, allow_empty ? "" : nullptr);
 }
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  std::string &value, bool allow_empty,
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, std::string &value, bool allow_empty,
                   const char *default_value) {
   const char *value_cstr;
   if (!parse_option(argc, argv, narg, option, &value_cstr, default_value))
@@ -70,8 +67,7 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 }
 
 template <>
-bool parse_option<unsigned>(int argc, char *const argv[], int &narg,
-                            const char *option, unsigned &mask,
+bool parse_option<unsigned>(int argc, char *const argv[], int &narg, const char *option, unsigned &mask,
                             const option_verb *verbs) {
   const char *list;
   if (!parse_option(argc, argv, narg, option, &list))
@@ -95,8 +91,7 @@ bool parse_option<unsigned>(int argc, char *const argv[], int &narg,
 
     while (true) {
       if (!scan->verb)
-        failure("Unknown verb '%.*s', for option '--%s'\n", (int)len, list,
-                option);
+        failure("Unknown verb '%.*s', for option '--%s'\n", (int)len, list, option);
       if (strlen(scan->verb) == len && strncmp(list, scan->verb, len) == 0) {
         mask = strikethrough ? mask & ~scan->mask : mask | scan->mask;
         clear = strikethrough ? clear & ~scan->mask : clear | scan->mask;
@@ -110,10 +105,8 @@ bool parse_option<unsigned>(int argc, char *const argv[], int &narg,
   return true;
 }
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  uint64_t &value, const scale_mode scale,
-                  const uint64_t minval, const uint64_t maxval,
-                  const uint64_t default_value) {
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, uint64_t &value, const scale_mode scale,
+                  const uint64_t minval, const uint64_t maxval, const uint64_t default_value) {
 
   const char *value_cstr;
   if (!parse_option(argc, argv, narg, option, &value_cstr))
@@ -134,17 +127,13 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
     return true;
   }
 
-  if (strcmp(value_cstr, "rnd") == 0 || strcmp(value_cstr, "rand") == 0 ||
-      strcmp(value_cstr, "random") == 0) {
+  if (strcmp(value_cstr, "rnd") == 0 || strcmp(value_cstr, "rand") == 0 || strcmp(value_cstr, "random") == 0) {
     value = minval;
     if (maxval > minval) {
-      uint64_t salt = (scale != entropy)
-                          ? prng64() ^ UINT64_C(44263400549519813)
-                          : (chrono::now_monotonic().fixedpoint ^
-                             UINT64_C(0xD85794512ED321FD)) *
-                                    UINT64_C(0x9120038359EAF3) ^
-                                chrono::now_realtime().fixedpoint *
-                                    UINT64_C(0x2FE5232BDC8E5F);
+      uint64_t salt = (scale != entropy) ? prng64() ^ UINT64_C(44263400549519813)
+                                         : (chrono::now_monotonic().fixedpoint ^ UINT64_C(0xD85794512ED321FD)) *
+                                                   UINT64_C(0x9120038359EAF3) ^
+                                               chrono::now_realtime().fixedpoint * UINT64_C(0x2FE5232BDC8E5F);
       value += salt % (maxval - minval);
     }
     if (scale == intkey)
@@ -161,43 +150,32 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
     raw = strtoull(value_cstr, &suffix, 10);
   }
   if (errno)
-    failure("Option '--%s' expects a numeric value (%s)\n", option,
-            test_strerror(errno));
+    failure("Option '--%s' expects a numeric value (%s)\n", option, test_strerror(errno));
 
   uint64_t multiplier = 1;
   if (suffix && *suffix) {
     if (scale == no_scale || scale == intkey)
-      failure("Option '--%s' doesn't accepts suffixes, so '%s' is unexpected\n",
-              option, suffix);
+      failure("Option '--%s' doesn't accepts suffixes, so '%s' is unexpected\n", option, suffix);
     if (strcmp(suffix, "K") == 0 || strcasecmp(suffix, "Kilo") == 0)
       multiplier = (scale == decimal) ? UINT64_C(1000) : UINT64_C(1024);
     else if (strcmp(suffix, "M") == 0 || strcasecmp(suffix, "Mega") == 0)
-      multiplier =
-          (scale == decimal) ? UINT64_C(1000) * 1000 : UINT64_C(1024) * 1024;
+      multiplier = (scale == decimal) ? UINT64_C(1000) * 1000 : UINT64_C(1024) * 1024;
     else if (strcmp(suffix, "G") == 0 || strcasecmp(suffix, "Giga") == 0)
-      multiplier = (scale == decimal) ? UINT64_C(1000) * 1000 * 1000
-                                      : UINT64_C(1024) * 1024 * 1024;
+      multiplier = (scale == decimal) ? UINT64_C(1000) * 1000 * 1000 : UINT64_C(1024) * 1024 * 1024;
     else if (strcmp(suffix, "T") == 0 || strcasecmp(suffix, "Tera") == 0)
-      multiplier = (scale == decimal) ? UINT64_C(1000) * 1000 * 1000 * 1000
-                                      : UINT64_C(1024) * 1024 * 1024 * 1024;
-    else if (scale == duration &&
-             (strcmp(suffix, "s") == 0 || strcasecmp(suffix, "Seconds") == 0))
+      multiplier = (scale == decimal) ? UINT64_C(1000) * 1000 * 1000 * 1000 : UINT64_C(1024) * 1024 * 1024 * 1024;
+    else if (scale == duration && (strcmp(suffix, "s") == 0 || strcasecmp(suffix, "Seconds") == 0))
       multiplier = 1;
-    else if (scale == duration &&
-             (strcmp(suffix, "m") == 0 || strcasecmp(suffix, "Minutes") == 0))
+    else if (scale == duration && (strcmp(suffix, "m") == 0 || strcasecmp(suffix, "Minutes") == 0))
       multiplier = 60;
-    else if (scale == duration &&
-             (strcmp(suffix, "h") == 0 || strcasecmp(suffix, "Hours") == 0))
+    else if (scale == duration && (strcmp(suffix, "h") == 0 || strcasecmp(suffix, "Hours") == 0))
       multiplier = 3600;
-    else if (scale == duration &&
-             (strcmp(suffix, "d") == 0 || strcasecmp(suffix, "Days") == 0))
+    else if (scale == duration && (strcmp(suffix, "d") == 0 || strcasecmp(suffix, "Days") == 0))
       multiplier = 3600 * 24;
     else
-      failure(
-          "Option '--%s' expects a numeric value with Kilo/Mega/Giga/Tera %s"
-          "suffixes, but '%s' is unexpected\n",
-          option, (scale == duration) ? "or Seconds/Minutes/Hours/Days " : "",
-          suffix);
+      failure("Option '--%s' expects a numeric value with Kilo/Mega/Giga/Tera %s"
+              "suffixes, but '%s' is unexpected\n",
+              option, (scale == duration) ? "or Seconds/Minutes/Hours/Days " : "", suffix);
   }
 
   if (raw >= UINT64_MAX / multiplier)
@@ -205,47 +183,38 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 
   value = raw * multiplier;
   if (maxval && value > maxval)
-    failure("The maximal value for option '--%s' is %" PRIu64 "\n", option,
-            maxval);
+    failure("The maximal value for option '--%s' is %" PRIu64 "\n", option, maxval);
   if (value < minval)
-    failure("The minimal value for option '--%s' is %" PRIu64 "\n", option,
-            minval);
+    failure("The minimal value for option '--%s' is %" PRIu64 "\n", option, minval);
   if (scale == intkey)
     value &= ~3u;
   return true;
 }
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  unsigned &value, const scale_mode scale,
-                  const unsigned minval, const unsigned maxval,
-                  const unsigned default_value) {
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, unsigned &value, const scale_mode scale,
+                  const unsigned minval, const unsigned maxval, const unsigned default_value) {
 
   uint64_t huge;
-  if (!parse_option(argc, argv, narg, option, huge, scale, minval, maxval,
-                    default_value))
+  if (!parse_option(argc, argv, narg, option, huge, scale, minval, maxval, default_value))
     return false;
   value = unsigned(huge);
   return true;
 }
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  uint8_t &value, const uint8_t minval, const uint8_t maxval,
-                  const uint8_t default_value) {
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, uint8_t &value, const uint8_t minval,
+                  const uint8_t maxval, const uint8_t default_value) {
 
   uint64_t huge;
-  if (!parse_option(argc, argv, narg, option, huge, no_scale, minval, maxval,
-                    default_value))
+  if (!parse_option(argc, argv, narg, option, huge, no_scale, minval, maxval, default_value))
     return false;
   value = uint8_t(huge);
   return true;
 }
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  int64_t &value, const int64_t minval, const int64_t maxval,
-                  const int64_t default_value) {
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, int64_t &value, const int64_t minval,
+                  const int64_t maxval, const int64_t default_value) {
   uint64_t proxy = uint64_t(value);
-  if (parse_option(argc, argv, narg, option, proxy, config::binary,
-                   uint64_t(minval), uint64_t(maxval),
+  if (parse_option(argc, argv, narg, option, proxy, config::binary, uint64_t(minval), uint64_t(maxval),
                    uint64_t(default_value))) {
     value = int64_t(proxy);
     return true;
@@ -253,12 +222,10 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
   return false;
 }
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  int32_t &value, const int32_t minval, const int32_t maxval,
-                  const int32_t default_value) {
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, int32_t &value, const int32_t minval,
+                  const int32_t maxval, const int32_t default_value) {
   uint64_t proxy = uint64_t(value);
-  if (parse_option(argc, argv, narg, option, proxy, config::binary,
-                   uint64_t(minval), uint64_t(maxval),
+  if (parse_option(argc, argv, narg, option, proxy, config::binary, uint64_t(minval), uint64_t(maxval),
                    uint64_t(default_value))) {
     value = int32_t(proxy);
     return true;
@@ -266,14 +233,12 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
   return false;
 }
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  logging::loglevel &loglevel) {
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, logging::loglevel &loglevel) {
   const char *value_cstr;
   if (!parse_option(argc, argv, narg, option, &value_cstr))
     return false;
 
-  if (strcmp(value_cstr, "min") == 0 || strcmp(value_cstr, "minimal") == 0 ||
-      strcmp(value_cstr, "fatal") == 0) {
+  if (strcmp(value_cstr, "min") == 0 || strcmp(value_cstr, "minimal") == 0 || strcmp(value_cstr, "fatal") == 0) {
     loglevel = logging::failure;
     return true;
   }
@@ -308,8 +273,7 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
     return true;
   }
 
-  if (strcmp(value_cstr, "max") == 0 || strcmp(value_cstr, "maximal") == 0 ||
-      strcmp(value_cstr, "extra") == 0) {
+  if (strcmp(value_cstr, "max") == 0 || strcmp(value_cstr, "maximal") == 0 || strcmp(value_cstr, "extra") == 0) {
     loglevel = logging::extra;
     return true;
   }
@@ -329,8 +293,7 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
   failure("Unknown log-level '%s', for option '--%s'\n", value_cstr, option);
 }
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  bool &value) {
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, bool &value) {
   const char *value_cstr = nullptr;
   if (!parse_option(argc, argv, narg, option, &value_cstr, "yes")) {
     const char *current = argv[narg];
@@ -338,8 +301,7 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
       value = false;
       return true;
     }
-    if (strncmp(current, "--dont-", 7) == 0 &&
-        strcmp(current + 7, option) == 0) {
+    if (strncmp(current, "--dont-", 7) == 0 && strcmp(current + 7, option) == 0) {
       value = false;
       return true;
     }
@@ -361,41 +323,36 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
     return true;
   }
 
-  failure(
-      "Option '--%s' expects a 'boolean' value Yes/No, so '%s' is unexpected\n",
-      option, value_cstr);
+  failure("Option '--%s' expects a 'boolean' value Yes/No, so '%s' is unexpected\n", option, value_cstr);
 }
 
 //-----------------------------------------------------------------------------
 
-const struct option_verb mode_bits[] = {
-    {"rdonly", unsigned(MDBX_RDONLY)},
-    {"nosync-utterly", unsigned(MDBX_UTTERLY_NOSYNC)},
-    {"nosubdir", unsigned(MDBX_NOSUBDIR)},
-    {"nosync-safe", unsigned(MDBX_SAFE_NOSYNC)},
-    {"nometasync", unsigned(MDBX_NOMETASYNC)},
-    {"writemap", unsigned(MDBX_WRITEMAP)},
-    {"nostickythreads", unsigned(MDBX_NOSTICKYTHREADS)},
-    {"no-sticky-threads", unsigned(MDBX_NOSTICKYTHREADS)},
-    {"nordahead", unsigned(MDBX_NORDAHEAD)},
-    {"nomeminit", unsigned(MDBX_NOMEMINIT)},
-    {"lifo", unsigned(MDBX_LIFORECLAIM)},
-    {"perturb", unsigned(MDBX_PAGEPERTURB)},
-    {"accede", unsigned(MDBX_ACCEDE)},
-    {"exclusive", unsigned(MDBX_EXCLUSIVE)},
-    {nullptr, 0}};
+const struct option_verb mode_bits[] = {{"rdonly", unsigned(MDBX_RDONLY)},
+                                        {"nosync-utterly", unsigned(MDBX_UTTERLY_NOSYNC)},
+                                        {"nosubdir", unsigned(MDBX_NOSUBDIR)},
+                                        {"nosync-safe", unsigned(MDBX_SAFE_NOSYNC)},
+                                        {"nometasync", unsigned(MDBX_NOMETASYNC)},
+                                        {"writemap", unsigned(MDBX_WRITEMAP)},
+                                        {"nostickythreads", unsigned(MDBX_NOSTICKYTHREADS)},
+                                        {"no-sticky-threads", unsigned(MDBX_NOSTICKYTHREADS)},
+                                        {"nordahead", unsigned(MDBX_NORDAHEAD)},
+                                        {"nomeminit", unsigned(MDBX_NOMEMINIT)},
+                                        {"lifo", unsigned(MDBX_LIFORECLAIM)},
+                                        {"perturb", unsigned(MDBX_PAGEPERTURB)},
+                                        {"accede", unsigned(MDBX_ACCEDE)},
+                                        {"exclusive", unsigned(MDBX_EXCLUSIVE)},
+                                        {nullptr, 0}};
 
-const struct option_verb table_bits[] = {
-    {"key.reverse", unsigned(MDBX_REVERSEKEY)},
-    {"key.integer", unsigned(MDBX_INTEGERKEY)},
-    {"data.integer", unsigned(MDBX_INTEGERDUP | MDBX_DUPFIXED | MDBX_DUPSORT)},
-    {"data.fixed", unsigned(MDBX_DUPFIXED | MDBX_DUPSORT)},
-    {"data.reverse", unsigned(MDBX_REVERSEDUP | MDBX_DUPSORT)},
-    {"data.dups", unsigned(MDBX_DUPSORT)},
-    {nullptr, 0}};
+const struct option_verb table_bits[] = {{"key.reverse", unsigned(MDBX_REVERSEKEY)},
+                                         {"key.integer", unsigned(MDBX_INTEGERKEY)},
+                                         {"data.integer", unsigned(MDBX_INTEGERDUP | MDBX_DUPFIXED | MDBX_DUPSORT)},
+                                         {"data.fixed", unsigned(MDBX_DUPFIXED | MDBX_DUPSORT)},
+                                         {"data.reverse", unsigned(MDBX_REVERSEDUP | MDBX_DUPSORT)},
+                                         {"data.dups", unsigned(MDBX_DUPSORT)},
+                                         {nullptr, 0}};
 
-static void dump_verbs(const char *caption, size_t bits,
-                       const struct option_verb *verbs) {
+static void dump_verbs(const char *caption, size_t bits, const struct option_verb *verbs) {
   log_verbose("%s: 0x%" PRIx64 " = ", caption, (uint64_t)bits);
 
   const char *comma = "";
@@ -429,28 +386,21 @@ void dump(const char *title) {
   logging::local_suffix indent(title);
 
   for (auto i = global::actors.begin(); i != global::actors.end(); ++i) {
-    log_verbose("#%u, testcase %s, space_id/table %u\n", i->actor_id,
-                testcase2str(i->testcase), i->space_id);
+    log_verbose("#%u, testcase %s, space_id/table %u\n", i->actor_id, testcase2str(i->testcase), i->space_id);
     indent.push();
     log_verbose("prng-seed: %u\n", i->params.prng_seed);
 
     if (i->params.loglevel) {
       log_verbose("log: level %u, %s\n", i->params.loglevel,
-                  i->params.pathname_log.empty()
-                      ? "console"
-                      : i->params.pathname_log.c_str());
+                  i->params.pathname_log.empty() ? "console" : i->params.pathname_log.c_str());
     }
 
-    log_verbose("database: %s, size %" PRIuPTR "[%" PRIiPTR "..%" PRIiPTR
-                ", %i %i, %i]\n",
-                i->params.pathname_db.c_str(), i->params.size_now,
-                i->params.size_lower, i->params.size_upper,
-                i->params.shrink_threshold, i->params.growth_step,
-                i->params.pagesize);
+    log_verbose("database: %s, size %" PRIuPTR "[%" PRIiPTR "..%" PRIiPTR ", %i %i, %i]\n",
+                i->params.pathname_db.c_str(), i->params.size_now, i->params.size_lower, i->params.size_upper,
+                i->params.shrink_threshold, i->params.growth_step, i->params.pagesize);
 
     dump_verbs("mode", i->params.mode_flags, mode_bits);
-    log_verbose("random-writemap: %s\n",
-                i->params.random_writemap ? "Yes" : "No");
+    log_verbose("random-writemap: %s\n", i->params.random_writemap ? "Yes" : "No");
     dump_verbs("table", i->params.table_flags, table_bits);
 
     if (i->params.test_nops)
@@ -465,62 +415,46 @@ void dump(const char *title) {
 
     log_verbose("threads %u\n", i->params.nthreads);
 
-    log_verbose(
-        "keygen.params: case %s, width %u, mesh %u, rotate %u, offset %" PRIu64
-        ", split %u/%u\n",
-        keygencase2str(i->params.keygen.keycase), i->params.keygen.width,
-        i->params.keygen.mesh, i->params.keygen.rotate, i->params.keygen.offset,
-        i->params.keygen.split,
-        i->params.keygen.width - i->params.keygen.split);
-    log_verbose("keygen.zerofill: %s\n",
-                i->params.keygen.zero_fill ? "Yes" : "No");
-    log_verbose("key: minlen %u, maxlen %u\n", i->params.keylen_min,
-                i->params.keylen_max);
-    log_verbose("data: minlen %u, maxlen %u\n", i->params.datalen_min,
-                i->params.datalen_max);
+    log_verbose("keygen.params: case %s, width %u, mesh %u, rotate %u, offset %" PRIu64 ", split %u/%u\n",
+                keygencase2str(i->params.keygen.keycase), i->params.keygen.width, i->params.keygen.mesh,
+                i->params.keygen.rotate, i->params.keygen.offset, i->params.keygen.split,
+                i->params.keygen.width - i->params.keygen.split);
+    log_verbose("keygen.zerofill: %s\n", i->params.keygen.zero_fill ? "Yes" : "No");
+    log_verbose("key: minlen %u, maxlen %u\n", i->params.keylen_min, i->params.keylen_max);
+    log_verbose("data: minlen %u, maxlen %u\n", i->params.datalen_min, i->params.datalen_max);
 
-    log_verbose("batch: read %u, write %u\n", i->params.batch_read,
-                i->params.batch_write);
+    log_verbose("batch: read %u, write %u\n", i->params.batch_read, i->params.batch_write);
 
     if (i->params.waitfor_nops)
-      log_verbose("wait: actor %u for %u ops\n", i->wait4id,
-                  i->params.waitfor_nops);
+      log_verbose("wait: actor %u for %u ops\n", i->wait4id, i->params.waitfor_nops);
     else if (i->params.delaystart)
       dump_duration("delay", i->params.delaystart);
     else
       log_verbose("no-delay\n");
 
     if (i->params.inject_writefaultn)
-      log_verbose("inject-writefault on %u ops\n",
-                  i->params.inject_writefaultn);
+      log_verbose("inject-writefault on %u ops\n", i->params.inject_writefaultn);
     else
       log_verbose("no-inject-writefault\n");
 
-    log_verbose("limits: readers %u, tables %u, txn-bytes %zu\n",
-                i->params.max_readers, i->params.max_tables,
+    log_verbose("limits: readers %u, tables %u, txn-bytes %zu\n", i->params.max_readers, i->params.max_tables,
                 mdbx_limits_txnsize_max(i->params.pagesize));
 
     log_verbose("drop table: %s\n", i->params.drop_table ? "Yes" : "No");
-    log_verbose("ignore MDBX_MAP_FULL error: %s\n",
-                i->params.ignore_dbfull ? "Yes" : "No");
-    log_verbose("verifying by speculum: %s\n",
-                i->params.speculum ? "Yes" : "No");
+    log_verbose("ignore MDBX_MAP_FULL error: %s\n", i->params.ignore_dbfull ? "Yes" : "No");
+    log_verbose("verifying by speculum: %s\n", i->params.speculum ? "Yes" : "No");
 
     indent.pop();
   }
 
   dump_duration("timeout", global::config::timeout_duration_seconds);
-  log_verbose("cleanup: before %s, after %s\n",
-              global::config::cleanup_before ? "Yes" : "No",
+  log_verbose("cleanup: before %s, after %s\n", global::config::cleanup_before ? "Yes" : "No",
               global::config::cleanup_after ? "Yes" : "No");
 
   log_verbose("failfast: %s\n", global::config::failfast ? "Yes" : "No");
-  log_verbose("progress indicator: %s\n",
-              global::config::progress_indicator ? "Yes" : "No");
-  log_verbose("console mode: %s\n",
-              global::config::console_mode ? "Yes" : "No");
-  log_verbose("geometry jitter: %s\n",
-              global::config::geometry_jitter ? "Yes" : "No");
+  log_verbose("progress indicator: %s\n", global::config::progress_indicator ? "Yes" : "No");
+  log_verbose("console mode: %s\n", global::config::console_mode ? "Yes" : "No");
+  log_verbose("geometry jitter: %s\n", global::config::geometry_jitter ? "Yes" : "No");
 }
 
 } /* namespace config */
@@ -529,11 +463,8 @@ void dump(const char *title) {
 
 using namespace config;
 
-actor_config::actor_config(actor_testcase testcase, const actor_params &params,
-                           unsigned space_id, unsigned wait4id)
-    : actor_config_pod(1 + unsigned(global::actors.size()), testcase, space_id,
-                       wait4id),
-      params(params) {}
+actor_config::actor_config(actor_testcase testcase, const actor_params &params, unsigned space_id, unsigned wait4id)
+    : actor_config_pod(1 + unsigned(global::actors.size()), testcase, space_id, wait4id), params(params) {}
 
 const std::string actor_config::serialize(const char *prefix) const {
   simple_checksum checksum;
@@ -551,25 +482,19 @@ const std::string actor_config::serialize(const char *prefix) const {
   result.push_back('|');
 
 #if __cplusplus > 201400
-  static_assert(std::is_trivially_copyable<actor_params_pod>::value,
-                "actor_params_pod should by POD");
+  static_assert(std::is_trivially_copyable<actor_params_pod>::value, "actor_params_pod should by POD");
 #else
-  static_assert(std::is_standard_layout<actor_params_pod>::value,
-                "actor_params_pod should by POD");
+  static_assert(std::is_standard_layout<actor_params_pod>::value, "actor_params_pod should by POD");
 #endif
-  result.append(data2hex(static_cast<const actor_params_pod *>(&params),
-                         sizeof(actor_params_pod), checksum));
+  result.append(data2hex(static_cast<const actor_params_pod *>(&params), sizeof(actor_params_pod), checksum));
   result.push_back('|');
 
 #if __cplusplus > 201400
-  static_assert(std::is_trivially_copyable<actor_config_pod>::value,
-                "actor_config_pod should by POD");
+  static_assert(std::is_trivially_copyable<actor_config_pod>::value, "actor_config_pod should by POD");
 #else
-  static_assert(std::is_standard_layout<actor_config_pod>::value,
-                "actor_config_pod should by POD");
+  static_assert(std::is_standard_layout<actor_config_pod>::value, "actor_config_pod should by POD");
 #endif
-  result.append(data2hex(static_cast<const actor_config_pod *>(this),
-                         sizeof(actor_config_pod), checksum));
+  result.append(data2hex(static_cast<const actor_config_pod *>(this), sizeof(actor_config_pod), checksum));
   result.push_back('|');
   result.push_back(global::config::progress_indicator ? 'Y' : 'N');
   checksum.push(global::config::progress_indicator);
@@ -615,16 +540,12 @@ bool actor_config::deserialize(const char *str, actor_config &config) {
     return false;
   }
 #if __cplusplus > 201400
-  static_assert(std::is_trivially_copyable<actor_params_pod>::value,
-                "actor_params_pod should by POD");
+  static_assert(std::is_trivially_copyable<actor_params_pod>::value, "actor_params_pod should by POD");
 #else
-  static_assert(std::is_standard_layout<actor_params_pod>::value,
-                "actor_params_pod should by POD");
+  static_assert(std::is_standard_layout<actor_params_pod>::value, "actor_params_pod should by POD");
 #endif
-  if (!hex2data(str, slash, static_cast<actor_params_pod *>(&config.params),
-                sizeof(actor_params_pod), checksum)) {
-    TRACE("<< actor_config::deserialize: actor_params_pod(%.*s)\n",
-          (int)(slash - str), str);
+  if (!hex2data(str, slash, static_cast<actor_params_pod *>(&config.params), sizeof(actor_params_pod), checksum)) {
+    TRACE("<< actor_config::deserialize: actor_params_pod(%.*s)\n", (int)(slash - str), str);
     return false;
   }
   str = slash + 1;
@@ -635,16 +556,12 @@ bool actor_config::deserialize(const char *str, actor_config &config) {
     return false;
   }
 #if __cplusplus > 201400
-  static_assert(std::is_trivially_copyable<actor_config_pod>::value,
-                "actor_config_pod should by POD");
+  static_assert(std::is_trivially_copyable<actor_config_pod>::value, "actor_config_pod should by POD");
 #else
-  static_assert(std::is_standard_layout<actor_config_pod>::value,
-                "actor_config_pod should by POD");
+  static_assert(std::is_standard_layout<actor_config_pod>::value, "actor_config_pod should by POD");
 #endif
-  if (!hex2data(str, slash, static_cast<actor_config_pod *>(&config),
-                sizeof(actor_config_pod), checksum)) {
-    TRACE("<< actor_config::deserialize: actor_config_pod(%.*s)\n",
-          (int)(slash - str), str);
+  if (!hex2data(str, slash, static_cast<actor_config_pod *>(&config), sizeof(actor_config_pod), checksum)) {
+    TRACE("<< actor_config::deserialize: actor_config_pod(%.*s)\n", (int)(slash - str), str);
     return false;
   }
   str = slash + 1;
@@ -654,8 +571,7 @@ bool actor_config::deserialize(const char *str, actor_config &config) {
     TRACE("<< actor_config::deserialize: slash-5\n");
     return false;
   }
-  if ((str[0] == 'Y' || str[0] == 'N') && (str[1] == 'Y' || str[1] == 'N') &&
-      (str[2] == 'Y' || str[2] == 'N')) {
+  if ((str[0] == 'Y' || str[0] == 'N') && (str[1] == 'Y' || str[1] == 'N') && (str[2] == 'Y' || str[2] == 'N')) {
     global::config::progress_indicator = str[0] == 'Y';
     checksum.push(global::config::progress_indicator);
     global::config::console_mode = str[1] == 'Y';
@@ -690,21 +606,14 @@ bool actor_config::deserialize(const char *str, actor_config &config) {
   return true;
 }
 
-unsigned actor_params::mdbx_keylen_min() const {
-  return unsigned(mdbx_limits_keysize_min(table_flags));
-}
+unsigned actor_params::mdbx_keylen_min() const { return unsigned(mdbx_limits_keysize_min(table_flags)); }
 
-unsigned actor_params::mdbx_keylen_max() const {
-  return unsigned(mdbx_limits_keysize_max(pagesize, table_flags));
-}
+unsigned actor_params::mdbx_keylen_max() const { return unsigned(mdbx_limits_keysize_max(pagesize, table_flags)); }
 
-unsigned actor_params::mdbx_datalen_min() const {
-  return unsigned(mdbx_limits_valsize_min(table_flags));
-}
+unsigned actor_params::mdbx_datalen_min() const { return unsigned(mdbx_limits_valsize_min(table_flags)); }
 
 unsigned actor_params::mdbx_datalen_max() const {
-  return std::min(unsigned(UINT16_MAX),
-                  unsigned(mdbx_limits_valsize_max(pagesize, table_flags)));
+  return std::min(unsigned(UINT16_MAX), unsigned(mdbx_limits_valsize_max(pagesize, table_flags)));
 }
 
 bool actor_params::make_keygen_linear() {
@@ -713,26 +622,18 @@ bool actor_params::make_keygen_linear() {
   keygen.rotate = 0;
   keygen.offset = 0;
   const auto max_serial = serial_mask(keygen.width) + base;
-  const auto max_key_serial = (keygen.split && (table_flags & MDBX_DUPSORT))
-                                  ? max_serial >> keygen.split
-                                  : max_serial;
-  const auto max_value_serial = (keygen.split && (table_flags & MDBX_DUPSORT))
-                                    ? serial_mask(keygen.split)
-                                    : 0;
+  const auto max_key_serial = (keygen.split && (table_flags & MDBX_DUPSORT)) ? max_serial >> keygen.split : max_serial;
+  const auto max_value_serial = (keygen.split && (table_flags & MDBX_DUPSORT)) ? serial_mask(keygen.split) : 0;
 
-  while (keylen_min < 8 &&
-         (keylen_min == 0 || serial_mask(keylen_min * 8) < max_key_serial)) {
+  while (keylen_min < 8 && (keylen_min == 0 || serial_mask(keylen_min * 8) < max_key_serial)) {
     keylen_min += (table_flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) ? 4 : 1;
     if (keylen_max < keylen_min)
       keylen_max = keylen_min;
   }
 
   if (table_flags & MDBX_DUPSORT)
-    while (
-        datalen_min < 8 &&
-        (datalen_min == 0 || serial_mask(datalen_min * 8) < max_value_serial)) {
-      datalen_min +=
-          (table_flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) ? 4 : 1;
+    while (datalen_min < 8 && (datalen_min == 0 || serial_mask(datalen_min * 8) < max_value_serial)) {
+      datalen_min += (table_flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) ? 4 : 1;
       if (datalen_max < datalen_min)
         datalen_max = datalen_min;
     }

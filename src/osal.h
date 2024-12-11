@@ -12,9 +12,8 @@
 
 #if __has_include(<sys/cachectl.h>)
 #include <sys/cachectl.h>
-#elif defined(__mips) || defined(__mips__) || defined(__mips64) ||             \
-    defined(__mips64__) || defined(_M_MRX000) || defined(_MIPS_) ||            \
-    defined(__MWERKS__) || defined(__sgi)
+#elif defined(__mips) || defined(__mips__) || defined(__mips64) || defined(__mips64__) || defined(_M_MRX000) ||        \
+    defined(_MIPS_) || defined(__MWERKS__) || defined(__sgi)
 /* MIPS should have explicit cache control */
 #include <sys/cachectl.h>
 #endif
@@ -28,11 +27,9 @@ MDBX_MAYBE_UNUSED static inline void osal_compiler_barrier(void) {
   __memory_barrier();
 #elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
   __compiler_barrier();
-#elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) &&       \
-    (defined(HP_IA64) || defined(__ia64))
+#elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) && (defined(HP_IA64) || defined(__ia64))
   _Asm_sched_fence(/* LY: no-arg meaning 'all expect ALU', e.g. 0x3D3D */);
-#elif defined(_AIX) || defined(__ppc__) || defined(__powerpc__) ||             \
-    defined(__ppc64__) || defined(__powerpc64__)
+#elif defined(_AIX) || defined(__ppc__) || defined(__powerpc__) || defined(__ppc64__) || defined(__powerpc64__)
   __fence();
 #else
 #error "Could not guess the kind of compiler, please report to us."
@@ -60,11 +57,9 @@ MDBX_MAYBE_UNUSED static inline void osal_memory_barrier(void) {
 #endif
 #elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
   __machine_rw_barrier();
-#elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) &&       \
-    (defined(HP_IA64) || defined(__ia64))
+#elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) && (defined(HP_IA64) || defined(__ia64))
   _Asm_mf();
-#elif defined(_AIX) || defined(__ppc__) || defined(__powerpc__) ||             \
-    defined(__ppc64__) || defined(__powerpc64__)
+#elif defined(_AIX) || defined(__ppc__) || defined(__powerpc__) || defined(__ppc64__) || defined(__powerpc64__)
   __lwsync();
 #else
 #error "Could not guess the kind of compiler, please report to us."
@@ -101,9 +96,7 @@ typedef CRITICAL_SECTION osal_fastmutex_t;
 #if MDBX_WITHOUT_MSVC_CRT
 
 #ifndef osal_malloc
-static inline void *osal_malloc(size_t bytes) {
-  return HeapAlloc(GetProcessHeap(), 0, bytes);
-}
+static inline void *osal_malloc(size_t bytes) { return HeapAlloc(GetProcessHeap(), 0, bytes); }
 #endif /* osal_malloc */
 
 #ifndef osal_calloc
@@ -114,8 +107,7 @@ static inline void *osal_calloc(size_t nelem, size_t size) {
 
 #ifndef osal_realloc
 static inline void *osal_realloc(void *ptr, size_t bytes) {
-  return ptr ? HeapReAlloc(GetProcessHeap(), 0, ptr, bytes)
-             : HeapAlloc(GetProcessHeap(), 0, bytes);
+  return ptr ? HeapReAlloc(GetProcessHeap(), 0, ptr, bytes) : HeapAlloc(GetProcessHeap(), 0, bytes);
 }
 #endif /* osal_realloc */
 
@@ -208,7 +200,7 @@ typedef struct osal_mmap {
 
 #elif defined(__APPLE__) || defined(__MACH__) || defined(_DARWIN_C_SOURCE)
 
-#if defined(MAC_OS_X_VERSION_MIN_REQUIRED) && defined(MAC_OS_VERSION_11_0) &&  \
+#if defined(MAC_OS_X_VERSION_MIN_REQUIRED) && defined(MAC_OS_VERSION_11_0) &&                                          \
     MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_VERSION_11_0
 /* FIXME: add checks for IOS versions, etc */
 #define MDBX_HAVE_PWRITEV 1
@@ -279,39 +271,29 @@ typedef struct osal_ioring {
 MDBX_INTERNAL int osal_ioring_create(osal_ioring_t *
 #if defined(_WIN32) || defined(_WIN64)
                                      ,
-                                     bool enable_direct,
-                                     mdbx_filehandle_t overlapped_fd
+                                     bool enable_direct, mdbx_filehandle_t overlapped_fd
 #endif /* Windows */
 );
 MDBX_INTERNAL int osal_ioring_resize(osal_ioring_t *, size_t items);
 MDBX_INTERNAL void osal_ioring_destroy(osal_ioring_t *);
 MDBX_INTERNAL void osal_ioring_reset(osal_ioring_t *);
-MDBX_INTERNAL int osal_ioring_add(osal_ioring_t *ctx, const size_t offset,
-                                  void *data, const size_t bytes);
+MDBX_INTERNAL int osal_ioring_add(osal_ioring_t *ctx, const size_t offset, void *data, const size_t bytes);
 typedef struct osal_ioring_write_result {
   int err;
   unsigned wops;
 } osal_ioring_write_result_t;
-MDBX_INTERNAL osal_ioring_write_result_t
-osal_ioring_write(osal_ioring_t *ior, mdbx_filehandle_t fd);
+MDBX_INTERNAL osal_ioring_write_result_t osal_ioring_write(osal_ioring_t *ior, mdbx_filehandle_t fd);
 
 MDBX_INTERNAL void osal_ioring_walk(osal_ioring_t *ior, iov_ctx_t *ctx,
-                                    void (*callback)(iov_ctx_t *ctx,
-                                                     size_t offset, void *data,
-                                                     size_t bytes));
+                                    void (*callback)(iov_ctx_t *ctx, size_t offset, void *data, size_t bytes));
 
-MDBX_MAYBE_UNUSED static inline unsigned
-osal_ioring_left(const osal_ioring_t *ior) {
-  return ior->slots_left;
-}
+MDBX_MAYBE_UNUSED static inline unsigned osal_ioring_left(const osal_ioring_t *ior) { return ior->slots_left; }
 
-MDBX_MAYBE_UNUSED static inline unsigned
-osal_ioring_used(const osal_ioring_t *ior) {
+MDBX_MAYBE_UNUSED static inline unsigned osal_ioring_used(const osal_ioring_t *ior) {
   return ior->allocated - ior->slots_left;
 }
 
-MDBX_MAYBE_UNUSED static inline int
-osal_ioring_prepare(osal_ioring_t *ior, size_t items, size_t bytes) {
+MDBX_MAYBE_UNUSED static inline int osal_ioring_prepare(osal_ioring_t *ior, size_t items, size_t bytes) {
   items = (items > 32) ? items : 32;
 #if defined(_WIN32) || defined(_WIN64)
   if (ior->direct) {
@@ -330,13 +312,11 @@ osal_ioring_prepare(osal_ioring_t *ior, size_t items, size_t bytes) {
 /*----------------------------------------------------------------------------*/
 /* libc compatibility stuff */
 
-#if (!defined(__GLIBC__) && __GLIBC_PREREQ(2, 1)) &&                           \
-    (defined(_GNU_SOURCE) || defined(_BSD_SOURCE))
+#if (!defined(__GLIBC__) && __GLIBC_PREREQ(2, 1)) && (defined(_GNU_SOURCE) || defined(_BSD_SOURCE))
 #define osal_asprintf asprintf
 #define osal_vasprintf vasprintf
 #else
-MDBX_MAYBE_UNUSED MDBX_INTERNAL
-    MDBX_PRINTF_ARGS(2, 3) int osal_asprintf(char **strp, const char *fmt, ...);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL MDBX_PRINTF_ARGS(2, 3) int osal_asprintf(char **strp, const char *fmt, ...);
 MDBX_INTERNAL int osal_vasprintf(char **strp, const char *fmt, va_list ap);
 #endif
 
@@ -358,14 +338,12 @@ MDBX_MAYBE_UNUSED MDBX_INTERNAL void osal_jitter(bool tiny);
 #else
 #define MAX_WRITE UINT32_C(0x3f000000)
 
-#if defined(F_GETLK64) && defined(F_SETLK64) && defined(F_SETLKW64) &&         \
-    !defined(__ANDROID_API__)
+#if defined(F_GETLK64) && defined(F_SETLK64) && defined(F_SETLKW64) && !defined(__ANDROID_API__)
 #define MDBX_F_SETLK F_SETLK64
 #define MDBX_F_SETLKW F_SETLKW64
 #define MDBX_F_GETLK F_GETLK64
-#if (__GLIBC_PREREQ(2, 28) &&                                                  \
-     (defined(__USE_LARGEFILE64) || defined(__LARGEFILE64_SOURCE) ||           \
-      defined(_USE_LARGEFILE64) || defined(_LARGEFILE64_SOURCE))) ||           \
+#if (__GLIBC_PREREQ(2, 28) && (defined(__USE_LARGEFILE64) || defined(__LARGEFILE64_SOURCE) ||                          \
+                               defined(_USE_LARGEFILE64) || defined(_LARGEFILE64_SOURCE))) ||                          \
     defined(fcntl64)
 #define MDBX_FCNTL fcntl64
 #else
@@ -383,8 +361,7 @@ MDBX_MAYBE_UNUSED MDBX_INTERNAL void osal_jitter(bool tiny);
 #define MDBX_STRUCT_FLOCK struct flock
 #endif /* MDBX_F_SETLK, MDBX_F_SETLKW, MDBX_F_GETLK */
 
-#if defined(F_OFD_SETLK64) && defined(F_OFD_SETLKW64) &&                       \
-    defined(F_OFD_GETLK64) && !defined(__ANDROID_API__)
+#if defined(F_OFD_SETLK64) && defined(F_OFD_SETLKW64) && defined(F_OFD_GETLK64) && !defined(__ANDROID_API__)
 #define MDBX_F_OFD_SETLK F_OFD_SETLK64
 #define MDBX_F_OFD_SETLKW F_OFD_SETLKW64
 #define MDBX_F_OFD_GETLK F_OFD_GETLK64
@@ -393,8 +370,7 @@ MDBX_MAYBE_UNUSED MDBX_INTERNAL void osal_jitter(bool tiny);
 #define MDBX_F_OFD_SETLKW F_OFD_SETLKW
 #define MDBX_F_OFD_GETLK F_OFD_GETLK
 #ifndef OFF_T_MAX
-#define OFF_T_MAX                                                              \
-  (((sizeof(off_t) > 4) ? INT64_MAX : INT32_MAX) & ~(size_t)0xFffff)
+#define OFF_T_MAX (((sizeof(off_t) > 4) ? INT64_MAX : INT32_MAX) & ~(size_t)0xFffff)
 #endif /* OFF_T_MAX */
 #endif /* MDBX_F_OFD_SETLK64, MDBX_F_OFD_SETLKW64, MDBX_F_OFD_GETLK64 */
 
@@ -414,8 +390,7 @@ MDBX_MAYBE_UNUSED static inline int osal_get_errno(void) {
 }
 
 #ifndef osal_memalign_alloc
-MDBX_INTERNAL int osal_memalign_alloc(size_t alignment, size_t bytes,
-                                      void **result);
+MDBX_INTERNAL int osal_memalign_alloc(size_t alignment, size_t bytes, void **result);
 #endif
 #ifndef osal_memalign_free
 MDBX_INTERNAL void osal_memalign_free(void *ptr);
@@ -433,19 +408,13 @@ MDBX_INTERNAL int osal_fastmutex_acquire(osal_fastmutex_t *fastmutex);
 MDBX_INTERNAL int osal_fastmutex_release(osal_fastmutex_t *fastmutex);
 MDBX_INTERNAL int osal_fastmutex_destroy(osal_fastmutex_t *fastmutex);
 
-MDBX_INTERNAL int osal_pwritev(mdbx_filehandle_t fd, struct iovec *iov,
-                               size_t sgvcnt, uint64_t offset);
-MDBX_INTERNAL int osal_pread(mdbx_filehandle_t fd, void *buf, size_t count,
-                             uint64_t offset);
-MDBX_INTERNAL int osal_pwrite(mdbx_filehandle_t fd, const void *buf,
-                              size_t count, uint64_t offset);
-MDBX_INTERNAL int osal_write(mdbx_filehandle_t fd, const void *buf,
-                             size_t count);
+MDBX_INTERNAL int osal_pwritev(mdbx_filehandle_t fd, struct iovec *iov, size_t sgvcnt, uint64_t offset);
+MDBX_INTERNAL int osal_pread(mdbx_filehandle_t fd, void *buf, size_t count, uint64_t offset);
+MDBX_INTERNAL int osal_pwrite(mdbx_filehandle_t fd, const void *buf, size_t count, uint64_t offset);
+MDBX_INTERNAL int osal_write(mdbx_filehandle_t fd, const void *buf, size_t count);
 
-MDBX_INTERNAL int
-osal_thread_create(osal_thread_t *thread,
-                   THREAD_RESULT(THREAD_CALL *start_routine)(void *),
-                   void *arg);
+MDBX_INTERNAL int osal_thread_create(osal_thread_t *thread, THREAD_RESULT(THREAD_CALL *start_routine)(void *),
+                                     void *arg);
 MDBX_INTERNAL int osal_thread_join(osal_thread_t thread);
 
 enum osal_syncmode_bits {
@@ -456,8 +425,7 @@ enum osal_syncmode_bits {
   MDBX_SYNC_IODQ = 8
 };
 
-MDBX_INTERNAL int osal_fsync(mdbx_filehandle_t fd,
-                             const enum osal_syncmode_bits mode_bits);
+MDBX_INTERNAL int osal_fsync(mdbx_filehandle_t fd, const enum osal_syncmode_bits mode_bits);
 MDBX_INTERNAL int osal_ftruncate(mdbx_filehandle_t fd, uint64_t length);
 MDBX_INTERNAL int osal_fseek(mdbx_filehandle_t fd, uint64_t pos);
 MDBX_INTERNAL int osal_filesize(mdbx_filehandle_t fd, uint64_t *length);
@@ -483,14 +451,11 @@ MDBX_MAYBE_UNUSED static inline bool osal_isdirsep(pathchar_t c) {
       c == '/';
 }
 
-MDBX_INTERNAL bool osal_pathequal(const pathchar_t *l, const pathchar_t *r,
-                                  size_t len);
+MDBX_INTERNAL bool osal_pathequal(const pathchar_t *l, const pathchar_t *r, size_t len);
 MDBX_INTERNAL pathchar_t *osal_fileext(const pathchar_t *pathname, size_t len);
 MDBX_INTERNAL int osal_fileexists(const pathchar_t *pathname);
-MDBX_INTERNAL int osal_openfile(const enum osal_openfile_purpose purpose,
-                                const MDBX_env *env, const pathchar_t *pathname,
-                                mdbx_filehandle_t *fd,
-                                mdbx_mode_t unix_mode_bits);
+MDBX_INTERNAL int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
+                                const pathchar_t *pathname, mdbx_filehandle_t *fd, mdbx_mode_t unix_mode_bits);
 MDBX_INTERNAL int osal_closefile(mdbx_filehandle_t fd);
 MDBX_INTERNAL int osal_removefile(const pathchar_t *pathname);
 MDBX_INTERNAL int osal_removedirectory(const pathchar_t *pathname);
@@ -499,26 +464,21 @@ MDBX_INTERNAL int osal_lockfile(mdbx_filehandle_t fd, bool wait);
 
 #define MMAP_OPTION_TRUNCATE 1
 #define MMAP_OPTION_SEMAPHORE 2
-MDBX_INTERNAL int osal_mmap(const int flags, osal_mmap_t *map, size_t size,
-                            const size_t limit, const unsigned options);
+MDBX_INTERNAL int osal_mmap(const int flags, osal_mmap_t *map, size_t size, const size_t limit, const unsigned options);
 MDBX_INTERNAL int osal_munmap(osal_mmap_t *map);
 #define MDBX_MRESIZE_MAY_MOVE 0x00000100
 #define MDBX_MRESIZE_MAY_UNMAP 0x00000200
-MDBX_INTERNAL int osal_mresize(const int flags, osal_mmap_t *map, size_t size,
-                               size_t limit);
+MDBX_INTERNAL int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit);
 #if defined(_WIN32) || defined(_WIN64)
 typedef struct {
   unsigned limit, count;
   HANDLE handles[31];
 } mdbx_handle_array_t;
-MDBX_INTERNAL int
-osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array);
+MDBX_INTERNAL int osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array);
 MDBX_INTERNAL int osal_resume_threads_after_remap(mdbx_handle_array_t *array);
 #endif /* Windows */
-MDBX_INTERNAL int osal_msync(const osal_mmap_t *map, size_t offset,
-                             size_t length, enum osal_syncmode_bits mode_bits);
-MDBX_INTERNAL int osal_check_fs_rdonly(mdbx_filehandle_t handle,
-                                       const pathchar_t *pathname, int err);
+MDBX_INTERNAL int osal_msync(const osal_mmap_t *map, size_t offset, size_t length, enum osal_syncmode_bits mode_bits);
+MDBX_INTERNAL int osal_check_fs_rdonly(mdbx_filehandle_t handle, const pathchar_t *pathname, int err);
 MDBX_INTERNAL int osal_check_fs_incore(mdbx_filehandle_t handle);
 
 MDBX_MAYBE_UNUSED static inline uint32_t osal_getpid(void) {
@@ -549,8 +509,7 @@ MDBX_INTERNAL int osal_check_tid4bionic(void);
 static inline int osal_check_tid4bionic(void) { return 0; }
 #endif /* __ANDROID_API__ || ANDROID) || BIONIC */
 
-MDBX_MAYBE_UNUSED static inline int
-osal_pthread_mutex_lock(pthread_mutex_t *mutex) {
+MDBX_MAYBE_UNUSED static inline int osal_pthread_mutex_lock(pthread_mutex_t *mutex) {
   int err = osal_check_tid4bionic();
   return unlikely(err) ? err : pthread_mutex_lock(mutex);
 }
@@ -561,8 +520,7 @@ MDBX_INTERNAL uint64_t osal_cputime(size_t *optional_page_faults);
 MDBX_INTERNAL uint64_t osal_16dot16_to_monotime(uint32_t seconds_16dot16);
 MDBX_INTERNAL uint32_t osal_monotime_to_16dot16(uint64_t monotime);
 
-MDBX_MAYBE_UNUSED static inline uint32_t
-osal_monotime_to_16dot16_noUnderflow(uint64_t monotime) {
+MDBX_MAYBE_UNUSED static inline uint32_t osal_monotime_to_16dot16_noUnderflow(uint64_t monotime) {
   uint32_t seconds_16dot16 = osal_monotime_to_16dot16(monotime);
   return seconds_16dot16 ? seconds_16dot16 : /* fix underflow */ (monotime > 0);
 }
@@ -589,10 +547,8 @@ MDBX_INTERNAL bin128_t osal_guid(const MDBX_env *);
 
 /*----------------------------------------------------------------------------*/
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint64_t
-osal_bswap64(uint64_t v) {
-#if __GNUC_PREREQ(4, 4) || __CLANG_PREREQ(4, 0) ||                             \
-    __has_builtin(__builtin_bswap64)
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint64_t osal_bswap64(uint64_t v) {
+#if __GNUC_PREREQ(4, 4) || __CLANG_PREREQ(4, 0) || __has_builtin(__builtin_bswap64)
   return __builtin_bswap64(v);
 #elif defined(_MSC_VER) && !defined(__clang__)
   return _byteswap_uint64(v);
@@ -601,19 +557,14 @@ osal_bswap64(uint64_t v) {
 #elif defined(bswap_64)
   return bswap_64(v);
 #else
-  return v << 56 | v >> 56 | ((v << 40) & UINT64_C(0x00ff000000000000)) |
-         ((v << 24) & UINT64_C(0x0000ff0000000000)) |
-         ((v << 8) & UINT64_C(0x000000ff00000000)) |
-         ((v >> 8) & UINT64_C(0x00000000ff000000)) |
-         ((v >> 24) & UINT64_C(0x0000000000ff0000)) |
-         ((v >> 40) & UINT64_C(0x000000000000ff00));
+  return v << 56 | v >> 56 | ((v << 40) & UINT64_C(0x00ff000000000000)) | ((v << 24) & UINT64_C(0x0000ff0000000000)) |
+         ((v << 8) & UINT64_C(0x000000ff00000000)) | ((v >> 8) & UINT64_C(0x00000000ff000000)) |
+         ((v >> 24) & UINT64_C(0x0000000000ff0000)) | ((v >> 40) & UINT64_C(0x000000000000ff00));
 #endif
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t
-osal_bswap32(uint32_t v) {
-#if __GNUC_PREREQ(4, 4) || __CLANG_PREREQ(4, 0) ||                             \
-    __has_builtin(__builtin_bswap32)
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t osal_bswap32(uint32_t v) {
+#if __GNUC_PREREQ(4, 4) || __CLANG_PREREQ(4, 0) || __has_builtin(__builtin_bswap32)
   return __builtin_bswap32(v);
 #elif defined(_MSC_VER) && !defined(__clang__)
   return _byteswap_ulong(v);
@@ -622,7 +573,6 @@ osal_bswap32(uint32_t v) {
 #elif defined(bswap_32)
   return bswap_32(v);
 #else
-  return v << 24 | v >> 24 | ((v << 8) & UINT32_C(0x00ff0000)) |
-         ((v >> 8) & UINT32_C(0x0000ff00));
+  return v << 24 | v >> 24 | ((v << 8) & UINT32_C(0x00ff0000)) | ((v >> 8) & UINT32_C(0x0000ff00));
 #endif
 }

@@ -60,11 +60,7 @@ namespace keygen {
 
 typedef uint64_t serial_t;
 
-enum : serial_t {
-  serial_minwith = 8,
-  serial_maxwith = sizeof(serial_t) * 8,
-  serial_allones = ~(serial_t)0u
-};
+enum : serial_t { serial_minwith = 8, serial_maxwith = sizeof(serial_t) * 8, serial_allones = ~(serial_t)0u };
 
 struct result {
   MDBX_val value;
@@ -75,9 +71,7 @@ struct result {
     uint64_t u64;
   };
 
-  std::string as_string() const {
-    return std::string((const char *)value.iov_base, value.iov_len);
-  }
+  std::string as_string() const { return std::string((const char *)value.iov_base, value.iov_len); }
 };
 
 //-----------------------------------------------------------------------------
@@ -106,21 +100,17 @@ class maker {
   unsigned value_age_bits{0};
   serial_t value_age_mask{0};
 
-  static serial_t mk_begin(serial_t serial, const essentials &params,
-                           result &out);
-  static void mk_continue(const serial_t serial, const essentials &params,
-                          result &out);
+  static serial_t mk_begin(serial_t serial, const essentials &params, result &out);
+  static void mk_continue(const serial_t serial, const essentials &params, result &out);
 
 public:
-  void pair(serial_t serial, const buffer &key, buffer &value,
-            serial_t value_age, const bool keylen_changeable);
+  void pair(serial_t serial, const buffer &key, buffer &value, serial_t value_age, const bool keylen_changeable);
   void setup(const config::actor_params_pod &actor, unsigned thread_number);
   bool is_unordered() const;
   void seek2end(serial_t &serial) const;
 
   bool increment(serial_t &serial, int64_t delta) const;
-  bool increment_key_part(serial_t &serial, int64_t delta,
-                          bool reset_value_part = true) const {
+  bool increment_key_part(serial_t &serial, int64_t delta, bool reset_value_part = true) const {
     if (reset_value_part) {
       serial_t value_part_bits = ((serial_t(1) << mapping.split) - 1);
       serial |= value_part_bits;
@@ -131,12 +121,10 @@ public:
   }
 
   serial_t remix_age(serial_t serial) const {
-    return (UINT64_C(768097847591) * (serial ^ UINT64_C(768097847591))) &
-           value_age_mask;
+    return (UINT64_C(768097847591) * (serial ^ UINT64_C(768097847591))) & value_age_mask;
   }
 };
 
-void log_pair(logging::loglevel level, const char *prefix, const buffer &key,
-              buffer &value);
+void log_pair(logging::loglevel level, const char *prefix, const buffer &key, buffer &value);
 
 } /* namespace keygen */

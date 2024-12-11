@@ -5,8 +5,7 @@
 
 class testcase_try : public testcase {
 public:
-  testcase_try(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid) {}
+  testcase_try(const actor_config &config, const mdbx_pid_t pid) : testcase(config, pid) {}
   bool run() override;
 };
 REGISTER_TESTCASE(try);

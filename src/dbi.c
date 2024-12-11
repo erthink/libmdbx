@@ -8,16 +8,14 @@ size_t dbi_bitmap_ctz_fallback(const MDBX_txn *txn, intptr_t bmi) {
   tASSERT(txn, bmi > 0);
   bmi &= -bmi;
   if (sizeof(txn->dbi_sparse[0]) > 4) {
-    static const uint8_t debruijn_ctz64[64] = {
-        0,  1,  2,  53, 3,  7,  54, 27, 4,  38, 41, 8,  34, 55, 48, 28,
-        62, 5,  39, 46, 44, 42, 22, 9,  24, 35, 59, 56, 49, 18, 29, 11,
-        63, 52, 6,  26, 37, 40, 33, 47, 61, 45, 43, 21, 23, 58, 17, 10,
-        51, 25, 36, 32, 60, 20, 57, 16, 50, 31, 19, 15, 30, 14, 13, 12};
+    static const uint8_t debruijn_ctz64[64] = {0,  1,  2,  53, 3,  7,  54, 27, 4,  38, 41, 8,  34, 55, 48, 28,
+                                               62, 5,  39, 46, 44, 42, 22, 9,  24, 35, 59, 56, 49, 18, 29, 11,
+                                               63, 52, 6,  26, 37, 40, 33, 47, 61, 45, 43, 21, 23, 58, 17, 10,
+                                               51, 25, 36, 32, 60, 20, 57, 16, 50, 31, 19, 15, 30, 14, 13, 12};
     return debruijn_ctz64[(UINT64_C(0x022FDD63CC95386D) * (uint64_t)bmi) >> 58];
   } else {
-    static const uint8_t debruijn_ctz32[32] = {
-        0,  1,  28, 2,  29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4,  8,
-        31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6,  11, 5,  10, 9};
+    static const uint8_t debruijn_ctz32[32] = {0,  1,  28, 2,  29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4,  8,
+                                               31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6,  11, 5,  10, 9};
     return debruijn_ctz32[(UINT32_C(0x077CB531) * (uint32_t)bmi) >> 27];
   }
 }
@@ -45,8 +43,7 @@ __noinline int dbi_import(MDBX_txn *txn, const size_t dbi) {
   const size_t bitmap_indx = dbi / bitmap_chunk;
   const size_t bitmap_mask = (size_t)1 << dbi % bitmap_chunk;
   if (dbi >= txn->n_dbi) {
-    for (size_t i = (txn->n_dbi + bitmap_chunk - 1) / bitmap_chunk;
-         bitmap_indx >= i; ++i)
+    for (size_t i = (txn->n_dbi + bitmap_chunk - 1) / bitmap_chunk; bitmap_indx >= i; ++i)
       txn->dbi_sparse[i] = 0;
     eASSERT(env, (txn->dbi_sparse[bitmap_indx] & bitmap_mask) == 0);
     MDBX_txn *scan = txn;
@@ -92,8 +89,7 @@ __noinline int dbi_import(MDBX_txn *txn, const size_t dbi) {
       int rc = dbi_check(parent, dbi);
       /* копируем состояние table очищая new-флаги. */
       eASSERT(env, txn->dbi_seqs == parent->dbi_seqs);
-      txn->dbi_state[dbi] =
-          parent->dbi_state[dbi] & ~(DBI_FRESH | DBI_CREAT | DBI_DIRTY);
+      txn->dbi_state[dbi] = parent->dbi_state[dbi] & ~(DBI_FRESH | DBI_CREAT | DBI_DIRTY);
       if (likely(rc == MDBX_SUCCESS)) {
         txn->dbs[dbi] = parent->dbs[dbi];
         if (parent->cursors[dbi]) {
@@ -111,8 +107,7 @@ __noinline int dbi_import(MDBX_txn *txn, const size_t dbi) {
     txn->dbi_state[dbi] = DBI_LINDO;
   } else {
     eASSERT(env, txn->dbi_seqs[dbi] != env->dbi_seqs[dbi].weak);
-    if (unlikely((txn->dbi_state[dbi] & (DBI_VALID | DBI_OLDEN)) ||
-                 txn->cursors[dbi])) {
+    if (unlikely((txn->dbi_state[dbi] & (DBI_VALID | DBI_OLDEN)) || txn->cursors[dbi])) {
       /* хендл уже использовался в транзакции, но был закрыт или переоткрыт,
        * либо при явном пере-открытии хендла есть висячие курсоры */
       eASSERT(env, (txn->dbi_state[dbi] & DBI_STALE) == 0);
@@ -137,8 +132,7 @@ __noinline int dbi_import(MDBX_txn *txn, const size_t dbi) {
   return MDBX_BAD_DBI;
 }
 
-static int defer_and_release(MDBX_env *const env,
-                             defer_free_item_t *const chain) {
+static int defer_and_release(MDBX_env *const env, defer_free_item_t *const chain) {
   size_t length = 0;
   defer_free_item_t *obsolete_chain = nullptr;
 #if MDBX_ENABLE_DBI_LOCKFREE
@@ -232,8 +226,7 @@ int dbi_update(MDBX_txn *txn, int keep) {
     while ((env->dbs_flags[i - 1] & DB_VALID) == 0) {
       --i;
       eASSERT(env, i >= CORE_DBS);
-      eASSERT(env, !env->dbs_flags[i] && !env->kvs[i].name.iov_len &&
-                       !env->kvs[i].name.iov_base);
+      eASSERT(env, !env->dbs_flags[i] && !env->kvs[i].name.iov_len && !env->kvs[i].name.iov_base);
     }
     env->n_dbi = (unsigned)i;
     defer_and_release(env, defer_chain);
@@ -241,21 +234,17 @@ int dbi_update(MDBX_txn *txn, int keep) {
   return MDBX_SUCCESS;
 }
 
-int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags,
-             MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp) {
+int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags, MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp) {
   const MDBX_env *const env = txn->env;
   eASSERT(env, dbi < txn->n_dbi && dbi < env->n_dbi);
   eASSERT(env, dbi_state(txn, dbi) & DBI_LINDO);
   eASSERT(env, env->dbs_flags[dbi] != DB_POISON);
   if ((env->dbs_flags[dbi] & DB_VALID) == 0) {
-    eASSERT(env, !env->kvs[dbi].clc.k.cmp && !env->kvs[dbi].clc.v.cmp &&
-                     !env->kvs[dbi].name.iov_len &&
-                     !env->kvs[dbi].name.iov_base &&
-                     !env->kvs[dbi].clc.k.lmax && !env->kvs[dbi].clc.k.lmin &&
+    eASSERT(env, !env->kvs[dbi].clc.k.cmp && !env->kvs[dbi].clc.v.cmp && !env->kvs[dbi].name.iov_len &&
+                     !env->kvs[dbi].name.iov_base && !env->kvs[dbi].clc.k.lmax && !env->kvs[dbi].clc.k.lmin &&
                      !env->kvs[dbi].clc.v.lmax && !env->kvs[dbi].clc.v.lmin);
   } else {
-    eASSERT(env, !(txn->dbi_state[dbi] & DBI_VALID) ||
-                     (txn->dbs[dbi].flags | DB_VALID) == env->dbs_flags[dbi]);
+    eASSERT(env, !(txn->dbi_state[dbi] & DBI_VALID) || (txn->dbs[dbi].flags | DB_VALID) == env->dbs_flags[dbi]);
     eASSERT(env, env->kvs[dbi].name.iov_base || dbi < CORE_DBS);
   }
 
@@ -271,8 +260,7 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags,
    * 4) user_flags отличаются, но table пустая и задан флаг MDBX_CREATE
    *    = предполагаем что пользователь пересоздает table;
    */
-  if ((user_flags & ~MDBX_CREATE) !=
-      (unsigned)(env->dbs_flags[dbi] & DB_PERSISTENT_FLAGS)) {
+  if ((user_flags & ~MDBX_CREATE) != (unsigned)(env->dbs_flags[dbi] & DB_PERSISTENT_FLAGS)) {
     /* flags are differs, check other conditions */
     if ((!user_flags && (!keycmp || keycmp == env->kvs[dbi].clc.k.cmp) &&
          (!datacmp || datacmp == env->kvs[dbi].clc.v.cmp)) ||
@@ -287,11 +275,8 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags,
         if (unlikely(err == MDBX_SUCCESS))
           return err;
       }
-      eASSERT(env, ((env->dbs_flags[dbi] ^ txn->dbs[dbi].flags) &
-                    DB_PERSISTENT_FLAGS) == 0);
-      eASSERT(env,
-              (txn->dbi_state[dbi] & (DBI_LINDO | DBI_VALID | DBI_STALE)) ==
-                  (DBI_LINDO | DBI_VALID));
+      eASSERT(env, ((env->dbs_flags[dbi] ^ txn->dbs[dbi].flags) & DB_PERSISTENT_FLAGS) == 0);
+      eASSERT(env, (txn->dbi_state[dbi] & (DBI_LINDO | DBI_VALID | DBI_STALE)) == (DBI_LINDO | DBI_VALID));
       if (unlikely(txn->dbs[dbi].leaf_pages))
         return /* FIXME: return extended info */ MDBX_INCOMPATIBLE;
 
@@ -299,13 +284,11 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags,
       if (unlikely(txn->cursors[dbi]))
         return MDBX_DANGLING_DBI;
       env->dbs_flags[dbi] = DB_POISON;
-      atomic_store32(&env->dbi_seqs[dbi], dbi_seq_next(env, dbi),
-                     mo_AcquireRelease);
+      atomic_store32(&env->dbi_seqs[dbi], dbi_seq_next(env, dbi), mo_AcquireRelease);
 
       const uint32_t seq = dbi_seq_next(env, dbi);
       const uint16_t db_flags = user_flags & DB_PERSISTENT_FLAGS;
-      eASSERT(env, txn->dbs[dbi].height == 0 && txn->dbs[dbi].items == 0 &&
-                       txn->dbs[dbi].root == P_INVALID);
+      eASSERT(env, txn->dbs[dbi].height == 0 && txn->dbs[dbi].items == 0 && txn->dbs[dbi].root == P_INVALID);
       env->kvs[dbi].clc.k.cmp = keycmp ? keycmp : builtin_keycmp(user_flags);
       env->kvs[dbi].clc.v.cmp = datacmp ? datacmp : builtin_datacmp(user_flags);
       txn->dbs[dbi].flags = db_flags;
@@ -325,8 +308,7 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags,
   }
 
   if (!keycmp)
-    keycmp = (env->dbs_flags[dbi] & DB_VALID) ? env->kvs[dbi].clc.k.cmp
-                                              : builtin_keycmp(user_flags);
+    keycmp = (env->dbs_flags[dbi] & DB_VALID) ? env->kvs[dbi].clc.k.cmp : builtin_keycmp(user_flags);
   if (env->kvs[dbi].clc.k.cmp != keycmp) {
     if (env->dbs_flags[dbi] & DB_VALID)
       return MDBX_EINVAL;
@@ -334,8 +316,7 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags,
   }
 
   if (!datacmp)
-    datacmp = (env->dbs_flags[dbi] & DB_VALID) ? env->kvs[dbi].clc.v.cmp
-                                               : builtin_datacmp(user_flags);
+    datacmp = (env->dbs_flags[dbi] & DB_VALID) ? env->kvs[dbi].clc.v.cmp : builtin_datacmp(user_flags);
   if (env->kvs[dbi].clc.v.cmp != datacmp) {
     if (env->dbs_flags[dbi] & DB_VALID)
       return MDBX_EINVAL;
@@ -346,19 +327,15 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags,
 }
 
 static inline size_t dbi_namelen(const MDBX_val name) {
-  return (name.iov_len > sizeof(defer_free_item_t)) ? name.iov_len
-                                                    : sizeof(defer_free_item_t);
+  return (name.iov_len > sizeof(defer_free_item_t)) ? name.iov_len : sizeof(defer_free_item_t);
 }
 
-static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi,
-                           MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp,
-                           MDBX_val name) {
+static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi, MDBX_cmp_func *keycmp,
+                           MDBX_cmp_func *datacmp, MDBX_val name) {
   MDBX_env *const env = txn->env;
 
   /* Cannot mix named table(s) with DUPSORT flags */
-  tASSERT(txn,
-          (txn->dbi_state[MAIN_DBI] & (DBI_LINDO | DBI_VALID | DBI_STALE)) ==
-              (DBI_LINDO | DBI_VALID));
+  tASSERT(txn, (txn->dbi_state[MAIN_DBI] & (DBI_LINDO | DBI_VALID | DBI_STALE)) == (DBI_LINDO | DBI_VALID));
   if (unlikely(txn->dbs[MAIN_DBI].flags & MDBX_DUPSORT)) {
     if (unlikely((user_flags & MDBX_CREATE) == 0))
       return MDBX_NOTFOUND;
@@ -367,18 +344,15 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi,
       return MDBX_INCOMPATIBLE;
 
     /* Пересоздаём MainDB когда там пусто. */
-    tASSERT(txn, txn->dbs[MAIN_DBI].height == 0 &&
-                     txn->dbs[MAIN_DBI].items == 0 &&
-                     txn->dbs[MAIN_DBI].root == P_INVALID);
+    tASSERT(txn,
+            txn->dbs[MAIN_DBI].height == 0 && txn->dbs[MAIN_DBI].items == 0 && txn->dbs[MAIN_DBI].root == P_INVALID);
     if (unlikely(txn->cursors[MAIN_DBI]))
       return MDBX_DANGLING_DBI;
     env->dbs_flags[MAIN_DBI] = DB_POISON;
-    atomic_store32(&env->dbi_seqs[MAIN_DBI], dbi_seq_next(env, MAIN_DBI),
-                   mo_AcquireRelease);
+    atomic_store32(&env->dbi_seqs[MAIN_DBI], dbi_seq_next(env, MAIN_DBI), mo_AcquireRelease);
 
     const uint32_t seq = dbi_seq_next(env, MAIN_DBI);
-    const uint16_t main_flags =
-        txn->dbs[MAIN_DBI].flags & (MDBX_REVERSEKEY | MDBX_INTEGERKEY);
+    const uint16_t main_flags = txn->dbs[MAIN_DBI].flags & (MDBX_REVERSEKEY | MDBX_INTEGERKEY);
     env->kvs[MAIN_DBI].clc.k.cmp = builtin_keycmp(main_flags);
     env->kvs[MAIN_DBI].clc.v.cmp = builtin_datacmp(main_flags);
     txn->dbs[MAIN_DBI].flags = main_flags;
@@ -391,8 +365,7 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi,
       return err;
     }
     env->dbs_flags[MAIN_DBI] = main_flags | DB_VALID;
-    txn->dbi_seqs[MAIN_DBI] =
-        atomic_store32(&env->dbi_seqs[MAIN_DBI], seq, mo_AcquireRelease);
+    txn->dbi_seqs[MAIN_DBI] = atomic_store32(&env->dbi_seqs[MAIN_DBI], seq, mo_AcquireRelease);
     txn->dbi_state[MAIN_DBI] |= DBI_DIRTY;
     txn->flags |= MDBX_TXN_DIRTY;
   }
@@ -410,8 +383,7 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi,
     if (!env->kvs[MAIN_DBI].clc.k.cmp(&name, &env->kvs[scan].name)) {
       slot = scan;
       int err = dbi_check(txn, slot);
-      if (err == MDBX_BAD_DBI &&
-          txn->dbi_state[slot] == (DBI_OLDEN | DBI_LINDO)) {
+      if (err == MDBX_BAD_DBI && txn->dbi_state[slot] == (DBI_OLDEN | DBI_LINDO)) {
         /* хендл использовался, стал невалидным,
          * но теперь явно пере-открывается в этой транзакци */
         eASSERT(env, !txn->cursors[slot]);
@@ -433,12 +405,10 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi,
     return MDBX_DBS_FULL;
 
   if (env->n_dbi == slot)
-    eASSERT(env, !env->dbs_flags[slot] && !env->kvs[slot].name.iov_len &&
-                     !env->kvs[slot].name.iov_base);
+    eASSERT(env, !env->dbs_flags[slot] && !env->kvs[slot].name.iov_len && !env->kvs[slot].name.iov_base);
 
   env->dbs_flags[slot] = DB_POISON;
-  atomic_store32(&env->dbi_seqs[slot], dbi_seq_next(env, slot),
-                 mo_AcquireRelease);
+  atomic_store32(&env->dbi_seqs[slot], dbi_seq_next(env, slot), mo_AcquireRelease);
   memset(&env->kvs[slot], 0, sizeof(env->kvs[slot]));
   if (env->n_dbi == slot)
     env->n_dbi = (unsigned)slot + 1;
@@ -461,13 +431,11 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi,
       return rc;
   } else {
     /* make sure this is actually a table */
-    node_t *node =
-        page_node(cx.outer.pg[cx.outer.top], cx.outer.ki[cx.outer.top]);
+    node_t *node = page_node(cx.outer.pg[cx.outer.top], cx.outer.ki[cx.outer.top]);
     if (unlikely((node_flags(node) & (N_DUP | N_TREE)) != N_TREE))
       return MDBX_INCOMPATIBLE;
     if (!MDBX_DISABLE_VALIDATION && unlikely(body.iov_len != sizeof(tree_t))) {
-      ERROR("%s/%d: %s %zu", "MDBX_CORRUPTED", MDBX_CORRUPTED,
-            "invalid table node size", body.iov_len);
+      ERROR("%s/%d: %s %zu", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid table node size", body.iov_len);
       return MDBX_CORRUPTED;
     }
     memcpy(&txn->dbs[slot], body.iov_base, sizeof(tree_t));
@@ -490,8 +458,7 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi,
     txn->dbs[slot].flags = user_flags & DB_PERSISTENT_FLAGS;
     cx.outer.next = txn->cursors[MAIN_DBI];
     txn->cursors[MAIN_DBI] = &cx.outer;
-    rc =
-        cursor_put_checklen(&cx.outer, &name, &body, N_TREE | MDBX_NOOVERWRITE);
+    rc = cursor_put_checklen(&cx.outer, &name, &body, N_TREE | MDBX_NOOVERWRITE);
     txn->cursors[MAIN_DBI] = cx.outer.next;
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
@@ -503,9 +470,8 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi,
 
   /* Got info, register DBI in this txn */
   const uint32_t seq = dbi_seq_next(env, slot);
-  eASSERT(env,
-          env->dbs_flags[slot] == DB_POISON && !txn->cursors[slot] &&
-              (txn->dbi_state[slot] & (DBI_LINDO | DBI_VALID)) == DBI_LINDO);
+  eASSERT(env, env->dbs_flags[slot] == DB_POISON && !txn->cursors[slot] &&
+                   (txn->dbi_state[slot] & (DBI_LINDO | DBI_VALID)) == DBI_LINDO);
   txn->dbi_state[slot] = dbi_state;
   memcpy(&txn->dbs[slot], body.iov_base, sizeof(txn->dbs[slot]));
   env->dbs_flags[slot] = txn->dbs[slot].flags;
@@ -515,8 +481,7 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi,
 
   env->kvs[slot].name = name;
   env->dbs_flags[slot] = txn->dbs[slot].flags | DB_VALID;
-  txn->dbi_seqs[slot] =
-      atomic_store32(&env->dbi_seqs[slot], seq, mo_AcquireRelease);
+  txn->dbi_seqs[slot] = atomic_store32(&env->dbi_seqs[slot], seq, mo_AcquireRelease);
 
 done:
   *dbi = (MDBX_dbi)slot;
@@ -525,8 +490,7 @@ done:
   return MDBX_SUCCESS;
 
 bailout:
-  eASSERT(env, !txn->cursors[slot] && !env->kvs[slot].name.iov_len &&
-                   !env->kvs[slot].name.iov_base);
+  eASSERT(env, !txn->cursors[slot] && !env->kvs[slot].name.iov_len && !env->kvs[slot].name.iov_base);
   txn->dbi_state[slot] &= DBI_LINDO | DBI_OLDEN;
   env->dbs_flags[slot] = 0;
   osal_free(clone);
@@ -535,14 +499,13 @@ bailout:
   return rc;
 }
 
-int dbi_open(MDBX_txn *txn, const MDBX_val *const name, unsigned user_flags,
-             MDBX_dbi *dbi, MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp) {
+int dbi_open(MDBX_txn *txn, const MDBX_val *const name, unsigned user_flags, MDBX_dbi *dbi, MDBX_cmp_func *keycmp,
+             MDBX_cmp_func *datacmp) {
   if (unlikely(!dbi))
     return MDBX_EINVAL;
   *dbi = 0;
 
-  if (user_flags != MDBX_ACCEDE &&
-      unlikely(!check_table_flags(user_flags & ~MDBX_CREATE)))
+  if (user_flags != MDBX_ACCEDE && unlikely(!check_table_flags(user_flags & ~MDBX_CREATE)))
     return MDBX_EINVAL;
 
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
@@ -567,8 +530,7 @@ int dbi_open(MDBX_txn *txn, const MDBX_val *const name, unsigned user_flags,
   }
   if (unlikely(name == MDBX_CHK_META || name->iov_base == MDBX_CHK_META))
     return MDBX_EINVAL;
-  if (unlikely(name->iov_len >
-               txn->env->leaf_nodemax - NODESIZE - sizeof(tree_t)))
+  if (unlikely(name->iov_len > txn->env->leaf_nodemax - NODESIZE - sizeof(tree_t)))
     return MDBX_EINVAL;
 
 #if MDBX_ENABLE_DBI_LOCKFREE
@@ -582,31 +544,24 @@ int dbi_open(MDBX_txn *txn, const MDBX_val *const name, unsigned user_flags,
       continue;
     }
 
-    const uint32_t snap_seq =
-        atomic_load32(&env->dbi_seqs[i], mo_AcquireRelease);
+    const uint32_t snap_seq = atomic_load32(&env->dbi_seqs[i], mo_AcquireRelease);
     const uint16_t snap_flags = env->dbs_flags[i];
     const MDBX_val snap_name = env->kvs[i].name;
     if (user_flags != MDBX_ACCEDE &&
-        (((user_flags ^ snap_flags) & DB_PERSISTENT_FLAGS) ||
-         (keycmp && keycmp != env->kvs[i].clc.k.cmp) ||
+        (((user_flags ^ snap_flags) & DB_PERSISTENT_FLAGS) || (keycmp && keycmp != env->kvs[i].clc.k.cmp) ||
          (datacmp && datacmp != env->kvs[i].clc.v.cmp)))
       continue;
-    const uint32_t main_seq =
-        atomic_load32(&env->dbi_seqs[MAIN_DBI], mo_AcquireRelease);
+    const uint32_t main_seq = atomic_load32(&env->dbi_seqs[MAIN_DBI], mo_AcquireRelease);
     MDBX_cmp_func *const snap_cmp = env->kvs[MAIN_DBI].clc.k.cmp;
-    if (unlikely(!(snap_flags & DB_VALID) || !snap_name.iov_base ||
-                 !snap_name.iov_len || !snap_cmp))
+    if (unlikely(!(snap_flags & DB_VALID) || !snap_name.iov_base || !snap_name.iov_len || !snap_cmp))
       continue;
 
     const bool name_match = snap_cmp(&snap_name, name) == 0;
     osal_flush_incoherent_cpu_writeback();
-    if (unlikely(
-            snap_seq != atomic_load32(&env->dbi_seqs[i], mo_AcquireRelease) ||
-            main_seq !=
-                atomic_load32(&env->dbi_seqs[MAIN_DBI], mo_AcquireRelease) ||
-            snap_flags != env->dbs_flags[i] ||
-            snap_name.iov_base != env->kvs[i].name.iov_base ||
-            snap_name.iov_len != env->kvs[i].name.iov_len))
+    if (unlikely(snap_seq != atomic_load32(&env->dbi_seqs[i], mo_AcquireRelease) ||
+                 main_seq != atomic_load32(&env->dbi_seqs[MAIN_DBI], mo_AcquireRelease) ||
+                 snap_flags != env->dbs_flags[i] || snap_name.iov_base != env->kvs[i].name.iov_base ||
+                 snap_name.iov_len != env->kvs[i].name.iov_len))
       goto retry;
     if (name_match) {
       rc = dbi_check(txn, i);
@@ -634,18 +589,15 @@ int dbi_open(MDBX_txn *txn, const MDBX_val *const name, unsigned user_flags,
   rc = osal_fastmutex_acquire(&txn->env->dbi_lock);
   if (likely(rc == MDBX_SUCCESS)) {
     rc = dbi_open_locked(txn, user_flags, dbi, keycmp, datacmp, *name);
-    ENSURE(txn->env,
-           osal_fastmutex_release(&txn->env->dbi_lock) == MDBX_SUCCESS);
+    ENSURE(txn->env, osal_fastmutex_release(&txn->env->dbi_lock) == MDBX_SUCCESS);
   }
   return rc;
 }
 
-static int dbi_open_cstr(MDBX_txn *txn, const char *name_cstr,
-                         MDBX_db_flags_t flags, MDBX_dbi *dbi,
+static int dbi_open_cstr(MDBX_txn *txn, const char *name_cstr, MDBX_db_flags_t flags, MDBX_dbi *dbi,
                          MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp) {
   MDBX_val thunk, *name;
-  if (name_cstr == MDBX_CHK_MAIN || name_cstr == MDBX_CHK_GC ||
-      name_cstr == MDBX_CHK_META)
+  if (name_cstr == MDBX_CHK_MAIN || name_cstr == MDBX_CHK_GC || name_cstr == MDBX_CHK_META)
     name = (void *)name_cstr;
   else {
     thunk.iov_len = strlen(name_cstr);
@@ -660,8 +612,7 @@ struct dbi_rename_result {
   int err;
 };
 
-__cold static struct dbi_rename_result
-dbi_rename_locked(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val new_name) {
+__cold static struct dbi_rename_result dbi_rename_locked(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val new_name) {
   struct dbi_rename_result pair;
   pair.defer = nullptr;
   pair.err = dbi_check(txn, dbi);
@@ -670,8 +621,7 @@ dbi_rename_locked(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val new_name) {
 
   MDBX_env *const env = txn->env;
   MDBX_val old_name = env->kvs[dbi].name;
-  if (env->kvs[MAIN_DBI].clc.k.cmp(&new_name, &old_name) == 0 &&
-      MDBX_DEBUG == 0)
+  if (env->kvs[MAIN_DBI].clc.k.cmp(&new_name, &old_name) == 0 && MDBX_DEBUG == 0)
     return pair;
 
   cursor_couple_t cx;
@@ -695,8 +645,7 @@ dbi_rename_locked(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val new_name) {
   txn->cursors[MAIN_DBI] = &cx.outer;
 
   MDBX_val data = {&txn->dbs[dbi], sizeof(tree_t)};
-  pair.err = cursor_put_checklen(&cx.outer, &new_name, &data,
-                                 N_TREE | MDBX_NOOVERWRITE);
+  pair.err = cursor_put_checklen(&cx.outer, &new_name, &data, N_TREE | MDBX_NOOVERWRITE);
   if (likely(pair.err == MDBX_SUCCESS)) {
     pair.err = cursor_seek(&cx.outer, &old_name, nullptr, MDBX_SET).err;
     if (likely(pair.err == MDBX_SUCCESS))
@@ -732,8 +681,7 @@ static defer_free_item_t *dbi_close_locked(MDBX_env *env, MDBX_dbi dbi) {
       do {
         --i;
         eASSERT(env, i >= CORE_DBS);
-        eASSERT(env, !env->dbs_flags[i] && !env->kvs[i].name.iov_len &&
-                         !env->kvs[i].name.iov_base);
+        eASSERT(env, !env->dbs_flags[i] && !env->kvs[i].name.iov_len && !env->kvs[i].name.iov_base);
       } while (i > CORE_DBS && !env->kvs[i - 1].name.iov_base);
       env->n_dbi = (unsigned)i;
     }
@@ -745,25 +693,21 @@ static defer_free_item_t *dbi_close_locked(MDBX_env *env, MDBX_dbi dbi) {
 /*----------------------------------------------------------------------------*/
 /* API */
 
-int mdbx_dbi_open(MDBX_txn *txn, const char *name, MDBX_db_flags_t flags,
-                  MDBX_dbi *dbi) {
+int mdbx_dbi_open(MDBX_txn *txn, const char *name, MDBX_db_flags_t flags, MDBX_dbi *dbi) {
   return LOG_IFERR(dbi_open_cstr(txn, name, flags, dbi, nullptr, nullptr));
 }
 
-int mdbx_dbi_open2(MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags,
-                   MDBX_dbi *dbi) {
+int mdbx_dbi_open2(MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags, MDBX_dbi *dbi) {
   return LOG_IFERR(dbi_open(txn, name, flags, dbi, nullptr, nullptr));
 }
 
-int mdbx_dbi_open_ex(MDBX_txn *txn, const char *name, MDBX_db_flags_t flags,
-                     MDBX_dbi *dbi, MDBX_cmp_func *keycmp,
+int mdbx_dbi_open_ex(MDBX_txn *txn, const char *name, MDBX_db_flags_t flags, MDBX_dbi *dbi, MDBX_cmp_func *keycmp,
                      MDBX_cmp_func *datacmp) {
   return LOG_IFERR(dbi_open_cstr(txn, name, flags, dbi, keycmp, datacmp));
 }
 
-int mdbx_dbi_open_ex2(MDBX_txn *txn, const MDBX_val *name,
-                      MDBX_db_flags_t flags, MDBX_dbi *dbi,
-                      MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp) {
+int mdbx_dbi_open_ex2(MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags, MDBX_dbi *dbi, MDBX_cmp_func *keycmp,
+                      MDBX_cmp_func *datacmp) {
   return LOG_IFERR(dbi_open(txn, name, flags, dbi, keycmp, datacmp));
 }
 
@@ -780,8 +724,7 @@ __cold int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
   if (txn->dbs[dbi].height) {
     cx.outer.next = txn->cursors[dbi];
     txn->cursors[dbi] = &cx.outer;
-    rc = tree_drop(&cx.outer,
-                   dbi == MAIN_DBI || (cx.outer.tree->flags & MDBX_DUPSORT));
+    rc = tree_drop(&cx.outer, dbi == MAIN_DBI || (cx.outer.tree->flags & MDBX_DUPSORT));
     txn->cursors[dbi] = cx.outer.next;
     if (unlikely(rc != MDBX_SUCCESS))
       return LOG_IFERR(rc);
@@ -832,8 +775,7 @@ __cold int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
 
 __cold int mdbx_dbi_rename(MDBX_txn *txn, MDBX_dbi dbi, const char *name_cstr) {
   MDBX_val thunk, *name;
-  if (name_cstr == MDBX_CHK_MAIN || name_cstr == MDBX_CHK_GC ||
-      name_cstr == MDBX_CHK_META)
+  if (name_cstr == MDBX_CHK_MAIN || name_cstr == MDBX_CHK_GC || name_cstr == MDBX_CHK_META)
     name = (void *)name_cstr;
   else {
     thunk.iov_len = strlen(name_cstr);
@@ -860,8 +802,7 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
   rc = osal_fastmutex_acquire(&env->dbi_lock);
   if (likely(rc == MDBX_SUCCESS && dbi < env->n_dbi)) {
   retry:
-    if (env->basal_txn && (env->dbs_flags[dbi] & DB_VALID) &&
-        (env->basal_txn->flags & MDBX_TXN_FINISHED) == 0) {
+    if (env->basal_txn && (env->dbs_flags[dbi] & DB_VALID) && (env->basal_txn->flags & MDBX_TXN_FINISHED) == 0) {
       /* LY: Опасный код, так как env->txn может быть изменено в другом потоке.
        * К сожалению тут нет надежного решения и может быть падение при неверном
        * использовании API (вызове mdbx_dbi_close конкурентно с завершением
@@ -884,8 +825,7 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
        * транзакции, и поэтому этот путь потенциально более опасен. */
       const MDBX_txn *const hazard = env->txn;
       osal_compiler_barrier();
-      if ((dbi_state(env->basal_txn, dbi) &
-           (DBI_LINDO | DBI_DIRTY | DBI_CREAT)) > DBI_LINDO) {
+      if ((dbi_state(env->basal_txn, dbi) & (DBI_LINDO | DBI_DIRTY | DBI_CREAT)) > DBI_LINDO) {
       bailout_dirty_dbi:
         osal_fastmutex_release(&env->dbi_lock);
         return LOG_IFERR(MDBX_DANGLING_DBI);
@@ -893,11 +833,9 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
       osal_memory_barrier();
       if (unlikely(hazard != env->txn))
         goto retry;
-      if (hazard != env->basal_txn && hazard &&
-          (hazard->flags & MDBX_TXN_FINISHED) == 0 &&
+      if (hazard != env->basal_txn && hazard && (hazard->flags & MDBX_TXN_FINISHED) == 0 &&
           hazard->signature == txn_signature &&
-          (dbi_state(hazard, dbi) & (DBI_LINDO | DBI_DIRTY | DBI_CREAT)) >
-              DBI_LINDO)
+          (dbi_state(hazard, dbi) & (DBI_LINDO | DBI_DIRTY | DBI_CREAT)) > DBI_LINDO)
         goto bailout_dirty_dbi;
       osal_compiler_barrier();
       if (unlikely(hazard != env->txn))
@@ -908,8 +846,7 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
   return LOG_IFERR(rc);
 }
 
-int mdbx_dbi_flags_ex(const MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
-                      unsigned *state) {
+int mdbx_dbi_flags_ex(const MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags, unsigned *state) {
   if (unlikely(!flags || !state))
     return LOG_IFERR(MDBX_EINVAL);
 
@@ -928,21 +865,17 @@ int mdbx_dbi_flags_ex(const MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
   }
 
   *flags = txn->dbs[dbi].flags & DB_PERSISTENT_FLAGS;
-  *state =
-      txn->dbi_state[dbi] & (DBI_FRESH | DBI_CREAT | DBI_DIRTY | DBI_STALE);
+  *state = txn->dbi_state[dbi] & (DBI_FRESH | DBI_CREAT | DBI_DIRTY | DBI_STALE);
   return MDBX_SUCCESS;
 }
 
-__cold int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi,
-                            const MDBX_val *new_name) {
+__cold int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *new_name) {
   int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
-  if (unlikely(new_name == MDBX_CHK_MAIN ||
-               new_name->iov_base == MDBX_CHK_MAIN || new_name == MDBX_CHK_GC ||
-               new_name->iov_base == MDBX_CHK_GC || new_name == MDBX_CHK_META ||
-               new_name->iov_base == MDBX_CHK_META))
+  if (unlikely(new_name == MDBX_CHK_MAIN || new_name->iov_base == MDBX_CHK_MAIN || new_name == MDBX_CHK_GC ||
+               new_name->iov_base == MDBX_CHK_GC || new_name == MDBX_CHK_META || new_name->iov_base == MDBX_CHK_META))
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(dbi < CORE_DBS))
@@ -968,13 +901,11 @@ static void stat_get(const tree_t *db, MDBX_stat *st, size_t bytes) {
   st->ms_leaf_pages = db->leaf_pages;
   st->ms_overflow_pages = db->large_pages;
   st->ms_entries = db->items;
-  if (likely(bytes >=
-             offsetof(MDBX_stat, ms_mod_txnid) + sizeof(st->ms_mod_txnid)))
+  if (likely(bytes >= offsetof(MDBX_stat, ms_mod_txnid) + sizeof(st->ms_mod_txnid)))
     st->ms_mod_txnid = db->mod_txnid;
 }
 
-__cold int mdbx_dbi_stat(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest,
-                         size_t bytes) {
+__cold int mdbx_dbi_stat(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest, size_t bytes) {
   if (unlikely(!dest))
     return LOG_IFERR(MDBX_EINVAL);
 
@@ -1012,8 +943,7 @@ bailout:
   return LOG_IFERR(rc);
 }
 
-__cold const tree_t *dbi_dig(const MDBX_txn *txn, const size_t dbi,
-                             tree_t *fallback) {
+__cold const tree_t *dbi_dig(const MDBX_txn *txn, const size_t dbi, tree_t *fallback) {
   const MDBX_txn *dig = txn;
   do {
     tASSERT(txn, txn->n_dbi == dig->n_dbi);
@@ -1036,8 +966,7 @@ __cold const tree_t *dbi_dig(const MDBX_txn *txn, const size_t dbi,
   return fallback;
 }
 
-__cold int mdbx_enumerate_tables(const MDBX_txn *txn,
-                                 MDBX_table_enum_func *func, void *ctx) {
+__cold int mdbx_enumerate_tables(const MDBX_txn *txn, MDBX_table_enum_func *func, void *ctx) {
   if (unlikely(!func))
     return LOG_IFERR(MDBX_EINVAL);
 
@@ -1054,13 +983,12 @@ __cold int mdbx_enumerate_tables(const MDBX_txn *txn,
   txn->cursors[MAIN_DBI] = &cx.outer;
   for (rc = outer_first(&cx.outer, nullptr, nullptr); rc == MDBX_SUCCESS;
        rc = outer_next(&cx.outer, nullptr, nullptr, MDBX_NEXT_NODUP)) {
-    node_t *node =
-        page_node(cx.outer.pg[cx.outer.top], cx.outer.ki[cx.outer.top]);
+    node_t *node = page_node(cx.outer.pg[cx.outer.top], cx.outer.ki[cx.outer.top]);
     if (node_flags(node) != N_TREE)
       continue;
     if (unlikely(node_ds(node) != sizeof(tree_t))) {
-      ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,
-            "invalid dupsort sub-tree node size", (unsigned)node_ds(node));
+      ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid dupsort sub-tree node size",
+            (unsigned)node_ds(node));
       rc = MDBX_CORRUPTED;
       break;
     }

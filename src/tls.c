@@ -29,21 +29,17 @@ static int uniq_peek(const osal_mmap_t *pending, osal_mmap_t *scan) {
     bait = 0 /* hush MSVC warning */;
     rc = osal_msync(scan, 0, sizeof(lck_t), MDBX_SYNC_DATA);
     if (rc == MDBX_SUCCESS)
-      rc = osal_pread(pending->fd, &bait, sizeof(scan_lck->bait_uniqueness),
-                      offsetof(lck_t, bait_uniqueness));
+      rc = osal_pread(pending->fd, &bait, sizeof(scan_lck->bait_uniqueness), offsetof(lck_t, bait_uniqueness));
   }
-  if (likely(rc == MDBX_SUCCESS) &&
-      bait == atomic_load64(&scan_lck->bait_uniqueness, mo_AcquireRelease))
+  if (likely(rc == MDBX_SUCCESS) && bait == atomic_load64(&scan_lck->bait_uniqueness, mo_AcquireRelease))
     rc = MDBX_RESULT_TRUE;
 
-  TRACE("uniq-peek: %s, bait 0x%016" PRIx64 ",%s rc %d",
-        pending_lck ? "mem" : "file", bait,
+  TRACE("uniq-peek: %s, bait 0x%016" PRIx64 ",%s rc %d", pending_lck ? "mem" : "file", bait,
         (rc == MDBX_RESULT_TRUE) ? " found," : (rc ? " FAILED," : ""), rc);
   return rc;
 }
 
-static int uniq_poke(const osal_mmap_t *pending, osal_mmap_t *scan,
-                     uint64_t *abra) {
+static int uniq_poke(const osal_mmap_t *pending, osal_mmap_t *scan, uint64_t *abra) {
   if (*abra == 0) {
     const uintptr_t tid = osal_thread_self();
     uintptr_t uit = 0;
@@ -51,9 +47,7 @@ static int uniq_poke(const osal_mmap_t *pending, osal_mmap_t *scan,
     *abra = rrxmrrxmsx_0(osal_monotime() + UINT64_C(5873865991930747) * uit);
   }
   const uint64_t cadabra =
-      rrxmrrxmsx_0(*abra + UINT64_C(7680760450171793) * (unsigned)osal_getpid())
-          << 24 |
-      *abra >> 40;
+      rrxmrrxmsx_0(*abra + UINT64_C(7680760450171793) * (unsigned)osal_getpid()) << 24 | *abra >> 40;
   lck_t *const scan_lck = scan->lck;
   atomic_store64(&scan_lck->bait_uniqueness, cadabra, mo_AcquireRelease);
   *abra = *abra * UINT64_C(6364136223846793005) + 1;
@@ -67,14 +61,12 @@ __cold int rthc_uniq_check(const osal_mmap_t *pending, MDBX_env **found) {
     MDBX_env *const scan = rthc_table[i].env;
     if (!scan->lck_mmap.lck || &scan->lck_mmap == pending)
       continue;
-    int err =
-        atomic_load64(&scan->lck_mmap.lck->bait_uniqueness, mo_AcquireRelease)
-            ? uniq_peek(pending, &scan->lck_mmap)
-            : uniq_poke(pending, &scan->lck_mmap, &salt);
+    int err = atomic_load64(&scan->lck_mmap.lck->bait_uniqueness, mo_AcquireRelease)
+                  ? uniq_peek(pending, &scan->lck_mmap)
+                  : uniq_poke(pending, &scan->lck_mmap, &salt);
     if (err == MDBX_ENODATA) {
       uint64_t length = 0;
-      if (likely(osal_filesize(pending->fd, &length) == MDBX_SUCCESS &&
-                 length == 0)) {
+      if (likely(osal_filesize(pending->fd, &length) == MDBX_SUCCESS && length == 0)) {
         /* LY: skip checking since LCK-file is empty, i.e. just created. */
         DEBUG("%s", "unique (new/empty lck)");
         return MDBX_SUCCESS;
@@ -114,8 +106,7 @@ static osal_thread_key_t rthc_key;
 static mdbx_atomic_uint32_t rthc_pending;
 
 static inline uint64_t rthc_signature(const void *addr, uint8_t kind) {
-  uint64_t salt = osal_thread_self() * UINT64_C(0xA2F0EEC059629A17) ^
-                  UINT64_C(0x01E07C6FDB596497) * (uintptr_t)(addr);
+  uint64_t salt = osal_thread_self() * UINT64_C(0xA2F0EEC059629A17) ^ UINT64_C(0x01E07C6FDB596497) * (uintptr_t)(addr);
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
   return salt << 8 | kind;
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
@@ -128,45 +119,36 @@ static inline uint64_t rthc_signature(const void *addr, uint8_t kind) {
 #define MDBX_THREAD_RTHC_REGISTERED(addr) rthc_signature(addr, 0x0D)
 #define MDBX_THREAD_RTHC_COUNTED(addr) rthc_signature(addr, 0xC0)
 static __thread uint64_t rthc_thread_state
-#if __has_attribute(tls_model) &&                                              \
-    (defined(__PIC__) || defined(__pic__) || MDBX_BUILD_SHARED_LIBRARY)
+#if __has_attribute(tls_model) && (defined(__PIC__) || defined(__pic__) || MDBX_BUILD_SHARED_LIBRARY)
     __attribute__((tls_model("local-dynamic")))
 #endif
     ;
 
-#if defined(__APPLE__) && defined(__SANITIZE_ADDRESS__) &&                     \
-    !defined(MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS)
+#if defined(__APPLE__) && defined(__SANITIZE_ADDRESS__) && !defined(MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS)
 /* Avoid ASAN-trap due the target TLS-variable feed by Darwin's tlv_free() */
-#define MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS                                     \
-  __attribute__((__no_sanitize_address__, __noinline__))
+#define MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS __attribute__((__no_sanitize_address__, __noinline__))
 #else
 #define MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS inline
 #endif
 
-MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS static uint64_t rthc_read(const void *rthc) {
-  return *(volatile uint64_t *)rthc;
-}
+MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS static uint64_t rthc_read(const void *rthc) { return *(volatile uint64_t *)rthc; }
 
-MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS static uint64_t
-rthc_compare_and_clean(const void *rthc, const uint64_t signature) {
+MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS static uint64_t rthc_compare_and_clean(const void *rthc, const uint64_t signature) {
 #if MDBX_64BIT_CAS
   return atomic_cas64((mdbx_atomic_uint64_t *)rthc, signature, 0);
 #elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
   return atomic_cas32((mdbx_atomic_uint32_t *)rthc, (uint32_t)signature, 0);
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-  return atomic_cas32((mdbx_atomic_uint32_t *)rthc, (uint32_t)(signature >> 32),
-                      0);
+  return atomic_cas32((mdbx_atomic_uint32_t *)rthc, (uint32_t)(signature >> 32), 0);
 #else
 #error "FIXME: Unsupported byte order"
 #endif
 }
 
-static inline int rthc_atexit(void (*dtor)(void *), void *obj,
-                              void *dso_symbol) {
+static inline int rthc_atexit(void (*dtor)(void *), void *obj, void *dso_symbol) {
 #ifndef MDBX_HAVE_CXA_THREAD_ATEXIT_IMPL
-#if defined(LIBCXXABI_HAS_CXA_THREAD_ATEXIT_IMPL) ||                           \
-    defined(HAVE___CXA_THREAD_ATEXIT_IMPL) || __GLIBC_PREREQ(2, 18) ||         \
-    defined(BIONIC)
+#if defined(LIBCXXABI_HAS_CXA_THREAD_ATEXIT_IMPL) || defined(HAVE___CXA_THREAD_ATEXIT_IMPL) ||                         \
+    __GLIBC_PREREQ(2, 18) || defined(BIONIC)
 #define MDBX_HAVE_CXA_THREAD_ATEXIT_IMPL 1
 #else
 #define MDBX_HAVE_CXA_THREAD_ATEXIT_IMPL 0
@@ -174,11 +156,9 @@ static inline int rthc_atexit(void (*dtor)(void *), void *obj,
 #endif /* MDBX_HAVE_CXA_THREAD_ATEXIT_IMPL */
 
 #ifndef MDBX_HAVE_CXA_THREAD_ATEXIT
-#if defined(LIBCXXABI_HAS_CXA_THREAD_ATEXIT) ||                                \
-    defined(HAVE___CXA_THREAD_ATEXIT)
+#if defined(LIBCXXABI_HAS_CXA_THREAD_ATEXIT) || defined(HAVE___CXA_THREAD_ATEXIT)
 #define MDBX_HAVE_CXA_THREAD_ATEXIT 1
-#elif !MDBX_HAVE_CXA_THREAD_ATEXIT_IMPL &&                                     \
-    (defined(__linux__) || defined(__gnu_linux__))
+#elif !MDBX_HAVE_CXA_THREAD_ATEXIT_IMPL && (defined(__linux__) || defined(__gnu_linux__))
 #define MDBX_HAVE_CXA_THREAD_ATEXIT 1
 #else
 #define MDBX_HAVE_CXA_THREAD_ATEXIT 0
@@ -190,13 +170,11 @@ static inline int rthc_atexit(void (*dtor)(void *), void *obj,
 #define __cxa_thread_atexit __cxa_thread_atexit_impl
 #endif
 #if MDBX_HAVE_CXA_THREAD_ATEXIT || defined(__cxa_thread_atexit)
-  extern int __cxa_thread_atexit(void (*dtor)(void *), void *obj,
-                                 void *dso_symbol) MDBX_WEAK_IMPORT_ATTRIBUTE;
+  extern int __cxa_thread_atexit(void (*dtor)(void *), void *obj, void *dso_symbol) MDBX_WEAK_IMPORT_ATTRIBUTE;
   if (&__cxa_thread_atexit)
     rc = __cxa_thread_atexit(dtor, obj, dso_symbol);
 #elif defined(__APPLE__) || defined(_DARWIN_C_SOURCE)
-  extern void _tlv_atexit(void (*termfunc)(void *objAddr), void *objAddr)
-      MDBX_WEAK_IMPORT_ATTRIBUTE;
+  extern void _tlv_atexit(void (*termfunc)(void *objAddr), void *objAddr) MDBX_WEAK_IMPORT_ATTRIBUTE;
   if (&_tlv_atexit) {
     (void)dso_symbol;
     _tlv_atexit(dtor, obj);
@@ -250,8 +228,7 @@ static inline int thread_key_create(osal_thread_key_t *key) {
 #else
   rc = pthread_key_create(key, nullptr);
 #endif
-  TRACE("&key = %p, value %" PRIuPTR ", rc %d", __Wpedantic_format_voidptr(key),
-        (uintptr_t)*key, rc);
+  TRACE("&key = %p, value %" PRIuPTR ", rc %d", __Wpedantic_format_voidptr(key), (uintptr_t)*key, rc);
   return rc;
 }
 
@@ -259,21 +236,17 @@ void thread_rthc_set(osal_thread_key_t key, const void *value) {
 #if defined(_WIN32) || defined(_WIN64)
   ENSURE(nullptr, TlsSetValue(key, (void *)value));
 #else
-  const uint64_t sign_registered =
-      MDBX_THREAD_RTHC_REGISTERED(&rthc_thread_state);
+  const uint64_t sign_registered = MDBX_THREAD_RTHC_REGISTERED(&rthc_thread_state);
   const uint64_t sign_counted = MDBX_THREAD_RTHC_COUNTED(&rthc_thread_state);
-  if (value && unlikely(rthc_thread_state != sign_registered &&
-                        rthc_thread_state != sign_counted)) {
+  if (value && unlikely(rthc_thread_state != sign_registered && rthc_thread_state != sign_counted)) {
     rthc_thread_state = sign_registered;
     TRACE("thread registered 0x%" PRIxPTR, osal_thread_self());
-    if (rthc_atexit(rthc_thread_dtor, &rthc_thread_state,
-                    (void *)&mdbx_version /* dso_anchor */)) {
+    if (rthc_atexit(rthc_thread_dtor, &rthc_thread_state, (void *)&mdbx_version /* dso_anchor */)) {
       ENSURE(nullptr, pthread_setspecific(rthc_key, &rthc_thread_state) == 0);
       rthc_thread_state = sign_counted;
       const unsigned count_before = atomic_add32(&rthc_pending, 1);
       ENSURE(nullptr, count_before < INT_MAX);
-      NOTICE("fallback to pthreads' tsd, key %" PRIuPTR ", count %u",
-             (uintptr_t)rthc_key, count_before);
+      NOTICE("fallback to pthreads' tsd, key %" PRIuPTR ", count %u", (uintptr_t)rthc_key, count_before);
       (void)count_before;
     }
   }
@@ -286,11 +259,9 @@ __cold void rthc_thread_dtor(void *rthc) {
   rthc_lock();
   const uint32_t current_pid = osal_getpid();
 #if defined(_WIN32) || defined(_WIN64)
-  TRACE(">> pid %d, thread 0x%" PRIxPTR ", module %p", current_pid,
-        osal_thread_self(), rthc);
+  TRACE(">> pid %d, thread 0x%" PRIxPTR ", module %p", current_pid, osal_thread_self(), rthc);
 #else
-  TRACE(">> pid %d, thread 0x%" PRIxPTR ", rthc %p", current_pid,
-        osal_thread_self(), rthc);
+  TRACE(">> pid %d, thread 0x%" PRIxPTR ", rthc %p", current_pid, osal_thread_self(), rthc);
 #endif
 
   for (size_t i = 0; i < rthc_count; ++i) {
@@ -306,22 +277,18 @@ __cold void rthc_thread_dtor(void *rthc) {
       continue;
 #if !defined(_WIN32) && !defined(_WIN64)
     if (pthread_setspecific(env->me_txkey, nullptr) != 0) {
-      TRACE("== thread 0x%" PRIxPTR
-            ", rthc %p: ignore race with tsd-key deletion",
-            osal_thread_self(), __Wpedantic_format_voidptr(reader));
+      TRACE("== thread 0x%" PRIxPTR ", rthc %p: ignore race with tsd-key deletion", osal_thread_self(),
+            __Wpedantic_format_voidptr(reader));
       continue /* ignore race with tsd-key deletion by mdbx_env_close() */;
     }
 #endif
 
-    TRACE("== thread 0x%" PRIxPTR
-          ", rthc %p, [%zi], %p ... %p (%+i), rtch-pid %i, "
+    TRACE("== thread 0x%" PRIxPTR ", rthc %p, [%zi], %p ... %p (%+i), rtch-pid %i, "
           "current-pid %i",
-          osal_thread_self(), __Wpedantic_format_voidptr(reader), i,
-          __Wpedantic_format_voidptr(begin), __Wpedantic_format_voidptr(end),
-          (int)(reader - begin), reader->pid.weak, current_pid);
+          osal_thread_self(), __Wpedantic_format_voidptr(reader), i, __Wpedantic_format_voidptr(begin),
+          __Wpedantic_format_voidptr(end), (int)(reader - begin), reader->pid.weak, current_pid);
     if (atomic_load32(&reader->pid, mo_Relaxed) == current_pid) {
-      TRACE("==== thread 0x%" PRIxPTR ", rthc %p, cleanup", osal_thread_self(),
-            __Wpedantic_format_voidptr(reader));
+      TRACE("==== thread 0x%" PRIxPTR ", rthc %p, cleanup", osal_thread_self(), __Wpedantic_format_voidptr(reader));
       (void)atomic_cas32(&reader->pid, current_pid, 0);
       atomic_store32(&env->lck->rdt_refresh_flag, true, mo_Relaxed);
     }
@@ -334,26 +301,20 @@ __cold void rthc_thread_dtor(void *rthc) {
   const uint64_t sign_registered = MDBX_THREAD_RTHC_REGISTERED(rthc);
   const uint64_t sign_counted = MDBX_THREAD_RTHC_COUNTED(rthc);
   const uint64_t state = rthc_read(rthc);
-  if (state == sign_registered &&
-      rthc_compare_and_clean(rthc, sign_registered)) {
-    TRACE("== thread 0x%" PRIxPTR
-          ", rthc %p, pid %d, self-status %s (0x%08" PRIx64 ")",
-          osal_thread_self(), rthc, osal_getpid(), "registered", state);
-  } else if (state == sign_counted &&
-             rthc_compare_and_clean(rthc, sign_counted)) {
-    TRACE("== thread 0x%" PRIxPTR
-          ", rthc %p, pid %d, self-status %s (0x%08" PRIx64 ")",
-          osal_thread_self(), rthc, osal_getpid(), "counted", state);
+  if (state == sign_registered && rthc_compare_and_clean(rthc, sign_registered)) {
+    TRACE("== thread 0x%" PRIxPTR ", rthc %p, pid %d, self-status %s (0x%08" PRIx64 ")", osal_thread_self(), rthc,
+          osal_getpid(), "registered", state);
+  } else if (state == sign_counted && rthc_compare_and_clean(rthc, sign_counted)) {
+    TRACE("== thread 0x%" PRIxPTR ", rthc %p, pid %d, self-status %s (0x%08" PRIx64 ")", osal_thread_self(), rthc,
+          osal_getpid(), "counted", state);
     ENSURE(nullptr, atomic_sub32(&rthc_pending, 1) > 0);
   } else {
-    WARNING("thread 0x%" PRIxPTR
-            ", rthc %p, pid %d, self-status %s (0x%08" PRIx64 ")",
-            osal_thread_self(), rthc, osal_getpid(), "wrong", state);
+    WARNING("thread 0x%" PRIxPTR ", rthc %p, pid %d, self-status %s (0x%08" PRIx64 ")", osal_thread_self(), rthc,
+            osal_getpid(), "wrong", state);
   }
 
   if (atomic_load32(&rthc_pending, mo_AcquireRelease) == 0) {
-    TRACE("== thread 0x%" PRIxPTR ", rthc %p, pid %d, wake", osal_thread_self(),
-          rthc, osal_getpid());
+    TRACE("== thread 0x%" PRIxPTR ", rthc %p, pid %d, wake", osal_thread_self(), rthc, osal_getpid());
     ENSURE(nullptr, pthread_cond_broadcast(&rthc_cond) == 0);
   }
 
@@ -367,8 +328,7 @@ __cold void rthc_thread_dtor(void *rthc) {
 }
 
 __cold int rthc_register(MDBX_env *const env) {
-  TRACE(">> env %p, rthc_count %u, rthc_limit %u",
-        __Wpedantic_format_voidptr(env), rthc_count, rthc_limit);
+  TRACE(">> env %p, rthc_count %u, rthc_limit %u", __Wpedantic_format_voidptr(env), rthc_count, rthc_limit);
 
   int rc = MDBX_SUCCESS;
   for (size_t i = 0; i < rthc_count; ++i)
@@ -380,8 +340,7 @@ __cold int rthc_register(MDBX_env *const env) {
   env->me_txkey = 0;
   if (unlikely(rthc_count == rthc_limit)) {
     rthc_entry_t *new_table =
-        osal_realloc((rthc_table == rthc_table_static) ? nullptr : rthc_table,
-                     sizeof(rthc_entry_t) * rthc_limit * 2);
+        osal_realloc((rthc_table == rthc_table_static) ? nullptr : rthc_table, sizeof(rthc_entry_t) * rthc_limit * 2);
     if (unlikely(new_table == nullptr)) {
       rc = MDBX_ENOMEM;
       goto bailout;
@@ -400,14 +359,12 @@ __cold int rthc_register(MDBX_env *const env) {
   }
 
   rthc_table[rthc_count].env = env;
-  TRACE("== [%i] = env %p, key %" PRIuPTR, rthc_count,
-        __Wpedantic_format_voidptr(env), (uintptr_t)env->me_txkey);
+  TRACE("== [%i] = env %p, key %" PRIuPTR, rthc_count, __Wpedantic_format_voidptr(env), (uintptr_t)env->me_txkey);
   ++rthc_count;
 
 bailout:
-  TRACE("<< env %p, key %" PRIuPTR ", rthc_count %u, rthc_limit %u, rc %d",
-        __Wpedantic_format_voidptr(env), (uintptr_t)env->me_txkey, rthc_count,
-        rthc_limit, rc);
+  TRACE("<< env %p, key %" PRIuPTR ", rthc_count %u, rthc_limit %u, rc %d", __Wpedantic_format_voidptr(env),
+        (uintptr_t)env->me_txkey, rthc_count, rthc_limit, rc);
   return rc;
 }
 
@@ -418,10 +375,8 @@ __cold static int rthc_drown(MDBX_env *const env) {
   if (likely(env->lck_mmap.lck && current_pid == env->pid)) {
     reader_slot_t *const begin = &env->lck_mmap.lck->rdt[0];
     reader_slot_t *const end = &env->lck_mmap.lck->rdt[env->max_readers];
-    TRACE("== %s env %p pid %d, readers %p ...%p, current-pid %d",
-          (current_pid == env->pid) ? "cleanup" : "skip",
-          __Wpedantic_format_voidptr(env), env->pid,
-          __Wpedantic_format_voidptr(begin), __Wpedantic_format_voidptr(end),
+    TRACE("== %s env %p pid %d, readers %p ...%p, current-pid %d", (current_pid == env->pid) ? "cleanup" : "skip",
+          __Wpedantic_format_voidptr(env), env->pid, __Wpedantic_format_voidptr(begin), __Wpedantic_format_voidptr(end),
           current_pid);
     bool cleaned = false;
     for (reader_slot_t *r = begin; r < end; ++r) {
@@ -434,8 +389,7 @@ __cold static int rthc_drown(MDBX_env *const env) {
     if (cleaned)
       atomic_store32(&env->lck_mmap.lck->rdt_refresh_flag, true, mo_Relaxed);
     rc = rthc_uniq_check(&env->lck_mmap, &inprocess_neighbor);
-    if (!inprocess_neighbor && env->registered_reader_pid &&
-        env->lck_mmap.fd != INVALID_HANDLE_VALUE) {
+    if (!inprocess_neighbor && env->registered_reader_pid && env->lck_mmap.fd != INVALID_HANDLE_VALUE) {
       int err = lck_rpid_clear(env);
       rc = rc ? rc : err;
     }
@@ -446,9 +400,8 @@ __cold static int rthc_drown(MDBX_env *const env) {
 }
 
 __cold int rthc_remove(MDBX_env *const env) {
-  TRACE(">>> env %p, key %zu, rthc_count %u, rthc_limit %u",
-        __Wpedantic_format_voidptr(env), (uintptr_t)env->me_txkey, rthc_count,
-        rthc_limit);
+  TRACE(">>> env %p, key %zu, rthc_count %u, rthc_limit %u", __Wpedantic_format_voidptr(env), (uintptr_t)env->me_txkey,
+        rthc_count, rthc_limit);
 
   int rc = MDBX_SUCCESS;
   if (likely(env->pid))
@@ -469,9 +422,8 @@ __cold int rthc_remove(MDBX_env *const env) {
     }
   }
 
-  TRACE("<<< %p, key %zu, rthc_count %u, rthc_limit %u",
-        __Wpedantic_format_voidptr(env), (uintptr_t)env->me_txkey, rthc_count,
-        rthc_limit);
+  TRACE("<<< %p, key %zu, rthc_count %u, rthc_limit %u", __Wpedantic_format_voidptr(env), (uintptr_t)env->me_txkey,
+        rthc_count, rthc_limit);
   return rc;
 }
 
@@ -508,8 +460,8 @@ __cold void rthc_ctor(void) {
 #else
   ENSURE(nullptr, pthread_atfork(nullptr, nullptr, rthc_afterfork) == 0);
   ENSURE(nullptr, pthread_key_create(&rthc_key, rthc_thread_dtor) == 0);
-  TRACE("pid %d, &mdbx_rthc_key = %p, value 0x%x", osal_getpid(),
-        __Wpedantic_format_voidptr(&rthc_key), (unsigned)rthc_key);
+  TRACE("pid %d, &mdbx_rthc_key = %p, value 0x%x", osal_getpid(), __Wpedantic_format_voidptr(&rthc_key),
+        (unsigned)rthc_key);
 #endif
 }
 
@@ -517,33 +469,23 @@ __cold void rthc_dtor(const uint32_t current_pid) {
   rthc_lock();
 #if !defined(_WIN32) && !defined(_WIN64)
   uint64_t *rthc = pthread_getspecific(rthc_key);
-  TRACE("== thread 0x%" PRIxPTR ", rthc %p, pid %d, self-status 0x%08" PRIx64
-        ", left %d",
-        osal_thread_self(), __Wpedantic_format_voidptr(rthc), current_pid,
-        rthc ? rthc_read(rthc) : ~UINT64_C(0),
+  TRACE("== thread 0x%" PRIxPTR ", rthc %p, pid %d, self-status 0x%08" PRIx64 ", left %d", osal_thread_self(),
+        __Wpedantic_format_voidptr(rthc), current_pid, rthc ? rthc_read(rthc) : ~UINT64_C(0),
         atomic_load32(&rthc_pending, mo_Relaxed));
   if (rthc) {
     const uint64_t sign_registered = MDBX_THREAD_RTHC_REGISTERED(rthc);
     const uint64_t sign_counted = MDBX_THREAD_RTHC_COUNTED(rthc);
     const uint64_t state = rthc_read(rthc);
-    if (state == sign_registered &&
-        rthc_compare_and_clean(rthc, sign_registered)) {
-      TRACE("== thread 0x%" PRIxPTR
-            ", rthc %p, pid %d, self-status %s (0x%08" PRIx64 ")",
-            osal_thread_self(), __Wpedantic_format_voidptr(rthc), current_pid,
-            "registered", state);
-    } else if (state == sign_counted &&
-               rthc_compare_and_clean(rthc, sign_counted)) {
-      TRACE("== thread 0x%" PRIxPTR
-            ", rthc %p, pid %d, self-status %s (0x%08" PRIx64 ")",
-            osal_thread_self(), __Wpedantic_format_voidptr(rthc), current_pid,
-            "counted", state);
+    if (state == sign_registered && rthc_compare_and_clean(rthc, sign_registered)) {
+      TRACE("== thread 0x%" PRIxPTR ", rthc %p, pid %d, self-status %s (0x%08" PRIx64 ")", osal_thread_self(),
+            __Wpedantic_format_voidptr(rthc), current_pid, "registered", state);
+    } else if (state == sign_counted && rthc_compare_and_clean(rthc, sign_counted)) {
+      TRACE("== thread 0x%" PRIxPTR ", rthc %p, pid %d, self-status %s (0x%08" PRIx64 ")", osal_thread_self(),
+            __Wpedantic_format_voidptr(rthc), current_pid, "counted", state);
       ENSURE(nullptr, atomic_sub32(&rthc_pending, 1) > 0);
     } else {
-      WARNING("thread 0x%" PRIxPTR
-              ", rthc %p, pid %d, self-status %s (0x%08" PRIx64 ")",
-              osal_thread_self(), __Wpedantic_format_voidptr(rthc), current_pid,
-              "wrong", state);
+      WARNING("thread 0x%" PRIxPTR ", rthc %p, pid %d, self-status %s (0x%08" PRIx64 ")", osal_thread_self(),
+              __Wpedantic_format_voidptr(rthc), current_pid, "wrong", state);
     }
   }
 
@@ -558,8 +500,7 @@ __cold void rthc_dtor(const uint32_t current_pid) {
   abstime.tv_sec += 600;
 #endif
 
-  for (unsigned left;
-       (left = atomic_load32(&rthc_pending, mo_AcquireRelease)) > 0;) {
+  for (unsigned left; (left = atomic_load32(&rthc_pending, mo_AcquireRelease)) > 0;) {
     NOTICE("tls-cleanup: pid %d, pending %u, wait for...", current_pid, left);
     const int rc = pthread_cond_timedwait(&rthc_cond, &rthc_mutex, &abstime);
     if (rc && rc != EINTR)
@@ -581,9 +522,8 @@ __cold void rthc_dtor(const uint32_t current_pid) {
     for (reader_slot_t *reader = begin; reader < end; ++reader) {
       TRACE("== [%zi] = key %" PRIuPTR ", %p ... %p, rthc %p (%+i), "
             "rthc-pid %i, current-pid %i",
-            i, (uintptr_t)env->me_txkey, __Wpedantic_format_voidptr(begin),
-            __Wpedantic_format_voidptr(end), __Wpedantic_format_voidptr(reader),
-            (int)(reader - begin), reader->pid.weak, current_pid);
+            i, (uintptr_t)env->me_txkey, __Wpedantic_format_voidptr(begin), __Wpedantic_format_voidptr(end),
+            __Wpedantic_format_voidptr(reader), (int)(reader - begin), reader->pid.weak, current_pid);
       if (atomic_load32(&reader->pid, mo_Relaxed) == current_pid) {
         (void)atomic_cas32(&reader->pid, current_pid, 0);
         TRACE("== cleanup %p", __Wpedantic_format_voidptr(reader));

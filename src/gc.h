@@ -34,8 +34,7 @@ static inline int gc_update_init(MDBX_txn *txn, gcu_t *ctx) {
 #define ALLOC_DEFAULT 0
 #define ALLOC_RESERVE 1
 #define ALLOC_UNIMPORTANT 2
-MDBX_INTERNAL pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num,
-                                uint8_t flags);
+MDBX_INTERNAL pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags);
 
 MDBX_INTERNAL pgr_t gc_alloc_single(const MDBX_cursor *const mc);
 MDBX_INTERNAL int gc_update(MDBX_txn *txn, gcu_t *ctx);

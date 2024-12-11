@@ -66,8 +66,7 @@
 
 /** Does a system have battery-backed Real-Time Clock or just a fake. */
 #ifndef MDBX_TRUST_RTC
-#if defined(__linux__) || defined(__gnu_linux__) || defined(__NetBSD__) ||     \
-    defined(__OpenBSD__)
+#if defined(__linux__) || defined(__gnu_linux__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #define MDBX_TRUST_RTC 0 /* a lot of embedded systems have a fake RTC */
 #else
 #define MDBX_TRUST_RTC 1
@@ -131,15 +130,13 @@
 
 #ifndef MDBX_PNL_PREALLOC_FOR_RADIXSORT
 #define MDBX_PNL_PREALLOC_FOR_RADIXSORT 1
-#elif !(MDBX_PNL_PREALLOC_FOR_RADIXSORT == 0 ||                                \
-        MDBX_PNL_PREALLOC_FOR_RADIXSORT == 1)
+#elif !(MDBX_PNL_PREALLOC_FOR_RADIXSORT == 0 || MDBX_PNL_PREALLOC_FOR_RADIXSORT == 1)
 #error MDBX_PNL_PREALLOC_FOR_RADIXSORT must be defined as 0 or 1
 #endif /* MDBX_PNL_PREALLOC_FOR_RADIXSORT */
 
 #ifndef MDBX_DPL_PREALLOC_FOR_RADIXSORT
 #define MDBX_DPL_PREALLOC_FOR_RADIXSORT 1
-#elif !(MDBX_DPL_PREALLOC_FOR_RADIXSORT == 0 ||                                \
-        MDBX_DPL_PREALLOC_FOR_RADIXSORT == 1)
+#elif !(MDBX_DPL_PREALLOC_FOR_RADIXSORT == 0 || MDBX_DPL_PREALLOC_FOR_RADIXSORT == 1)
 #error MDBX_DPL_PREALLOC_FOR_RADIXSORT must be defined as 0 or 1
 #endif /* MDBX_DPL_PREALLOC_FOR_RADIXSORT */
 
@@ -204,8 +201,7 @@
 /** Size of buffer used during copying a environment/database file. */
 #ifndef MDBX_ENVCOPY_WRITEBUF
 #define MDBX_ENVCOPY_WRITEBUF 1048576u
-#elif MDBX_ENVCOPY_WRITEBUF < 65536u || MDBX_ENVCOPY_WRITEBUF > 1073741824u || \
-    MDBX_ENVCOPY_WRITEBUF % 65536u
+#elif MDBX_ENVCOPY_WRITEBUF < 65536u || MDBX_ENVCOPY_WRITEBUF > 1073741824u || MDBX_ENVCOPY_WRITEBUF % 65536u
 #error MDBX_ENVCOPY_WRITEBUF must be defined in range 65536..1073741824 and be multiple of 65536
 #endif /* MDBX_ENVCOPY_WRITEBUF */
 
@@ -224,8 +220,7 @@
 #else
 #define MDBX_ASSUME_MALLOC_OVERHEAD (sizeof(void *) * 2u)
 #endif
-#elif MDBX_ASSUME_MALLOC_OVERHEAD < 0 || MDBX_ASSUME_MALLOC_OVERHEAD > 64 ||   \
-    MDBX_ASSUME_MALLOC_OVERHEAD % 4
+#elif MDBX_ASSUME_MALLOC_OVERHEAD < 0 || MDBX_ASSUME_MALLOC_OVERHEAD > 64 || MDBX_ASSUME_MALLOC_OVERHEAD % 4
 #error MDBX_ASSUME_MALLOC_OVERHEAD must be defined in range 0..64 and be multiple of 4
 #endif /* MDBX_ASSUME_MALLOC_OVERHEAD */
 
@@ -252,15 +247,13 @@
 #define MDBX_HAVE_BUILTIN_CPU_SUPPORTS 0
 #elif defined(__e2k__)
 #define MDBX_HAVE_BUILTIN_CPU_SUPPORTS 0
-#elif __has_builtin(__builtin_cpu_supports) ||                                 \
-    defined(__BUILTIN_CPU_SUPPORTS__) ||                                       \
+#elif __has_builtin(__builtin_cpu_supports) || defined(__BUILTIN_CPU_SUPPORTS__) ||                                    \
     (defined(__ia32__) && __GNUC_PREREQ(4, 8) && __GLIBC_PREREQ(2, 23))
 #define MDBX_HAVE_BUILTIN_CPU_SUPPORTS 1
 #else
 #define MDBX_HAVE_BUILTIN_CPU_SUPPORTS 0
 #endif
-#elif !(MDBX_HAVE_BUILTIN_CPU_SUPPORTS == 0 ||                                 \
-        MDBX_HAVE_BUILTIN_CPU_SUPPORTS == 1)
+#elif !(MDBX_HAVE_BUILTIN_CPU_SUPPORTS == 0 || MDBX_HAVE_BUILTIN_CPU_SUPPORTS == 1)
 #error MDBX_HAVE_BUILTIN_CPU_SUPPORTS must be defined as 0 or 1
 #endif /* MDBX_HAVE_BUILTIN_CPU_SUPPORTS */
 
@@ -286,19 +279,15 @@
 #define MDBX_LOCKING MDBX_LOCKING_WIN32FILES
 #else
 #ifndef MDBX_LOCKING
-#if defined(_POSIX_THREAD_PROCESS_SHARED) &&                                   \
-    _POSIX_THREAD_PROCESS_SHARED >= 200112L && !defined(__FreeBSD__)
+#if defined(_POSIX_THREAD_PROCESS_SHARED) && _POSIX_THREAD_PROCESS_SHARED >= 200112L && !defined(__FreeBSD__)
 
 /* Some platforms define the EOWNERDEAD error code even though they
  * don't support Robust Mutexes. If doubt compile with -MDBX_LOCKING=2001. */
-#if defined(EOWNERDEAD) && _POSIX_THREAD_PROCESS_SHARED >= 200809L &&          \
-    ((defined(_POSIX_THREAD_ROBUST_PRIO_INHERIT) &&                            \
-      _POSIX_THREAD_ROBUST_PRIO_INHERIT > 0) ||                                \
-     (defined(_POSIX_THREAD_ROBUST_PRIO_PROTECT) &&                            \
-      _POSIX_THREAD_ROBUST_PRIO_PROTECT > 0) ||                                \
-     defined(PTHREAD_MUTEX_ROBUST) || defined(PTHREAD_MUTEX_ROBUST_NP)) &&     \
-    (!defined(__GLIBC__) ||                                                    \
-     __GLIBC_PREREQ(2, 10) /* troubles with Robust mutexes before 2.10 */)
+#if defined(EOWNERDEAD) && _POSIX_THREAD_PROCESS_SHARED >= 200809L &&                                                  \
+    ((defined(_POSIX_THREAD_ROBUST_PRIO_INHERIT) && _POSIX_THREAD_ROBUST_PRIO_INHERIT > 0) ||                          \
+     (defined(_POSIX_THREAD_ROBUST_PRIO_PROTECT) && _POSIX_THREAD_ROBUST_PRIO_PROTECT > 0) ||                          \
+     defined(PTHREAD_MUTEX_ROBUST) || defined(PTHREAD_MUTEX_ROBUST_NP)) &&                                             \
+    (!defined(__GLIBC__) || __GLIBC_PREREQ(2, 10) /* troubles with Robust mutexes before 2.10 */)
 #define MDBX_LOCKING MDBX_LOCKING_POSIX2008
 #else
 #define MDBX_LOCKING MDBX_LOCKING_POSIX2001
@@ -316,12 +305,9 @@
 
 /** Advanced: Using POSIX OFD-locks (autodetection by default). */
 #ifndef MDBX_USE_OFDLOCKS
-#if ((defined(F_OFD_SETLK) && defined(F_OFD_SETLKW) &&                         \
-      defined(F_OFD_GETLK)) ||                                                 \
-     (defined(F_OFD_SETLK64) && defined(F_OFD_SETLKW64) &&                     \
-      defined(F_OFD_GETLK64))) &&                                              \
-    !defined(MDBX_SAFE4QEMU) &&                                                \
-    !defined(__sun) /* OFD-lock are broken on Solaris */
+#if ((defined(F_OFD_SETLK) && defined(F_OFD_SETLKW) && defined(F_OFD_GETLK)) ||                                        \
+     (defined(F_OFD_SETLK64) && defined(F_OFD_SETLKW64) && defined(F_OFD_GETLK64))) &&                                 \
+    !defined(MDBX_SAFE4QEMU) && !defined(__sun) /* OFD-lock are broken on Solaris */
 #define MDBX_USE_OFDLOCKS 1
 #else
 #define MDBX_USE_OFDLOCKS 0
@@ -335,8 +321,7 @@
 
 /** Advanced: Using sendfile() syscall (autodetection by default). */
 #ifndef MDBX_USE_SENDFILE
-#if ((defined(__linux__) || defined(__gnu_linux__)) &&                         \
-     !defined(__ANDROID_API__)) ||                                             \
+#if ((defined(__linux__) || defined(__gnu_linux__)) && !defined(__ANDROID_API__)) ||                                   \
     (defined(__ANDROID_API__) && __ANDROID_API__ >= 21)
 #define MDBX_USE_SENDFILE 1
 #else
@@ -360,14 +345,12 @@
 //------------------------------------------------------------------------------
 
 #ifndef MDBX_CPU_WRITEBACK_INCOHERENT
-#if defined(__ia32__) || defined(__e2k__) || defined(__hppa) ||                \
-    defined(__hppa__) || defined(DOXYGEN)
+#if defined(__ia32__) || defined(__e2k__) || defined(__hppa) || defined(__hppa__) || defined(DOXYGEN)
 #define MDBX_CPU_WRITEBACK_INCOHERENT 0
 #else
 #define MDBX_CPU_WRITEBACK_INCOHERENT 1
 #endif
-#elif !(MDBX_CPU_WRITEBACK_INCOHERENT == 0 ||                                  \
-        MDBX_CPU_WRITEBACK_INCOHERENT == 1)
+#elif !(MDBX_CPU_WRITEBACK_INCOHERENT == 0 || MDBX_CPU_WRITEBACK_INCOHERENT == 1)
 #error MDBX_CPU_WRITEBACK_INCOHERENT must be defined as 0 or 1
 #endif /* MDBX_CPU_WRITEBACK_INCOHERENT */
 
@@ -377,31 +360,27 @@
 #else
 #define MDBX_MMAP_INCOHERENT_FILE_WRITE 0
 #endif
-#elif !(MDBX_MMAP_INCOHERENT_FILE_WRITE == 0 ||                                \
-        MDBX_MMAP_INCOHERENT_FILE_WRITE == 1)
+#elif !(MDBX_MMAP_INCOHERENT_FILE_WRITE == 0 || MDBX_MMAP_INCOHERENT_FILE_WRITE == 1)
 #error MDBX_MMAP_INCOHERENT_FILE_WRITE must be defined as 0 or 1
 #endif /* MDBX_MMAP_INCOHERENT_FILE_WRITE */
 
 #ifndef MDBX_MMAP_INCOHERENT_CPU_CACHE
-#if defined(__mips) || defined(__mips__) || defined(__mips64) ||               \
-    defined(__mips64__) || defined(_M_MRX000) || defined(_MIPS_) ||            \
-    defined(__MWERKS__) || defined(__sgi)
+#if defined(__mips) || defined(__mips__) || defined(__mips64) || defined(__mips64__) || defined(_M_MRX000) ||          \
+    defined(_MIPS_) || defined(__MWERKS__) || defined(__sgi)
 /* MIPS has cache coherency issues. */
 #define MDBX_MMAP_INCOHERENT_CPU_CACHE 1
 #else
 /* LY: assume no relevant mmap/dcache issues. */
 #define MDBX_MMAP_INCOHERENT_CPU_CACHE 0
 #endif
-#elif !(MDBX_MMAP_INCOHERENT_CPU_CACHE == 0 ||                                 \
-        MDBX_MMAP_INCOHERENT_CPU_CACHE == 1)
+#elif !(MDBX_MMAP_INCOHERENT_CPU_CACHE == 0 || MDBX_MMAP_INCOHERENT_CPU_CACHE == 1)
 #error MDBX_MMAP_INCOHERENT_CPU_CACHE must be defined as 0 or 1
 #endif /* MDBX_MMAP_INCOHERENT_CPU_CACHE */
 
 /** Assume system needs explicit syscall to sync/flush/write modified mapped
  * memory. */
 #ifndef MDBX_MMAP_NEEDS_JOLT
-#if MDBX_MMAP_INCOHERENT_FILE_WRITE || MDBX_MMAP_INCOHERENT_CPU_CACHE ||       \
-    !(defined(__linux__) || defined(__gnu_linux__))
+#if MDBX_MMAP_INCOHERENT_FILE_WRITE || MDBX_MMAP_INCOHERENT_CPU_CACHE || !(defined(__linux__) || defined(__gnu_linux__))
 #define MDBX_MMAP_NEEDS_JOLT 1
 #else
 #define MDBX_MMAP_NEEDS_JOLT 0
@@ -456,8 +435,7 @@
 #endif /* MDBX_64BIT_CAS */
 
 #ifndef MDBX_UNALIGNED_OK
-#if defined(__ALIGNED__) || defined(__SANITIZE_UNDEFINED__) ||                 \
-    defined(ENABLE_UBSAN)
+#if defined(__ALIGNED__) || defined(__SANITIZE_UNDEFINED__) || defined(ENABLE_UBSAN)
 #define MDBX_UNALIGNED_OK 0 /* no unaligned access allowed */
 #elif defined(__ARM_FEATURE_UNALIGNED)
 #define MDBX_UNALIGNED_OK 4 /* ok unaligned for 32-bit words */

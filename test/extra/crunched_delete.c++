@@ -26,8 +26,7 @@ std::string format_va(const char *fmt, va_list ap) {
   result.reserve(size_t(needed + 1));
   result.resize(size_t(needed), '\0');
   assert(int(result.capacity()) > needed);
-  int actual = vsnprintf(const_cast<char *>(result.data()), result.capacity(),
-                         fmt, ones);
+  int actual = vsnprintf(const_cast<char *>(result.data()), result.capacity(), fmt, ones);
   assert(actual == needed);
   (void)actual;
   va_end(ones);
@@ -47,10 +46,8 @@ struct acase {
   unsigned vlen_min, vlen_max;
   unsigned dupmax_log2;
 
-  acase(unsigned klen_min, unsigned klen_max, unsigned vlen_min,
-        unsigned vlen_max, unsigned dupmax_log2)
-      : klen_min(klen_min), klen_max(klen_max), vlen_min(vlen_min),
-        vlen_max(vlen_max), dupmax_log2(dupmax_log2) {}
+  acase(unsigned klen_min, unsigned klen_max, unsigned vlen_min, unsigned vlen_max, unsigned dupmax_log2)
+      : klen_min(klen_min), klen_max(klen_max), vlen_min(vlen_min), vlen_max(vlen_max), dupmax_log2(dupmax_log2) {}
 };
 
 // std::random_device rd;
@@ -80,33 +77,26 @@ static mdbx::slice mk_val(mdbx::default_buffer &buf, const acase &thecase) {
 
 static std::string name(unsigned n) { return format("Commitment_%05u", n); }
 
-static mdbx::map_handle create_and_fill(mdbx::txn txn, const acase &thecase,
-                                        const unsigned n) {
+static mdbx::map_handle create_and_fill(mdbx::txn txn, const acase &thecase, const unsigned n) {
   auto map = txn.create_map(name(n),
-                            (thecase.klen_min == thecase.klen_max &&
-                             (thecase.klen_min == 4 || thecase.klen_max == 8))
+                            (thecase.klen_min == thecase.klen_max && (thecase.klen_min == 4 || thecase.klen_max == 8))
                                 ? mdbx::key_mode::ordinal
                                 : mdbx::key_mode::usual,
-                            (thecase.vlen_min == thecase.vlen_max)
-                                ? mdbx::value_mode::multi_samelength
-                                : mdbx::value_mode::multi);
+                            (thecase.vlen_min == thecase.vlen_max) ? mdbx::value_mode::multi_samelength
+                                                                   : mdbx::value_mode::multi);
 
   if (txn.get_map_stat(map).ms_entries < NN) {
     mdbx::default_buffer k, v;
     for (auto i = 0u; i < NN; i++) {
       mk_key(k, thecase);
-      for (auto ii = thecase.dupmax_log2
-                         ? 1u + (rnd() & ((2u << thecase.dupmax_log2) - 1u))
-                         : 1u;
-           ii > 0; --ii)
+      for (auto ii = thecase.dupmax_log2 ? 1u + (rnd() & ((2u << thecase.dupmax_log2) - 1u)) : 1u; ii > 0; --ii)
         txn.upsert(map, k, mk_val(v, thecase));
     }
   }
   return map;
 }
 
-static void chunched_delete(mdbx::txn txn, const acase &thecase,
-                            const unsigned n) {
+static void chunched_delete(mdbx::txn txn, const acase &thecase, const unsigned n) {
   // printf(">> %s, case #%i\n", __FUNCTION__, n);
   mdbx::default_buffer k, v;
   auto map = txn.open_map_accede(name(n));
@@ -121,27 +111,20 @@ static void chunched_delete(mdbx::txn txn, const acase &thecase,
       bool last_r;
 
       if (true == ((last_op = "MDBX_GET_BOTH"),
-                   (last_r = cursor.find_multivalue(
-                        mk_key(k, thecase), mk_val(v, thecase), false))) ||
+                   (last_r = cursor.find_multivalue(mk_key(k, thecase), mk_val(v, thecase), false))) ||
           rnd() % 3 == 0 ||
-          true == ((last_op = "MDBX_SET_RANGE"),
-                   (last_r = cursor.lower_bound(mk_key(k, thecase), false)))) {
+          true == ((last_op = "MDBX_SET_RANGE"), (last_r = cursor.lower_bound(mk_key(k, thecase), false)))) {
         int i = int(rnd() % 7) - 3;
         // if (i)
         //   printf(" %s -> %s\n", last_op, last_r ? "true" : "false");
         // printf("== shift multi %i\n", i);
         try {
-          while (i < 0 &&
-                 true == ((last_op = "MDBX_PREV_DUP"),
-                          (last_r = cursor.to_current_prev_multi(false))))
+          while (i < 0 && true == ((last_op = "MDBX_PREV_DUP"), (last_r = cursor.to_current_prev_multi(false))))
             ++i;
-          while (i > 0 &&
-                 true == ((last_op = "MDBX_NEXT_DUP"),
-                          (last_r = cursor.to_current_next_multi(false))))
+          while (i > 0 && true == ((last_op = "MDBX_NEXT_DUP"), (last_r = cursor.to_current_next_multi(false))))
             --i;
         } catch (const mdbx::no_data &) {
-          printf("cursor_del() -> exception, last %s %s\n", last_op,
-                 last_r ? "true" : "false");
+          printf("cursor_del() -> exception, last %s %s\n", last_op, last_r ? "true" : "false");
           continue;
         }
       }
@@ -159,8 +142,7 @@ static void chunched_delete(mdbx::txn txn, const acase &thecase,
           // printf(" cursor_del() -> %s\n", last_r ? "true" : "false");
         } while (cursor.to_next(false) && --i > 0);
       } catch (const mdbx::no_data &) {
-        printf("cursor_del() -> exception, last %s %s\n", last_op,
-               last_r ? "true" : "false");
+        printf("cursor_del() -> exception, last %s %s\n", last_op, last_r ? "true" : "false");
       }
 
       // (void) last_op;
@@ -178,8 +160,8 @@ static void chunched_delete(mdbx::txn txn, const acase &thecase,
 
 static char log_buffer[1024];
 
-static void logger_nofmt(MDBX_log_level_t loglevel, const char *function,
-                         int line, const char *msg, unsigned length) noexcept {
+static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int line, const char *msg,
+                         unsigned length) noexcept {
   (void)length;
   (void)loglevel;
   fprintf(stdout, "%s:%u %s", function, line, msg);
@@ -187,12 +169,10 @@ static void logger_nofmt(MDBX_log_level_t loglevel, const char *function,
 
 bool outofrange_prev(mdbx::env env) {
   mdbx::cursor_managed cursor;
-  const std::array<mdbx::pair, 4> items = {
-      {{"k1", "v1"}, {"k1", "v2"}, {"k2", "v1"}, {"k2", "v2"}}};
+  const std::array<mdbx::pair, 4> items = {{{"k1", "v1"}, {"k1", "v2"}, {"k2", "v1"}, {"k2", "v2"}}};
 
   auto txn = env.start_write();
-  auto multi =
-      txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
+  auto multi = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
   auto simple = txn.create_map("simple");
   txn.clear_map(multi);
   txn.clear_map(simple);
@@ -242,12 +222,10 @@ bool outofrange_prev(mdbx::env env) {
 }
 
 bool next_prev_current(mdbx::env env) {
-  const std::array<mdbx::pair, 4> items = {
-      {{"k1", "v1"}, {"k1", "v2"}, {"k2", "v1"}, {"k2", "v2"}}};
+  const std::array<mdbx::pair, 4> items = {{{"k1", "v1"}, {"k1", "v2"}, {"k2", "v1"}, {"k2", "v2"}}};
 
   auto txn = env.start_write();
-  auto map =
-      txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
+  auto map = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
   txn.clear_map(map);
   for (const auto &i : items)
     txn.upsert(map, i);
@@ -309,8 +287,7 @@ bool next_prev_current(mdbx::env env) {
 }
 
 bool simple(mdbx::env env) {
-  const std::array<mdbx::pair, 3> items = {
-      {{"k0", "v0"}, {"k1", "v1"}, {"k2", "v2"}}};
+  const std::array<mdbx::pair, 3> items = {{{"k0", "v0"}, {"k1", "v1"}, {"k2", "v2"}}};
 
   auto txn = env.start_write();
   auto map = txn.create_map("simple");
@@ -376,14 +353,12 @@ int main(int argc, const char *argv[]) {
   (void)argc;
   (void)argv;
 
-  mdbx_setup_debug_nofmt(MDBX_LOG_NOTICE, MDBX_DBG_ASSERT, logger_nofmt,
-                         log_buffer, sizeof(log_buffer));
+  mdbx_setup_debug_nofmt(MDBX_LOG_NOTICE, MDBX_DBG_ASSERT, logger_nofmt, log_buffer, sizeof(log_buffer));
 
   mdbx::path db_filename = "test-crunched-del";
   mdbx::env::remove(db_filename);
 
-  mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(),
-                        mdbx::env::operate_parameters(42));
+  mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(), mdbx::env::operate_parameters(42));
   if (!simple(env) || !next_prev_current(env) || !outofrange_prev(env))
     return EXIT_FAILURE;
 
@@ -392,8 +367,7 @@ int main(int argc, const char *argv[]) {
   // Значения разной длины от 100 до 1000 байт.
   testset.emplace_back(/* keylen_min */ 1, /* keylen_max */ 64,
                        /* datalen_min */ 100, /* datalen_max */
-                       mdbx_env_get_valsize4page_max(
-                           env, MDBX_db_flags_t(mdbx::value_mode::multi)),
+                       mdbx_env_get_valsize4page_max(env, MDBX_db_flags_t(mdbx::value_mode::multi)),
                        /* dups_log2 */ 6);
   // В одной таблице DupSort: path -> version_u64+data
   // path - это префикс в дереве. Самые частые длины: 1-5 байт и 32-36 байт.

@@ -4,13 +4,11 @@
 #pragma once
 #include "base.h++"
 
-#if !defined(__BYTE_ORDER__) || !defined(__ORDER_LITTLE_ENDIAN__) ||           \
-    !defined(__ORDER_BIG_ENDIAN__)
+#if !defined(__BYTE_ORDER__) || !defined(__ORDER_LITTLE_ENDIAN__) || !defined(__ORDER_BIG_ENDIAN__)
 #error __BYTE_ORDER__ should be defined.
 #endif
 
-#if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__ &&                               \
-    __BYTE_ORDER__ != __ORDER_BIG_ENDIAN__
+#if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__ && __BYTE_ORDER__ != __ORDER_BIG_ENDIAN__
 #error Unsupported byte order.
 #endif
 
@@ -21,16 +19,14 @@
 #ifndef bswap32
 #define bswap32(v) __builtin_bswap32(v)
 #endif
-#if (__GNUC_PREREQ(4, 8) || __has_builtin(__builtin_bswap16)) &&               \
-    !defined(bswap16)
+#if (__GNUC_PREREQ(4, 8) || __has_builtin(__builtin_bswap16)) && !defined(bswap16)
 #define bswap16(v) __builtin_bswap16(v)
 #endif
 
 #elif defined(_MSC_VER)
 
 #if _MSC_FULL_VER < 190024215
-#pragma message(                                                               \
-    "It is recommended to use Visual Studio 2015 (MSC 19.0) or newer.")
+#pragma message("It is recommended to use Visual Studio 2015 (MSC 19.0) or newer.")
 #endif
 
 #define bswap64(v) _byteswap_uint64(v)
@@ -60,12 +56,9 @@
 #define bswap64(v) __bswap_64(v)
 #else
 static inline uint64_t bswap64(uint64_t v) {
-  return v << 56 | v >> 56 | ((v << 40) & UINT64_C(0x00ff000000000000)) |
-         ((v << 24) & UINT64_C(0x0000ff0000000000)) |
-         ((v << 8) & UINT64_C(0x000000ff00000000)) |
-         ((v >> 8) & UINT64_C(0x00000000ff0000000)) |
-         ((v >> 24) & UINT64_C(0x0000000000ff0000)) |
-         ((v >> 40) & UINT64_C(0x000000000000ff00));
+  return v << 56 | v >> 56 | ((v << 40) & UINT64_C(0x00ff000000000000)) | ((v << 24) & UINT64_C(0x0000ff0000000000)) |
+         ((v << 8) & UINT64_C(0x000000ff00000000)) | ((v >> 8) & UINT64_C(0x00000000ff0000000)) |
+         ((v >> 24) & UINT64_C(0x0000000000ff0000)) | ((v >> 40) & UINT64_C(0x000000000000ff00));
 }
 #endif
 #endif /* bswap64 */
@@ -75,8 +68,7 @@ static inline uint64_t bswap64(uint64_t v) {
 #define bswap32(v) __bswap_32(v)
 #else
 static inline uint32_t bswap32(uint32_t v) {
-  return v << 24 | v >> 24 | ((v << 8) & UINT32_C(0x00ff0000)) |
-         ((v >> 8) & UINT32_C(0x0000ff00));
+  return v << 24 | v >> 24 | ((v << 8) & UINT32_C(0x00ff0000)) | ((v >> 8) & UINT32_C(0x0000ff00));
 }
 #endif
 #endif /* bswap32 */
@@ -140,8 +132,7 @@ template <typename T> static inline T load(const void *ptr) {
   if (MDBX_UNALIGNED_OK >= sizeof(T))
     return *(const T *)ptr;
   else {
-#if defined(__unaligned) || defined(_M_ARM) || defined(_M_ARM64) ||            \
-    defined(_M_X64) || defined(_M_IA64)
+#if defined(__unaligned) || defined(_M_ARM) || defined(_M_ARM64) || defined(_M_X64) || defined(_M_IA64)
     return *(const T __unaligned *)ptr;
 #else
     T local;
@@ -155,8 +146,7 @@ template <typename T> static inline void store(void *ptr, const T &value) {
   if (MDBX_UNALIGNED_OK >= sizeof(T))
     *(T *)ptr = value;
   else {
-#if defined(__unaligned) || defined(_M_ARM) || defined(_M_ARM64) ||            \
-    defined(_M_X64) || defined(_M_IA64)
+#if defined(__unaligned) || defined(_M_ARM) || defined(_M_ARM64) || defined(_M_X64) || defined(_M_IA64)
     *((T __unaligned *)ptr) = value;
 #else
     memcpy(ptr, &value, sizeof(T));
@@ -169,9 +159,7 @@ template <typename T> static inline void store(void *ptr, const T &value) {
 //-----------------------------------------------------------------------------
 
 #ifndef rot64
-static inline uint64_t rot64(uint64_t v, unsigned s) {
-  return (v >> s) | (v << (64 - s));
-}
+static inline uint64_t rot64(uint64_t v, unsigned s) { return (v >> s) | (v << (64 - s)); }
 #endif /* rot64 */
 
 static inline bool is_power2(size_t x) { return (x & (x - 1)) == 0; }
@@ -203,11 +191,9 @@ static inline void memory_barrier(void) {
 #endif
 #elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
   __machine_rw_barrier();
-#elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) &&       \
-    (defined(HP_IA64) || defined(__ia64))
+#elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) && (defined(HP_IA64) || defined(__ia64))
   _Asm_mf();
-#elif defined(_AIX) || defined(__ppc__) || defined(__powerpc__) ||             \
-    defined(__ppc64__) || defined(__powerpc64__)
+#elif defined(_AIX) || defined(__ppc__) || defined(__powerpc__) || defined(__ppc64__) || defined(__powerpc64__)
   __lwsync();
 #else
 #error "Could not guess the kind of compiler, please report to us."
@@ -217,8 +203,7 @@ static inline void memory_barrier(void) {
 static inline void cpu_relax() {
 #if defined(__ia32__)
   _mm_pause();
-#elif defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS) ||               \
-    defined(YieldProcessor)
+#elif defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS) || defined(YieldProcessor)
   YieldProcessor();
 #else
 /* nope */
@@ -243,9 +228,7 @@ struct simple_checksum {
     push((uint32_t)(data >> 32));
   }
 
-  void push(const bool data) {
-    push(data ? UINT32_C(0x780E) : UINT32_C(0xFA18E));
-  }
+  void push(const bool data) { push(data ? UINT32_C(0x780E) : UINT32_C(0xFA18E)); }
 
   void push(const void *ptr, size_t bytes) {
     const uint8_t *data = (const uint8_t *)ptr;
@@ -269,12 +252,9 @@ struct simple_checksum {
 };
 
 std::string data2hex(const void *ptr, size_t bytes, simple_checksum &checksum);
-bool hex2data(const char *hex_begin, const char *hex_end, void *ptr,
-              size_t bytes, simple_checksum &checksum);
+bool hex2data(const char *hex_begin, const char *hex_end, void *ptr, size_t bytes, simple_checksum &checksum);
 bool is_samedata(const MDBX_val *a, const MDBX_val *b);
-inline bool is_samedata(const MDBX_val &a, const MDBX_val &b) {
-  return is_samedata(&a, &b);
-}
+inline bool is_samedata(const MDBX_val &a, const MDBX_val &b) { return is_samedata(&a, &b); }
 std::string format(const char *fmt, ...);
 
 static inline uint64_t bleach64(uint64_t x) {
@@ -300,22 +280,15 @@ static inline uint32_t bleach32(uint32_t x) {
   return x;
 }
 
-static inline uint64_t prng64_map1_careless(uint64_t state) {
-  return state * UINT64_C(6364136223846793005) + 1;
-}
+static inline uint64_t prng64_map1_careless(uint64_t state) { return state * UINT64_C(6364136223846793005) + 1; }
 
 static inline uint64_t prng64_map2_careless(uint64_t state) {
-  return (state + UINT64_C(1442695040888963407)) *
-         UINT64_C(6364136223846793005);
+  return (state + UINT64_C(1442695040888963407)) * UINT64_C(6364136223846793005);
 }
 
-static inline uint64_t prng64_map1_white(uint64_t state) {
-  return bleach64(prng64_map1_careless(state));
-}
+static inline uint64_t prng64_map1_white(uint64_t state) { return bleach64(prng64_map1_careless(state)); }
 
-static inline uint64_t prng64_map2_white(uint64_t state) {
-  return bleach64(prng64_map2_careless(state));
-}
+static inline uint64_t prng64_map2_white(uint64_t state) { return bleach64(prng64_map2_careless(state)); }
 
 static inline uint64_t prng64_careless(uint64_t &state) {
   state = prng64_map1_careless(state);

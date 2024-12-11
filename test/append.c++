@@ -5,16 +5,14 @@
 
 class testcase_append : public testcase {
 public:
-  testcase_append(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid) {}
+  testcase_append(const actor_config &config, const mdbx_pid_t pid) : testcase(config, pid) {}
   bool run() override;
 
   static bool review_params(actor_params &params, unsigned space_id) {
     if (!testcase::review_params(params, space_id))
       return false;
     const bool ordered = !flipcoin_x3();
-    log_notice("the '%s' key-generation mode is selected",
-               ordered ? "ordered/linear" : "unordered/non-linear");
+    log_notice("the '%s' key-generation mode is selected", ordered ? "ordered/linear" : "unordered/non-linear");
     if (ordered && !params.make_keygen_linear())
       return false;
     return true;
@@ -37,13 +35,10 @@ bool testcase_append::run() {
   keyvalue_maker.setup(config.params, 0 /* thread_number */);
   /* LY: тест наполнения таблиц в append-режиме,
    * при котором записи добавляются строго в конец (в порядке сортировки) */
-  const MDBX_put_flags_t flags =
-      reverse
-          ? ((config.params.table_flags & MDBX_DUPSORT) ? MDBX_UPSERT
-                                                        : MDBX_NOOVERWRITE)
-          : ((config.params.table_flags & MDBX_DUPSORT)
-                 ? (flipcoin() ? MDBX_APPEND | MDBX_APPENDDUP : MDBX_APPENDDUP)
-                 : MDBX_APPEND);
+  const MDBX_put_flags_t flags = reverse ? ((config.params.table_flags & MDBX_DUPSORT) ? MDBX_UPSERT : MDBX_NOOVERWRITE)
+                                         : ((config.params.table_flags & MDBX_DUPSORT)
+                                                ? (flipcoin() ? MDBX_APPEND | MDBX_APPENDDUP : MDBX_APPENDDUP)
+                                                : MDBX_APPEND);
 
   key = keygen::alloc(config.params.keylen_max);
   data = keygen::alloc(config.params.datalen_max);
@@ -59,11 +54,9 @@ bool testcase_append::run() {
   simple_checksum committed_inserted_checksum = inserted_checksum;
   while (should_continue()) {
     const keygen::serial_t serial = serial_count;
-    const bool turn_key = (config.params.table_flags & MDBX_DUPSORT) == 0 ||
-                          flipcoin_n(config.params.keygen.split);
-    if (turn_key
-            ? !keyvalue_maker.increment_key_part(serial_count, reverse ? -1 : 1)
-            : !keyvalue_maker.increment(serial_count, reverse ? -1 : 1)) {
+    const bool turn_key = (config.params.table_flags & MDBX_DUPSORT) == 0 || flipcoin_n(config.params.keygen.split);
+    if (turn_key ? !keyvalue_maker.increment_key_part(serial_count, reverse ? -1 : 1)
+                 : !keyvalue_maker.increment(serial_count, reverse ? -1 : 1)) {
       // дошли до границы пространства ключей
       break;
     }
@@ -106,8 +99,7 @@ bool testcase_append::run() {
           break;
         case MDBX_APPENDDUP:
           assert((config.params.table_flags & MDBX_DUPSORT) != 0);
-          expect_key_mismatch =
-              mdbx_cmp(txn_guard.get(), dbi, &key->value, &ge_key) == 0;
+          expect_key_mismatch = mdbx_cmp(txn_guard.get(), dbi, &key->value, &ge_key) == 0;
           break;
         }
       } else if (err == MDBX_NOTFOUND /* all pair are less than */) {
@@ -152,10 +144,9 @@ bool testcase_append::run() {
         const auto insertion_result = speculum.insert(item);
         if (!insertion_result.second) {
           char dump_key[32], dump_value[32];
-          log_error(
-              "speculum.append: unexpected %s {%s, %s}", "MDBX_SUCCESS",
-              mdbx_dump_val(&key->value, dump_key, sizeof(dump_key)),
-              mdbx_dump_val(&data->value, dump_value, sizeof(dump_value)));
+          log_error("speculum.append: unexpected %s {%s, %s}", "MDBX_SUCCESS",
+                    mdbx_dump_val(&key->value, dump_key, sizeof(dump_key)),
+                    mdbx_dump_val(&data->value, dump_value, sizeof(dump_value)));
           return false;
         }
       }
@@ -199,8 +190,7 @@ bool testcase_append::run() {
   cursor_renew();
 
   MDBX_val check_key, check_data;
-  err = mdbx_cursor_get(cursor_guard.get(), &check_key, &check_data,
-                        reverse ? MDBX_LAST : MDBX_FIRST);
+  err = mdbx_cursor_get(cursor_guard.get(), &check_key, &check_data, reverse ? MDBX_LAST : MDBX_FIRST);
   if (likely(inserted_number)) {
     if (unlikely(err != MDBX_SUCCESS))
       failure_perror("mdbx_cursor_get(MDBX_FIRST)", err);
@@ -213,19 +203,16 @@ bool testcase_append::run() {
     read_checksum.push((uint32_t)read_count, check_key);
     read_checksum.push(10639, check_data);
 
-    err = mdbx_cursor_get(cursor_guard.get(), &check_key, &check_data,
-                          reverse ? MDBX_PREV : MDBX_NEXT);
+    err = mdbx_cursor_get(cursor_guard.get(), &check_key, &check_data, reverse ? MDBX_PREV : MDBX_NEXT);
   }
 
   if (unlikely(err != MDBX_NOTFOUND))
     failure_perror("mdbx_cursor_get(MDBX_NEXT) != EOF", err);
 
   if (unlikely(read_count != inserted_number))
-    failure("read_count(%" PRIu64 ") != inserted_number(%" PRIu64 ")",
-            read_count, inserted_number);
+    failure("read_count(%" PRIu64 ") != inserted_number(%" PRIu64 ")", read_count, inserted_number);
 
-  if (unlikely(read_checksum.value != inserted_checksum.value) &&
-      !keyvalue_maker.is_unordered())
+  if (unlikely(read_checksum.value != inserted_checksum.value) && !keyvalue_maker.is_unordered())
     failure("read_checksum(0x%016" PRIu64 ") "
             "!= inserted_checksum(0x%016" PRIu64 ")",
             read_checksum.value, inserted_checksum.value);

@@ -59,32 +59,27 @@ typedef struct _FILE_REMOTE_PROTOCOL_INFO {
 
 #endif /* _WIN32_WINNT < 0x0600 (prior to Windows Vista) */
 
-typedef BOOL(WINAPI *MDBX_GetFileInformationByHandleEx)(
-    _In_ HANDLE hFile, _In_ FILE_INFO_BY_HANDLE_CLASS FileInformationClass,
-    _Out_ LPVOID lpFileInformation, _In_ DWORD dwBufferSize);
+typedef BOOL(WINAPI *MDBX_GetFileInformationByHandleEx)(_In_ HANDLE hFile,
+                                                        _In_ FILE_INFO_BY_HANDLE_CLASS FileInformationClass,
+                                                        _Out_ LPVOID lpFileInformation, _In_ DWORD dwBufferSize);
 
 typedef BOOL(WINAPI *MDBX_GetVolumeInformationByHandleW)(
-    _In_ HANDLE hFile, _Out_opt_ LPWSTR lpVolumeNameBuffer,
-    _In_ DWORD nVolumeNameSize, _Out_opt_ LPDWORD lpVolumeSerialNumber,
-    _Out_opt_ LPDWORD lpMaximumComponentLength,
-    _Out_opt_ LPDWORD lpFileSystemFlags,
-    _Out_opt_ LPWSTR lpFileSystemNameBuffer, _In_ DWORD nFileSystemNameSize);
+    _In_ HANDLE hFile, _Out_opt_ LPWSTR lpVolumeNameBuffer, _In_ DWORD nVolumeNameSize,
+    _Out_opt_ LPDWORD lpVolumeSerialNumber, _Out_opt_ LPDWORD lpMaximumComponentLength,
+    _Out_opt_ LPDWORD lpFileSystemFlags, _Out_opt_ LPWSTR lpFileSystemNameBuffer, _In_ DWORD nFileSystemNameSize);
 
-typedef DWORD(WINAPI *MDBX_GetFinalPathNameByHandleW)(_In_ HANDLE hFile,
-                                                      _Out_ LPWSTR lpszFilePath,
-                                                      _In_ DWORD cchFilePath,
-                                                      _In_ DWORD dwFlags);
+typedef DWORD(WINAPI *MDBX_GetFinalPathNameByHandleW)(_In_ HANDLE hFile, _Out_ LPWSTR lpszFilePath,
+                                                      _In_ DWORD cchFilePath, _In_ DWORD dwFlags);
 
-typedef BOOL(WINAPI *MDBX_SetFileInformationByHandle)(
-    _In_ HANDLE hFile, _In_ FILE_INFO_BY_HANDLE_CLASS FileInformationClass,
-    _Out_ LPVOID lpFileInformation, _In_ DWORD dwBufferSize);
+typedef BOOL(WINAPI *MDBX_SetFileInformationByHandle)(_In_ HANDLE hFile,
+                                                      _In_ FILE_INFO_BY_HANDLE_CLASS FileInformationClass,
+                                                      _Out_ LPVOID lpFileInformation, _In_ DWORD dwBufferSize);
 
-typedef NTSTATUS(NTAPI *MDBX_NtFsControlFile)(
-    IN HANDLE FileHandle, IN OUT HANDLE Event,
-    IN OUT PVOID /* PIO_APC_ROUTINE */ ApcRoutine, IN OUT PVOID ApcContext,
-    OUT PIO_STATUS_BLOCK IoStatusBlock, IN ULONG FsControlCode,
-    IN OUT PVOID InputBuffer, IN ULONG InputBufferLength,
-    OUT OPTIONAL PVOID OutputBuffer, IN ULONG OutputBufferLength);
+typedef NTSTATUS(NTAPI *MDBX_NtFsControlFile)(IN HANDLE FileHandle, IN OUT HANDLE Event,
+                                              IN OUT PVOID /* PIO_APC_ROUTINE */ ApcRoutine, IN OUT PVOID ApcContext,
+                                              OUT PIO_STATUS_BLOCK IoStatusBlock, IN ULONG FsControlCode,
+                                              IN OUT PVOID InputBuffer, IN ULONG InputBufferLength,
+                                              OUT OPTIONAL PVOID OutputBuffer, IN ULONG OutputBufferLength);
 
 typedef uint64_t(WINAPI *MDBX_GetTickCount64)(void);
 
@@ -95,27 +90,21 @@ typedef struct _WIN32_MEMORY_RANGE_ENTRY {
 } WIN32_MEMORY_RANGE_ENTRY, *PWIN32_MEMORY_RANGE_ENTRY;
 #endif /* Windows 8.x */
 
-typedef BOOL(WINAPI *MDBX_PrefetchVirtualMemory)(
-    HANDLE hProcess, ULONG_PTR NumberOfEntries,
-    PWIN32_MEMORY_RANGE_ENTRY VirtualAddresses, ULONG Flags);
+typedef BOOL(WINAPI *MDBX_PrefetchVirtualMemory)(HANDLE hProcess, ULONG_PTR NumberOfEntries,
+                                                 PWIN32_MEMORY_RANGE_ENTRY VirtualAddresses, ULONG Flags);
 
 typedef enum _SECTION_INHERIT { ViewShare = 1, ViewUnmap = 2 } SECTION_INHERIT;
 
-typedef NTSTATUS(NTAPI *MDBX_NtExtendSection)(IN HANDLE SectionHandle,
-                                              IN PLARGE_INTEGER NewSectionSize);
+typedef NTSTATUS(NTAPI *MDBX_NtExtendSection)(IN HANDLE SectionHandle, IN PLARGE_INTEGER NewSectionSize);
 
-typedef LSTATUS(WINAPI *MDBX_RegGetValueA)(HKEY hkey, LPCSTR lpSubKey,
-                                           LPCSTR lpValue, DWORD dwFlags,
-                                           LPDWORD pdwType, PVOID pvData,
-                                           LPDWORD pcbData);
+typedef LSTATUS(WINAPI *MDBX_RegGetValueA)(HKEY hkey, LPCSTR lpSubKey, LPCSTR lpValue, DWORD dwFlags, LPDWORD pdwType,
+                                           PVOID pvData, LPDWORD pcbData);
 
 typedef long(WINAPI *MDBX_CoCreateGuid)(bin128_t *guid);
 
 NTSYSAPI ULONG RtlRandomEx(PULONG Seed);
 
-typedef BOOL(WINAPI *MDBX_SetFileIoOverlappedRange)(HANDLE FileHandle,
-                                                    PUCHAR OverlappedRangeStart,
-                                                    ULONG Length);
+typedef BOOL(WINAPI *MDBX_SetFileIoOverlappedRange)(HANDLE FileHandle, PUCHAR OverlappedRangeStart, ULONG Length);
 
 struct libmdbx_imports {
   osal_srwlock_t_function srwl_Init;

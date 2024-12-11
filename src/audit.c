@@ -8,29 +8,23 @@ struct audit_ctx {
   uint8_t *const done_bitmap;
 };
 
-static int audit_dbi(void *ctx, const MDBX_txn *txn, const MDBX_val *name,
-                     MDBX_db_flags_t flags, const struct MDBX_stat *stat,
-                     MDBX_dbi dbi) {
+static int audit_dbi(void *ctx, const MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags,
+                     const struct MDBX_stat *stat, MDBX_dbi dbi) {
   struct audit_ctx *audit_ctx = ctx;
   (void)name;
   (void)txn;
   (void)flags;
-  audit_ctx->used += (size_t)stat->ms_branch_pages +
-                     (size_t)stat->ms_leaf_pages +
-                     (size_t)stat->ms_overflow_pages;
+  audit_ctx->used += (size_t)stat->ms_branch_pages + (size_t)stat->ms_leaf_pages + (size_t)stat->ms_overflow_pages;
   if (dbi)
     audit_ctx->done_bitmap[dbi / CHAR_BIT] |= 1 << dbi % CHAR_BIT;
   return MDBX_SUCCESS;
 }
 
 static size_t audit_db_used(const tree_t *db) {
-  return db ? (size_t)db->branch_pages + (size_t)db->leaf_pages +
-                  (size_t)db->large_pages
-            : 0;
+  return db ? (size_t)db->branch_pages + (size_t)db->leaf_pages + (size_t)db->large_pages : 0;
 }
 
-__cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored,
-                                  bool dont_filter_gc) {
+__cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored, bool dont_filter_gc) {
   const MDBX_env *const env = txn->env;
   size_t pending = 0;
   if ((txn->flags & MDBX_TXN_RDONLY) == 0)
@@ -48,8 +42,7 @@ __cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored,
   while (rc == MDBX_SUCCESS) {
     if (!dont_filter_gc) {
       if (unlikely(key.iov_len != sizeof(txnid_t))) {
-        ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED,
-              "invalid GC-key size", (unsigned)key.iov_len);
+        ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid GC-key size", (unsigned)key.iov_len);
         return MDBX_CORRUPTED;
       }
       txnid_t id = unaligned_peek_u64(4, key.iov_base);
@@ -68,18 +61,16 @@ __cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored,
 
   const size_t done_bitmap_size = (txn->n_dbi + CHAR_BIT - 1) / CHAR_BIT;
   if (txn->parent) {
-    tASSERT(txn, txn->n_dbi == txn->parent->n_dbi &&
-                     txn->n_dbi == txn->env->txn->n_dbi);
+    tASSERT(txn, txn->n_dbi == txn->parent->n_dbi && txn->n_dbi == txn->env->txn->n_dbi);
 #if MDBX_ENABLE_DBI_SPARSE
-    tASSERT(txn, txn->dbi_sparse == txn->parent->dbi_sparse &&
-                     txn->dbi_sparse == txn->env->txn->dbi_sparse);
+    tASSERT(txn, txn->dbi_sparse == txn->parent->dbi_sparse && txn->dbi_sparse == txn->env->txn->dbi_sparse);
 #endif /* MDBX_ENABLE_DBI_SPARSE */
   }
 
   struct audit_ctx ctx = {0, alloca(done_bitmap_size)};
   memset(ctx.done_bitmap, 0, done_bitmap_size);
-  ctx.used = NUM_METAS + audit_db_used(dbi_dig(txn, FREE_DBI, nullptr)) +
-             audit_db_used(dbi_dig(txn, MAIN_DBI, nullptr));
+  ctx.used =
+      NUM_METAS + audit_db_used(dbi_dig(txn, FREE_DBI, nullptr)) + audit_db_used(dbi_dig(txn, MAIN_DBI, nullptr));
 
   rc = mdbx_enumerate_tables(txn, audit_dbi, &ctx);
   tASSERT(txn, rc == MDBX_SUCCESS);
@@ -91,11 +82,9 @@ __cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored,
     if (db)
       ctx.used += audit_db_used(db);
     else if (dbi_state(txn, dbi))
-      WARNING("audit %s@%" PRIaTXN
-              ": unable account dbi %zd / \"%*s\", state 0x%02x",
-              txn->parent ? "nested-" : "", txn->txnid, dbi,
-              (int)env->kvs[dbi].name.iov_len,
-              (const char *)env->kvs[dbi].name.iov_base, dbi_state(txn, dbi));
+      WARNING("audit %s@%" PRIaTXN ": unable account dbi %zd / \"%*s\", state 0x%02x", txn->parent ? "nested-" : "",
+              txn->txnid, dbi, (int)env->kvs[dbi].name.iov_len, (const char *)env->kvs[dbi].name.iov_base,
+              dbi_state(txn, dbi));
   }
 
   if (pending + gc + ctx.used == txn->geo.first_unallocated)
@@ -104,15 +93,12 @@ __cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored,
   if ((txn->flags & MDBX_TXN_RDONLY) == 0)
     ERROR("audit @%" PRIaTXN ": %zu(pending) = %zu(loose) + "
           "%zu(reclaimed) + %zu(retired-pending) - %zu(retired-stored)",
-          txn->txnid, pending, txn->tw.loose_count,
-          MDBX_PNL_GETSIZE(txn->tw.relist),
-          txn->tw.retired_pages ? MDBX_PNL_GETSIZE(txn->tw.retired_pages) : 0,
-          retired_stored);
+          txn->txnid, pending, txn->tw.loose_count, MDBX_PNL_GETSIZE(txn->tw.relist),
+          txn->tw.retired_pages ? MDBX_PNL_GETSIZE(txn->tw.retired_pages) : 0, retired_stored);
   ERROR("audit @%" PRIaTXN ": %zu(pending) + %zu"
         "(gc) + %zu(count) = %zu(total) <> %zu"
         "(allocated)",
-        txn->txnid, pending, gc, ctx.used, pending + gc + ctx.used,
-        (size_t)txn->geo.first_unallocated);
+        txn->txnid, pending, gc, ctx.used, pending + gc + ctx.used, (size_t)txn->geo.first_unallocated);
   return MDBX_PROBLEM;
 }
 

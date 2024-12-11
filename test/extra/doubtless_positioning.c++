@@ -7,8 +7,7 @@
 #include <iostream>
 #include <random>
 
-static ::std::ostream &operator<<(::std::ostream &out,
-                                  const mdbx::cursor::move_operation op) {
+static ::std::ostream &operator<<(::std::ostream &out, const mdbx::cursor::move_operation op) {
   static const char *const str[] = {"FIRST",
                                     "FIRST_DUP",
                                     "GET_BOTH",
@@ -70,54 +69,45 @@ static buffer random_value() { return random(prng() % 47); }
 
 using predicate = std::function<bool(const mdbx::pair &, const mdbx::pair &)>;
 
-static bool probe(mdbx::txn txn, mdbx::map_handle dbi,
-                  mdbx::cursor::move_operation op, predicate cmp,
+static bool probe(mdbx::txn txn, mdbx::map_handle dbi, mdbx::cursor::move_operation op, predicate cmp,
                   const buffer_pair &pair) {
   auto seeker = txn.open_cursor(dbi);
   auto scanner = seeker.clone();
 
-  const bool scan_backward =
-      op == mdbx::cursor::key_lesser_than ||
-      op == mdbx::cursor::key_lesser_or_equal ||
-      op == mdbx::cursor::multi_exactkey_value_lesser_than ||
-      op == mdbx::cursor::multi_exactkey_value_lesser_or_equal ||
-      op == mdbx::cursor::pair_lesser_than ||
-      op == mdbx::cursor::pair_lesser_or_equal;
+  const bool scan_backward = op == mdbx::cursor::key_lesser_than || op == mdbx::cursor::key_lesser_or_equal ||
+                             op == mdbx::cursor::multi_exactkey_value_lesser_than ||
+                             op == mdbx::cursor::multi_exactkey_value_lesser_or_equal ||
+                             op == mdbx::cursor::pair_lesser_than || op == mdbx::cursor::pair_lesser_or_equal;
 
   const bool is_multi = mdbx::is_multi(txn.get_handle_info(dbi).value_mode());
 
   auto seek_result = seeker.move(op, pair.key, pair.value, false);
-  auto scan_result = scanner.fullscan(
-      [cmp, &pair](const mdbx::pair &scan) -> bool { return cmp(scan, pair); },
-      scan_backward);
+  auto scan_result =
+      scanner.fullscan([cmp, &pair](const mdbx::pair &scan) -> bool { return cmp(scan, pair); }, scan_backward);
   if (seek_result.done == scan_result &&
       (!scan_result ||
-       seeker.is_same_position(
-           scanner,
-           op < mdbx::cursor::multi_exactkey_value_lesser_than && is_multi)))
+       seeker.is_same_position(scanner, op < mdbx::cursor::multi_exactkey_value_lesser_than && is_multi)))
     return true;
 
   std::cerr << std::endl;
   std::cerr << "bug:";
   std::cerr << std::endl;
-  std::cerr << std::string(is_multi ? "multi" : "single") << "-map, op " << op
-            << ", key " << pair.key << ", value " << pair.value;
+  std::cerr << std::string(is_multi ? "multi" : "single") << "-map, op " << op << ", key " << pair.key << ", value "
+            << pair.value;
   std::cerr << std::endl;
   std::cerr << "\tscanner: ";
   if (scan_result)
-    std::cerr << "     done, key " << scanner.current(false).key << ", value "
-              << scanner.current(false).value;
+    std::cerr << "     done, key " << scanner.current(false).key << ", value " << scanner.current(false).value;
   else
     std::cerr << "not-found";
   std::cerr << std::endl;
-  std::cerr << "\t seeker: " << (seek_result.done ? "     done" : "not-found")
-            << ", key " << seek_result.key << ", value " << seek_result.value;
+  std::cerr << "\t seeker: " << (seek_result.done ? "     done" : "not-found") << ", key " << seek_result.key
+            << ", value " << seek_result.value;
   std::cerr << std::endl;
   return false;
 }
 
-static bool probe(mdbx::txn txn, mdbx::map_handle dbi,
-                  mdbx::cursor::move_operation op, predicate cmp) {
+static bool probe(mdbx::txn txn, mdbx::map_handle dbi, mdbx::cursor::move_operation op, predicate cmp) {
   const auto pair = buffer_pair(random_key(), random_value());
   const bool ok = probe(txn, dbi, op, cmp, pair);
 #if MDBX_DEBUG
@@ -159,32 +149,27 @@ static bool test(mdbx::txn txn, mdbx::map_handle dbi) {
 
   ok = probe(txn, dbi, mdbx::cursor::multi_exactkey_value_lesser_than,
              [txn, dbi](const mdbx::pair &l, const mdbx::pair &r) -> bool {
-               return mdbx_cmp(txn, dbi, l.key, r.key) == 0 &&
-                      mdbx_dcmp(txn, dbi, l.value, r.value) < 0;
+               return mdbx_cmp(txn, dbi, l.key, r.key) == 0 && mdbx_dcmp(txn, dbi, l.value, r.value) < 0;
              }) &&
        ok;
   ok = probe(txn, dbi, mdbx::cursor::multi_exactkey_value_lesser_or_equal,
              [txn, dbi](const mdbx::pair &l, const mdbx::pair &r) -> bool {
-               return mdbx_cmp(txn, dbi, l.key, r.key) == 0 &&
-                      mdbx_dcmp(txn, dbi, l.value, r.value) <= 0;
+               return mdbx_cmp(txn, dbi, l.key, r.key) == 0 && mdbx_dcmp(txn, dbi, l.value, r.value) <= 0;
              }) &&
        ok;
   ok = probe(txn, dbi, mdbx::cursor::multi_exactkey_value_equal,
              [txn, dbi](const mdbx::pair &l, const mdbx::pair &r) -> bool {
-               return mdbx_cmp(txn, dbi, l.key, r.key) == 0 &&
-                      mdbx_dcmp(txn, dbi, l.value, r.value) == 0;
+               return mdbx_cmp(txn, dbi, l.key, r.key) == 0 && mdbx_dcmp(txn, dbi, l.value, r.value) == 0;
              }) &&
        ok;
   ok = probe(txn, dbi, mdbx::cursor::multi_exactkey_value_greater_or_equal,
              [txn, dbi](const mdbx::pair &l, const mdbx::pair &r) -> bool {
-               return mdbx_cmp(txn, dbi, l.key, r.key) == 0 &&
-                      mdbx_dcmp(txn, dbi, l.value, r.value) >= 0;
+               return mdbx_cmp(txn, dbi, l.key, r.key) == 0 && mdbx_dcmp(txn, dbi, l.value, r.value) >= 0;
              }) &&
        ok;
   ok = probe(txn, dbi, mdbx::cursor::multi_exactkey_value_greater,
              [txn, dbi](const mdbx::pair &l, const mdbx::pair &r) -> bool {
-               return mdbx_cmp(txn, dbi, l.key, r.key) == 0 &&
-                      mdbx_dcmp(txn, dbi, l.value, r.value) > 0;
+               return mdbx_cmp(txn, dbi, l.key, r.key) == 0 && mdbx_dcmp(txn, dbi, l.value, r.value) > 0;
              }) &&
        ok;
 
@@ -205,9 +190,7 @@ static bool test(mdbx::txn txn, mdbx::map_handle dbi) {
              }) &&
        ok;
   ok = probe(txn, dbi, mdbx::cursor::pair_equal,
-             [](const mdbx::pair &l, const mdbx::pair &r) -> bool {
-               return l == r;
-             }) &&
+             [](const mdbx::pair &l, const mdbx::pair &r) -> bool { return l == r; }) &&
        ok;
   ok = probe(txn, dbi, mdbx::cursor::pair_greater_or_equal,
              [txn, dbi](const mdbx::pair &l, const mdbx::pair &r) -> bool {
@@ -234,14 +217,11 @@ int main(int argc, const char *argv[]) {
 
   mdbx::path db_filename = "test-posi";
   mdbx::env_managed::remove(db_filename);
-  mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(),
-                        mdbx::env::operate_parameters(3));
+  mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(), mdbx::env::operate_parameters(3));
 
   auto txn = env.start_write();
-  auto single =
-      txn.create_map("single", mdbx::key_mode::usual, mdbx::value_mode::single);
-  auto multi =
-      txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
+  auto single = txn.create_map("single", mdbx::key_mode::usual, mdbx::value_mode::single);
+  auto multi = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
   for (size_t i = 0; i < 1000; ++i) {
     auto key = random_key();
     txn.upsert(single, key, random_value());

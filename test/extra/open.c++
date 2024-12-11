@@ -18,8 +18,8 @@ int main(int argc, const char *argv[]) {
 
 static char log_buffer[1024];
 
-static void logger_nofmt(MDBX_log_level_t loglevel, const char *function,
-                         int line, const char *msg, unsigned length) noexcept {
+static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int line, const char *msg,
+                         unsigned length) noexcept {
   (void)length;
   (void)loglevel;
   fprintf(stdout, "%s:%u %s", function, line, msg);
@@ -29,8 +29,7 @@ int main(int argc, const char *argv[]) {
   (void)argc;
   (void)argv;
 
-  mdbx_setup_debug_nofmt(MDBX_LOG_VERBOSE, MDBX_DBG_ASSERT, logger_nofmt,
-                         log_buffer, sizeof(log_buffer));
+  mdbx_setup_debug_nofmt(MDBX_LOG_VERBOSE, MDBX_DBG_ASSERT, logger_nofmt, log_buffer, sizeof(log_buffer));
 
   mdbx::path path = "test-open";
   mdbx::env::remove(path);
@@ -41,19 +40,16 @@ int main(int argc, const char *argv[]) {
     createParameters2.geometry.make_fixed(42 * mdbx::env::geometry::MiB);
     mdbx::env_managed env2(path, createParameters2, operateParameters2);
     mdbx::txn_managed txn2 = env2.start_write(false);
-    /* mdbx::map_handle testHandle2 = */ txn2.create_map(
-        "fap1", mdbx::key_mode::reverse, mdbx::value_mode::single);
+    /* mdbx::map_handle testHandle2 = */ txn2.create_map("fap1", mdbx::key_mode::reverse, mdbx::value_mode::single);
     txn2.commit();
   }
 
   mdbx::env::operate_parameters operateParameters(100, 10);
   mdbx::env_managed::create_parameters createParameters;
-  createParameters.geometry.make_dynamic(21 * mdbx::env::geometry::MiB,
-                                         84 * mdbx::env::geometry::MiB);
+  createParameters.geometry.make_dynamic(21 * mdbx::env::geometry::MiB, 84 * mdbx::env::geometry::MiB);
   mdbx::env_managed env(path, createParameters, operateParameters);
   mdbx::txn_managed txn = env.start_write(false);
-  /* mdbx::map_handle testHandle = */ txn.create_map(
-      "fap1", mdbx::key_mode::usual, mdbx::value_mode::single);
+  /* mdbx::map_handle testHandle = */ txn.create_map("fap1", mdbx::key_mode::usual, mdbx::value_mode::single);
   txn.commit();
 
   std::latch starter(1);
@@ -62,8 +58,7 @@ int main(int argc, const char *argv[]) {
     starter.wait();
     // mdbx::env_managed env(path, createParameters, operateParameters);
     mdbx::txn_managed txn = env.start_write(false);
-    /* mdbx::map_handle testHandle = */ txn.create_map(
-        "fap1", mdbx::key_mode::usual, mdbx::value_mode::single);
+    /* mdbx::map_handle testHandle = */ txn.create_map("fap1", mdbx::key_mode::usual, mdbx::value_mode::single);
     txn.commit();
   });
 
@@ -71,8 +66,7 @@ int main(int argc, const char *argv[]) {
     starter.wait();
     // mdbx::env_managed env(path, createParameters, operateParameters);
     mdbx::txn_managed txn = env.start_write(false);
-    /* mdbx::map_handle testHandle = */ txn.create_map(
-        "fap1", mdbx::key_mode::usual, mdbx::value_mode::single);
+    /* mdbx::map_handle testHandle = */ txn.create_map("fap1", mdbx::key_mode::usual, mdbx::value_mode::single);
     txn.commit();
   });
 

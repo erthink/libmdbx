@@ -110,27 +110,22 @@ extern struct libmdbx_imports imports;
 extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
 #endif
 
-#define MDBX_IS_ERROR(rc)                                                      \
-  ((rc) != MDBX_RESULT_TRUE && (rc) != MDBX_RESULT_FALSE)
+#define MDBX_IS_ERROR(rc) ((rc) != MDBX_RESULT_TRUE && (rc) != MDBX_RESULT_FALSE)
 
 /*----------------------------------------------------------------------------*/
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline pgno_t
-int64pgno(int64_t i64) {
+MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline pgno_t int64pgno(int64_t i64) {
   if (likely(i64 >= (int64_t)MIN_PAGENO && i64 <= (int64_t)MAX_PAGENO + 1))
     return (pgno_t)i64;
   return (i64 < (int64_t)MIN_PAGENO) ? MIN_PAGENO : MAX_PAGENO;
 }
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline pgno_t
-pgno_add(size_t base, size_t augend) {
+MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline pgno_t pgno_add(size_t base, size_t augend) {
   assert(base <= MAX_PAGENO + 1 && augend < MAX_PAGENO);
   return int64pgno((int64_t)base + (int64_t)augend);
 }
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline pgno_t
-pgno_sub(size_t base, size_t subtrahend) {
-  assert(base >= MIN_PAGENO && base <= MAX_PAGENO + 1 &&
-         subtrahend < MAX_PAGENO);
+MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline pgno_t pgno_sub(size_t base, size_t subtrahend) {
+  assert(base >= MIN_PAGENO && base <= MAX_PAGENO + 1 && subtrahend < MAX_PAGENO);
   return int64pgno((int64_t)base - (int64_t)subtrahend);
 }

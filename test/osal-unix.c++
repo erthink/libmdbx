@@ -19,14 +19,12 @@
 #error "Oops, MDBX_LOCKING is undefined!"
 #endif
 
-#if defined(__APPLE__) && (MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||           \
-                           MDBX_LOCKING == MDBX_LOCKING_POSIX2008)
+#if defined(__APPLE__) && (MDBX_LOCKING == MDBX_LOCKING_POSIX2001 || MDBX_LOCKING == MDBX_LOCKING_POSIX2008)
 #include "stub/pthread_barrier.c"
 #endif /* __APPLE__ && MDBX_LOCKING >= MDBX_LOCKING_POSIX2001 */
 
-#if defined(__ANDROID_API__) && __ANDROID_API__ < 24 &&                        \
-    (MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                 \
-     MDBX_LOCKING == MDBX_LOCKING_POSIX2008)
+#if defined(__ANDROID_API__) && __ANDROID_API__ < 24 &&                                                                \
+    (MDBX_LOCKING == MDBX_LOCKING_POSIX2001 || MDBX_LOCKING == MDBX_LOCKING_POSIX2008)
 #include "stub/pthread_barrier.c"
 #endif /* __ANDROID_API__ < 24 && MDBX_LOCKING >= MDBX_LOCKING_POSIX2001 */
 
@@ -40,9 +38,7 @@
 
 #if __cplusplus >= 201103L
 #include <atomic>
-MDBX_MAYBE_UNUSED static inline int atomic_decrement(std::atomic_int *p) {
-  return std::atomic_fetch_sub(p, 1) - 1;
-}
+MDBX_MAYBE_UNUSED static inline int atomic_decrement(std::atomic_int *p) { return std::atomic_fetch_sub(p, 1) - 1; }
 #else
 MDBX_MAYBE_UNUSED static inline int atomic_decrement(volatile int *p) {
 #if defined(__GNUC__) || defined(__clang__)
@@ -69,8 +65,7 @@ static void ipc_remove(void) {
 
 #else
 struct shared_t {
-#if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                  \
-    MDBX_LOCKING == MDBX_LOCKING_POSIX2008
+#if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 || MDBX_LOCKING == MDBX_LOCKING_POSIX2008
   pthread_barrier_t barrier;
   pthread_mutex_t mutex;
   size_t count;
@@ -105,18 +100,14 @@ void osal_wait4barrier(void) {
   op.sem_flg = 0;
   if (semop(ipc, &op, 1))
     failure_perror("semop(wait)", errno);
-#elif MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                \
-    MDBX_LOCKING == MDBX_LOCKING_POSIX2008
+#elif MDBX_LOCKING == MDBX_LOCKING_POSIX2001 || MDBX_LOCKING == MDBX_LOCKING_POSIX2008
   assert(shared != nullptr && shared != MAP_FAILED);
   int err = pthread_barrier_wait(&shared->barrier);
   if (err != 0 && err != PTHREAD_BARRIER_SERIAL_THREAD)
     failure_perror("pthread_barrier_wait(shared)", err);
 #elif MDBX_LOCKING == MDBX_LOCKING_POSIX1988
   assert(shared != nullptr && shared != MAP_FAILED);
-  int err = (atomic_decrement(&shared->barrier.countdown) > 0 &&
-             sem_wait(&shared->barrier.sema))
-                ? errno
-                : 0;
+  int err = (atomic_decrement(&shared->barrier.countdown) > 0 && sem_wait(&shared->barrier.sema)) ? errno : 0;
   if (err != 0)
     failure_perror("sem_wait(shared)", err);
   if (sem_post(&shared->barrier.sema))
@@ -149,22 +140,20 @@ void osal_setup(const std::vector<actor_config> &actors) {
       failure_perror("semctl(SETVAL.N, shared_sems)", errno);
 #else
   assert(shared == nullptr);
-  shared = (shared_t *)mmap(
-      nullptr, sizeof(shared_t) + actors.size() * sizeof(shared->events[0]),
-      PROT_READ | PROT_WRITE,
-      MAP_SHARED | MAP_ANONYMOUS
+  shared =
+      (shared_t *)mmap(nullptr, sizeof(shared_t) + actors.size() * sizeof(shared->events[0]), PROT_READ | PROT_WRITE,
+                       MAP_SHARED | MAP_ANONYMOUS
 #ifdef MAP_HASSEMAPHORE
-          | MAP_HASSEMAPHORE
+                           | MAP_HASSEMAPHORE
 #endif
-      ,
-      -1, 0);
+                       ,
+                       -1, 0);
   if (MAP_FAILED == (void *)shared)
     failure_perror("mmap(shared)", errno);
 
   shared->count = actors.size() + 1;
 
-#if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                  \
-    MDBX_LOCKING == MDBX_LOCKING_POSIX2008
+#if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 || MDBX_LOCKING == MDBX_LOCKING_POSIX2008
   pthread_barrierattr_t barrierattr;
   int err = pthread_barrierattr_init(&barrierattr);
   if (err)
@@ -173,8 +162,7 @@ void osal_setup(const std::vector<actor_config> &actors) {
   if (err)
     failure_perror("pthread_barrierattr_setpshared()", err);
 
-  err = pthread_barrier_init(&shared->barrier, &barrierattr,
-                             unsigned(shared->count));
+  err = pthread_barrier_init(&shared->barrier, &barrierattr, unsigned(shared->count));
   if (err)
     failure_perror("pthread_barrier_init(shared)", err);
   pthread_barrierattr_destroy(&barrierattr);
@@ -204,8 +192,7 @@ void osal_setup(const std::vector<actor_config> &actors) {
     err = pthread_cond_init(event, &condattr);
     if (err)
       failure_perror("pthread_cond_init(shared)", err);
-    log_trace("osal_setup: event(shared pthread_cond) %" PRIuPTR " -> %p", i,
-              __Wpedantic_format_voidptr(event));
+    log_trace("osal_setup: event(shared pthread_cond) %" PRIuPTR " -> %p", i, __Wpedantic_format_voidptr(event));
   }
   pthread_condattr_destroy(&condattr);
   pthread_mutexattr_destroy(&mutexattr);
@@ -217,8 +204,7 @@ void osal_setup(const std::vector<actor_config> &actors) {
     sem_t *event = &shared->events[i];
     if (sem_init(event, true, 0))
       failure_perror("sem_init(shared.event)", errno);
-    log_trace("osal_setup: event(shared sem_init) %" PRIuPTR " -> %p", i,
-              __Wpedantic_format_voidptr(event));
+    log_trace("osal_setup: event(shared sem_init) %" PRIuPTR " -> %p", i, __Wpedantic_format_voidptr(event));
   }
 #else
 #error "FIXME"
@@ -235,8 +221,7 @@ void osal_broadcast(unsigned id) {
   assert(shared != nullptr && shared != MAP_FAILED);
   if (id >= shared->count)
     failure("osal_broadcast: id > limit");
-#if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                  \
-    MDBX_LOCKING == MDBX_LOCKING_POSIX2008
+#if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 || MDBX_LOCKING == MDBX_LOCKING_POSIX2008
   int err = pthread_cond_broadcast(shared->events + id);
   if (err)
     failure_perror("pthread_cond_broadcast(shared)", err);
@@ -261,8 +246,7 @@ int osal_waitfor(unsigned id) {
   if (id >= shared->count)
     failure("osal_waitfor: id > limit");
 
-#if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                  \
-    MDBX_LOCKING == MDBX_LOCKING_POSIX2008
+#if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 || MDBX_LOCKING == MDBX_LOCKING_POSIX2008
   int rc = pthread_mutex_lock(&shared->mutex);
   if (rc != 0)
     failure_perror("pthread_mutex_lock(shared)", rc);
@@ -288,15 +272,13 @@ int osal_waitfor(unsigned id) {
 
 //-----------------------------------------------------------------------------
 
-const std::string
-actor_config::osal_serialize(simple_checksum &checksum) const {
+const std::string actor_config::osal_serialize(simple_checksum &checksum) const {
   (void)checksum;
   /* not used in workload, but just for testing */
   return "unix.fork";
 }
 
-bool actor_config::osal_deserialize(const char *str, const char *end,
-                                    simple_checksum &checksum) {
+bool actor_config::osal_deserialize(const char *str, const char *end, simple_checksum &checksum) {
   (void)checksum;
   /* not used in workload, but just for testing */
   return strncmp(str, "unix.fork", 9) == 0 && str + 9 == end;
@@ -392,8 +374,7 @@ int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
   if (pid < 0)
     return errno;
 
-  log_trace("osal_actor_start: fork pid %ld for %u", (long)pid,
-            config.actor_id);
+  log_trace("osal_actor_start: fork pid %ld for %u", (long)pid, config.actor_id);
   children[pid] = as_running;
   return 0;
 }
@@ -536,8 +517,7 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
 
     if (pid > 0) {
       if (WIFEXITED(status))
-        children[pid] =
-            (WEXITSTATUS(status) == EXIT_SUCCESS) ? as_successful : as_failed;
+        children[pid] = (WEXITSTATUS(status) == EXIT_SUCCESS) ? as_successful : as_failed;
       else if (WIFSIGNALED(status)) {
         int sig = WTERMSIG(status);
 #ifdef WCOREDUMP
@@ -551,13 +531,11 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
           case SIGFPE:
           case SIGILL:
           case SIGSEGV:
-            log_notice("child pid %lu %s by SIG%s", (long)pid, "terminated",
-                       signal_name(sig));
+            log_notice("child pid %lu %s by SIG%s", (long)pid, "terminated", signal_name(sig));
             children[pid] = as_coredump;
             break;
           default:
-            log_notice("child pid %lu %s by SIG%s", (long)pid, "killed",
-                       signal_name(sig));
+            log_notice("child pid %lu %s by SIG%s", (long)pid, "killed", signal_name(sig));
             children[pid] = as_killed;
           }
       } else if (WIFSTOPPED(status))
@@ -605,12 +583,10 @@ void osal_udelay(size_t us) {
 
   static size_t threshold_us;
   if (threshold_us == 0) {
-#if defined(_POSIX_CPUTIME) && _POSIX_CPUTIME > -1 &&                          \
-    defined(CLOCK_PROCESS_CPUTIME_ID)
+#if defined(_POSIX_CPUTIME) && _POSIX_CPUTIME > -1 && defined(CLOCK_PROCESS_CPUTIME_ID)
     if (clock_getres(CLOCK_PROCESS_CPUTIME_ID, &ts)) {
       int rc = errno;
-      log_warning("clock_getres(CLOCK_PROCESS_CPUTIME_ID), failed errno %d",
-                  rc);
+      log_warning("clock_getres(CLOCK_PROCESS_CPUTIME_ID), failed errno %d", rc);
     }
 #endif /* CLOCK_PROCESS_CPUTIME_ID */
     if (threshold_us == 0 && clock_getres(CLOCK_MONOTONIC, &ts)) {
