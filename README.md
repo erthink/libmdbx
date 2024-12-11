@@ -5,12 +5,10 @@
 > and pay attention to the [`C++` API](https://gitflic.ru/project/erthink/libmdbx/blob?file=mdbx.h%2B%2B#line-num-1).
 
 > Questions, feedback and suggestions are welcome to the [Telegram' group](https://t.me/libmdbx).
+> See the [ChangeLog](https://gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md) for `NEWS` and latest updates.
 
-> For NEWS take a look to the [ChangeLog](https://gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md)
-> or the [TODO](https://gitflic.ru/project/erthink/libmdbx/blob?file=TODO.md).
-
-Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`.
-Всё будет хорошо!
+> Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`.
+> Всё будет хорошо!
 
 
 libmdbx
@@ -94,15 +92,15 @@ However, _MithrilDB_ will not be available for countries unfriendly to
 Russia (i.e. acceded the sanctions, devil adepts and/or NATO). But it is
 not yet known whether such restriction will be implemented only through
 a license and support, either the source code will not be open at all.
-Basically we are not inclined to allow our work to contribute to the
-profit that goes to weapons that kill our relatives and friends.
+Basically I am not inclined to allow my work to contribute to the
+profit that goes to weapons that kill my relatives and friends.
 NO OPTIONS.
 
 Nonetheless, I try not to make any promises regarding _MithrilDB_ until release.
 
 Contrary to _MithrilDB_, _libmdbx_ will forever free and open source.
 Moreover with high-quality support whenever possible. Tu deviens
-responsable pour toujours de ce que tu as apprivois. So we will continue
+responsable pour toujours de ce que tu as apprivois. So I will continue
 to comply with the original open license and the principles of
 constructive cooperation, in spite of outright Github sabotage and
 sanctions. I will also try to keep (not drop) Windows support, despite
@@ -375,14 +373,13 @@ conference](http://www.highload.ru/2015/abstracts/1831.html).
 
 Since 2017 _libmdbx_ is used in [Fast Positive Tables](https://gitflic.ru/project/erthink/libfpta),
 and until 2025 development was funded by [Positive Technologies](https://www.ptsecurity.com).
-
 Since 2020 _libmdbx_ is used in Ethereum: [Erigon](https://github.com/erigontech/erigon), [Akula](https://github.com/akula-bft/akula),
 [Silkworm](https://github.com/erigontech/silkworm), [Reth](https://github.com/paradigmxyz/reth), etc.
 
 On 2022-04-15 the Github administration, without any warning nor
 explanation, deleted _libmdbx_ along with a lot of other projects,
 simultaneously blocking access for many developers. Therefore on
-2022-04-21 we have migrated to a reliable trusted infrastructure.
+2022-04-21 I have migrated to a reliable trusted infrastructure.
 The origin for now is at [GitFlic](https://gitflic.ru/project/erthink/libmdbx)
 with backup at [ABF by ROSA Лаб](https://abf.rosalinux.ru/erthink/libmdbx).
 For the same reason ~~Github~~ is blacklisted forever.
@@ -612,16 +609,16 @@ tests. If something goes wrong, it is recommended to install
 
 To run the [long stochastic test scenario](test/stochastic.sh), you
 will need to install the current (not outdated) version of
-[Bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)). To do this, we
+[Bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)). To do this, I
 recommend that you install [Homebrew](https://brew.sh/) and then execute
 `brew install bash`.
 
 ### Android
-We recommend using CMake to build _libmdbx_ for Android.
+I recommend using CMake to build _libmdbx_ for Android.
 Please refer to the [official guide](https://developer.android.com/studio/projects/add-native-code).
 
 ### iOS
-To build _libmdbx_ for iOS, we recommend using CMake with the
+To build _libmdbx_ for iOS, I recommend using CMake with the
 ["toolchain file"](https://cmake.org/cmake/help/latest/variable/CMAKE_TOOLCHAIN_FILE.html)
 from the [ios-cmake](https://github.com/leetal/ios-cmake) project.
 
@@ -662,10 +659,17 @@ Bindings
 Performance comparison
 ======================
 
-All benchmarks were done in 2015 by [IOArena](https://abf.io/erthink/ioarena)
+Over the past 10 years, _libmdbx_ has had a lot of significant
+improvements and innovations. _libmdbx_ has become a slightly faster in
+simple cases and many times faster in complex scenarios, especially with
+a huge transactions in gigantic databases. Therefore, on the one hand,
+the results below are outdated. However, on the other hand, these simple
+benchmarks are evident, easy to reproduce, and are close to the most
+common use cases.
+
+The following all benchmark results were obtained in 2015 by [IOArena](https://abf.io/erthink/ioarena)
 and multiple [scripts](https://github.com/pmwkaa/ioarena/tree/HL%2B%2B2015)
-runs on Lenovo Carbon-2 laptop, i7-4600U 2.1 GHz (2 physical cores, 4 HyperThreading cores), 8 Gb RAM,
-SSD SAMSUNG MZNTD512HAGL-000L1 (DXT23L0Q) 512 Gb.
+runs on my laptop (i7-4600U 2.1 GHz, SSD MZNTD512HAGL-000L1).
 
 ## Integral performance
 
@@ -696,7 +700,8 @@ Here showed sum of performance metrics in 3 benchmarks:
 ## Read Scalability
 
 Summary performance with concurrent read/search queries in 1-2-4-8
-threads on the machine with 4 logical CPUs in HyperThreading mode (i.e. actually 2 physical CPU cores).
+threads on the machine with 4 logical CPUs in HyperThreading mode (i.e.
+actually 2 physical CPU cores).
 
 ![Comparison #2: Read Scalability](https://libmdbx.dqdkfa.ru/img/perf-slide-2.png)
 
@@ -761,10 +766,10 @@ records.
  execution time, cross marks standard deviation.
 
 **1,000,000 transactions in async-write mode**.
-In case of a crash all data is consistent and conforms to the one of last successful transactions,
-but lost transaction count is much higher than in
-lazy-write mode. All DB engines in this mode do as little writes as
-possible on persistent storage. _libmdbx_ uses
+In case of a crash all data is consistent and conforms to the one of
+last successful transactions, but lost transaction count is much higher
+than in lazy-write mode. All DB engines in this mode do as little writes
+as possible on persistent storage. _libmdbx_ uses
 [msync(MS_ASYNC)](https://linux.die.net/man/2/msync) in this mode.
 
 In the benchmark each transaction contains combined CRUD operations (2
