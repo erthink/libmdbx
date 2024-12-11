@@ -230,14 +230,14 @@ macro(git_get_versioninfo source_root_directory)
     OUTPUT_STRIP_TRAILING_WHITESPACE
     WORKING_DIRECTORY ${source_root_directory}
     RESULT_VARIABLE _rc)
-  if(_rc OR _git_timestamp STREQUAL "%cI")
+  if(_rc OR "${_git_timestamp}" STREQUAL "%cI")
     execute_process(
       COMMAND ${GIT} show --no-patch --format=%ci HEAD
       OUTPUT_VARIABLE _git_timestamp
       OUTPUT_STRIP_TRAILING_WHITESPACE
       WORKING_DIRECTORY ${source_root_directory}
       RESULT_VARIABLE _rc)
-    if(_rc OR _git_timestamp STREQUAL "%ci")
+    if(_rc OR "${_git_timestamp}" STREQUAL "%ci")
       message(
         FATAL_ERROR
           "Please install latest version of git (`show --no-patch --format=%cI HEAD` failed)"
@@ -251,7 +251,7 @@ macro(git_get_versioninfo source_root_directory)
     OUTPUT_STRIP_TRAILING_WHITESPACE
     WORKING_DIRECTORY ${source_root_directory}
     RESULT_VARIABLE _rc)
-  if(_rc OR _git_tree STREQUAL "")
+  if(_rc OR "${_git_tree}" STREQUAL "")
     message(
       FATAL_ERROR
         "Please install latest version of git (`show --no-patch --format=%T HEAD` failed)"
@@ -264,7 +264,7 @@ macro(git_get_versioninfo source_root_directory)
     OUTPUT_STRIP_TRAILING_WHITESPACE
     WORKING_DIRECTORY ${source_root_directory}
     RESULT_VARIABLE _rc)
-  if(_rc OR _git_commit STREQUAL "")
+  if(_rc OR "${_git_commit}" STREQUAL "")
     message(
       FATAL_ERROR
         "Please install latest version of git (`show --no-patch --format=%H HEAD` failed)"
@@ -283,7 +283,7 @@ macro(git_get_versioninfo source_root_directory)
         "Please install latest version of git (`status --untracked-files=no --porcelain` failed)"
     )
   endif()
-  if(NOT _git_status STREQUAL "")
+  if(NOT "${_git_status}" STREQUAL "")
     set(_git_commit "DIRTY-${_git_commit}")
     set(_git_is_dirty TRUE)
   endif()
@@ -295,7 +295,7 @@ macro(git_get_versioninfo source_root_directory)
     OUTPUT_STRIP_TRAILING_WHITESPACE
     WORKING_DIRECTORY ${source_root_directory}
     RESULT_VARIABLE _rc)
-  if(_rc OR _git_last_vtag STREQUAL "")
+  if(_rc OR "${_git_last_vtag}" STREQUAL "")
     execute_process(
       COMMAND ${GIT} tag
       OUTPUT_VARIABLE _git_tags_dump
@@ -314,7 +314,7 @@ macro(git_get_versioninfo source_root_directory)
           "Please install latest version of git (`git rev-list --count --no-merges --remove-empty HEAD` failed)"
       )
     endif()
-    if(_git_whole_count GREATER 42 AND _git_tags_dump STREQUAL "")
+    if(_git_whole_count GREATER 42 AND "${_git_tags_dump}" STREQUAL "")
       message(
         FATAL_ERROR
           "Please fetch tags (`describe --tags --abbrev=0 --match=v[0-9]*` failed)"
@@ -332,14 +332,14 @@ macro(git_get_versioninfo source_root_directory)
       OUTPUT_STRIP_TRAILING_WHITESPACE
       WORKING_DIRECTORY ${source_root_directory}
       RESULT_VARIABLE _rc)
-    if(_rc OR _git_describe STREQUAL "")
+    if(_rc OR "${_git_describe}" STREQUAL "")
       execute_process(
         COMMAND ${GIT} describe --tags --all --dirty --long --always
         OUTPUT_VARIABLE _git_describe
         OUTPUT_STRIP_TRAILING_WHITESPACE
         WORKING_DIRECTORY ${source_root_directory}
         RESULT_VARIABLE _rc)
-      if(_rc OR _git_describe STREQUAL "")
+      if(_rc OR "${_git_describe}" STREQUAL "")
         message(
           FATAL_ERROR
             "Please install latest version of git (`describe --tags --all --long` failed)"
@@ -353,7 +353,7 @@ macro(git_get_versioninfo source_root_directory)
       OUTPUT_STRIP_TRAILING_WHITESPACE
       WORKING_DIRECTORY ${source_root_directory}
       RESULT_VARIABLE _rc)
-    if(_rc OR _git_describe STREQUAL "")
+    if(_rc OR "${_git_describe}" STREQUAL "")
       message(
         FATAL_ERROR
           "Please install latest version of git (`describe --tags --long --match=v[0-9]*`)"
@@ -365,7 +365,7 @@ macro(git_get_versioninfo source_root_directory)
       OUTPUT_STRIP_TRAILING_WHITESPACE
       WORKING_DIRECTORY ${source_root_directory}
       RESULT_VARIABLE _rc)
-    if(_rc OR _git_trailing_commits STREQUAL "")
+    if(_rc OR "${_git_trailing_commits}" STREQUAL "")
       message(
         FATAL_ERROR
           "Please install latest version of git (`rev-list --count ${_git_last_vtag}..HEAD` failed)"
@@ -393,7 +393,7 @@ macro(semver_provide name source_root_directory build_directory_for_json_output
       OUTPUT_STRIP_TRAILING_WHITESPACE
       WORKING_DIRECTORY ${source_root_directory}
       RESULT_VARIABLE _rc)
-    if(_rc OR _git_root STREQUAL "")
+    if(_rc OR "${_git_root}" STREQUAL "")
       if(EXISTS "${source_root_directory}/.git")
         message(ERROR
                 "`git rev-parse --show-toplevel` failed '${_git_root_error}'")
@@ -468,19 +468,19 @@ macro(semver_provide name source_root_directory build_directory_for_json_output
      OR NOT _git_timestamp
      OR NOT _git_tree
      OR NOT _git_commit
-     OR _semver_major STREQUAL ""
-     OR _semver_minor STREQUAL ""
-     OR _semver_patch STREQUAL "")
+     OR "${_semver_major}" STREQUAL ""
+     OR "${_semver_minor}" STREQUAL ""
+     OR "${_semver_patch}" STREQUAL "")
     message(ERROR "Unable to retrieve ${name} version from ${_version_from}.")
   endif()
 
   set(_semver "${_semver_major}.${_semver_minor}.${_semver_patch}")
-  if(_semver_tweak STREQUAL "")
+  if("${_semver_tweak}" STREQUAL "")
     set(_semver_tweak 0)
   elseif(_semver_tweak GREATER 0)
     string(APPEND _semver ".${_semver_tweak}")
   endif()
-  if(NOT _semver_prerelease STREQUAL "")
+  if(NOT "${_semver_prerelease}" STREQUAL "")
     string(APPEND _semver "-${_semver_prerelease}")
   endif()
   if(_git_is_dirty)
@@ -497,7 +497,7 @@ macro(semver_provide name source_root_directory build_directory_for_json_output
   set(${name}_VERSION_MAJOR ${_semver_major})
   set(${name}_VERSION_MINOR ${_semver_minor})
   set(${name}_VERSION_PATCH ${_semver_patch})
-  set(${name}_VERSION_TWEAK "${_semver_tweak}")
+  set(${name}_VERSION_TWEAK ${_semver_tweak})
   set(${name}_VERSION_PRERELEASE "${_semver_prerelease}")
   set(${name}_GIT_DESCRIBE "${_git_describe}")
   set(${name}_GIT_TIMESTAMP "${_git_timestamp}")
