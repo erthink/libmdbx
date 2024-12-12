@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2024 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
+# Copyright (c) 2012-2024 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> ###############################################
 # SPDX-License-Identifier: Apache-2.0
 
 if(CMAKE_VERSION VERSION_LESS 3.8.2)
@@ -22,8 +22,7 @@ if(NOT DEFINED ENABLE_MEMCHECK)
     set(MEMCHECK_OPTION_NAME "ENABLE_MEMCHECK")
   endif()
   if(MEMCHECK_OPTION_NAME STREQUAL "ENABLE_MEMCHECK")
-    option(ENABLE_MEMCHECK
-           "Enable integration with valgrind, a memory analyzing tool" OFF)
+    option(ENABLE_MEMCHECK "Enable integration with valgrind, a memory analyzing tool" OFF)
   elseif(${MEMCHECK_OPTION_NAME})
     set(ENABLE_MEMCHECK ON)
   else()
@@ -36,18 +35,12 @@ check_library_exists(gcov __gcov_flush "" HAVE_GCOV)
 
 option(ENABLE_GCOV "Enable integration with gcov, a code coverage program" OFF)
 
-option(ENABLE_GPROF
-       "Enable integration with gprof, a performance analyzing tool" OFF)
+option(ENABLE_GPROF "Enable integration with gprof, a performance analyzing tool" OFF)
 
-option(
-  ENABLE_ASAN
-  "Enable AddressSanitizer, a fast memory error detector based on compiler instrumentation"
-  OFF)
+option(ENABLE_ASAN "Enable AddressSanitizer, a fast memory error detector based on compiler instrumentation" OFF)
 
-option(
-  ENABLE_UBSAN
-  "Enable UndefinedBehaviorSanitizer, a fast undefined behavior detector based on compiler instrumentation"
-  OFF)
+option(ENABLE_UBSAN
+       "Enable UndefinedBehaviorSanitizer, a fast undefined behavior detector based on compiler instrumentation" OFF)
 
 if(ENABLE_MEMCHECK)
   if(CMAKE_CXX_COMPILER_LOADED)
@@ -58,10 +51,7 @@ if(ENABLE_MEMCHECK)
     check_include_file(valgrind/memcheck.h HAVE_VALGRIND_MEMCHECK_H)
   endif()
   if(NOT HAVE_VALGRIND_MEMCHECK_H)
-    message(
-      FATAL_ERROR
-        "${MEMCHECK_OPTION_NAME} option is set but valgrind/memcheck.h is not found"
-    )
+    message(FATAL_ERROR "${MEMCHECK_OPTION_NAME} option is set but valgrind/memcheck.h is not found")
   endif()
 endif()
 

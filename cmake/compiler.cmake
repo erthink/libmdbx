@@ -1,4 +1,4 @@
-# Copyright (c) 2010-2024 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
+# Copyright (c) 2010-2024 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> ###############################################
 # SPDX-License-Identifier: Apache-2.0
 
 if(CMAKE_VERSION VERSION_LESS 3.8.2)
@@ -32,11 +32,8 @@ if(NOT CMAKE_VERSION VERSION_LESS 3.9)
 endif()
 
 if(CMAKE_VERSION MATCHES ".*MSVC.*" AND CMAKE_VERSION VERSION_LESS 3.16)
-  message(
-    FATAL_ERROR
-      "CMake from MSVC kit is unfit! "
-      "Please use MSVC2019 with modern CMake the original CMake from https://cmake.org/download/"
-  )
+  message(FATAL_ERROR "CMake from MSVC kit is unfit! "
+                      "Please use MSVC2019 with modern CMake the original CMake from https://cmake.org/download/")
 endif()
 
 if(NOT (CMAKE_C_COMPILER_LOADED OR CMAKE_CXX_COMPILER_LOADED))
@@ -62,8 +59,7 @@ if(CMAKE_C_COMPILER_LOADED
    AND CMAKE_CXX_COMPILER_LOADED
    AND NOT (CMAKE_C_COMPILER_ID STREQUAL CMAKE_CXX_COMPILER_ID))
   message(WARNING "CMAKE_C_COMPILER_ID (${CMAKE_C_COMPILER_ID}) is different "
-                  "from CMAKE_CXX_COMPILER_ID (${CMAKE_CXX_COMPILER_ID}). "
-                  "The final binary may be unusable.")
+                  "from CMAKE_CXX_COMPILER_ID (${CMAKE_CXX_COMPILER_ID}). " "The final binary may be unusable.")
 endif()
 
 if(CMAKE_CXX_COMPILER_LOADED)
@@ -80,15 +76,12 @@ macro(check_compiler_flag flag variable)
   endif()
 endmacro(check_compiler_flag)
 
-# We support building with Clang and gcc. First check what we're using for
-# build.
-if(CMAKE_C_COMPILER_LOADED AND CMAKE_C_COMPILER_ID MATCHES
-                               ".*[Cc][Ll][Aa][Nn][Gg].*")
+# We support building with Clang and gcc. First check what we're using for build.
+if(CMAKE_C_COMPILER_LOADED AND CMAKE_C_COMPILER_ID MATCHES ".*[Cc][Ll][Aa][Nn][Gg].*")
   set(CMAKE_COMPILER_IS_CLANG ON)
   set(CMAKE_COMPILER_IS_GNUCC OFF)
 endif()
-if(CMAKE_CXX_COMPILER_LOADED AND CMAKE_CXX_COMPILER_ID MATCHES
-                                 ".*[Cc][Ll][Aa][Nn][Gg].*")
+if(CMAKE_CXX_COMPILER_LOADED AND CMAKE_CXX_COMPILER_ID MATCHES ".*[Cc][Ll][Aa][Nn][Gg].*")
   set(CMAKE_COMPILER_IS_CLANG ON)
   set(CMAKE_COMPILER_IS_GNUCXX OFF)
 endif()
@@ -140,8 +133,7 @@ if(CMAKE_CXX_COMPILER_LOADED)
         OUTPUT_STRIP_TRAILING_WHITESPACE)
       set(CMAKE_COMPILER_IS_ELBRUSCXX ON)
       set(CMAKE_CXX_COMPILER_ID "Elbrus")
-      message(
-        STATUS "Detected Elbrus C++ compiler ${CMAKE_CXX_COMPILER_VERSION}")
+      message(STATUS "Detected Elbrus C++ compiler ${CMAKE_CXX_COMPILER_VERSION}")
     else()
       set(CMAKE_COMPILER_IS_ELBRUSCXX OFF)
     endif()
@@ -152,20 +144,17 @@ if(CMAKE_CXX_COMPILER_LOADED)
   unset(tmp_lxx_probe_result)
 endif()
 
-# Hard coding the compiler version is ugly from cmake POV, but at least gives
-# user a friendly error message. The most critical demand for C++ compiler is
-# support of C++11 lambdas, added only in version 4.5
+# Hard coding the compiler version is ugly from cmake POV, but at least gives user a friendly error message. The most
+# critical demand for C++ compiler is support of C++11 lambdas, added only in version 4.5
 # https://gcc.gnu.org/projects/cxx0x.html
 if(CMAKE_COMPILER_IS_GNUCC)
-  if(CMAKE_C_COMPILER_VERSION VERSION_LESS 4.5 AND NOT
-                                                   CMAKE_COMPILER_IS_ELBRUSC)
+  if(CMAKE_C_COMPILER_VERSION VERSION_LESS 4.5 AND NOT CMAKE_COMPILER_IS_ELBRUSC)
     message(FATAL_ERROR "
       Your GCC version is ${CMAKE_C_COMPILER_VERSION}, please update")
   endif()
 endif()
 if(CMAKE_COMPILER_IS_GNUCXX)
-  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.5
-     AND NOT CMAKE_COMPILER_IS_ELBRUSCXX)
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.5 AND NOT CMAKE_COMPILER_IS_ELBRUSCXX)
     message(FATAL_ERROR "
       Your G++ version is ${CMAKE_CXX_COMPILER_VERSION}, please update")
   endif()
@@ -210,12 +199,10 @@ endif()
 
 if(NOT CMAKE_SYSTEM_ARCH)
   if(CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER_ARCHITECTURE_ID)
-    string(TOLOWER "${CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER_ARCHITECTURE_ID}"
-                   CMAKE_SYSTEM_ARCH)
+    string(TOLOWER "${CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER_ARCHITECTURE_ID}" CMAKE_SYSTEM_ARCH)
     if(CMAKE_SYSTEM_ARCH STREQUAL "x86")
       set(X86_32 TRUE)
-    elseif(CMAKE_SYSTEM_ARCH STREQUAL "x86_64" OR CMAKE_SYSTEM_ARCH STREQUAL
-                                                  "x64")
+    elseif(CMAKE_SYSTEM_ARCH STREQUAL "x86_64" OR CMAKE_SYSTEM_ARCH STREQUAL "x64")
       set(X86_64 TRUE)
       set(CMAKE_SYSTEM_ARCH "x86_64")
     elseif(CMAKE_SYSTEM_ARCH MATCHES "^(aarch.*|arm.*)")
@@ -263,8 +250,7 @@ if(NOT CMAKE_SYSTEM_ARCH)
       set(X86_32 TRUE)
       set(CMAKE_SYSTEM_ARCH "x86")
     endif()
-  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES
-         "amd64.*|[xXiI]86_64.*|AMD64.*|[iI][3-6]86.*|[xXiI]86.*")
+  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64.*|[xXiI]86_64.*|AMD64.*|[iI][3-6]86.*|[xXiI]86.*")
     if(CMAKE_TARGET_BITNESS EQUAL 64)
       set(X86_64 TRUE)
       set(CMAKE_SYSTEM_ARCH "x86_64")
@@ -347,18 +333,15 @@ if(NOT DEFINED CMAKE_HOST_CAN_RUN_EXECUTABLES_BUILT_FOR_TARGET)
             )
         ))
     set(CMAKE_HOST_CAN_RUN_EXECUTABLES_BUILT_FOR_TARGET TRUE)
-    message(STATUS "Assume СAN RUN A BUILT EXECUTABLES,"
-                   " since host (${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_ARCH})"
+    message(STATUS "Assume СAN RUN A BUILT EXECUTABLES," " since host (${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_ARCH})"
                    " match target (${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_ARCH})")
   else()
     if(CMAKE_C_COMPILER_LOADED)
       include(CheckCSourceRuns)
-      check_c_source_runs("int main(void) { return 0; }"
-                          CMAKE_HOST_CAN_RUN_EXECUTABLES_BUILT_FOR_TARGET)
+      check_c_source_runs("int main(void) { return 0; }" CMAKE_HOST_CAN_RUN_EXECUTABLES_BUILT_FOR_TARGET)
     elseif(CMAKE_CXX_COMPILER_LOADED)
       include(CheckCXXSourceRuns)
-      check_cxx_source_runs("int main(void) { return 0; }"
-                            CMAKE_HOST_CAN_RUN_EXECUTABLES_BUILT_FOR_TARGET)
+      check_cxx_source_runs("int main(void) { return 0; }" CMAKE_HOST_CAN_RUN_EXECUTABLES_BUILT_FOR_TARGET)
     endif()
     if(NOT CMAKE_HOST_CAN_RUN_EXECUTABLES_BUILT_FOR_TARGET)
       message(STATUS "Force CMAKE_CROSSCOMPILING to TRUE")
@@ -373,15 +356,13 @@ if(MSVC)
   check_compiler_flag("/fsanitize=undefined" CC_HAS_UBSAN)
 else()
   #
-  # GCC started to warn for unused result starting from 4.2, and this is when it
-  # introduced -Wno-unused-result GCC can also be built on top of llvm runtime
-  # (on mac).
+  # GCC started to warn for unused result starting from 4.2, and this is when it introduced -Wno-unused-result GCC can
+  # also be built on top of llvm runtime (on mac).
   check_compiler_flag("-Wno-unknown-pragmas" CC_HAS_WNO_UNKNOWN_PRAGMAS)
   check_compiler_flag("-Wextra" CC_HAS_WEXTRA)
   check_compiler_flag("-Werror" CC_HAS_WERROR)
   check_compiler_flag("-fexceptions" CC_HAS_FEXCEPTIONS)
-  check_compiler_flag("-fno-semantic-interposition"
-                      CC_HAS_FNO_SEMANTIC_INTERPOSITION)
+  check_compiler_flag("-fno-semantic-interposition" CC_HAS_FNO_SEMANTIC_INTERPOSITION)
   if(CMAKE_CXX_COMPILER_LOADED)
     check_cxx_compiler_flag("-fcxx-exceptions" CC_HAS_FCXX_EXCEPTIONS)
   endif()
@@ -463,34 +444,26 @@ if(CMAKE_COMPILER_IS_GNU${CMAKE_PRIMARY_LANG}
       OUTPUT_VARIABLE gcc_info_v
       ERROR_VARIABLE gcc_info_v)
 
-    string(REGEX MATCH "^(.+\nCOLLECT_GCC=)([^ \n]+)(\n.+)$" gcc_collect_valid
-                 ${gcc_info_v})
+    string(REGEX MATCH "^(.+\nCOLLECT_GCC=)([^ \n]+)(\n.+)$" gcc_collect_valid ${gcc_info_v})
     if(gcc_collect_valid)
-      string(REGEX REPLACE "^(.+\nCOLLECT_GCC=)([^ \n]+)(\n.+)$" "\\2"
-                           gcc_collect ${gcc_info_v})
+      string(REGEX REPLACE "^(.+\nCOLLECT_GCC=)([^ \n]+)(\n.+)$" "\\2" gcc_collect ${gcc_info_v})
     endif()
 
-    string(REGEX MATCH
-                 "^(.+\nCOLLECT_LTO_WRAPPER=)([^ \n]+/lto-wrapper)(\n.+)$"
-                 gcc_lto_wrapper_valid ${gcc_info_v})
+    string(REGEX MATCH "^(.+\nCOLLECT_LTO_WRAPPER=)([^ \n]+/lto-wrapper)(\n.+)$" gcc_lto_wrapper_valid ${gcc_info_v})
     if(gcc_lto_wrapper_valid)
-      string(REGEX
-             REPLACE "^(.+\nCOLLECT_LTO_WRAPPER=)([^ \n]+/lto-wrapper)(\n.+)$"
-                     "\\2" gcc_lto_wrapper ${gcc_info_v})
+      string(REGEX REPLACE "^(.+\nCOLLECT_LTO_WRAPPER=)([^ \n]+/lto-wrapper)(\n.+)$" "\\2" gcc_lto_wrapper
+                           ${gcc_info_v})
     endif()
 
     set(gcc_suffix "")
     if(gcc_collect_valid AND gcc_collect)
-      string(REGEX MATCH "^(.*(cc|\\+\\+))(-.+)$" gcc_suffix_valid
-                   ${gcc_collect})
+      string(REGEX MATCH "^(.*(cc|\\+\\+))(-.+)$" gcc_suffix_valid ${gcc_collect})
       if(gcc_suffix_valid)
-        string(REGEX REPLACE "^(.*(cc|\\+\\+))(-.+)$" "\\3" gcc_suffix
-                             ${gcc_collect})
+        string(REGEX REPLACE "^(.*(cc|\\+\\+))(-.+)$" "\\3" gcc_suffix ${gcc_collect})
       endif()
     endif()
 
-    get_filename_component(gcc_dir ${CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER}
-                           DIRECTORY)
+    get_filename_component(gcc_dir ${CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER} DIRECTORY)
     if(NOT CMAKE_GCC_AR)
       find_program(
         CMAKE_GCC_AR
@@ -526,10 +499,7 @@ if(CMAKE_COMPILER_IS_GNU${CMAKE_PRIMARY_LANG}
      AND CMAKE_GCC_NM
      AND CMAKE_GCC_RANLIB
      AND gcc_lto_wrapper)
-    message(
-      STATUS
-        "Found GCC's LTO toolset: ${gcc_lto_wrapper}, ${CMAKE_GCC_AR}, ${CMAKE_GCC_RANLIB}"
-    )
+    message(STATUS "Found GCC's LTO toolset: ${gcc_lto_wrapper}, ${CMAKE_GCC_AR}, ${CMAKE_GCC_RANLIB}")
     set(GCC_LTO_CFLAGS "-flto -fno-fat-lto-objects -fuse-linker-plugin")
     set(GCC_LTO_AVAILABLE TRUE)
     message(STATUS "Link-Time Optimization by GCC is available")
@@ -565,11 +535,9 @@ if(CMAKE_COMPILER_IS_CLANG)
     unset(clang_libdirs)
     unset(clang_libdirs_x)
     if(clang_probe_result EQUAL 0)
-      string(REGEX MATCH "(^|\n.*)(.*programs: =)([^\n]+)((\n.*)|$)"
-                   regexp_valid ${clang_search_dirs})
+      string(REGEX MATCH "(^|\n.*)(.*programs: =)([^\n]+)((\n.*)|$)" regexp_valid ${clang_search_dirs})
       if(regexp_valid)
-        string(REGEX REPLACE "(^|\n.*)(.*programs: =)([^\n]+)((\n.*)|$)" "\\3"
-                             list ${clang_search_dirs})
+        string(REGEX REPLACE "(^|\n.*)(.*programs: =)([^\n]+)((\n.*)|$)" "\\3" list ${clang_search_dirs})
         string(REPLACE ":" ";" list "${list}")
         foreach(dir IN LISTS list)
           get_filename_component(dir "${dir}" REALPATH)
@@ -582,11 +550,9 @@ if(CMAKE_COMPILER_IS_CLANG)
         list(APPEND clang_bindirs "${clang_bindirs_x}")
         list(REMOVE_DUPLICATES clang_bindirs)
       endif()
-      string(REGEX MATCH "(^|\n.*)(.*libraries: =)([^\n]+)((\n.*)|$)"
-                   regexp_valid ${clang_search_dirs})
+      string(REGEX MATCH "(^|\n.*)(.*libraries: =)([^\n]+)((\n.*)|$)" regexp_valid ${clang_search_dirs})
       if(regexp_valid)
-        string(REGEX REPLACE "(^|\n.*)(.*libraries: =)([^\n]+)((\n.*)|$)" "\\3"
-                             list ${clang_search_dirs})
+        string(REGEX REPLACE "(^|\n.*)(.*libraries: =)([^\n]+)((\n.*)|$)" "\\3" list ${clang_search_dirs})
         string(REPLACE ":" ";" list "${list}")
         foreach(dir IN LISTS list)
           get_filename_component(dir "${dir}" REALPATH)
@@ -600,21 +566,16 @@ if(CMAKE_COMPILER_IS_CLANG)
         list(REMOVE_DUPLICATES clang_libdirs)
       endif()
     else()
-      get_filename_component(clang_bindirs
-                             ${CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER} DIRECTORY)
+      get_filename_component(clang_bindirs ${CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER} DIRECTORY)
       if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
         set(clang_libdirs ${clang_bindirs})
       else()
-        get_filename_component(
-          clang_libdirs "${CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER}/../lib"
-          REALPATH)
+        get_filename_component(clang_libdirs "${CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER}/../lib" REALPATH)
       endif()
     endif()
 
     if(clang_bindirs AND clang_libdirs)
-      message(
-        STATUS
-          "Found CLANG/LLVM directories: ${clang_bindirs}, ${clang_libdirs}")
+      message(STATUS "Found CLANG/LLVM directories: ${clang_bindirs}, ${clang_libdirs}")
     else()
       message(STATUS "Could NOT find CLANG/LLVM directories (bin and/or lib).")
     endif()
@@ -622,8 +583,7 @@ if(CMAKE_COMPILER_IS_CLANG)
     if(NOT CMAKE_CLANG_LD AND clang_bindirs)
       find_program(
         CMAKE_CLANG_LD
-        NAMES lld-link ld.lld "ld${CMAKE_TARGET_BITNESS}.lld" lld llvm-link
-              llvm-ld
+        NAMES lld-link ld.lld "ld${CMAKE_TARGET_BITNESS}.lld" lld llvm-link llvm-ld
         PATHS ${clang_bindirs}
         NO_DEFAULT_PATH)
     endif()
@@ -666,31 +626,21 @@ if(CMAKE_COMPILER_IS_CLANG)
     if(CLANG_LTO_PLUGIN)
       message(STATUS "Found CLANG/LLVM's plugin for LTO: ${CLANG_LTO_PLUGIN}")
     else()
-      message(
-        STATUS
-          "Could NOT find CLANG/LLVM's plugin (${clang_lto_plugin_name}) for LTO."
-      )
+      message(STATUS "Could NOT find CLANG/LLVM's plugin (${clang_lto_plugin_name}) for LTO.")
     endif()
 
     if(CMAKE_CLANG_LD)
       message(STATUS "Found CLANG/LLVM's linker for LTO: ${CMAKE_CLANG_LD}")
     else()
-      message(
-        STATUS
-          "Could NOT find CLANG/LLVM's linker (lld, llvm-ld, llvm-link) for LTO."
-      )
+      message(STATUS "Could NOT find CLANG/LLVM's linker (lld, llvm-ld, llvm-link) for LTO.")
     endif()
 
     if(CMAKE_CLANG_AR
        AND CMAKE_CLANG_RANLIB
        AND CMAKE_CLANG_NM)
-      message(
-        STATUS
-          "Found CLANG/LLVM's binutils for LTO: ${CMAKE_CLANG_AR}, ${CMAKE_CLANG_RANLIB}, ${CMAKE_CLANG_NM}"
-      )
+      message(STATUS "Found CLANG/LLVM's binutils for LTO: ${CMAKE_CLANG_AR}, ${CMAKE_CLANG_RANLIB}, ${CMAKE_CLANG_NM}")
     else()
-      message(
-        STATUS "Could NOT find CLANG/LLVM's binutils (ar, ranlib, nm) for LTO.")
+      message(STATUS "Could NOT find CLANG/LLVM's binutils (ar, ranlib, nm) for LTO.")
     endif()
 
     unset(clang_lto_plugin_name)
@@ -704,22 +654,17 @@ if(CMAKE_COMPILER_IS_CLANG)
      AND CMAKE_CLANG_NM
      AND CMAKE_CLANG_RANLIB
      AND ((CLANG_LTO_PLUGIN AND CMAKE_LD_GOLD)
-          OR (CMAKE_CLANG_LD AND NOT (CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux"
-                                      AND CMAKE_SYSTEM_NAME STREQUAL "Linux"))
-          OR APPLE
-         ))
+          OR (CMAKE_CLANG_LD AND NOT (CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_NAME STREQUAL "Linux"))
+          OR APPLE))
     if(ANDROID AND CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER_VERSION VERSION_LESS 12)
       set(CLANG_LTO_AVAILABLE FALSE)
       message(
-        STATUS
-          "Link-Time Optimization by CLANG/LLVM is available but unusable due https://reviews.llvm.org/D79919"
-      )
+        STATUS "Link-Time Optimization by CLANG/LLVM is available but unusable due https://reviews.llvm.org/D79919")
     else()
       set(CLANG_LTO_AVAILABLE TRUE)
       message(STATUS "Link-Time Optimization by CLANG/LLVM is available")
     endif()
-  elseif(CMAKE_TOOLCHAIN_FILE
-         AND NOT CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER_VERSION VERSION_LESS 7.0)
+  elseif(CMAKE_TOOLCHAIN_FILE AND NOT CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER_VERSION VERSION_LESS 7.0)
     set(CLANG_LTO_AVAILABLE TRUE)
     if(NOT CMAKE_CLANG_LD)
       set(CMAKE_CLANG_LD ${CMAKE_LINKER})
@@ -733,10 +678,7 @@ if(CMAKE_COMPILER_IS_CLANG)
     if(NOT CMAKE_CLANG_RANLIB)
       set(CMAKE_CLANG_RANLIB ${CMAKE_RANLIB})
     endif()
-    message(
-      STATUS
-        "Assume Link-Time Optimization by CLANG/LLVM is available via ${CMAKE_TOOLCHAIN_FILE}"
-    )
+    message(STATUS "Assume Link-Time Optimization by CLANG/LLVM is available via ${CMAKE_TOOLCHAIN_FILE}")
   else()
     set(CLANG_LTO_AVAILABLE FALSE)
     message(STATUS "Link-Time Optimization by CLANG/LLVM is NOT available")
@@ -772,8 +714,7 @@ if(ENABLE_BACKTRACE)
   if(IBERTY_LIBRARY)
     check_library_exists(${IBERTY_LIBRARY} cplus_demangle "" HAVE_IBERTY_LIB)
   endif()
-  set(CMAKE_REQUIRED_DEFINITIONS -DPACKAGE=${PACKAGE}
-                                 -DPACKAGE_VERSION=${PACKAGE_VERSION})
+  set(CMAKE_REQUIRED_DEFINITIONS -DPACKAGE=${PACKAGE} -DPACKAGE_VERSION=${PACKAGE_VERSION})
   check_include_files(bfd.h HAVE_BFD_H)
   set(CMAKE_REQUIRED_DEFINITIONS)
   find_package(ZLIB)
@@ -783,8 +724,7 @@ if(ENABLE_BACKTRACE)
      AND ZLIB_FOUND)
     set(HAVE_BFD ON)
     set(BFD_LIBRARIES ${BFD_LIBRARY} ${IBERTY_LIBRARY} ${ZLIB_LIBRARIES})
-    find_package_message(BFD_LIBRARIES "Found libbfd and dependencies"
-                         ${BFD_LIBRARIES})
+    find_package_message(BFD_LIBRARIES "Found libbfd and dependencies" ${BFD_LIBRARIES})
     if(TARGET_OS_FREEBSD AND NOT TARGET_OS_DEBIAN_FREEBSD)
       set(BFD_LIBRARIES ${BFD_LIBRARIES} iconv)
     endif()
@@ -859,12 +799,9 @@ macro(setup_compile_flags)
     add_compile_flags("C;CXX" "-fno-semantic-interposition")
   endif()
   if(MSVC)
-    # checks for /EHa or /clr options exists, i.e. is enabled structured async
-    # WinNT exceptions
-    string(REGEX MATCH "^(.* )*[-/]EHc*a( .*)*$" msvc_async_eh_enabled
-                 "${CXX_FLAGS}" "${C_FLAGS}")
-    string(REGEX MATCH "^(.* )*[-/]clr( .*)*$" msvc_clr_enabled "${CXX_FLAGS}"
-                 "${C_FLAGS}")
+    # checks for /EHa or /clr options exists, i.e. is enabled structured async WinNT exceptions
+    string(REGEX MATCH "^(.* )*[-/]EHc*a( .*)*$" msvc_async_eh_enabled "${CXX_FLAGS}" "${C_FLAGS}")
+    string(REGEX MATCH "^(.* )*[-/]clr( .*)*$" msvc_clr_enabled "${CXX_FLAGS}" "${C_FLAGS}")
     # remote any /EH? options
     string(REGEX REPLACE "( *[-/]-*EH[csa]+ *)+" "" CXX_FLAGS "${CXX_FLAGS}")
     string(REGEX REPLACE "( *[-/]-*EH[csa]+ *)+" "" C_FLAGS "${C_FLAGS}")
@@ -887,21 +824,17 @@ macro(setup_compile_flags)
     endif()
   endif()
 
-  # In C a global variable without a storage specifier (static/extern) and
-  # without an initialiser is called a ’tentative definition’. The language
-  # permits multiple tentative definitions in the single translation unit; i.e.
-  # int foo; int foo; is perfectly ok. GNU toolchain goes even further, allowing
-  # multiple tentative definitions in *different* translation units. Internally,
-  # variables introduced via tentative definitions are implemented as ‘common’
-  # symbols. Linker permits multiple definitions if they are common symbols, and
-  # it picks one arbitrarily for inclusion in the binary being linked.
+  # In C a global variable without a storage specifier (static/extern) and without an initialiser is called a ’tentative
+  # definition’. The language permits multiple tentative definitions in the single translation unit; i.e. int foo; int
+  # foo; is perfectly ok. GNU toolchain goes even further, allowing multiple tentative definitions in *different*
+  # translation units. Internally, variables introduced via tentative definitions are implemented as ‘common’ symbols.
+  # Linker permits multiple definitions if they are common symbols, and it picks one arbitrarily for inclusion in the
+  # binary being linked.
   #
-  # -fno-common forces GNU toolchain to behave in a more standard-conformant way
-  # in respect to tentative definitions and it prevents common symbols
-  # generation. Since we are a cross-platform project it really makes sense.
-  # There are toolchains that don’t implement GNU style handling of the
-  # tentative definitions and there are platforms lacking proper support for
-  # common symbols (osx).
+  # -fno-common forces GNU toolchain to behave in a more standard-conformant way in respect to tentative definitions and
+  # it prevents common symbols generation. Since we are a cross-platform project it really makes sense. There are
+  # toolchains that don’t implement GNU style handling of the tentative definitions and there are platforms lacking
+  # proper support for common symbols (osx).
   if(CC_HAS_FNO_COMMON)
     add_compile_flags("C;CXX" "-fno-common")
   endif()
@@ -920,9 +853,8 @@ macro(setup_compile_flags)
     add_compile_flags("C;CXX" "/Gy")
   endif()
 
-  # We must set -fno-omit-frame-pointer here, since we rely on frame pointer
-  # when getting a backtrace, and it must be used consistently across all object
-  # files. The same reasoning applies to -fno-stack-protector switch.
+  # We must set -fno-omit-frame-pointer here, since we rely on frame pointer when getting a backtrace, and it must be
+  # used consistently across all object files. The same reasoning applies to -fno-stack-protector switch.
   if(ENABLE_BACKTRACE)
     if(CC_HAS_FNO_OMIT_FRAME_POINTER)
       add_compile_flags("C;CXX" "-fno-omit-frame-pointer")
@@ -933,8 +865,7 @@ macro(setup_compile_flags)
     if(MSVC_VERSION LESS 1900)
       message(
         FATAL_ERROR
-          "At least \"Microsoft C/C++ Compiler\" version 19.0.24234.1 (Visual Studio 2015 Update 3) is required."
-      )
+          "At least \"Microsoft C/C++ Compiler\" version 19.0.24234.1 (Visual Studio 2015 Update 3) is required.")
     endif()
     if(NOT MSVC_VERSION LESS 1910)
       add_compile_flags("CXX" "/Zc:__cplusplus")
@@ -955,8 +886,7 @@ macro(setup_compile_flags)
   add_definitions("-D__STDC_CONSTANT_MACROS=1")
   add_definitions("-D_HAS_EXCEPTIONS=1")
 
-  # Only add -Werror if it's a debug build, done by developers. Release builds
-  # should not cause extra trouble.
+  # Only add -Werror if it's a debug build, done by developers. Release builds should not cause extra trouble.
   if(CC_HAS_WERROR
      AND (CI
           OR CMAKE_CONFIGURATION_TYPES
@@ -976,17 +906,15 @@ macro(setup_compile_flags)
     endif()
   endif()
 
-  if(CMAKE_COMPILER_IS_GNU${CMAKE_PRIMARY_LANG}
-     AND CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER_VERSION VERSION_LESS 5)
+  if(CMAKE_COMPILER_IS_GNU${CMAKE_PRIMARY_LANG} AND CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER_VERSION VERSION_LESS 5)
     # G++ bug. http://gcc.gnu.org/bugzilla/show_bug.cgi?id=31488
     add_compile_flags("CXX" "-Wno-invalid-offsetof")
   endif()
   if(MINGW)
-    # Disable junk MINGW's warnings that issued due to incompatibilities and
-    # shortcomings of MINGW, since the code is checked by builds with GCC, CLANG
-    # and MSVC.
-    add_compile_flags("C;CXX" "-Wno-format-extra-args" "-Wno-format"
-                      "-Wno-cast-function-type" "-Wno-implicit-fallthrough")
+    # Disable junk MINGW's warnings that issued due to incompatibilities and shortcomings of MINGW, since the code is
+    # checked by builds with GCC, CLANG and MSVC.
+    add_compile_flags("C;CXX" "-Wno-format-extra-args" "-Wno-format" "-Wno-cast-function-type"
+                      "-Wno-implicit-fallthrough")
   endif()
 
   if(ENABLE_ASAN)
@@ -1000,8 +928,7 @@ macro(setup_compile_flags)
 
   if(ENABLE_UBSAN)
     if(NOT MSVC)
-      add_compile_flags("C;CXX" "-fsanitize=undefined"
-                        "-fsanitize-undefined-trap-on-error")
+      add_compile_flags("C;CXX" "-fsanitize=undefined" "-fsanitize-undefined-trap-on-error")
     else()
       add_compile_flags("C;CXX" "/fsanitize=undefined")
     endif()
@@ -1010,17 +937,13 @@ macro(setup_compile_flags)
 
   if(ENABLE_GCOV)
     if(NOT HAVE_GCOV)
-      message(
-        FATAL_ERROR "ENABLE_GCOV option requested but gcov library is not found"
-      )
+      message(FATAL_ERROR "ENABLE_GCOV option requested but gcov library is not found")
     endif()
 
     add_compile_flags("C;CXX" "-fprofile-arcs" "-ftest-coverage")
     set(EXE_LINKER_FLAGS "${EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
-    set(SHARED_LINKER_FLAGS
-        "${SHARED_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
-    set(MODULE_LINKER_FLAGS
-        "${MODULE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
+    set(SHARED_LINKER_FLAGS "${SHARED_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
+    set(MODULE_LINKER_FLAGS "${MODULE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
     # add_library(gcov SHARED IMPORTED)
   endif()
 
@@ -1030,16 +953,12 @@ macro(setup_compile_flags)
 
   if(CMAKE_COMPILER_IS_GNUCC AND LTO_ENABLED)
     add_compile_flags("C;CXX" ${GCC_LTO_CFLAGS})
-    set(EXE_LINKER_FLAGS
-        "${EXE_LINKER_FLAGS} ${GCC_LTO_CFLAGS} -fverbose-asm -fwhole-program")
-    set(SHARED_LINKER_FLAGS
-        "${SHARED_LINKER_FLAGS} ${GCC_LTO_CFLAGS} -fverbose-asm")
-    set(MODULE_LINKER_FLAGS
-        "${MODULE_LINKER_FLAGS} ${GCC_LTO_CFLAGS} -fverbose-asm")
+    set(EXE_LINKER_FLAGS "${EXE_LINKER_FLAGS} ${GCC_LTO_CFLAGS} -fverbose-asm -fwhole-program")
+    set(SHARED_LINKER_FLAGS "${SHARED_LINKER_FLAGS} ${GCC_LTO_CFLAGS} -fverbose-asm")
+    set(MODULE_LINKER_FLAGS "${MODULE_LINKER_FLAGS} ${GCC_LTO_CFLAGS} -fverbose-asm")
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5)
       # Pass the same optimization flags to the linker
-      set(compile_flags
-          "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE}}")
+      set(compile_flags "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE}}")
       set(EXE_LINKER_FLAGS "${EXE_LINKER_FLAGS} ${compile_flags}")
       set(SHARED_LINKER_FLAGS "${SHARED_LINKER_FLAGS} ${compile_flags}")
       set(MODULE_LINKER_FLAGS "${MODULE_LINKER_FLAGS} ${compile_flags}")
@@ -1055,9 +974,8 @@ macro(setup_compile_flags)
     add_compile_flags("C;CXX" "/GL")
     foreach(linkmode IN ITEMS EXE SHARED STATIC MODULE)
       set(${linkmode}_LINKER_FLAGS "${${linkmode}_LINKER_FLAGS} /LTCG")
-      string(REGEX
-             REPLACE "^(.*)(/INCREMENTAL)(:YES)?(:NO)?( ?.*)$" "\\1\\2:NO\\5"
-                     ${linkmode}_LINKER_FLAGS "${${linkmode}_LINKER_FLAGS}")
+      string(REGEX REPLACE "^(.*)(/INCREMENTAL)(:YES)?(:NO)?( ?.*)$" "\\1\\2:NO\\5" ${linkmode}_LINKER_FLAGS
+                           "${${linkmode}_LINKER_FLAGS}")
       string(STRIP "${${linkmode}_LINKER_FLAGS}" ${linkmode}_LINKER_FLAGS)
       foreach(
         config IN
@@ -1065,14 +983,10 @@ macro(setup_compile_flags)
         ITEMS Release MinSizeRel RelWithDebInfo Debug)
         string(TOUPPER "${config}" config_uppercase)
         if(DEFINED "CMAKE_${linkmode}_LINKER_FLAGS_${config_uppercase}")
-          string(
-            REGEX
-            REPLACE "^(.*)(/INCREMENTAL)(:YES)?(:NO)?( ?.*)$" "\\1\\2:NO\\5"
-                    altered_flags
-                    "${CMAKE_${linkmode}_LINKER_FLAGS_${config_uppercase}}")
+          string(REGEX REPLACE "^(.*)(/INCREMENTAL)(:YES)?(:NO)?( ?.*)$" "\\1\\2:NO\\5" altered_flags
+                               "${CMAKE_${linkmode}_LINKER_FLAGS_${config_uppercase}}")
           string(STRIP "${altered_flags}" altered_flags)
-          if(NOT "${altered_flags}" STREQUAL
-             "${CMAKE_${linkmode}_LINKER_FLAGS_${config_uppercase}}")
+          if(NOT "${altered_flags}" STREQUAL "${CMAKE_${linkmode}_LINKER_FLAGS_${config_uppercase}}")
             set(CMAKE_${linkmode}_LINKER_FLAGS_${config_uppercase}
                 "${altered_flags}"
                 CACHE STRING "Altered: '/INCREMENTAL' removed for LTO" FORCE)
@@ -1089,10 +1003,8 @@ macro(setup_compile_flags)
       foreach(lang IN ITEMS C CXX)
         string(TOUPPER "${config}" config_uppercase)
         if(DEFINED "CMAKE_${lang}_FLAGS_${config_uppercase}")
-          string(REPLACE "/O2" "/Ox" altered_flags
-                         "${CMAKE_${lang}_FLAGS_${config_uppercase}}")
-          if(NOT "${altered_flags}" STREQUAL
-             "${CMAKE_${lang}_FLAGS_${config_uppercase}}")
+          string(REPLACE "/O2" "/Ox" altered_flags "${CMAKE_${lang}_FLAGS_${config_uppercase}}")
+          if(NOT "${altered_flags}" STREQUAL "${CMAKE_${lang}_FLAGS_${config_uppercase}}")
             set(CMAKE_${lang}_FLAGS_${config_uppercase}
                 "${altered_flags}"
                 CACHE STRING "Altered: '/O2' replaced by '/Ox' for LTO" FORCE)
@@ -1120,12 +1032,9 @@ macro(setup_compile_flags)
     endif()
     add_compile_flags("C;CXX" ${CLANG_LTO_FLAG})
     if(NOT MSVC)
-      set(EXE_LINKER_FLAGS
-          "${EXE_LINKER_FLAGS} ${CLANG_LTO_FLAG} -fverbose-asm -fwhole-program")
-      set(SHARED_LINKER_FLAGS
-          "${SHARED_LINKER_FLAGS} ${CLANG_LTO_FLAG} -fverbose-asm")
-      set(MODULE_LINKER_FLAGS
-          "${MODULE_LINKER_FLAGS} ${CLANG_LTO_FLAG} -fverbose-asm")
+      set(EXE_LINKER_FLAGS "${EXE_LINKER_FLAGS} ${CLANG_LTO_FLAG} -fverbose-asm -fwhole-program")
+      set(SHARED_LINKER_FLAGS "${SHARED_LINKER_FLAGS} ${CLANG_LTO_FLAG} -fverbose-asm")
+      set(MODULE_LINKER_FLAGS "${MODULE_LINKER_FLAGS} ${CLANG_LTO_FLAG} -fverbose-asm")
     endif()
   endif()
 
@@ -1133,15 +1042,13 @@ macro(setup_compile_flags)
   if(CMAKE_CXX_COMPILER_LOADED)
     set(CMAKE_CXX_FLAGS
         ${CXX_FLAGS}
-        CACHE STRING "Flags used by the C++ compiler during all build types"
-              FORCE)
+        CACHE STRING "Flags used by the C++ compiler during all build types" FORCE)
     unset(CXX_FLAGS)
   endif()
   if(CMAKE_C_COMPILER_LOADED)
     set(CMAKE_C_FLAGS
         ${C_FLAGS}
-        CACHE STRING "Flags used by the C compiler during all build types"
-              FORCE)
+        CACHE STRING "Flags used by the C compiler during all build types" FORCE)
     unset(C_FLAGS)
   endif()
   set(CMAKE_EXE_LINKER_FLAGS
@@ -1149,17 +1056,13 @@ macro(setup_compile_flags)
       CACHE STRING "Flags used by the linker" FORCE)
   set(CMAKE_SHARED_LINKER_FLAGS
       ${SHARED_LINKER_FLAGS}
-      CACHE STRING "Flags used by the linker during the creation of dll's"
-            FORCE)
+      CACHE STRING "Flags used by the linker during the creation of dll's" FORCE)
   set(CMAKE_STATIC_LINKER_FLAGS
       ${STATIC_LINKER_FLAGS}
-      CACHE STRING
-            "Flags used by the linker during the creation of static libraries"
-            FORCE)
+      CACHE STRING "Flags used by the linker during the creation of static libraries" FORCE)
   set(CMAKE_MODULE_LINKER_FLAGS
       ${MODULE_LINKER_FLAGS}
-      CACHE STRING "Flags used by the linker during the creation of modules"
-            FORCE)
+      CACHE STRING "Flags used by the linker during the creation of modules" FORCE)
   unset(EXE_LINKER_FLAGS)
   unset(SHARED_LINKER_FLAGS)
   unset(STATIC_LINKER_FLAGS)
@@ -1183,9 +1086,7 @@ macro(probe_libcxx_filesystem)
       if(NOT DEFINED CMAKE_CXX_STANDARD)
         list(FIND CMAKE_CXX_COMPILE_FEATURES cxx_std_14 HAS_CXX14)
         list(FIND CMAKE_CXX_COMPILE_FEATURES cxx_std_17 HAS_CXX17)
-        if(NOT HAS_CXX17 LESS 0
-           AND NOT (CMAKE_COMPILER_IS_CLANG AND CMAKE_CXX_COMPILER_VERSION
-                                                VERSION_LESS 5))
+        if(NOT HAS_CXX17 LESS 0 AND NOT (CMAKE_COMPILER_IS_CLANG AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5))
           set(CMAKE_CXX_STANDARD 17)
         elseif(NOT HAS_CXX14 LESS 0)
           set(CMAKE_CXX_STANDARD 14)
@@ -1198,14 +1099,11 @@ macro(probe_libcxx_filesystem)
         endif()
         set(stdfs_probe_clear_cxx_standard ON)
       endif()
-      if(CMAKE_COMPILER_IS_ELBRUSCXX AND CMAKE_CXX_COMPILER_VERSION
-                                         VERSION_LESS 1.25.23)
+      if(CMAKE_COMPILER_IS_ELBRUSCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 1.25.23)
         if(CMAKE_VERSION VERSION_LESS 3.14)
-          set(stdfs_probe_flags ${stdfs_probe_flags}
-                                "-Wl,--allow-multiple-definition")
+          set(stdfs_probe_flags ${stdfs_probe_flags} "-Wl,--allow-multiple-definition")
         else()
-          set(CMAKE_REQUIRED_LINK_OPTIONS ${stdfs_probe_save_link_options}
-                                          "-Wl,--allow-multiple-definition")
+          set(CMAKE_REQUIRED_LINK_OPTIONS ${stdfs_probe_save_link_options} "-Wl,--allow-multiple-definition")
         endif()
       endif()
       set(CMAKE_REQUIRED_FLAGS ${stdfs_probe_flags})
@@ -1261,40 +1159,25 @@ macro(probe_libcxx_filesystem)
 
       check_cxx_source_compiles("${stdfs_probe_code}" LIBCXX_FILESYSTEM_none)
       if(LIBCXX_FILESYSTEM_none)
-        message(
-          STATUS "No linking with additional library needed for std::filesystem"
-        )
+        message(STATUS "No linking with additional library needed for std::filesystem")
       else()
         set(CMAKE_REQUIRED_LIBRARIES ${stdfs_probe_save_libraries} "stdc++fs")
-        check_cxx_source_compiles("${stdfs_probe_code}"
-                                  LIBCXX_FILESYSTEM_stdcxxfs)
+        check_cxx_source_compiles("${stdfs_probe_code}" LIBCXX_FILESYSTEM_stdcxxfs)
         if(LIBCXX_FILESYSTEM_stdcxxfs)
           set(LIBCXX_FILESYSTEM "stdc++fs")
-          message(
-            STATUS
-              "Linking with ${LIBCXX_FILESYSTEM} is required for std::filesystem"
-          )
+          message(STATUS "Linking with ${LIBCXX_FILESYSTEM} is required for std::filesystem")
         else()
           set(CMAKE_REQUIRED_LIBRARIES ${stdfs_probe_save_libraries} "c++fs")
-          check_cxx_source_compiles("${stdfs_probe_code}"
-                                    LIBCXX_FILESYSTEM_cxxfs)
+          check_cxx_source_compiles("${stdfs_probe_code}" LIBCXX_FILESYSTEM_cxxfs)
           if(LIBCXX_FILESYSTEM_cxxfs)
             set(LIBCXX_FILESYSTEM "c++fs")
-            message(
-              STATUS
-                "Linking with ${LIBCXX_FILESYSTEM} is required for std::filesystem"
-            )
+            message(STATUS "Linking with ${LIBCXX_FILESYSTEM} is required for std::filesystem")
           else()
-            set(CMAKE_REQUIRED_LIBRARIES ${stdfs_probe_save_libraries}
-                                         "c++experimental")
-            check_cxx_source_compiles("${stdfs_probe_code}"
-                                      LIBCXX_FILESYSTEM_cxxexperimental)
+            set(CMAKE_REQUIRED_LIBRARIES ${stdfs_probe_save_libraries} "c++experimental")
+            check_cxx_source_compiles("${stdfs_probe_code}" LIBCXX_FILESYSTEM_cxxexperimental)
             if(LIBCXX_FILESYSTEM_cxxexperimental)
               set(LIBCXX_FILESYSTEM "c++experimental")
-              message(
-                STATUS
-                  "Linking with ${LIBCXX_FILESYSTEM} is required for std::filesystem"
-              )
+              message(STATUS "Linking with ${LIBCXX_FILESYSTEM} is required for std::filesystem")
             else()
               message(STATUS "No support for std::filesystem")
             endif()
