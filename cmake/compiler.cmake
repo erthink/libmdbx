@@ -31,9 +31,11 @@ if(NOT CMAKE_VERSION VERSION_LESS 3.9)
   cmake_policy(SET CMP0069 NEW)
 endif()
 
+cmake_policy(SET CMP0054 NEW)
+
 if(CMAKE_VERSION MATCHES ".*MSVC.*" AND CMAKE_VERSION VERSION_LESS 3.16)
   message(FATAL_ERROR "CMake from MSVC kit is unfit! "
-                      "Please use MSVC2019 with modern CMake the original CMake from https://cmake.org/download/")
+                      "Please use MSVC-2019 with modern CMake the original CMake from https://cmake.org/download/")
 endif()
 
 if(NOT (CMAKE_C_COMPILER_LOADED OR CMAKE_CXX_COMPILER_LOADED))
