@@ -621,14 +621,6 @@ endif()
 # ######################################################################################################################
 
 set(MDBX_BUILD_OPTIONS ENABLE_UBSAN ENABLE_ASAN ENABLE_MEMCHECK ENABLE_GPROF ENABLE_GCOV)
-macro(add_mdbx_option NAME DESCRIPTION DEFAULT)
-  list(APPEND MDBX_BUILD_OPTIONS ${NAME})
-  if(NOT ${DEFAULT} STREQUAL "AUTO")
-    option(${NAME} "${DESCRIPTION}" ${DEFAULT})
-  elseif(NOT DEFINED ${NAME})
-    set(${NAME}_AUTO ON)
-  endif()
-endmacro()
 
 if(IOS)
   set(MDBX_BUILD_TOOLS_DEFAULT OFF)
@@ -640,64 +632,60 @@ else()
   set(MDBX_BUILD_TOOLS_DEFAULT ON)
 endif()
 
-add_mdbx_option(MDBX_INSTALL_STATIC "Build and install libmdbx for static linking" OFF)
-add_mdbx_option(MDBX_BUILD_SHARED_LIBRARY "Build libmdbx as shared library (DLL)" ${BUILD_SHARED_LIBS})
-add_mdbx_option(MDBX_BUILD_TOOLS "Build MDBX tools (mdbx_chk/stat/dump/load/copy/drop)" ${MDBX_BUILD_TOOLS_DEFAULT})
+add_option(MDBX INSTALL_STATIC "Build and install libmdbx for static linking" OFF)
+add_option(MDBX BUILD_SHARED_LIBRARY "Build libmdbx as shared library (DLL)" ${BUILD_SHARED_LIBS})
+add_option(MDBX BUILD_TOOLS "Build MDBX tools (mdbx_chk/stat/dump/load/copy/drop)" ${MDBX_BUILD_TOOLS_DEFAULT})
 cmake_dependent_option(MDBX_INSTALL_MANPAGES "Install man-pages for MDBX tools (mdbx_chk/stat/dump/load/copy)" ON
                        MDBX_BUILD_TOOLS OFF)
-add_mdbx_option(MDBX_TXN_CHECKOWNER "Checking transaction matches the calling thread inside libmdbx's API" ON)
-add_mdbx_option(MDBX_ENV_CHECKPID "Checking PID inside libmdbx's API against reuse DB environment after the fork()"
-                AUTO)
+add_option(MDBX TXN_CHECKOWNER "Checking transaction matches the calling thread inside libmdbx's API" ON)
+add_option(MDBX ENV_CHECKPID "Checking PID inside libmdbx's API against reuse DB environment after the fork()" AUTO)
 mark_as_advanced(MDBX_ENV_CHECKPID)
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
-  add_mdbx_option(MDBX_DISABLE_GNU_SOURCE "Don't use GNU/Linux libc extensions" OFF)
+  add_option(MDBX DISABLE_GNU_SOURCE "Don't use GNU/Linux libc extensions" OFF)
   mark_as_advanced(MDBX_DISABLE_GNU_SOURCE)
 endif()
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Darwin" OR IOS)
-  add_mdbx_option(MDBX_APPLE_SPEED_INSTEADOF_DURABILITY "Disable use fcntl(F_FULLFSYNC) in favor of speed" OFF)
+  add_option(MDBX APPLE_SPEED_INSTEADOF_DURABILITY "Disable use fcntl(F_FULLFSYNC) in favor of speed" OFF)
   mark_as_advanced(MDBX_APPLE_SPEED_INSTEADOF_DURABILITY)
 endif()
 if(WIN32)
   if(MDBX_NTDLL_EXTRA_IMPLIB)
-    add_mdbx_option(MDBX_WITHOUT_MSVC_CRT "Avoid dependence from MSVC CRT and use ntdll.dll instead" OFF)
+    add_option(MDBX WITHOUT_MSVC_CRT "Avoid dependence from MSVC CRT and use ntdll.dll instead" OFF)
   endif()
   set(MDBX_AVOID_MSYNC_DEFAULT ON)
 else()
-  add_mdbx_option(MDBX_USE_OFDLOCKS "Use Open file description locks (aka OFD locks, non-POSIX)" AUTO)
+  add_option(MDBX USE_OFDLOCKS "Use Open file description locks (aka OFD locks, non-POSIX)" AUTO)
   mark_as_advanced(MDBX_USE_OFDLOCKS)
-  add_mdbx_option(MDBX_USE_MINCORE "Use Unix' mincore() to determine whether DB-pages are resident in memory" ON)
+  add_option(MDBX USE_MINCORE "Use Unix' mincore() to determine whether DB-pages are resident in memory" ON)
   mark_as_advanced(MDBX_USE_MINCORE)
   set(MDBX_AVOID_MSYNC_DEFAULT OFF)
 endif()
-add_mdbx_option(
-  MDBX_AVOID_MSYNC
+add_option(
+  MDBX AVOID_MSYNC
   "Disable in-memory database updating with consequent flush-to-disk/msync syscall in `MDBX_WRITEMAP` mode"
   ${MDBX_AVOID_MSYNC_DEFAULT})
-add_mdbx_option(MDBX_MMAP_NEEDS_JOLT "Assume system needs explicit syscall to sync/flush/write modified mapped memory"
-                AUTO)
+add_option(MDBX MMAP_NEEDS_JOLT "Assume system needs explicit syscall to sync/flush/write modified mapped memory" AUTO)
 mark_as_advanced(MDBX_MMAP_NEEDS_JOLT)
-add_mdbx_option(MDBX_LOCKING "Locking method (Windows=-1, SystemV=5, POSIX=1988, POSIX=2001, POSIX=2008)" AUTO)
+add_option(MDBX LOCKING "Locking method (Windows=-1, SystemV=5, POSIX=1988, POSIX=2001, POSIX=2008)" AUTO)
 mark_as_advanced(MDBX_LOCKING)
-add_mdbx_option(MDBX_TRUST_RTC "Does a system have battery-backed Real-Time Clock or just a fake" AUTO)
+add_option(MDBX TRUST_RTC "Does a system have battery-backed Real-Time Clock or just a fake" AUTO)
 mark_as_advanced(MDBX_TRUST_RTC)
-add_mdbx_option(MDBX_FORCE_ASSERTIONS "Force enable assertion checking" OFF)
-add_mdbx_option(
-  MDBX_DISABLE_VALIDATION
+add_option(MDBX FORCE_ASSERTIONS "Force enable assertion checking" OFF)
+add_option(
+  MDBX
+  DISABLE_VALIDATION
   "Disable some checks to reduce an overhead and detection probability of database corruption to a values closer to the LMDB"
   OFF)
 mark_as_advanced(MDBX_DISABLE_VALIDATION)
-add_mdbx_option(MDBX_ENABLE_REFUND "Zerocost auto-compactification during write-transactions" ON)
-add_mdbx_option(
-  MDBX_ENABLE_BIGFOOT
-  "Chunking long list of retired pages during huge transactions commit to avoid use sequences of pages" ON)
-add_mdbx_option(MDBX_ENABLE_PGOP_STAT "Gathering statistics for page operations" ON)
-add_mdbx_option(MDBX_ENABLE_PROFGC "Profiling of GC search and updates" OFF)
+add_option(MDBX ENABLE_REFUND "Zerocost auto-compactification during write-transactions" ON)
+add_option(MDBX ENABLE_BIGFOOT
+           "Chunking long list of retired pages during huge transactions commit to avoid use sequences of pages" ON)
+add_option(MDBX ENABLE_PGOP_STAT "Gathering statistics for page operations" ON)
+add_option(MDBX ENABLE_PROFGC "Profiling of GC search and updates" OFF)
 mark_as_advanced(MDBX_ENABLE_PROFGC)
-add_mdbx_option(
-  MDBX_ENABLE_DBI_SPARSE
-  "Support for sparse sets of DBI handles to reduce overhead when starting and processing transactions" ON)
-add_mdbx_option(MDBX_ENABLE_DBI_LOCKFREE
-                "Support for deferred releasing and a lockfree path to quickly open DBI handles" ON)
+add_option(MDBX ENABLE_DBI_SPARSE
+           "Support for sparse sets of DBI handles to reduce overhead when starting and processing transactions" ON)
+add_option(MDBX ENABLE_DBI_LOCKFREE "Support for deferred releasing and a lockfree path to quickly open DBI handles" ON)
 
 if(NOT MDBX_AMALGAMATED_SOURCE)
   if(CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE_UPPERCASE STREQUAL "DEBUG")
@@ -705,11 +693,11 @@ if(NOT MDBX_AMALGAMATED_SOURCE)
   else()
     set(MDBX_ALLOY_BUILD_DEFAULT ON)
   endif()
-  add_mdbx_option(MDBX_ALLOY_BUILD "Build MDBX library through single/alloyed object file" ${MDBX_ALLOY_BUILD_DEFAULT})
+  add_option(MDBX ALLOY_BUILD "Build MDBX library through single/alloyed object file" ${MDBX_ALLOY_BUILD_DEFAULT})
 endif()
 
 if((MDBX_BUILD_TOOLS OR MDBX_ENABLE_TESTS) AND MDBX_BUILD_SHARED_LIBRARY)
-  add_mdbx_option(MDBX_LINK_TOOLS_NONSTATIC "Link MDBX tools with non-static libmdbx" OFF)
+  add_option(MDBX LINK_TOOLS_NONSTATIC "Link MDBX tools with non-static libmdbx" OFF)
 else()
   unset(MDBX_LINK_TOOLS_NONSTATIC CACHE)
 endif()
