@@ -2877,12 +2877,32 @@ __cold MDBX_MAYBE_UNUSED static bool bootid_parse_uuid(bin128_t *s, const void *
 }
 
 #if defined(__linux__) || defined(__gnu_linux__)
+
+__cold static bool is_inside_lxc(void) {
+  bool inside_lxc = false;
+  FILE *mounted = setmntent("/proc/mounts", "r");
+  if (mounted) {
+    const struct mntent *ent;
+    while (nullptr != (ent = getmntent(mounted))) {
+      if (strcmp(ent->mnt_fsname, "lxcfs") == 0 && strncmp(ent->mnt_dir, "/proc/", 6) == 0) {
+        inside_lxc = true;
+        break;
+      }
+    }
+    endmntent(mounted);
+  }
+  return inside_lxc;
+}
+
 __cold static bool proc_read_uuid(const char *path, bin128_t *target) {
   const int fd = open(path, O_RDONLY | O_NOFOLLOW);
   if (fd != -1) {
     struct statfs fs;
     char buf[42];
-    const ssize_t len = (fstatfs(fd, &fs) == 0 && fs.f_type == /* procfs */ 0x9FA0) ? read(fd, buf, sizeof(buf)) : -1;
+    const ssize_t len = (fstatfs(fd, &fs) == 0 &&
+                         (fs.f_type == /* procfs */ 0x9FA0 || (fs.f_type == /* tmpfs */ 0x1021994 && is_inside_lxc())))
+                            ? read(fd, buf, sizeof(buf))
+                            : -1;
     const int err = close(fd);
     assert(err == 0);
     (void)err;
@@ -3061,10 +3081,27 @@ __cold static bin128_t osal_bootid(void) {
   }
 #endif /* __NetBSD__ */
 
+#if !(defined(_WIN32) || defined(_WIN64))
+  if (!got_machineid) {
+    int fd = open("/etc/machine-id", O_RDONLY);
+    if (fd == -1)
+      fd = open("/var/lib/dbus/machine-id", O_RDONLY);
+    if (fd != -1) {
+      char buf[42];
+      const ssize_t len = read(fd, buf, sizeof(buf));
+      const int err = close(fd);
+      assert(err == 0);
+      (void)err;
+      if (len > 0)
+        got_machineid = bootid_parse_uuid(&uuid, buf, len);
+    }
+  }
+#endif /* !Windows */
+
 #if _XOPEN_SOURCE_EXTENDED
   if (!got_machineid) {
-    const int hostid = gethostid();
-    if (hostid > 0) {
+    const long hostid = gethostid();
+    if (hostid != 0 && hostid != -1) {
       bootid_collect(&uuid, &hostid, sizeof(hostid));
       got_machineid = true;
     }
