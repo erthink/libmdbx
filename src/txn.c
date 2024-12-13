@@ -438,7 +438,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   bailout:
     if (latency)
       memset(latency, 0, sizeof(*latency));
-    return rc;
+    return LOG_IFERR(rc);
   }
 
   MDBX_env *const env = txn->env;
@@ -817,7 +817,7 @@ provide_latency:
     latency->ending = ts_5 ? osal_monotime_to_16dot16(ts_6 - ts_5) : 0;
     latency->whole = osal_monotime_to_16dot16_noUnderflow(ts_6 - ts_0);
   }
-  return rc;
+  return LOG_IFERR(rc);
 
 fail:
   txn->flags |= MDBX_TXN_ERROR;
@@ -1384,13 +1384,13 @@ int txn_end(MDBX_txn *txn, unsigned mode) {
 
 int mdbx_txn_renew(MDBX_txn *txn) {
   if (unlikely(!txn))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(txn->signature != txn_signature))
-    return MDBX_EBADSIGN;
+    return LOG_IFERR(MDBX_EBADSIGN);
 
   if (unlikely((txn->flags & MDBX_TXN_RDONLY) == 0))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(txn->owner != 0 || !(txn->flags & MDBX_TXN_FINISHED))) {
     int rc = mdbx_txn_reset(txn);
@@ -1405,13 +1405,13 @@ int mdbx_txn_renew(MDBX_txn *txn) {
           (txn->flags & MDBX_TXN_RDONLY) ? 'r' : 'w', (void *)txn, (void *)txn->env, txn->dbs[MAIN_DBI].root,
           txn->dbs[FREE_DBI].root);
   }
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 int mdbx_txn_set_userctx(MDBX_txn *txn, void *ctx) {
   int rc = check_txn(txn, MDBX_TXN_FINISHED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   txn->userctx = ctx;
   return MDBX_SUCCESS;
@@ -1421,31 +1421,31 @@ void *mdbx_txn_get_userctx(const MDBX_txn *txn) { return check_txn(txn, MDBX_TXN
 
 int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, MDBX_txn **ret, void *context) {
   if (unlikely(!ret))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
   *ret = nullptr;
 
   if (unlikely((flags & ~txn_rw_begin_flags) && (parent || (flags & ~txn_ro_begin_flags))))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(env->flags & MDBX_RDONLY & ~flags)) /* write txn in RDONLY env */
-    return MDBX_EACCESS;
+    return LOG_IFERR(MDBX_EACCESS);
 
   MDBX_txn *txn = nullptr;
   if (parent) {
     /* Nested transactions: Max 1 child, write txns only, no writemap */
     rc = check_txn_rw(parent, MDBX_TXN_RDONLY | MDBX_WRITEMAP | MDBX_TXN_BLOCKED);
     if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
+      return LOG_IFERR(rc);
 
     if (env->options.spill_parent4child_denominator) {
       /* Spill dirty-pages of parent to provide dirtyroom for child txn */
       rc = txn_spill(parent, nullptr, parent->tw.dirtylist->length / env->options.spill_parent4child_denominator);
       if (unlikely(rc != MDBX_SUCCESS))
-        return rc;
+        return LOG_IFERR(rc);
     }
     tASSERT(parent, audit_ex(parent, 0, false) == 0);
 
@@ -1470,10 +1470,8 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
                       ((flags & MDBX_TXN_RDONLY) ? (size_t)bitmap_bytes + env->max_dbi * sizeof(txn->dbi_seqs[0]) : 0) +
                       env->max_dbi * (sizeof(txn->dbs[0]) + sizeof(txn->cursors[0]) + sizeof(txn->dbi_state[0]));
   txn = osal_malloc(size);
-  if (unlikely(txn == nullptr)) {
-    DEBUG("calloc: %s", "failed");
-    return MDBX_ENOMEM;
-  }
+  if (unlikely(txn == nullptr))
+    return LOG_IFERR(MDBX_ENOMEM);
 #if MDBX_DEBUG
   memset(txn, 0xCD, size);
   VALGRIND_MAKE_MEM_UNDEFINED(txn, size);
@@ -1508,7 +1506,7 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
       pnl_free(txn->tw.relist);
       dpl_free(txn);
       osal_free(txn);
-      return rc;
+      return LOG_IFERR(rc);
     }
 
     /* Move loose pages to reclaimed list */
@@ -1618,22 +1616,22 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
           txn->dbs[FREE_DBI].root);
   }
 
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
   int rc = check_txn(txn, MDBX_TXN_FINISHED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if (unlikely(!info))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   MDBX_env *const env = txn->env;
 #if MDBX_ENV_CHECKPID
   if (unlikely(env->pid != osal_getpid())) {
     env->flags |= ENV_FATAL_ERROR;
-    return MDBX_PANIC;
+    return LOG_IFERR(MDBX_PANIC);
   }
 #endif /* MDBX_ENV_CHECKPID */
 
@@ -1758,11 +1756,11 @@ MDBX_txn_flags_t mdbx_txn_flags(const MDBX_txn *txn) {
 int mdbx_txn_reset(MDBX_txn *txn) {
   int rc = check_txn(txn, 0);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   /* This call is only valid for read-only txns */
   if (unlikely((txn->flags & MDBX_TXN_RDONLY) == 0))
-    return MDBX_EINVAL;
+    return LOG_IFERR(MDBX_EINVAL);
 
   /* LY: don't close DBI-handles */
   rc = txn_end(txn, TXN_END_RESET | TXN_END_UPDATE);
@@ -1770,14 +1768,14 @@ int mdbx_txn_reset(MDBX_txn *txn) {
     tASSERT(txn, txn->signature == txn_signature);
     tASSERT(txn, txn->owner == 0);
   }
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 int mdbx_txn_break(MDBX_txn *txn) {
   do {
     int rc = check_txn(txn, 0);
     if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
+      return LOG_IFERR(rc);
     txn->flags |= MDBX_TXN_ERROR;
     if (txn->flags & MDBX_TXN_RDONLY)
       break;
@@ -1789,52 +1787,52 @@ int mdbx_txn_break(MDBX_txn *txn) {
 int mdbx_txn_abort(MDBX_txn *txn) {
   int rc = check_txn(txn, 0);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   rc = check_env(txn->env, true);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   if ((txn->flags & (MDBX_TXN_RDONLY | MDBX_NOSTICKYTHREADS)) == MDBX_NOSTICKYTHREADS &&
       unlikely(txn->owner != osal_thread_self())) {
     mdbx_txn_break(txn);
-    return MDBX_THREAD_MISMATCH;
+    return LOG_IFERR(MDBX_THREAD_MISMATCH);
   }
 
-  return txn_abort(txn);
+  return LOG_IFERR(txn_abort(txn));
 }
 
 int mdbx_txn_park(MDBX_txn *txn, bool autounpark) {
   STATIC_ASSERT(MDBX_TXN_BLOCKED > MDBX_TXN_ERROR);
   int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
   if (unlikely((txn->flags & MDBX_TXN_RDONLY) == 0))
-    return MDBX_TXN_INVALID;
+    return LOG_IFERR(MDBX_TXN_INVALID);
 
   if (unlikely((txn->flags & MDBX_TXN_ERROR))) {
     rc = txn_end(txn, TXN_END_RESET | TXN_END_UPDATE);
-    return rc ? rc : MDBX_OUSTED;
+    return LOG_IFERR(rc ? rc : MDBX_OUSTED);
   }
 
-  return txn_park(txn, autounpark);
+  return LOG_IFERR(txn_park(txn, autounpark));
 }
 
 int mdbx_txn_unpark(MDBX_txn *txn, bool restart_if_ousted) {
   STATIC_ASSERT(MDBX_TXN_BLOCKED > MDBX_TXN_PARKED + MDBX_TXN_ERROR);
   int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_PARKED - MDBX_TXN_ERROR);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
   if (unlikely(!F_ISSET(txn->flags, MDBX_TXN_RDONLY | MDBX_TXN_PARKED)))
     return MDBX_SUCCESS;
 
   rc = txn_unpark(txn);
   if (likely(rc != MDBX_OUSTED) || !restart_if_ousted)
-    return rc;
+    return LOG_IFERR(rc);
 
   tASSERT(txn, txn->flags & MDBX_TXN_FINISHED);
   rc = txn_renew(txn, MDBX_TXN_RDONLY);
-  return (rc == MDBX_SUCCESS) ? MDBX_RESULT_TRUE : rc;
+  return (rc == MDBX_SUCCESS) ? MDBX_RESULT_TRUE : LOG_IFERR(rc);
 }
 
 int txn_check_badbits_parked(const MDBX_txn *txn, int bad_bits) {
@@ -1848,7 +1846,7 @@ int txn_check_badbits_parked(const MDBX_txn *txn, int bad_bits) {
    *    mdbx_txn_break(), но далее любое её использование приведет к завершению
    *    при распарковке. */
   if ((txn->flags & (bad_bits | MDBX_TXN_AUTOUNPARK)) != (MDBX_TXN_PARKED | MDBX_TXN_AUTOUNPARK))
-    return MDBX_BAD_TXN;
+    return LOG_IFERR(MDBX_BAD_TXN);
 
   tASSERT(txn, bad_bits == MDBX_TXN_BLOCKED || bad_bits == MDBX_TXN_BLOCKED - MDBX_TXN_ERROR);
   return mdbx_txn_unpark((MDBX_txn *)txn, false);
