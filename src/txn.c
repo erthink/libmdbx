@@ -1424,7 +1424,7 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
     return MDBX_EINVAL;
   *ret = nullptr;
 
-  if (unlikely((flags & ~txn_rw_begin_flags) && (flags & ~txn_ro_begin_flags)))
+  if (unlikely((flags & ~txn_rw_begin_flags) && (parent || (flags & ~txn_ro_begin_flags))))
     return MDBX_EINVAL;
 
   int rc = check_env(env, true);
