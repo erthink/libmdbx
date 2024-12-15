@@ -898,13 +898,16 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
   if (insert_key) {
     /* The key does not exist */
     DEBUG("inserting key at index %i", mc->ki[mc->top]);
-    if ((mc->tree->flags & MDBX_DUPSORT) && node_size(key, data) > env->leaf_nodemax) {
-      /* Too big for a node, insert in sub-DB.  Set up an empty
-       * "old sub-page" for convert_to_subtree to expand to a full page. */
-      fp->dupfix_ksize = (mc->tree->flags & MDBX_DUPFIXED) ? (uint16_t)data->iov_len : 0;
-      fp->lower = fp->upper = 0;
-      old_data.iov_len = PAGEHDRSZ;
-      goto convert_to_subtree;
+    if (mc->tree->flags & MDBX_DUPSORT) {
+      inner_gone(mc);
+      if (node_size(key, data) > env->leaf_nodemax) {
+        /* Too big for a node, insert in sub-DB.  Set up an empty
+         * "old sub-page" for convert_to_subtree to expand to a full page. */
+        fp->dupfix_ksize = (mc->tree->flags & MDBX_DUPFIXED) ? (uint16_t)data->iov_len : 0;
+        fp->lower = fp->upper = 0;
+        old_data.iov_len = PAGEHDRSZ;
+        goto convert_to_subtree;
+      }
     }
   } else {
     /* there's only a key anyway, so this is a no-op */
