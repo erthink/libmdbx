@@ -174,7 +174,16 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool inner_pointed(co
 }
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool inner_hollow(const MDBX_cursor *mc) {
-  return !mc->subcur || is_hollow(&mc->subcur->cursor);
+  const bool r = !mc->subcur || is_hollow(&mc->subcur->cursor);
+#if MDBX_DEBUG || MDBX_FORCE_ASSERTIONS
+  if (!r) {
+    cASSERT(mc, is_filled(mc));
+    const page_t *mp = mc->pg[mc->top];
+    const node_t *node = page_node(mp, mc->ki[mc->top]);
+    cASSERT(mc, node_flags(node) & N_DUP);
+  }
+#endif /* MDBX_DEBUG || MDBX_FORCE_ASSERTIONS */
+  return r;
 }
 
 MDBX_MAYBE_UNUSED static inline void inner_gone(MDBX_cursor *mc) {
