@@ -4139,6 +4139,12 @@ struct MDBX_commit_latency {
     /** \brief Количество страничных промахов (page faults) внутри GC
      *  при выделении и подготовки страниц для самой GC. */
     uint32_t self_majflt;
+    /* Для разборок с pnl_merge() */
+    struct {
+      uint32_t time;
+      uint64_t volume;
+      uint32_t calls;
+    } pnl_merge_work, pnl_merge_self;
   } gc_prof;
 };
 #ifndef __cplusplus

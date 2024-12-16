@@ -418,6 +418,14 @@ static void take_gcprof(MDBX_txn *txn, MDBX_commit_latency *latency) {
     latency->gc_prof.wipes = ptr->gc_prof.wipes;
     latency->gc_prof.flushes = ptr->gc_prof.flushes;
     latency->gc_prof.kicks = ptr->gc_prof.kicks;
+
+    latency->gc_prof.pnl_merge_work.time = osal_monotime_to_16dot16(ptr->gc_prof.work.pnl_merge.time);
+    latency->gc_prof.pnl_merge_work.calls = ptr->gc_prof.work.pnl_merge.calls;
+    latency->gc_prof.pnl_merge_work.volume = ptr->gc_prof.work.pnl_merge.volume;
+    latency->gc_prof.pnl_merge_self.time = osal_monotime_to_16dot16(ptr->gc_prof.self.pnl_merge.time);
+    latency->gc_prof.pnl_merge_self.calls = ptr->gc_prof.self.pnl_merge.calls;
+    latency->gc_prof.pnl_merge_self.volume = ptr->gc_prof.self.pnl_merge.volume;
+
     if (txn == env->basal_txn)
       memset(&ptr->gc_prof, 0, sizeof(ptr->gc_prof));
   } else

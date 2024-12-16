@@ -1064,7 +1064,15 @@ next_gc:;
   }
 
   /* Merge in descending sorted order */
+#if MDBX_ENABLE_PROFGC
+  const uint64_t merge_begin = osal_monotime();
+#endif /* MDBX_ENABLE_PROFGC */
   pnl_merge(txn->tw.relist, gc_pnl);
+#if MDBX_ENABLE_PROFGC
+  prof->pnl_merge.calls += 1;
+  prof->pnl_merge.volume += MDBX_PNL_GETSIZE(txn->tw.relist);
+  prof->pnl_merge.time += osal_monotime() - merge_begin;
+#endif /* MDBX_ENABLE_PROFGC */
   flags |= ALLOC_SHOULD_SCAN;
   if (AUDIT_ENABLED()) {
     if (unlikely(!pnl_check(txn->tw.relist, txn->geo.first_unallocated))) {
