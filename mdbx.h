@@ -5701,8 +5701,10 @@ LIBMDBX_API int mdbx_cursor_put(MDBX_cursor *cursor, const MDBX_val *key, MDBX_v
  * \retval MDBX_EINVAL        An invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_del(MDBX_cursor *cursor, MDBX_put_flags_t flags);
 
-/** \brief Return count of duplicates for current key.
+/** \brief Return count values (aka duplicates) for current key.
  * \ingroup c_crud
+ *
+ * \see mdbx_cursor_count_ex
  *
  * This call is valid for all tables, but reasonable only for that support
  * sorted duplicate data items \ref MDBX_DUPSORT.
@@ -5717,6 +5719,30 @@ LIBMDBX_API int mdbx_cursor_del(MDBX_cursor *cursor, MDBX_put_flags_t flags);
  * \retval MDBX_EINVAL   Cursor is not initialized, or an invalid parameter
  *                       was specified. */
 LIBMDBX_API int mdbx_cursor_count(const MDBX_cursor *cursor, size_t *pcount);
+
+/** \brief Return count values (aka duplicates) and nested b-tree statistics for current key.
+ * \ingroup c_crud
+ *
+ * \see mdbx_dbi_stat
+ * \see mdbx_dbi_dupsort_depthmask
+ * \see mdbx_cursor_count
+ *
+ * This call is valid for all tables, but reasonable only for that support
+ * sorted duplicate data items \ref MDBX_DUPSORT.
+ *
+ * \param [in] cursor    A cursor handle returned by \ref mdbx_cursor_open().
+ * \param [out] pcount   Address where the count will be stored.
+ * \param [out] stat     The address of an \ref MDBX_stat structure where
+ *                       the statistics of a nested b-tree will be copied.
+ * \param [in] bytes     The size of \ref MDBX_stat.
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
+ *                               by current thread.
+ * \retval MDBX_EINVAL   Cursor is not initialized, or an invalid parameter
+ *                       was specified. */
+LIBMDBX_API int mdbx_cursor_count_ex(const MDBX_cursor *mc, size_t *count, MDBX_stat *stat, size_t bytes);
 
 /** \brief Determines whether the cursor is pointed to a key-value pair or not,
  * i.e. was not positioned or points to the end of data.

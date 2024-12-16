@@ -308,8 +308,7 @@ int mdbx_cursor_compare(const MDBX_cursor *l, const MDBX_cursor *r, bool ignore_
   return (l->flags & z_eof_hard) - (r->flags & z_eof_hard);
 }
 
-/* Return the count of duplicate data items for the current key */
-int mdbx_cursor_count(const MDBX_cursor *mc, size_t *countp) {
+int mdbx_cursor_count_ex(const MDBX_cursor *mc, size_t *count, MDBX_stat *ns, size_t bytes) {
   if (unlikely(mc == nullptr))
     return LOG_IFERR(MDBX_EINVAL);
 
@@ -320,19 +319,49 @@ int mdbx_cursor_count(const MDBX_cursor *mc, size_t *countp) {
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
-  if (unlikely(countp == nullptr))
-    return LOG_IFERR(MDBX_EINVAL);
+  if (ns) {
+    const size_t size_before_modtxnid = offsetof(MDBX_stat, ms_mod_txnid);
+    if (unlikely(bytes != sizeof(MDBX_stat)) && bytes != size_before_modtxnid)
+      return LOG_IFERR(MDBX_EINVAL);
+    memset(ns, 0, sizeof(*ns));
+  }
 
-  if ((*countp = is_filled(mc)) > 0) {
+  size_t nvals = 0;
+  if (is_filled(mc)) {
+    nvals = 1;
     if (!inner_hollow(mc)) {
       const page_t *mp = mc->pg[mc->top];
       const node_t *node = page_node(mp, mc->ki[mc->top]);
       cASSERT(mc, node_flags(node) & N_DUP);
-      *countp =
-          unlikely(mc->subcur->nested_tree.items > PTRDIFF_MAX) ? PTRDIFF_MAX : (size_t)mc->subcur->nested_tree.items;
+      const tree_t *nt = &mc->subcur->nested_tree;
+      nvals = unlikely(nt->items > PTRDIFF_MAX) ? PTRDIFF_MAX : (size_t)nt->items;
+      if (ns) {
+        ns->ms_psize = (unsigned)node_ds(node);
+        if (node_flags(node) & N_TREE) {
+          ns->ms_psize = mc->txn->env->ps;
+          ns->ms_depth = nt->height;
+          ns->ms_branch_pages = nt->branch_pages;
+        }
+        cASSERT(mc, nt->large_pages == 0);
+        ns->ms_leaf_pages = nt->leaf_pages;
+        ns->ms_entries = nt->items;
+        if (likely(bytes >= offsetof(MDBX_stat, ms_mod_txnid) + sizeof(ns->ms_mod_txnid)))
+          ns->ms_mod_txnid = nt->mod_txnid;
+      }
     }
   }
+
+  if (likely(count))
+    *count = nvals;
+
   return MDBX_SUCCESS;
+}
+
+int mdbx_cursor_count(const MDBX_cursor *mc, size_t *count) {
+  if (unlikely(count == nullptr))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  return mdbx_cursor_count_ex(mc, count, nullptr, 0);
 }
 
 int mdbx_cursor_on_first(const MDBX_cursor *mc) {
