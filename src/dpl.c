@@ -41,9 +41,9 @@ dpl_t *dpl_reserve(MDBX_txn *txn, size_t size) {
   size_t bytes = dpl_size2bytes((size < PAGELIST_LIMIT) ? size : PAGELIST_LIMIT);
   dpl_t *const dl = osal_realloc(txn->tw.dirtylist, bytes);
   if (likely(dl)) {
-#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
-    bytes = malloc_usable_size(dl);
-#endif /* malloc_usable_size */
+#ifdef osal_malloc_usable_size
+    bytes = osal_malloc_usable_size(dl);
+#endif /* osal_malloc_usable_size */
     dl->detent = dpl_bytes2size(bytes);
     tASSERT(txn, txn->tw.dirtylist == nullptr || dl->length <= dl->detent);
     txn->tw.dirtylist = dl;

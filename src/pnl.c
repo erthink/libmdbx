@@ -7,9 +7,9 @@ MDBX_INTERNAL pnl_t pnl_alloc(size_t size) {
   size_t bytes = pnl_size2bytes(size);
   pnl_t pnl = osal_malloc(bytes);
   if (likely(pnl)) {
-#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
-    bytes = malloc_usable_size(pnl);
-#endif /* malloc_usable_size */
+#ifdef osal_malloc_usable_size
+    bytes = osal_malloc_usable_size(pnl);
+#endif /* osal_malloc_usable_size */
     pnl[0] = pnl_bytes2size(bytes);
     assert(pnl[0] >= size);
     pnl += 1;
@@ -33,9 +33,9 @@ MDBX_INTERNAL void pnl_shrink(pnl_t __restrict *__restrict ppnl) {
     size_t bytes = pnl_size2bytes(MDBX_PNL_INITIAL * 2);
     pnl_t pnl = osal_realloc(*ppnl - 1, bytes);
     if (likely(pnl)) {
-#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
-      bytes = malloc_usable_size(pnl);
-#endif /* malloc_usable_size */
+#ifdef osal_malloc_usable_size
+      bytes = osal_malloc_usable_size(pnl);
+#endif /* osal_malloc_usable_size */
       *pnl = pnl_bytes2size(bytes);
       *ppnl = pnl + 1;
     }
@@ -57,9 +57,9 @@ MDBX_INTERNAL int pnl_reserve(pnl_t __restrict *__restrict ppnl, const size_t wa
   size_t bytes = pnl_size2bytes(size);
   pnl_t pnl = osal_realloc(*ppnl - 1, bytes);
   if (likely(pnl)) {
-#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
-    bytes = malloc_usable_size(pnl);
-#endif /* malloc_usable_size */
+#ifdef osal_malloc_usable_size
+    bytes = osal_malloc_usable_size(pnl);
+#endif /* osal_malloc_usable_size */
     *pnl = pnl_bytes2size(bytes);
     assert(*pnl >= wanna);
     *ppnl = pnl + 1;

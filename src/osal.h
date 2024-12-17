@@ -153,12 +153,12 @@ typedef pthread_mutex_t osal_fastmutex_t;
 #endif /* Platform */
 
 #if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
-/* malloc_usable_size() already provided */
+#define osal_malloc_usable_size(ptr) malloc_usable_size(ptr)
 #elif defined(__APPLE__)
-#define malloc_usable_size(ptr) malloc_size(ptr)
+#define osal_malloc_usable_size(ptr) malloc_size(ptr)
 #elif defined(_MSC_VER) && !MDBX_WITHOUT_MSVC_CRT
-#define malloc_usable_size(ptr) _msize(ptr)
-#endif /* malloc_usable_size */
+#define osal_malloc_usable_size(ptr) _msize(ptr)
+#endif /* osal_malloc_usable_size */
 
 /*----------------------------------------------------------------------------*/
 /* OS abstraction layer stuff */

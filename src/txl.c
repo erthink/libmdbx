@@ -21,9 +21,9 @@ MDBX_INTERNAL txl_t txl_alloc(void) {
   size_t bytes = txl_size2bytes(txl_initial);
   txl_t txl = osal_malloc(bytes);
   if (likely(txl)) {
-#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
-    bytes = malloc_usable_size(txl);
-#endif /* malloc_usable_size */
+#ifdef osal_malloc_usable_size
+    bytes = osal_malloc_usable_size(txl);
+#endif /* osal_malloc_usable_size */
     txl[0] = txl_bytes2size(bytes);
     assert(txl[0] >= txl_initial);
     txl += 1;
@@ -52,9 +52,9 @@ MDBX_INTERNAL int txl_reserve(txl_t __restrict *__restrict ptxl, const size_t wa
   size_t bytes = txl_size2bytes(size);
   txl_t txl = osal_realloc(*ptxl - 1, bytes);
   if (likely(txl)) {
-#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
-    bytes = malloc_usable_size(txl);
-#endif /* malloc_usable_size */
+#ifdef osal_malloc_usable_size
+    bytes = osal_malloc_usable_size(txl);
+#endif /* osal_malloc_usable_size */
     *txl = txl_bytes2size(bytes);
     assert(*txl >= wanna);
     *ptxl = txl + 1;
