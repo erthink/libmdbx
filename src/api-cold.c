@@ -361,17 +361,15 @@ __cold int mdbx_env_set_flags(MDBX_env *env, MDBX_env_flags_t flags, bool onoff)
   return MDBX_SUCCESS;
 }
 
-__cold int mdbx_env_get_flags(const MDBX_env *env, unsigned *arg) {
-  if (unlikely(!arg))
+__cold int mdbx_env_get_flags(const MDBX_env *env, unsigned *flags) {
+  int rc = check_env(env, false);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  if (unlikely(!flags))
     return LOG_IFERR(MDBX_EINVAL);
 
-  int rc = check_env(env, false);
-  if (unlikely(rc != MDBX_SUCCESS)) {
-    *arg = 0;
-    return LOG_IFERR(rc);
-  }
-
-  *arg = env->flags & ENV_USABLE_FLAGS;
+  *flags = env->flags & ENV_USABLE_FLAGS;
   return MDBX_SUCCESS;
 }
 

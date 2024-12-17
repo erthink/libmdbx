@@ -148,27 +148,12 @@ MDBX_INTERNAL const char *pagetype_caption(const uint8_t type, char buf4unknown[
 #define DVAL_DEBUG(x) ("-")
 #endif
 
-MDBX_INTERNAL int log_error(const int err, const char *func, unsigned line);
+MDBX_INTERNAL void log_error(const int err, const char *func, unsigned line);
 
 MDBX_MAYBE_UNUSED static inline int log_if_error(const int err, const char *func, unsigned line) {
-  if (likely(err == MDBX_SUCCESS))
-    return err;
-  int rc = log_error(err, func, line);
-#if __has_c_attribute(assume)
-  [[assume(rc == err && rc != MDBX_SUCCESS)]];
-#endif
-#if defined(__clang__) || __has_builtin(assume)
-  __builtin_assume(rc == err && rc != MDBX_SUCCESS);
-#endif
-  if (rc != err || rc == MDBX_SUCCESS) {
-#if defined(__GNUC__)
-    __builtin_unreachable();
-#elif defined(_MSC_VER) && !defined(__clang__)
-    __assume(0);
-#endif
-    rc = err;
-  }
-  return rc;
+  if (unlikely(err != MDBX_SUCCESS))
+    log_error(err, func, line);
+  return err;
 }
 
 #define LOG_IFERR(err) log_if_error((err), __func__, __LINE__)

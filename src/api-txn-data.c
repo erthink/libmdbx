@@ -6,8 +6,8 @@
 __cold int mdbx_dbi_dupsort_depthmask(const MDBX_txn *txn, MDBX_dbi dbi, uint32_t *mask) {
   if (unlikely(!mask))
     return LOG_IFERR(MDBX_EINVAL);
-
   *mask = 0;
+
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
@@ -16,6 +16,7 @@ __cold int mdbx_dbi_dupsort_depthmask(const MDBX_txn *txn, MDBX_dbi dbi, uint32_
   rc = cursor_init(&cx.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
+
   if ((cx.outer.tree->flags & MDBX_DUPSORT) == 0)
     return MDBX_RESULT_TRUE;
 
@@ -50,14 +51,14 @@ __cold int mdbx_dbi_dupsort_depthmask(const MDBX_txn *txn, MDBX_dbi dbi, uint32_
 }
 
 int mdbx_canary_get(const MDBX_txn *txn, MDBX_canary *canary) {
-  if (unlikely(canary == nullptr))
-    return LOG_IFERR(MDBX_EINVAL);
-
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS)) {
     memset(canary, 0, sizeof(*canary));
     return LOG_IFERR(rc);
   }
+
+  if (unlikely(canary == nullptr))
+    return LOG_IFERR(MDBX_EINVAL);
 
   *canary = txn->canary;
   return MDBX_SUCCESS;

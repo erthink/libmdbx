@@ -56,14 +56,13 @@ __cold void debug_log(int level, const char *function, int line, const char *fmt
   va_end(args);
 }
 
-__cold int log_error(const int err, const char *func, unsigned line) {
+__cold void log_error(const int err, const char *func, unsigned line) {
   assert(err != MDBX_SUCCESS);
   if (unlikely(globals.loglevel >= MDBX_LOG_DEBUG) &&
       (globals.loglevel >= MDBX_LOG_TRACE || !(err == MDBX_RESULT_TRUE || err == MDBX_NOTFOUND))) {
     char buf[256];
     debug_log(MDBX_LOG_ERROR, func, line, "error %d (%s)\n", err, mdbx_strerror_r(err, buf, sizeof(buf)));
   }
-  return err;
 }
 
 /* Dump a val in ascii or hexadecimal. */
