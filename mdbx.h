@@ -5716,7 +5716,7 @@ LIBMDBX_API int mdbx_cursor_del(MDBX_cursor *cursor, MDBX_put_flags_t flags);
  * sorted duplicate data items \ref MDBX_DUPSORT.
  *
  * \param [in] cursor    A cursor handle returned by \ref mdbx_cursor_open().
- * \param [out] pcount   Address where the count will be stored.
+ * \param [out] count    Address where the count will be stored.
  *
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
@@ -5724,7 +5724,7 @@ LIBMDBX_API int mdbx_cursor_del(MDBX_cursor *cursor, MDBX_put_flags_t flags);
  *                               by current thread.
  * \retval MDBX_EINVAL   Cursor is not initialized, or an invalid parameter
  *                       was specified. */
-LIBMDBX_API int mdbx_cursor_count(const MDBX_cursor *cursor, size_t *pcount);
+LIBMDBX_API int mdbx_cursor_count(const MDBX_cursor *cursor, size_t *count);
 
 /** \brief Return count values (aka duplicates) and nested b-tree statistics for current key.
  * \ingroup c_crud
@@ -5737,7 +5737,7 @@ LIBMDBX_API int mdbx_cursor_count(const MDBX_cursor *cursor, size_t *pcount);
  * sorted duplicate data items \ref MDBX_DUPSORT.
  *
  * \param [in] cursor    A cursor handle returned by \ref mdbx_cursor_open().
- * \param [out] pcount   Address where the count will be stored.
+ * \param [out] count    Address where the count will be stored.
  * \param [out] stat     The address of an \ref MDBX_stat structure where
  *                       the statistics of a nested b-tree will be copied.
  * \param [in] bytes     The size of \ref MDBX_stat.
@@ -5748,7 +5748,7 @@ LIBMDBX_API int mdbx_cursor_count(const MDBX_cursor *cursor, size_t *pcount);
  *                               by current thread.
  * \retval MDBX_EINVAL   Cursor is not initialized, or an invalid parameter
  *                       was specified. */
-LIBMDBX_API int mdbx_cursor_count_ex(const MDBX_cursor *mc, size_t *count, MDBX_stat *stat, size_t bytes);
+LIBMDBX_API int mdbx_cursor_count_ex(const MDBX_cursor *cursor, size_t *count, MDBX_stat *stat, size_t bytes);
 
 /** \brief Determines whether the cursor is pointed to a key-value pair or not,
  * i.e. was not positioned or points to the end of data.
