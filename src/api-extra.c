@@ -72,6 +72,65 @@ __cold int mdbx_reader_check(MDBX_env *env, int *dead) {
   return LOG_IFERR(mvcc_cleanup_dead(env, false, dead));
 }
 
+__cold int mdbx_thread_register(const MDBX_env *env) {
+  int rc = check_env(env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  if (unlikely(!env->lck_mmap.lck))
+    return LOG_IFERR((env->flags & MDBX_EXCLUSIVE) ? MDBX_EINVAL : MDBX_EPERM);
+
+  if (unlikely((env->flags & ENV_TXKEY) == 0)) {
+    eASSERT(env, env->flags & MDBX_NOSTICKYTHREADS);
+    return LOG_IFERR(MDBX_EINVAL) /* MDBX_NOSTICKYTHREADS mode */;
+  }
+
+  eASSERT(env, (env->flags & (MDBX_NOSTICKYTHREADS | ENV_TXKEY)) == ENV_TXKEY);
+  reader_slot_t *r = thread_rthc_get(env->me_txkey);
+  if (unlikely(r != nullptr)) {
+    eASSERT(env, r->pid.weak == env->pid);
+    eASSERT(env, r->tid.weak == osal_thread_self());
+    if (unlikely(r->pid.weak != env->pid))
+      return LOG_IFERR(MDBX_BAD_RSLOT);
+    return MDBX_RESULT_TRUE /* already registered */;
+  }
+
+  return LOG_IFERR(mvcc_bind_slot((MDBX_env *)env).err);
+}
+
+__cold int mdbx_thread_unregister(const MDBX_env *env) {
+  int rc = check_env(env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  if (unlikely(!env->lck_mmap.lck))
+    return MDBX_RESULT_TRUE;
+
+  if (unlikely((env->flags & ENV_TXKEY) == 0)) {
+    eASSERT(env, env->flags & MDBX_NOSTICKYTHREADS);
+    return MDBX_RESULT_TRUE /* MDBX_NOSTICKYTHREADS mode */;
+  }
+
+  eASSERT(env, (env->flags & (MDBX_NOSTICKYTHREADS | ENV_TXKEY)) == ENV_TXKEY);
+  reader_slot_t *r = thread_rthc_get(env->me_txkey);
+  if (unlikely(r == nullptr))
+    return MDBX_RESULT_TRUE /* not registered */;
+
+  eASSERT(env, r->pid.weak == env->pid);
+  eASSERT(env, r->tid.weak == osal_thread_self());
+  if (unlikely(r->pid.weak != env->pid || r->tid.weak != osal_thread_self()))
+    return LOG_IFERR(MDBX_BAD_RSLOT);
+
+  eASSERT(env, r->txnid.weak >= SAFE64_INVALID_THRESHOLD);
+  if (unlikely(r->txnid.weak < SAFE64_INVALID_THRESHOLD))
+    return LOG_IFERR(MDBX_BUSY) /* transaction is still active */;
+
+  atomic_store32(&r->pid, 0, mo_Relaxed);
+  atomic_store32(&env->lck->rdt_refresh_flag, true, mo_AcquireRelease);
+  thread_rthc_set(env->me_txkey, nullptr);
+  return MDBX_SUCCESS;
+}
+
 /*------------------------------------------------------------------------------
  * Locking API */
 

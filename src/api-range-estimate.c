@@ -142,6 +142,9 @@ __hot static ptrdiff_t estimate(const tree_t *tree, diff_t *const __restrict dr)
   }
 }
 
+/*------------------------------------------------------------------------------
+ * Range-Estimation API */
+
 __hot int mdbx_estimate_distance(const MDBX_cursor *first, const MDBX_cursor *last, ptrdiff_t *distance_items) {
   if (unlikely(first == nullptr || last == nullptr || distance_items == nullptr))
     return LOG_IFERR(MDBX_EINVAL);

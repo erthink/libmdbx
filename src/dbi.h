@@ -124,4 +124,18 @@ MDBX_INTERNAL int dbi_open(MDBX_txn *txn, const MDBX_val *const name, unsigned u
 MDBX_INTERNAL int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags, MDBX_cmp_func *keycmp,
                            MDBX_cmp_func *datacmp);
 
+typedef struct defer_free_item {
+  struct defer_free_item *next;
+  uint64_t timestamp;
+} defer_free_item_t;
+
+MDBX_INTERNAL int dbi_defer_release(MDBX_env *const env, defer_free_item_t *const chain);
+MDBX_INTERNAL int dbi_close_release(MDBX_env *env, MDBX_dbi dbi);
 MDBX_INTERNAL const tree_t *dbi_dig(const MDBX_txn *txn, const size_t dbi, tree_t *fallback);
+
+struct dbi_rename_result {
+  defer_free_item_t *defer;
+  int err;
+};
+
+MDBX_INTERNAL struct dbi_rename_result dbi_rename_locked(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val new_name);

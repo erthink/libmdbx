@@ -46,6 +46,7 @@ MDBX_INTERNAL int txn_renew(MDBX_txn *txn, unsigned flags);
 MDBX_INTERNAL int txn_park(MDBX_txn *txn, bool autounpark);
 MDBX_INTERNAL int txn_unpark(MDBX_txn *txn);
 MDBX_INTERNAL int txn_check_badbits_parked(const MDBX_txn *txn, int bad_bits);
+MDBX_INTERNAL void txn_done_cursors(MDBX_txn *txn, const bool merge);
 
 #define TXN_END_NAMES                                                                                                  \
   {"committed", "empty-commit", "abort", "reset", "fail-begin", "fail-beginchild", "ousted", nullptr}
@@ -67,6 +68,8 @@ enum {
 };
 MDBX_INTERNAL int txn_end(MDBX_txn *txn, unsigned mode);
 MDBX_INTERNAL int txn_write(MDBX_txn *txn, iov_ctx_t *ctx);
+MDBX_INTERNAL void txn_take_gcprof(MDBX_txn *txn, MDBX_commit_latency *latency);
+MDBX_INTERNAL void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t parent_retired_len);
 
 /* env.c */
 MDBX_INTERNAL int env_open(MDBX_env *env, mdbx_mode_t mode);

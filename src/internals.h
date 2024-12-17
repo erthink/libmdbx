@@ -315,11 +315,6 @@ struct cursor_couple {
   subcur_t inner;
 };
 
-struct defer_free_item {
-  struct defer_free_item *next;
-  uint64_t timestamp;
-};
-
 enum env_flags {
   /* Failed to update the meta page. Probably an I/O error. */
   ENV_FATAL_ERROR = INT32_MIN /* 0x80000000 */,

@@ -1315,3 +1315,108 @@ __cold int mdbx_env_sync_ex(MDBX_env *env, bool force, bool nonblock) {
 
   return LOG_IFERR(env_sync(env, force, nonblock));
 }
+
+/*----------------------------------------------------------------------------*/
+
+static void stat_add(const tree_t *db, MDBX_stat *const st, const size_t bytes) {
+  st->ms_depth += db->height;
+  st->ms_branch_pages += db->branch_pages;
+  st->ms_leaf_pages += db->leaf_pages;
+  st->ms_overflow_pages += db->large_pages;
+  st->ms_entries += db->items;
+  if (likely(bytes >= offsetof(MDBX_stat, ms_mod_txnid) + sizeof(st->ms_mod_txnid)))
+    st->ms_mod_txnid = (st->ms_mod_txnid > db->mod_txnid) ? st->ms_mod_txnid : db->mod_txnid;
+}
+
+static int stat_acc(const MDBX_txn *txn, MDBX_stat *st, size_t bytes) {
+  memset(st, 0, bytes);
+
+  int err = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
+  cursor_couple_t cx;
+  err = cursor_init(&cx.outer, (MDBX_txn *)txn, MAIN_DBI);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
+  const MDBX_env *const env = txn->env;
+  st->ms_psize = env->ps;
+  TXN_FOREACH_DBI_FROM(txn, dbi,
+                       /* assuming GC is internal and not subject for accounting */ MAIN_DBI) {
+    if ((txn->dbi_state[dbi] & (DBI_VALID | DBI_STALE)) == DBI_VALID)
+      stat_add(txn->dbs + dbi, st, bytes);
+  }
+
+  if (!(txn->dbs[MAIN_DBI].flags & MDBX_DUPSORT) && txn->dbs[MAIN_DBI].items /* TODO: use `md_subs` field */) {
+
+    /* scan and account not opened named tables */
+    err = tree_search(&cx.outer, nullptr, Z_FIRST);
+    while (err == MDBX_SUCCESS) {
+      const page_t *mp = cx.outer.pg[cx.outer.top];
+      for (size_t i = 0; i < page_numkeys(mp); i++) {
+        const node_t *node = page_node(mp, i);
+        if (node_flags(node) != N_TREE)
+          continue;
+        if (unlikely(node_ds(node) != sizeof(tree_t))) {
+          ERROR("%s/%d: %s %zu", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid table node size", node_ds(node));
+          return MDBX_CORRUPTED;
+        }
+
+        /* skip opened and already accounted */
+        const MDBX_val name = {node_key(node), node_ks(node)};
+        TXN_FOREACH_DBI_USER(txn, dbi) {
+          if ((txn->dbi_state[dbi] & (DBI_VALID | DBI_STALE)) == DBI_VALID &&
+              env->kvs[MAIN_DBI].clc.k.cmp(&name, &env->kvs[dbi].name) == 0) {
+            node = nullptr;
+            break;
+          }
+        }
+
+        if (node) {
+          tree_t db;
+          memcpy(&db, node_data(node), sizeof(db));
+          stat_add(&db, st, bytes);
+        }
+      }
+      err = cursor_sibling_right(&cx.outer);
+    }
+    if (unlikely(err != MDBX_NOTFOUND))
+      return err;
+  }
+
+  return MDBX_SUCCESS;
+}
+
+__cold int mdbx_env_stat_ex(const MDBX_env *env, const MDBX_txn *txn, MDBX_stat *dest, size_t bytes) {
+  if (unlikely(!dest))
+    return LOG_IFERR(MDBX_EINVAL);
+  const size_t size_before_modtxnid = offsetof(MDBX_stat, ms_mod_txnid);
+  if (unlikely(bytes != sizeof(MDBX_stat)) && bytes != size_before_modtxnid)
+    return LOG_IFERR(MDBX_EINVAL);
+
+  if (likely(txn)) {
+    if (env && unlikely(txn->env != env))
+      return LOG_IFERR(MDBX_EINVAL);
+    return LOG_IFERR(stat_acc(txn, dest, bytes));
+  }
+
+  int err = check_env(env, true);
+  if (unlikely(err != MDBX_SUCCESS))
+    return LOG_IFERR(err);
+
+  if (env->txn && env_txn0_owned(env))
+    /* inside write-txn */
+    return LOG_IFERR(stat_acc(env->txn, dest, bytes));
+
+  MDBX_txn *tmp_txn;
+  err = mdbx_txn_begin((MDBX_env *)env, nullptr, MDBX_TXN_RDONLY, &tmp_txn);
+  if (unlikely(err != MDBX_SUCCESS))
+    return LOG_IFERR(err);
+
+  const int rc = stat_acc(tmp_txn, dest, bytes);
+  err = mdbx_txn_abort(tmp_txn);
+  if (unlikely(err != MDBX_SUCCESS))
+    return LOG_IFERR(err);
+  return LOG_IFERR(rc);
+}
