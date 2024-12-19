@@ -211,14 +211,14 @@ struct MDBX_txn {
     struct {
       troika_t troika;
       /* In write txns, array of cursors for each DB */
-      pnl_t __restrict relist; /* Reclaimed GC pages */
-      bool prefault_write_activated;
+      pnl_t __restrict repnl; /* Reclaimed GC pages */
       struct {
-        /* The list of reclaimed txns from GC */
-        txl_t __restrict reclaimed;
+        /* The list of reclaimed txn-ids from GC */
+        txl_t __restrict retxl;
         txnid_t last_reclaimed; /* ID of last used record */
         uint64_t time_acc;
       } gc;
+      bool prefault_write_activated;
 #if MDBX_ENABLE_REFUND
       pgno_t loose_refund_wl /* FIXME: describe */;
 #endif /* MDBX_ENABLE_REFUND */

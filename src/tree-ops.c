@@ -889,7 +889,7 @@ retry:
     goto retry;
   }
   if (likely(!involve) &&
-      (likely(mc->tree != &mc->txn->dbs[FREE_DBI]) || mc->txn->tw.loose_pages || MDBX_PNL_GETSIZE(mc->txn->tw.relist) ||
+      (likely(mc->tree != &mc->txn->dbs[FREE_DBI]) || mc->txn->tw.loose_pages || MDBX_PNL_GETSIZE(mc->txn->tw.repnl) ||
        (mc->flags & z_gcu_preparation) || (mc->txn->flags & txn_gc_drained) || room_threshold)) {
     involve = true;
     goto retry;

@@ -608,8 +608,8 @@ status_done:
 
   reclaim:
     DEBUG("reclaim %zu %s page %" PRIaPGNO, npages, "dirty", pgno);
-    rc = pnl_insert_span(&txn->tw.relist, pgno, npages);
-    tASSERT(txn, pnl_check_allocated(txn->tw.relist, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
+    rc = pnl_insert_span(&txn->tw.repnl, pgno, npages);
+    tASSERT(txn, pnl_check_allocated(txn->tw.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
     tASSERT(txn, dpl_check(txn));
     return rc;
   }
@@ -679,7 +679,7 @@ __hot int __must_check_result page_dirty(MDBX_txn *txn, page_t *mp, size_t npage
     if (txn->tw.loose_count) {
       page_t *lp = txn->tw.loose_pages;
       DEBUG("purge-and-reclaim loose page %" PRIaPGNO, lp->pgno);
-      rc = pnl_insert_span(&txn->tw.relist, lp->pgno, 1);
+      rc = pnl_insert_span(&txn->tw.repnl, lp->pgno, 1);
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
       size_t di = dpl_search(txn, lp->pgno);

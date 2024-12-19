@@ -257,14 +257,14 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
     txn->geo = parent->geo;
     rc = dpl_alloc(txn);
     if (likely(rc == MDBX_SUCCESS)) {
-      const size_t len = MDBX_PNL_GETSIZE(parent->tw.relist) + parent->tw.loose_count;
-      txn->tw.relist = pnl_alloc((len > MDBX_PNL_INITIAL) ? len : MDBX_PNL_INITIAL);
-      if (unlikely(!txn->tw.relist))
+      const size_t len = MDBX_PNL_GETSIZE(parent->tw.repnl) + parent->tw.loose_count;
+      txn->tw.repnl = pnl_alloc((len > MDBX_PNL_INITIAL) ? len : MDBX_PNL_INITIAL);
+      if (unlikely(!txn->tw.repnl))
         rc = MDBX_ENOMEM;
     }
     if (unlikely(rc != MDBX_SUCCESS)) {
     nested_failed:
-      pnl_free(txn->tw.relist);
+      pnl_free(txn->tw.repnl);
       dpl_free(txn);
       osal_free(txn);
       return LOG_IFERR(rc);
@@ -275,7 +275,7 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
       do {
         page_t *lp = parent->tw.loose_pages;
         tASSERT(parent, lp->flags == P_LOOSE);
-        rc = pnl_insert_span(&parent->tw.relist, lp->pgno, 1);
+        rc = pnl_insert_span(&parent->tw.repnl, lp->pgno, 1);
         if (unlikely(rc != MDBX_SUCCESS))
           goto nested_failed;
         MDBX_ASAN_UNPOISON_MEMORY_REGION(&page_next(lp), sizeof(page_t *));
@@ -297,18 +297,18 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
     if (parent->tw.spilled.list)
       spill_purge(parent);
 
-    tASSERT(txn, MDBX_PNL_ALLOCLEN(txn->tw.relist) >= MDBX_PNL_GETSIZE(parent->tw.relist));
-    memcpy(txn->tw.relist, parent->tw.relist, MDBX_PNL_SIZEOF(parent->tw.relist));
-    eASSERT(env, pnl_check_allocated(txn->tw.relist, (txn->geo.first_unallocated /* LY: intentional assignment
+    tASSERT(txn, MDBX_PNL_ALLOCLEN(txn->tw.repnl) >= MDBX_PNL_GETSIZE(parent->tw.repnl));
+    memcpy(txn->tw.repnl, parent->tw.repnl, MDBX_PNL_SIZEOF(parent->tw.repnl));
+    eASSERT(env, pnl_check_allocated(txn->tw.repnl, (txn->geo.first_unallocated /* LY: intentional assignment
                                                                                here, only for assertion */
-                                                      = parent->geo.first_unallocated) -
-                                                         MDBX_ENABLE_REFUND));
+                                                     = parent->geo.first_unallocated) -
+                                                        MDBX_ENABLE_REFUND));
 
     txn->tw.gc.time_acc = parent->tw.gc.time_acc;
     txn->tw.gc.last_reclaimed = parent->tw.gc.last_reclaimed;
-    if (parent->tw.gc.reclaimed) {
-      txn->tw.gc.reclaimed = parent->tw.gc.reclaimed;
-      parent->tw.gc.reclaimed = (void *)(intptr_t)MDBX_PNL_GETSIZE(parent->tw.gc.reclaimed);
+    if (parent->tw.gc.retxl) {
+      txn->tw.gc.retxl = parent->tw.gc.retxl;
+      parent->tw.gc.retxl = (void *)(intptr_t)MDBX_PNL_GETSIZE(parent->tw.gc.retxl);
     }
 
     txn->tw.retired_pages = parent->tw.retired_pages;
@@ -464,7 +464,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     tASSERT(txn, parent_retired_len <= MDBX_PNL_GETSIZE(txn->tw.retired_pages));
     const size_t retired_delta = MDBX_PNL_GETSIZE(txn->tw.retired_pages) - parent_retired_len;
     if (retired_delta) {
-      rc = pnl_need(&txn->tw.relist, retired_delta);
+      rc = pnl_need(&txn->tw.repnl, retired_delta);
       if (unlikely(rc != MDBX_SUCCESS))
         goto fail;
     }
@@ -486,15 +486,15 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
 
     //-------------------------------------------------------------------------
 
-    parent->tw.gc.reclaimed = txn->tw.gc.reclaimed;
-    txn->tw.gc.reclaimed = nullptr;
+    parent->tw.gc.retxl = txn->tw.gc.retxl;
+    txn->tw.gc.retxl = nullptr;
 
     parent->tw.retired_pages = txn->tw.retired_pages;
     txn->tw.retired_pages = nullptr;
 
-    pnl_free(parent->tw.relist);
-    parent->tw.relist = txn->tw.relist;
-    txn->tw.relist = nullptr;
+    pnl_free(parent->tw.repnl);
+    parent->tw.repnl = txn->tw.repnl;
+    txn->tw.repnl = nullptr;
     parent->tw.gc.time_acc = txn->tw.gc.time_acc;
     parent->tw.gc.last_reclaimed = txn->tw.gc.last_reclaimed;
 
@@ -550,8 +550,8 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
         VALGRIND_MAKE_MEM_DEFINED(&page_next(lp), sizeof(page_t *));
       }
       /* Check parent's reclaimed pages not suitable for refund */
-      if (MDBX_PNL_GETSIZE(parent->tw.relist))
-        tASSERT(parent, MDBX_PNL_MOST(parent->tw.relist) + 1 < parent->geo.first_unallocated);
+      if (MDBX_PNL_GETSIZE(parent->tw.repnl))
+        tASSERT(parent, MDBX_PNL_MOST(parent->tw.repnl) + 1 < parent->geo.first_unallocated);
     }
 #endif /* MDBX_ENABLE_REFUND */
 

@@ -510,8 +510,8 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname, MDBX_env_flags
     txn->flags = MDBX_TXN_FINISHED;
     env->basal_txn = txn;
     txn->tw.retired_pages = pnl_alloc(MDBX_PNL_INITIAL);
-    txn->tw.relist = pnl_alloc(MDBX_PNL_INITIAL);
-    if (unlikely(!txn->tw.retired_pages || !txn->tw.relist)) {
+    txn->tw.repnl = pnl_alloc(MDBX_PNL_INITIAL);
+    if (unlikely(!txn->tw.retired_pages || !txn->tw.repnl)) {
       rc = MDBX_ENOMEM;
       goto bailout;
     }

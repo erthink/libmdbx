@@ -85,7 +85,7 @@ void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t parent_
   }
 
   /* Remove reclaimed pages from parent's dirty list */
-  const pnl_t reclaimed_list = parent->tw.relist;
+  const pnl_t reclaimed_list = parent->tw.repnl;
   dpl_sift(parent, reclaimed_list, false);
 
   /* Move retired pages from parent's dirty & spilled list to reclaimed */
@@ -139,7 +139,7 @@ void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t parent_
     }
 
     DEBUG("reclaim retired parent's %u -> %zu %s page %" PRIaPGNO, npages, l, kind, pgno);
-    int err = pnl_insert_span(&parent->tw.relist, pgno, l);
+    int err = pnl_insert_span(&parent->tw.repnl, pgno, l);
     ENSURE(txn->env, err == MDBX_SUCCESS);
   }
   MDBX_PNL_SETSIZE(parent->tw.retired_pages, w);
@@ -651,8 +651,8 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
     txn->tw.spilled.least_removed = 0;
     txn->tw.gc.time_acc = 0;
     txn->tw.gc.last_reclaimed = 0;
-    if (txn->tw.gc.reclaimed)
-      MDBX_PNL_SETSIZE(txn->tw.gc.reclaimed, 0);
+    if (txn->tw.gc.retxl)
+      MDBX_PNL_SETSIZE(txn->tw.gc.retxl, 0);
     env->txn = txn;
 
     if ((txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC) {
@@ -916,7 +916,7 @@ int txn_end(MDBX_txn *txn, unsigned mode) {
       /* Export or close DBI handles created in this txn */
       rc = dbi_update(txn, mode & TXN_END_UPDATE);
       pnl_shrink(&txn->tw.retired_pages);
-      pnl_shrink(&txn->tw.relist);
+      pnl_shrink(&txn->tw.repnl);
       if (!(env->flags & MDBX_WRITEMAP))
         dpl_release_shadows(txn);
       /* The writer mutex was locked in mdbx_txn_begin. */
@@ -926,14 +926,14 @@ int txn_end(MDBX_txn *txn, unsigned mode) {
       MDBX_txn *const parent = txn->parent;
       eASSERT(env, parent->signature == txn_signature);
       eASSERT(env, parent->nested == txn && (parent->flags & MDBX_TXN_HAS_CHILD) != 0);
-      eASSERT(env, pnl_check_allocated(txn->tw.relist, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
+      eASSERT(env, pnl_check_allocated(txn->tw.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
       eASSERT(env, memcmp(&txn->tw.troika, &parent->tw.troika, sizeof(troika_t)) == 0);
 
       txn->owner = 0;
-      if (txn->tw.gc.reclaimed) {
-        eASSERT(env, MDBX_PNL_GETSIZE(txn->tw.gc.reclaimed) >= (uintptr_t)parent->tw.gc.reclaimed);
-        MDBX_PNL_SETSIZE(txn->tw.gc.reclaimed, (uintptr_t)parent->tw.gc.reclaimed);
-        parent->tw.gc.reclaimed = txn->tw.gc.reclaimed;
+      if (txn->tw.gc.retxl) {
+        eASSERT(env, MDBX_PNL_GETSIZE(txn->tw.gc.retxl) >= (uintptr_t)parent->tw.gc.retxl);
+        MDBX_PNL_SETSIZE(txn->tw.gc.retxl, (uintptr_t)parent->tw.gc.retxl);
+        parent->tw.gc.retxl = txn->tw.gc.retxl;
       }
 
       if (txn->tw.retired_pages) {
@@ -949,7 +949,7 @@ int txn_end(MDBX_txn *txn, unsigned mode) {
       tASSERT(parent, audit_ex(parent, 0, false) == 0);
       dpl_release_shadows(txn);
       dpl_free(txn);
-      pnl_free(txn->tw.relist);
+      pnl_free(txn->tw.repnl);
 
       if (parent->geo.upper != txn->geo.upper || parent->geo.now != txn->geo.now) {
         /* undo resize performed by child txn */

@@ -362,12 +362,12 @@ __cold bool dpl_check(MDBX_txn *txn) {
         return false;
     }
 
-    const size_t rpa = pnl_search(txn->tw.relist, dp->pgno, txn->geo.first_unallocated);
-    tASSERT(txn, rpa > MDBX_PNL_GETSIZE(txn->tw.relist) || txn->tw.relist[rpa] != dp->pgno);
-    if (rpa <= MDBX_PNL_GETSIZE(txn->tw.relist) && unlikely(txn->tw.relist[rpa] == dp->pgno))
+    const size_t rpa = pnl_search(txn->tw.repnl, dp->pgno, txn->geo.first_unallocated);
+    tASSERT(txn, rpa > MDBX_PNL_GETSIZE(txn->tw.repnl) || txn->tw.repnl[rpa] != dp->pgno);
+    if (rpa <= MDBX_PNL_GETSIZE(txn->tw.repnl) && unlikely(txn->tw.repnl[rpa] == dp->pgno))
       return false;
     if (num > 1) {
-      const size_t rpb = pnl_search(txn->tw.relist, dp->pgno + num - 1, txn->geo.first_unallocated);
+      const size_t rpb = pnl_search(txn->tw.repnl, dp->pgno + num - 1, txn->geo.first_unallocated);
       tASSERT(txn, rpa == rpb);
       if (unlikely(rpa != rpb))
         return false;
