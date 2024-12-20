@@ -129,7 +129,7 @@ __hot __noinline dpl_t *dpl_sort_slowpath(const MDBX_txn *txn) {
 #define DP_SEARCH_CMP(dp, id) ((dp).pgno < (id))
 SEARCH_IMPL(dp_bsearch, dp_t, pgno_t, DP_SEARCH_CMP)
 
-__hot __noinline MDBX_INTERNAL size_t dpl_search(const MDBX_txn *txn, pgno_t pgno) {
+__hot __noinline size_t dpl_search(const MDBX_txn *txn, pgno_t pgno) {
   tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 

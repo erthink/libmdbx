@@ -3,7 +3,7 @@
 
 #include "internals.h"
 
-MDBX_INTERNAL pnl_t pnl_alloc(size_t size) {
+pnl_t pnl_alloc(size_t size) {
   size_t bytes = pnl_size2bytes(size);
   pnl_t pnl = osal_malloc(bytes);
   if (likely(pnl)) {
@@ -18,12 +18,12 @@ MDBX_INTERNAL pnl_t pnl_alloc(size_t size) {
   return pnl;
 }
 
-MDBX_INTERNAL void pnl_free(pnl_t pnl) {
+void pnl_free(pnl_t pnl) {
   if (likely(pnl))
     osal_free(pnl - 1);
 }
 
-MDBX_INTERNAL void pnl_shrink(pnl_t __restrict *__restrict ppnl) {
+void pnl_shrink(pnl_t __restrict *__restrict ppnl) {
   assert(pnl_bytes2size(pnl_size2bytes(MDBX_PNL_INITIAL)) >= MDBX_PNL_INITIAL &&
          pnl_bytes2size(pnl_size2bytes(MDBX_PNL_INITIAL)) < MDBX_PNL_INITIAL * 3 / 2);
   assert(MDBX_PNL_GETSIZE(*ppnl) <= PAGELIST_LIMIT && MDBX_PNL_ALLOCLEN(*ppnl) >= MDBX_PNL_GETSIZE(*ppnl));
@@ -42,7 +42,7 @@ MDBX_INTERNAL void pnl_shrink(pnl_t __restrict *__restrict ppnl) {
   }
 }
 
-MDBX_INTERNAL int pnl_reserve(pnl_t __restrict *__restrict ppnl, const size_t wanna) {
+int pnl_reserve(pnl_t __restrict *__restrict ppnl, const size_t wanna) {
   const size_t allocated = MDBX_PNL_ALLOCLEN(*ppnl);
   assert(MDBX_PNL_GETSIZE(*ppnl) <= PAGELIST_LIMIT && MDBX_PNL_ALLOCLEN(*ppnl) >= MDBX_PNL_GETSIZE(*ppnl));
   if (likely(allocated >= wanna))
@@ -99,15 +99,15 @@ static __always_inline int __must_check_result pnl_append_stepped(unsigned step,
   return MDBX_SUCCESS;
 }
 
-__hot MDBX_INTERNAL int __must_check_result spill_append_span(__restrict pnl_t *ppnl, pgno_t pgno, size_t n) {
+__hot int __must_check_result spill_append_span(__restrict pnl_t *ppnl, pgno_t pgno, size_t n) {
   return pnl_append_stepped(2, ppnl, pgno << 1, n);
 }
 
-__hot MDBX_INTERNAL int __must_check_result pnl_append_span(__restrict pnl_t *ppnl, pgno_t pgno, size_t n) {
+__hot int __must_check_result pnl_append_span(__restrict pnl_t *ppnl, pgno_t pgno, size_t n) {
   return pnl_append_stepped(1, ppnl, pgno, n);
 }
 
-__hot MDBX_INTERNAL int __must_check_result pnl_insert_span(__restrict pnl_t *ppnl, pgno_t pgno, size_t n) {
+__hot int __must_check_result pnl_insert_span(__restrict pnl_t *ppnl, pgno_t pgno, size_t n) {
   assert(n > 0);
   int rc = pnl_need(ppnl, n);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -125,7 +125,7 @@ __hot MDBX_INTERNAL int __must_check_result pnl_insert_span(__restrict pnl_t *pp
   return MDBX_SUCCESS;
 }
 
-__hot __noinline MDBX_INTERNAL bool pnl_check(const const_pnl_t pnl, const size_t limit) {
+__hot __noinline bool pnl_check(const const_pnl_t pnl, const size_t limit) {
   assert(limit >= MIN_PAGENO - MDBX_ENABLE_REFUND);
   if (likely(MDBX_PNL_GETSIZE(pnl))) {
     if (unlikely(MDBX_PNL_GETSIZE(pnl) > PAGELIST_LIMIT))
@@ -179,7 +179,7 @@ static __always_inline void pnl_merge_inner(pgno_t *__restrict dst, const pgno_t
   } while (likely(src_b > src_b_detent));
 }
 
-__hot MDBX_INTERNAL size_t pnl_merge(pnl_t dst, const pnl_t src) {
+__hot size_t pnl_merge(pnl_t dst, const pnl_t src) {
   assert(pnl_check_allocated(dst, MAX_PAGENO + 1));
   assert(pnl_check(src, MAX_PAGENO + 1));
   const size_t src_len = MDBX_PNL_GETSIZE(src);
@@ -215,7 +215,7 @@ RADIXSORT_IMPL(pgno, pgno_t, MDBX_PNL_EXTRACT_KEY, MDBX_PNL_PREALLOC_FOR_RADIXSO
 
 SORT_IMPL(pgno_sort, false, pgno_t, MDBX_PNL_ORDERED)
 
-__hot __noinline MDBX_INTERNAL void pnl_sort_nochk(pnl_t pnl) {
+__hot __noinline void pnl_sort_nochk(pnl_t pnl) {
   if (likely(MDBX_PNL_GETSIZE(pnl) < MDBX_RADIXSORT_THRESHOLD) ||
       unlikely(!pgno_radixsort(&MDBX_PNL_FIRST(pnl), MDBX_PNL_GETSIZE(pnl))))
     pgno_sort(MDBX_PNL_BEGIN(pnl), MDBX_PNL_END(pnl));
@@ -223,7 +223,7 @@ __hot __noinline MDBX_INTERNAL void pnl_sort_nochk(pnl_t pnl) {
 
 SEARCH_IMPL(pgno_bsearch, pgno_t, pgno_t, MDBX_PNL_ORDERED)
 
-__hot __noinline MDBX_INTERNAL size_t pnl_search_nochk(const pnl_t pnl, pgno_t pgno) {
+__hot __noinline size_t pnl_search_nochk(const pnl_t pnl, pgno_t pgno) {
   const pgno_t *begin = MDBX_PNL_BEGIN(pnl);
   const pgno_t *it = pgno_bsearch(begin, MDBX_PNL_GETSIZE(pnl), pgno);
   const pgno_t *end = begin + MDBX_PNL_GETSIZE(pnl);
