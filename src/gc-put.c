@@ -415,7 +415,7 @@ static rid_t get_rid_for_reclaimed(MDBX_txn *txn, gcu_t *ctx, const size_t left)
         if (unlikely(ctx->rid <= MIN_TXNID)) {
           ctx->dense = true;
           if (unlikely(MDBX_PNL_GETSIZE(txn->tw.gc.reclaimed) <= ctx->reused_slot)) {
-            NOTICE("** restart: reserve depleted (reused_gc_slot %zu >= "
+            VERBOSE("** restart: reserve depleted (reused_gc_slot %zu >= "
                    "gc.reclaimed %zu)",
                    ctx->reused_slot, MDBX_PNL_GETSIZE(txn->tw.gc.reclaimed));
             goto return_restart;
@@ -838,7 +838,7 @@ retry:
         if (ctx->fill_idx == 0 || fill_gc_id > txn->tw.gc.last_reclaimed) {
           if (!left)
             break;
-          NOTICE("** restart: reserve depleted (fill_idx %zu, fill_id %" PRIaTXN " > last_reclaimed %" PRIaTXN
+          VERBOSE("** restart: reserve depleted (fill_idx %zu, fill_id %" PRIaTXN " > last_reclaimed %" PRIaTXN
                  ", left %zu",
                  ctx->fill_idx, fill_gc_id, txn->tw.gc.last_reclaimed, left);
           ctx->reserve_adj = (ctx->reserve_adj > left) ? ctx->reserve_adj - left : 0;
@@ -850,7 +850,7 @@ retry:
         if (ctx->fill_idx >= MDBX_PNL_GETSIZE(txn->tw.gc.reclaimed)) {
           if (!left)
             break;
-          NOTICE("** restart: reserve depleted (fill_idx %zu >= "
+          VERBOSE("** restart: reserve depleted (fill_idx %zu >= "
                  "gc.reclaimed %zu, left %zu",
                  ctx->fill_idx, MDBX_PNL_GETSIZE(txn->tw.gc.reclaimed), left);
           ctx->reserve_adj = (ctx->reserve_adj > left) ? ctx->reserve_adj - left : 0;
