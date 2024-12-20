@@ -412,7 +412,7 @@ since release the version 1.0.
 
 ## Source code embedding
 
-_libmdbx_ provides two official three for integration in source code form:
+_libmdbx_ provides three official ways for integration in source code form:
 
 1. Using an amalgamated source code which available in the [releases section](https://gitflic.ru/project/erthink/libmdbx/release) on GitFlic.
    > An amalgamated source code includes all files required to build and
