@@ -212,6 +212,7 @@ struct MDBX_txn {
       troika_t troika;
       /* In write txns, array of cursors for each DB */
       pnl_t __restrict relist; /* Reclaimed GC pages */
+      bool prefault_write_activated;
       struct {
         /* The list of reclaimed txns from GC */
         txl_t __restrict reclaimed;
@@ -436,7 +437,6 @@ struct MDBX_env {
   } me_sysv_ipc;
 #endif /* MDBX_LOCKING == MDBX_LOCKING_SYSV */
   bool incore;
-  bool prefault_write_activated;
 
 #if MDBX_ENABLE_DBI_LOCKFREE
   defer_free_item_t *defer_free;

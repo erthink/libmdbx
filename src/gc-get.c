@@ -768,7 +768,7 @@ static inline pgr_t page_alloc_finalize(MDBX_env *const env, MDBX_txn *const txn
      * обновляться PTE с последующей генерацией page-fault и чтением данных из
      * грязной I/O очереди. Из-за этого штраф за лишнюю запись может быть
      * сравним с избегаемым ненужным чтением. */
-    if (env->prefault_write_activated) {
+    if (txn->tw.prefault_write_activated) {
       void *const pattern = ptr_disp(env->page_auxbuf, need_clean ? env->ps : env->ps * 2);
       size_t file_offset = pgno2bytes(env, pgno);
       if (likely(num == 1)) {
@@ -900,8 +900,8 @@ pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) 
   gc->dbi_state = txn->dbi_state;
   gc->top_and_flags = z_fresh_mark;
 
-  env->prefault_write_activated = env->options.prefault_write;
-  if (env->prefault_write_activated) {
+  txn->tw.prefault_write_activated = env->options.prefault_write;
+  if (txn->tw.prefault_write_activated) {
     /* Проверка посредством minicore() существенно снижает затраты, но в
      * простейших случаях (тривиальный бенчмарк) интегральная производительность
      * становится вдвое меньше. А на платформах без mincore() и с проблемной
@@ -914,7 +914,7 @@ pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) 
         (txn->dbs[FREE_DBI].branch_pages == 0 && txn->geo.now < 1234) ||
         /* Не суетимся если страница в зоне включенного упреждающего чтения */
         (readahead_enabled && pgno + num < readahead_edge))
-      env->prefault_write_activated = false;
+      txn->tw.prefault_write_activated = false;
   }
 
 retry_gc_refresh_oldest:;
