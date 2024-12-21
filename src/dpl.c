@@ -20,10 +20,10 @@ static inline size_t dpl_size2bytes(ptrdiff_t size) {
 
 static inline size_t dpl_bytes2size(const ptrdiff_t bytes) {
   size_t size = (bytes - sizeof(dpl_t)) / sizeof(dp_t);
-  assert(size > CURSOR_STACK_SIZE && size <= PAGELIST_LIMIT + MDBX_PNL_GRANULATE);
 #if MDBX_DPL_PREALLOC_FOR_RADIXSORT
   size >>= 1;
 #endif /* MDBX_DPL_PREALLOC_FOR_RADIXSORT */
+  assert(size > CURSOR_STACK_SIZE && size <= PAGELIST_LIMIT + MDBX_PNL_GRANULATE);
   return size;
 }
 
