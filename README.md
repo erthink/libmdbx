@@ -647,7 +647,7 @@ Bindings
 | Rust    | [libmdbx-rs](https://github.com/vorot93/libmdbx-rs)   | [Artem Vorotnikov](https://github.com/vorot93) |
 | Rust    | [mdbx](https://crates.io/crates/mdbx)                 | [gcxfd](https://github.com/gcxfd) |
 | Java    | [mdbxjni](https://github.com/castortech/mdbxjni)      | [Castor Technologies](https://castortech.com/) |
-| Python (draft)  | [python-bindings](https://libmdbx.dqdkfa.ru/dead-github/commits/python-bindings) branch | [Noel Kuntze](https://github.com/Thermi)
+| Python  | [PyPi/libmdbx](https://pypi.org/project/libmdbx/)     | [Lazymio](https://github.com/wtdcode) |
 | .NET (obsolete) | [mdbx.NET](https://github.com/wangjia184/mdbx.NET) | [Jerry Wang](https://github.com/wangjia184) |
 
 <!-- section-end -->
