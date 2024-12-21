@@ -590,13 +590,7 @@ static inline bool is_gc_usable(MDBX_txn *txn, const MDBX_cursor *mc, const uint
   return true;
 }
 
-__hot static bool is_already_reclaimed(const MDBX_txn *txn, txnid_t id) {
-  const size_t len = MDBX_PNL_GETSIZE(txn->tw.gc.retxl);
-  for (size_t i = 1; i <= len; ++i)
-    if (txn->tw.gc.retxl[i] == id)
-      return true;
-  return false;
-}
+static inline bool is_already_reclaimed(const MDBX_txn *txn, txnid_t id) { return txl_contain(txn->tw.gc.retxl, id); }
 
 __hot static pgno_t repnl_get_single(MDBX_txn *txn) {
   const size_t len = MDBX_PNL_GETSIZE(txn->tw.repnl);

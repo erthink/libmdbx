@@ -89,3 +89,11 @@ int __must_check_result txl_append(txl_t __restrict *ptxl, txnid_t id) {
   txl_xappend(*ptxl, id);
   return MDBX_SUCCESS;
 }
+
+__hot bool txl_contain(const txl_t txl, txnid_t id) {
+  const size_t len = MDBX_PNL_GETSIZE(txl);
+  for (size_t i = 1; i <= len; ++i)
+    if (txl[i] == id)
+      return true;
+  return false;
+}
