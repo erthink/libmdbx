@@ -515,6 +515,7 @@ __cold void rthc_dtor(const uint32_t current_pid) {
       continue;
     if (!(env->flags & ENV_TXKEY))
       continue;
+    env->flags -= ENV_TXKEY;
     reader_slot_t *const begin = &env->lck_mmap.lck->rdt[0];
     reader_slot_t *const end = &env->lck_mmap.lck->rdt[env->max_readers];
     thread_key_delete(env->me_txkey);
