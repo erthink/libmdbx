@@ -98,5 +98,31 @@ int main(int argc, char *argv[]) {
   err = mdbx_env_close_ex(environment, true);
   assert(err == MDBX_SUCCESS);
 
+  // -------------------------------------------------------------------------
+
+  auto env = mdbx::env_managed(db_filename, mdbx::env_managed::operate_parameters(2));
+  auto txn = env.start_write();
+  auto dbi = txn.create_map("keller-case");
+  txn.commit();
+
+  txn = env.start_write();
+  txn.rename_map(dbi, "keller-case.renamed");
+  txn.commit();
+
+  txn = env.start_write();
+  auto dbi2 = txn.create_map("keller-case");
+  txn.drop_map(dbi);
+  txn.drop_map(dbi2);
+  txn.commit();
+
+  err = mdbx_dbi_close(env, dbi);
+  assert(err == MDBX_BAD_DBI);
+  if (err != MDBX_BAD_DBI)
+    return 1;
+  err = mdbx_dbi_close(env, dbi2);
+  assert(err == MDBX_BAD_DBI);
+  if (err != MDBX_BAD_DBI)
+    return 2;
+
   return 0;
 }
