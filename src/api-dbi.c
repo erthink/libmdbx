@@ -146,53 +146,58 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
   if (unlikely(dbi >= env->max_dbi))
     return LOG_IFERR(MDBX_BAD_DBI);
 
-  if (unlikely(dbi < CORE_DBS || dbi >= env->max_dbi))
-    return LOG_IFERR(MDBX_BAD_DBI);
-
   rc = osal_fastmutex_acquire(&env->dbi_lock);
-  if (likely(rc == MDBX_SUCCESS && dbi < env->n_dbi)) {
-  retry:
-    if (env->basal_txn && (env->dbs_flags[dbi] & DB_VALID) && (env->basal_txn->flags & MDBX_TXN_FINISHED) == 0) {
-      /* LY: Опасный код, так как env->txn может быть изменено в другом потоке.
-       * К сожалению тут нет надежного решения и может быть падение при неверном
-       * использовании API (вызове mdbx_dbi_close конкурентно с завершением
-       * пишущей транзакции).
-       *
-       * Для минимизации вероятности падения сначала проверяем dbi-флаги
-       * в basal_txn, а уже после в env->txn. Таким образом, падение может быть
-       * только при коллизии с завершением вложенной транзакции.
-       *
-       * Альтернативно можно попробовать выполнять обновление/put записи в
-       * mainDb соответствующей таблице закрываемого хендла. Семантически это
-       * верный путь, но проблема в текущем API, в котором исторически dbi-хендл
-       * живет и закрывается вне транзакции. Причем проблема не только в том,
-       * что нет указателя на текущую пишущую транзакцию, а в том что
-       * пользователь точно не ожидает что закрытие хендла приведет к
-       * скрытой/непрозрачной активности внутри транзакции потенциально
-       * выполняемой в другом потоке. Другими словами, проблема может быть
-       * только при неверном использовании API и если пользователь это
-       * допускает, то точно не будет ожидать скрытых действий внутри
-       * транзакции, и поэтому этот путь потенциально более опасен. */
-      const MDBX_txn *const hazard = env->txn;
-      osal_compiler_barrier();
-      if ((dbi_state(env->basal_txn, dbi) & (DBI_LINDO | DBI_DIRTY | DBI_CREAT)) > DBI_LINDO) {
-      bailout_dirty_dbi:
-        osal_fastmutex_release(&env->dbi_lock);
-        return LOG_IFERR(MDBX_DANGLING_DBI);
-      }
-      osal_memory_barrier();
-      if (unlikely(hazard != env->txn))
-        goto retry;
-      if (hazard != env->basal_txn && hazard && (hazard->flags & MDBX_TXN_FINISHED) == 0 &&
-          hazard->signature == txn_signature &&
-          (dbi_state(hazard, dbi) & (DBI_LINDO | DBI_DIRTY | DBI_CREAT)) > DBI_LINDO)
-        goto bailout_dirty_dbi;
-      osal_compiler_barrier();
-      if (unlikely(hazard != env->txn))
-        goto retry;
-    }
-    rc = dbi_close_release(env, dbi);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  if (unlikely(dbi >= env->n_dbi)) {
+    rc = MDBX_BAD_DBI;
+  bailout:
+    osal_fastmutex_release(&env->dbi_lock);
+    return LOG_IFERR(rc);
   }
+
+  while (env->basal_txn && (env->dbs_flags[dbi] & DB_VALID) && (env->basal_txn->flags & MDBX_TXN_FINISHED) == 0) {
+    /* LY: Опасный код, так как env->txn может быть изменено в другом потоке.
+     * К сожалению тут нет надежного решения и может быть падение при неверном
+     * использовании API (вызове mdbx_dbi_close конкурентно с завершением
+     * пишущей транзакции).
+     *
+     * Для минимизации вероятности падения сначала проверяем dbi-флаги
+     * в basal_txn, а уже после в env->txn. Таким образом, падение может быть
+     * только при коллизии с завершением вложенной транзакции.
+     *
+     * Альтернативно можно попробовать выполнять обновление/put записи в
+     * mainDb соответствующей таблице закрываемого хендла. Семантически это
+     * верный путь, но проблема в текущем API, в котором исторически dbi-хендл
+     * живет и закрывается вне транзакции. Причем проблема не только в том,
+     * что нет указателя на текущую пишущую транзакцию, а в том что
+     * пользователь точно не ожидает что закрытие хендла приведет к
+     * скрытой/непрозрачной активности внутри транзакции потенциально
+     * выполняемой в другом потоке. Другими словами, проблема может быть
+     * только при неверном использовании API и если пользователь это
+     * допускает, то точно не будет ожидать скрытых действий внутри
+     * транзакции, и поэтому этот путь потенциально более опасен. */
+    const MDBX_txn *const hazard = env->txn;
+    osal_compiler_barrier();
+    if ((dbi_state(env->basal_txn, dbi) & (DBI_LINDO | DBI_DIRTY | DBI_CREAT)) > DBI_LINDO) {
+      rc = MDBX_DANGLING_DBI;
+      goto bailout;
+    }
+    osal_memory_barrier();
+    if (unlikely(hazard != env->txn))
+      continue;
+    if (hazard != env->basal_txn && hazard && (hazard->flags & MDBX_TXN_FINISHED) == 0 &&
+        hazard->signature == txn_signature &&
+        (dbi_state(hazard, dbi) & (DBI_LINDO | DBI_DIRTY | DBI_CREAT)) > DBI_LINDO) {
+      rc = MDBX_DANGLING_DBI;
+      goto bailout;
+    }
+    osal_compiler_barrier();
+    if (likely(hazard == env->txn))
+      break;
+  }
+  rc = dbi_close_release(env, dbi);
   return LOG_IFERR(rc);
 }
 
