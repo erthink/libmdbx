@@ -191,8 +191,7 @@ and [CoW](https://en.wikipedia.org/wiki/Copy-on-write).
 
 - Append operation for efficient bulk insertion of pre-sorted data.
 
-- No [WAL](https://en.wikipedia.org/wiki/Write-ahead_logging) nor any
-transaction journal. No crash recovery needed. No maintenance is required.
+- No [WAL](https://en.wikipedia.org/wiki/Write-ahead_logging) nor any transaction journal. No crash recovery needed. No maintenance is required.
 
 - No internal cache and/or memory management, all done by basic OS services.
 
@@ -264,7 +263,11 @@ the user's point of view.
    > and up to 30% faster when _libmdbx_ compiled with specific build options
    > which downgrades several runtime checks to be match with LMDB behaviour.
    >
-   > These and other results could be easily reproduced with [ioArena](https://abf.io/erthink/ioarena) just by `make bench-quartet` command,
+   > However, libmdbx may be slower than LMDB on Windows, since uses native file locking API.
+   > These locks are really slow, but they prevent an inconsistent backup from being obtained by copying the DB file during an ongoing write transaction.
+   > So I think this is the right decision, and for speed, it's better to use Linux, or ask Microsoft to fix up file locks.
+   >
+   > Noted above and other results could be easily reproduced with [ioArena](https://abf.io/erthink/ioarena) just by `make bench-quartet` command,
    > including comparisons with [RockDB](https://en.wikipedia.org/wiki/RocksDB)
    > and [WiredTiger](https://en.wikipedia.org/wiki/WiredTiger).
 
