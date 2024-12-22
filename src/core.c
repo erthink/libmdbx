@@ -23125,9 +23125,6 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
   if (unlikely(dbi >= env->me_maxdbs))
     return MDBX_BAD_DBI;
 
-  if (unlikely(dbi < CORE_DBS || dbi >= env->me_maxdbs))
-    return MDBX_BAD_DBI;
-
   rc = osal_fastmutex_acquire(&env->me_dbi_lock);
   if (likely(rc == MDBX_SUCCESS)) {
   retry:
