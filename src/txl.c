@@ -37,7 +37,7 @@ void txl_free(txl_t txl) {
     osal_free(txl - 1);
 }
 
-int txl_reserve(txl_t __restrict *__restrict ptxl, const size_t wanna) {
+static int txl_reserve(txl_t __restrict *__restrict ptxl, const size_t wanna) {
   const size_t allocated = (size_t)MDBX_PNL_ALLOCLEN(*ptxl);
   assert(MDBX_PNL_GETSIZE(*ptxl) <= txl_max && MDBX_PNL_ALLOCLEN(*ptxl) >= MDBX_PNL_GETSIZE(*ptxl));
   if (likely(allocated >= wanna))
