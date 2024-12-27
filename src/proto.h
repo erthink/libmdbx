@@ -77,10 +77,14 @@ MDBX_INTERNAL int env_info(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinf
 MDBX_INTERNAL int env_sync(MDBX_env *env, bool force, bool nonblock);
 MDBX_INTERNAL int env_close(MDBX_env *env, bool resurrect_after_fork);
 MDBX_INTERNAL bool env_txn0_owned(const MDBX_env *env);
-MDBX_INTERNAL void env_options_init(MDBX_env *env);
-MDBX_INTERNAL void env_options_adjust_defaults(MDBX_env *env);
 MDBX_INTERNAL int __must_check_result env_page_auxbuffer(MDBX_env *env);
 MDBX_INTERNAL unsigned env_setup_pagesize(MDBX_env *env, const size_t pagesize);
+
+/* api-opt.c */
+MDBX_INTERNAL void env_options_init(MDBX_env *env);
+MDBX_INTERNAL void env_options_adjust_defaults(MDBX_env *env);
+MDBX_INTERNAL void env_options_adjust_dp_limit(MDBX_env *env);
+MDBX_INTERNAL pgno_t default_dp_limit(const MDBX_env *env);
 
 /* tree.c */
 MDBX_INTERNAL int tree_drop(MDBX_cursor *mc, const bool may_have_tables);

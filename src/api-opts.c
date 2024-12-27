@@ -3,7 +3,37 @@
 
 #include "internals.h"
 
-__cold static unsigned default_rp_augment_limit(const MDBX_env *env) {
+static pgno_t env_max_pgno(const MDBX_env *env) {
+  return env->ps ? bytes2pgno(env, env->geo_in_bytes.upper ? env->geo_in_bytes.upper : MAX_MAPSIZE) : PAGELIST_LIMIT;
+}
+
+__cold pgno_t default_dp_limit(const MDBX_env *env) {
+  /* auto-setup dp_limit by "The42" ;-) */
+  intptr_t total_ram_pages, avail_ram_pages;
+  int err = mdbx_get_sysraminfo(nullptr, &total_ram_pages, &avail_ram_pages);
+  pgno_t dp_limit = 1024;
+  if (unlikely(err != MDBX_SUCCESS))
+    ERROR("mdbx_get_sysraminfo(), rc %d", err);
+  else {
+    size_t estimate = (size_t)(total_ram_pages + avail_ram_pages) / 42;
+    if (env->ps) {
+      if (env->ps > globals.sys_pagesize)
+        estimate /= env->ps / globals.sys_pagesize;
+      else if (env->ps < globals.sys_pagesize)
+        estimate *= globals.sys_pagesize / env->ps;
+    }
+    dp_limit = (pgno_t)estimate;
+  }
+
+  dp_limit = (dp_limit < PAGELIST_LIMIT) ? dp_limit : PAGELIST_LIMIT;
+  const pgno_t max_pgno = env_max_pgno(env);
+  if (dp_limit > max_pgno - NUM_METAS)
+    dp_limit = max_pgno - NUM_METAS;
+  dp_limit = (dp_limit > CURSOR_STACK_SIZE * 4) ? dp_limit : CURSOR_STACK_SIZE * 4;
+  return dp_limit;
+}
+
+__cold static pgno_t default_rp_augment_limit(const MDBX_env *env) {
   const size_t timeframe = /* 16 секунд */ 16 << 16;
   const size_t remain_1sec =
       (env->options.gc_time_limit < timeframe) ? timeframe - (size_t)env->options.gc_time_limit : 0;
@@ -45,15 +75,51 @@ static uint16_t default_subpage_reserve_limit(const MDBX_env *env) {
   return 2753 /* 4.2% */;
 }
 
+static uint16_t default_merge_threshold_16dot16_percent(const MDBX_env *env) {
+  (void)env;
+  return 65536 / 4 /* 25% */;
+}
+
+static pgno_t default_dp_reserve_limit(const MDBX_env *env) {
+  (void)env;
+  return MDBX_PNL_INITIAL;
+}
+
+static pgno_t default_dp_initial(const MDBX_env *env) {
+  (void)env;
+  return MDBX_PNL_INITIAL;
+}
+
+static uint8_t default_spill_max_denominator(const MDBX_env *env) {
+  (void)env;
+  return 8;
+}
+
+static uint8_t default_spill_min_denominator(const MDBX_env *env) {
+  (void)env;
+  return 8;
+}
+
+static uint8_t default_spill_parent4child_denominator(const MDBX_env *env) {
+  (void)env;
+  return 0;
+}
+
+static uint8_t default_dp_loose_limit(const MDBX_env *env) {
+  (void)env;
+  return 64;
+}
+
 void env_options_init(MDBX_env *env) {
-  env->options.rp_augment_limit = MDBX_PNL_INITIAL;
-  env->options.dp_reserve_limit = MDBX_PNL_INITIAL;
-  env->options.dp_initial = MDBX_PNL_INITIAL;
-  env->options.spill_max_denominator = 8;
-  env->options.spill_min_denominator = 8;
-  env->options.spill_parent4child_denominator = 0;
-  env->options.dp_loose_limit = 64;
-  env->options.merge_threshold_16dot16_percent = 65536 / 4 /* 25% */;
+  env->options.rp_augment_limit = default_rp_augment_limit(env);
+  env->options.dp_reserve_limit = default_dp_reserve_limit(env);
+  env->options.dp_initial = default_dp_initial(env);
+  env->options.dp_limit = default_dp_limit(env);
+  env->options.spill_max_denominator = default_spill_max_denominator(env);
+  env->options.spill_min_denominator = default_spill_min_denominator(env);
+  env->options.spill_parent4child_denominator = default_spill_parent4child_denominator(env);
+  env->options.dp_loose_limit = default_dp_loose_limit(env);
+  env->options.merge_threshold_16dot16_percent = default_merge_threshold_16dot16_percent(env);
   if (default_prefer_waf_insteadof_balance(env))
     env->options.prefer_waf_insteadof_balance = true;
 
@@ -71,11 +137,30 @@ void env_options_init(MDBX_env *env) {
   env->options.subpage.reserve_limit = default_subpage_reserve_limit(env);
 }
 
+void env_options_adjust_dp_limit(MDBX_env *env) {
+  if (!env->options.flags.non_auto.dp_limit)
+    env->options.dp_limit = default_dp_limit(env);
+  else {
+    const pgno_t max_pgno = env_max_pgno(env);
+    if (env->options.dp_limit > max_pgno - NUM_METAS)
+      env->options.dp_limit = max_pgno - NUM_METAS;
+    if (env->options.dp_limit < CURSOR_STACK_SIZE * 4)
+      env->options.dp_limit = CURSOR_STACK_SIZE * 4;
+  }
+  if (env->options.dp_initial > env->options.dp_limit && env->options.dp_initial > default_dp_initial(env))
+    env->options.dp_initial = env->options.dp_limit;
+  env->options.need_dp_limit_adjust = false;
+}
+
 void env_options_adjust_defaults(MDBX_env *env) {
   if (!env->options.flags.non_auto.rp_augment_limit)
     env->options.rp_augment_limit = default_rp_augment_limit(env);
   if (!env->options.flags.non_auto.prefault_write)
     env->options.prefault_write = default_prefault_write(env);
+
+  env->options.need_dp_limit_adjust = true;
+  if (!env->txn)
+    env_options_adjust_dp_limit(env);
 
   const size_t basis = env->geo_in_bytes.now;
   /* TODO: use options? */
@@ -85,7 +170,6 @@ void env_options_adjust_defaults(MDBX_env *env) {
                                                           : basis >> factor;
   threshold =
       (threshold < env->geo_in_bytes.shrink || !env->geo_in_bytes.shrink) ? threshold : env->geo_in_bytes.shrink;
-
   env->madv_threshold = bytes2pgno(env, bytes_align2os_bytes(env, threshold));
 }
 
@@ -163,7 +247,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option, uint64
 
   case MDBX_opt_dp_reserve_limit:
     if (value == /* default */ UINT64_MAX)
-      value = INT_MAX;
+      value = default_dp_reserve_limit(env);
     if (unlikely(value > INT_MAX))
       return LOG_IFERR(MDBX_EINVAL);
     if (env->options.dp_reserve_limit != (unsigned)value) {
@@ -218,9 +302,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option, uint64
 
   case MDBX_opt_txn_dp_limit:
   case MDBX_opt_txn_dp_initial:
-    if (value == /* default */ UINT64_MAX)
-      value = PAGELIST_LIMIT;
-    if (unlikely(value > PAGELIST_LIMIT || value < CURSOR_STACK_SIZE * 4))
+    if (value != /* default */ UINT64_MAX && unlikely(value > PAGELIST_LIMIT || value < CURSOR_STACK_SIZE * 4))
       return LOG_IFERR(MDBX_EINVAL);
     if (unlikely(env->flags & MDBX_RDONLY))
       return LOG_IFERR(MDBX_EACCESS);
@@ -233,40 +315,45 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option, uint64
     if (env->txn)
       err = MDBX_EPERM /* unable change during transaction */;
     else {
-      const pgno_t value32 = (pgno_t)value;
-      if (option == MDBX_opt_txn_dp_initial && env->options.dp_initial != value32) {
-        env->options.dp_initial = value32;
-        if (env->options.dp_limit < value32) {
-          env->options.dp_limit = value32;
-          env->options.flags.non_auto.dp_limit = 1;
+      const pgno_t max_pgno = env_max_pgno(env);
+      if (option == MDBX_opt_txn_dp_initial) {
+        if (value == /* default */ UINT64_MAX)
+          env->options.dp_initial = default_dp_initial(env);
+        else {
+          env->options.dp_initial = (pgno_t)value;
+          if (env->options.dp_initial > max_pgno)
+            env->options.dp_initial = (max_pgno > CURSOR_STACK_SIZE * 4) ? max_pgno : CURSOR_STACK_SIZE * 4;
         }
       }
-      if (option == MDBX_opt_txn_dp_limit && env->options.dp_limit != value32) {
-        env->options.dp_limit = value32;
-        env->options.flags.non_auto.dp_limit = 1;
-        if (env->options.dp_initial > value32)
-          env->options.dp_initial = value32;
+      if (option == MDBX_opt_txn_dp_limit) {
+        if (value == /* default */ UINT64_MAX) {
+          env->options.flags.non_auto.dp_limit = 0;
+        } else {
+          env->options.flags.non_auto.dp_limit = 1;
+          env->options.dp_limit = (pgno_t)value;
+        }
+        env_options_adjust_dp_limit(env);
       }
     }
     break;
 
   case MDBX_opt_spill_max_denominator:
     if (value == /* default */ UINT64_MAX)
-      value = 8;
+      value = default_spill_max_denominator(env);
     if (unlikely(value > 255))
       return LOG_IFERR(MDBX_EINVAL);
     env->options.spill_max_denominator = (uint8_t)value;
     break;
   case MDBX_opt_spill_min_denominator:
     if (value == /* default */ UINT64_MAX)
-      value = 8;
+      value = default_spill_min_denominator(env);
     if (unlikely(value > 255))
       return LOG_IFERR(MDBX_EINVAL);
     env->options.spill_min_denominator = (uint8_t)value;
     break;
   case MDBX_opt_spill_parent4child_denominator:
     if (value == /* default */ UINT64_MAX)
-      value = 0;
+      value = default_spill_parent4child_denominator(env);
     if (unlikely(value > 255))
       return LOG_IFERR(MDBX_EINVAL);
     env->options.spill_parent4child_denominator = (uint8_t)value;
@@ -274,7 +361,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option, uint64
 
   case MDBX_opt_loose_limit:
     if (value == /* default */ UINT64_MAX)
-      value = 64;
+      value = default_dp_loose_limit(env);
     if (unlikely(value > 255))
       return LOG_IFERR(MDBX_EINVAL);
     env->options.dp_loose_limit = (uint8_t)value;
@@ -282,7 +369,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option, uint64
 
   case MDBX_opt_merge_threshold_16dot16_percent:
     if (value == /* default */ UINT64_MAX)
-      value = 65536 / 4 /* 25% */;
+      value = default_merge_threshold_16dot16_percent(env);
     if (unlikely(value < 8192 || value > 32768))
       return LOG_IFERR(MDBX_EINVAL);
     env->options.merge_threshold_16dot16_percent = (unsigned)value;

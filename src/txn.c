@@ -654,21 +654,6 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
     if (txn->tw.gc.retxl)
       MDBX_PNL_SETSIZE(txn->tw.gc.retxl, 0);
     env->txn = txn;
-
-    if ((txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC) {
-      rc = dpl_alloc(txn);
-      if (unlikely(rc != MDBX_SUCCESS))
-        goto bailout;
-      txn->tw.dirtyroom = txn->env->options.dp_limit;
-      txn->tw.dirtylru = MDBX_DEBUG ? UINT32_MAX / 3 - 42 : 0;
-    } else {
-      tASSERT(txn, txn->tw.dirtylist == nullptr);
-      txn->tw.dirtylist = nullptr;
-      txn->tw.dirtyroom = MAX_PAGENO;
-      txn->tw.dirtylru = 0;
-    }
-    eASSERT(env, txn->tw.writemap_dirty_npages == 0);
-    eASSERT(env, txn->tw.writemap_spilled_npages == 0);
   }
 
   txn->front_txnid = txn->txnid + ((flags & (MDBX_WRITEMAP | MDBX_RDONLY)) == 0);
@@ -834,6 +819,24 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
 #endif /* Windows */
     } else {
       tASSERT(txn, txn == env->basal_txn);
+
+      if (env->options.need_dp_limit_adjust)
+        env_options_adjust_dp_limit(env);
+      if ((txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC) {
+        rc = dpl_alloc(txn);
+        if (unlikely(rc != MDBX_SUCCESS))
+          goto bailout;
+        txn->tw.dirtyroom = txn->env->options.dp_limit;
+        txn->tw.dirtylru = MDBX_DEBUG ? UINT32_MAX / 3 - 42 : 0;
+      } else {
+        tASSERT(txn, txn->tw.dirtylist == nullptr);
+        txn->tw.dirtylist = nullptr;
+        txn->tw.dirtyroom = MAX_PAGENO;
+        txn->tw.dirtylru = 0;
+      }
+      eASSERT(env, txn->tw.writemap_dirty_npages == 0);
+      eASSERT(env, txn->tw.writemap_spilled_npages == 0);
+
       MDBX_cursor *const gc = ptr_disp(txn, sizeof(MDBX_txn));
       rc = cursor_init(gc, txn, FREE_DBI);
       if (rc != MDBX_SUCCESS)

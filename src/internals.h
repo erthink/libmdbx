@@ -401,6 +401,7 @@ struct MDBX_env {
     bool prefault_write;
     bool prefer_waf_insteadof_balance; /* Strive to minimize WAF instead of
                                           balancing pages fullment */
+    bool need_dp_limit_adjust;
     struct {
       uint16_t limit;
       uint16_t room_threshold;

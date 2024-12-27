@@ -52,30 +52,7 @@ __cold unsigned env_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   eASSERT(env, bytes2pgno(env, pagesize + pagesize) == 2);
   recalculate_merge_thresholds(env);
   recalculate_subpage_thresholds(env);
-
-  const pgno_t max_pgno = bytes2pgno(env, MAX_MAPSIZE);
-  if (!env->options.flags.non_auto.dp_limit) {
-    /* auto-setup dp_limit by "The42" ;-) */
-    intptr_t total_ram_pages, avail_ram_pages;
-    int err = mdbx_get_sysraminfo(nullptr, &total_ram_pages, &avail_ram_pages);
-    if (unlikely(err != MDBX_SUCCESS))
-      ERROR("mdbx_get_sysraminfo(), rc %d", err);
-    else {
-      size_t reasonable_dpl_limit = (size_t)(total_ram_pages + avail_ram_pages) / 42;
-      if (pagesize > globals.sys_pagesize)
-        reasonable_dpl_limit /= pagesize / globals.sys_pagesize;
-      else if (pagesize < globals.sys_pagesize)
-        reasonable_dpl_limit *= globals.sys_pagesize / pagesize;
-      reasonable_dpl_limit = (reasonable_dpl_limit < PAGELIST_LIMIT) ? reasonable_dpl_limit : PAGELIST_LIMIT;
-      reasonable_dpl_limit =
-          (reasonable_dpl_limit > CURSOR_STACK_SIZE * 4) ? reasonable_dpl_limit : CURSOR_STACK_SIZE * 4;
-      env->options.dp_limit = (unsigned)reasonable_dpl_limit;
-    }
-  }
-  if (env->options.dp_limit > max_pgno - NUM_METAS)
-    env->options.dp_limit = max_pgno - NUM_METAS;
-  if (env->options.dp_initial > env->options.dp_limit)
-    env->options.dp_initial = env->options.dp_limit;
+  env_options_adjust_dp_limit(env);
   return env->ps;
 }
 
