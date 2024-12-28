@@ -395,7 +395,7 @@ void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t parent_
   }
 }
 
-void txn_take_gcprof(MDBX_txn *txn, MDBX_commit_latency *latency) {
+void txn_take_gcprof(const MDBX_txn *txn, MDBX_commit_latency *latency) {
   MDBX_env *const env = txn->env;
   if (MDBX_ENABLE_PROFGC) {
     pgop_stat_t *const ptr = &env->lck->pgops;
