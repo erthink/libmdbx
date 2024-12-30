@@ -385,6 +385,9 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   const uint64_t ts_0 = latency ? osal_monotime() : 0;
   uint64_t ts_1 = 0, ts_2 = 0, ts_3 = 0, ts_4 = 0, ts_5 = 0, gc_cputime = 0;
 
+  /* txn_end() mode for a commit which writes nothing */
+  unsigned end_mode = TXN_END_PURE_COMMIT | TXN_END_UPDATE | TXN_END_SLOT | TXN_END_FREE;
+
   int rc = check_txn(txn, MDBX_TXN_FINISHED);
   if (unlikely(rc != MDBX_SUCCESS)) {
     if (rc == MDBX_BAD_TXN && (txn->flags & MDBX_TXN_RDONLY)) {
@@ -404,18 +407,22 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     goto bailout;
   }
 
-  if (unlikely(txn->flags & MDBX_TXN_ERROR)) {
-    rc = MDBX_RESULT_TRUE;
-    goto fail;
+  if (unlikely(txn->flags & MDBX_TXN_RDONLY)) {
+    if (txn->flags & MDBX_TXN_ERROR) {
+      rc = MDBX_RESULT_TRUE;
+      goto fail;
+    }
+    goto done;
   }
 
-  /* txn_end() mode for a commit which writes nothing */
-  unsigned end_mode = TXN_END_PURE_COMMIT | TXN_END_UPDATE | TXN_END_SLOT | TXN_END_FREE;
-  if (unlikely(txn->flags & MDBX_TXN_RDONLY))
-    goto done;
-
-  if ((txn->flags & MDBX_NOSTICKYTHREADS) && unlikely(txn->owner != osal_thread_self())) {
+  if (!txn->parent && (txn->flags & MDBX_NOSTICKYTHREADS) && unlikely(txn->owner != osal_thread_self())) {
+    txn->flags |= MDBX_TXN_ERROR;
     rc = MDBX_THREAD_MISMATCH;
+    return LOG_IFERR(rc);
+  }
+
+  if (unlikely(txn->flags & MDBX_TXN_ERROR)) {
+    rc = MDBX_RESULT_TRUE;
     goto fail;
   }
 

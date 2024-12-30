@@ -400,31 +400,34 @@ static inline int check_env(const MDBX_env *env, const bool wanna_active) {
   return MDBX_SUCCESS;
 }
 
-static inline int check_txn(const MDBX_txn *txn, int bad_bits) {
+static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
   if (unlikely(!txn))
     return MDBX_EINVAL;
 
   if (unlikely(txn->signature != txn_signature))
     return MDBX_EBADSIGN;
 
-  if (bad_bits && unlikely(txn->flags & bad_bits)) {
-    if ((bad_bits & MDBX_TXN_PARKED) == 0)
-      return MDBX_BAD_TXN;
-    else
-      return txn_check_badbits_parked(txn, bad_bits);
+  if (bad_bits) {
+    if (unlikely(!txn->env->dxb_mmap.base))
+      return MDBX_EPERM;
+
+    if (unlikely(txn->flags & bad_bits)) {
+      if ((bad_bits & MDBX_TXN_PARKED) == 0)
+        return MDBX_BAD_TXN;
+      else
+        return txn_check_badbits_parked(txn, bad_bits);
+    }
   }
 
   tASSERT(txn, (txn->flags & MDBX_TXN_FINISHED) ||
                    (txn->flags & MDBX_NOSTICKYTHREADS) == (txn->env->flags & MDBX_NOSTICKYTHREADS));
 #if MDBX_TXN_CHECKOWNER
-  STATIC_ASSERT((long)MDBX_NOSTICKYTHREADS > (long)MDBX_TXN_FINISHED);
-  if ((txn->flags & (MDBX_NOSTICKYTHREADS | MDBX_TXN_FINISHED)) < MDBX_TXN_FINISHED &&
+  if ((txn->flags & (MDBX_NOSTICKYTHREADS | MDBX_TXN_FINISHED)) != MDBX_NOSTICKYTHREADS &&
+      !(bad_bits /* abort/reset/txn-break */ == 0 &&
+        ((txn->flags & (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED)) == (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED))) &&
       unlikely(txn->owner != osal_thread_self()))
     return txn->owner ? MDBX_THREAD_MISMATCH : MDBX_BAD_TXN;
 #endif /* MDBX_TXN_CHECKOWNER */
-
-  if (bad_bits && unlikely(!txn->env->dxb_mmap.base))
-    return MDBX_EPERM;
 
   return MDBX_SUCCESS;
 }
