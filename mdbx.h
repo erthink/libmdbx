@@ -4235,7 +4235,7 @@ LIBMDBX_INLINE_API(int, mdbx_txn_commit, (MDBX_txn * txn)) { return mdbx_txn_com
  * \retval MDBX_EINVAL           Transaction handle is NULL. */
 LIBMDBX_API int mdbx_txn_abort(MDBX_txn *txn);
 
-/** \brief Marks transaction as broken.
+/** \brief Marks transaction as broken to prevent further operations.
  * \ingroup c_transactions
  *
  * Function keeps the transaction handle and corresponding locks, but makes

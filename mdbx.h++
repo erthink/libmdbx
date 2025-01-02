@@ -3799,6 +3799,9 @@ public:
   /// \brief Renew read-only transaction.
   inline void renew_reading();
 
+  /// \brief Marks transaction as broken to prevent further operations.
+  inline void make_broken();
+
   /// \brief Park read-only transaction.
   inline void park_reading(bool autounpark = true);
 
@@ -5577,6 +5580,8 @@ inline uint64_t txn::id() const {
 }
 
 inline void txn::reset_reading() { error::success_or_throw(::mdbx_txn_reset(handle_)); }
+
+inline void txn::make_broken() { error::success_or_throw(::mdbx_txn_break(handle_)); }
 
 inline void txn::renew_reading() { error::success_or_throw(::mdbx_txn_renew(handle_)); }
 
