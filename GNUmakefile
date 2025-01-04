@@ -296,7 +296,7 @@ lib-shared libmdbx.$(SO_SUFFIX): mdbx-dylib.o $(call select_by,MDBX_BUILD_CXX,md
 ninja: cmake-build
 cmake-build:
 	@echo "-G Ninja . && cmake --build ."
-	$(QUIET)mkdir @cmake-ninja-build && $(CMAKE) $(CMAKE_OPT) -G Ninja -S . -B @cmake-ninja-build && $(CMAKE) --build @cmake-ninja-build
+	$(QUIET)mkdir -p @cmake-ninja-build && $(CMAKE) $(CMAKE_OPT) -G Ninja -S . -B @cmake-ninja-build && $(CMAKE) --build @cmake-ninja-build
 
 #> dist-cutoff-begin
 ifeq ($(wildcard mdbx.c),mdbx.c)
