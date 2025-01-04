@@ -15,8 +15,10 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx
 
 Новое:
 
- - В API добавлена функция `mdbx_cursor_count_ex()` позволяющая получить как количество мульти-значений
+ - В C API добавлена функция `mdbx_cursor_count_ex()` позволяющая получить как количество мульти-значений
    соответствующих текущему ключу, так и информацию о вложенном дереве хранящем эти значения.
+
+ - В C++ API добавлен метод `mdbx::txn::make_broken()` аналогичный `mdbx_txn_break()`.
 
 Исправления:
 
@@ -85,6 +87,11 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx
  - Если посредством `mdbx_env_set_option(MDBX_opt_txn_dp_limit)` пользователем не задано собственно значение,
    то выполняется подстройка dirty-pages-limit при старте каждой не-вложенной пишущей транзакций,
    исходя из объёма доступного ОЗУ и размера БД.
+
+ - Теперь в режиме `MDBX_NOSTICKYTHREADS` допускается commit/abort вложенных транзакций из любого треда/потока.
+
+ - Теперь при попытке запуска вложенных транзакций в режиме `MDBX_WRITEMAP` производится
+   логирование и возврат ошибки `MDBX_INCOMPATIBLE`.
 
 
 
