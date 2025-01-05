@@ -588,12 +588,7 @@ __cold int env_close(MDBX_env *env, bool resurrect_after_fork) {
       env->pathname.buffer = nullptr;
     }
     if (env->basal_txn) {
-      dpl_free(env->basal_txn);
-      txl_free(env->basal_txn->tw.gc.retxl);
-      pnl_free(env->basal_txn->tw.retired_pages);
-      pnl_free(env->basal_txn->tw.spilled.list);
-      pnl_free(env->basal_txn->tw.repnl);
-      osal_free(env->basal_txn);
+      txn_basal_destroy(env->basal_txn);
       env->basal_txn = nullptr;
     }
   }

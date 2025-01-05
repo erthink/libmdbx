@@ -482,39 +482,12 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname, MDBX_env_flags
   }
 
   if ((flags & MDBX_RDONLY) == 0) {
-    MDBX_txn *txn = nullptr;
-    const intptr_t bitmap_bytes =
-#if MDBX_ENABLE_DBI_SPARSE
-        ceil_powerof2(env->max_dbi, CHAR_BIT * sizeof(txn->dbi_sparse[0])) / CHAR_BIT;
-#else
-        0;
-#endif /* MDBX_ENABLE_DBI_SPARSE */
-    const size_t base = sizeof(MDBX_txn) + sizeof(cursor_couple_t);
-    const size_t size = base + bitmap_bytes +
-                        env->max_dbi * (sizeof(txn->dbs[0]) + sizeof(txn->cursors[0]) + sizeof(txn->dbi_seqs[0]) +
-                                        sizeof(txn->dbi_state[0]));
-
-    txn = osal_calloc(1, size);
-    if (unlikely(!txn)) {
+    env->basal_txn = txn_basal_create(env->max_dbi);
+    if (unlikely(!env->basal_txn)) {
       rc = MDBX_ENOMEM;
       goto bailout;
     }
-    txn->dbs = ptr_disp(txn, base);
-    txn->cursors = ptr_disp(txn->dbs, env->max_dbi * sizeof(txn->dbs[0]));
-    txn->dbi_seqs = ptr_disp(txn->cursors, env->max_dbi * sizeof(txn->cursors[0]));
-    txn->dbi_state = ptr_disp(txn, size - env->max_dbi * sizeof(txn->dbi_state[0]));
-#if MDBX_ENABLE_DBI_SPARSE
-    txn->dbi_sparse = ptr_disp(txn->dbi_state, -bitmap_bytes);
-#endif /* MDBX_ENABLE_DBI_SPARSE */
-    txn->env = env;
-    txn->flags = MDBX_TXN_FINISHED;
-    env->basal_txn = txn;
-    txn->tw.retired_pages = pnl_alloc(MDBX_PNL_INITIAL);
-    txn->tw.repnl = pnl_alloc(MDBX_PNL_INITIAL);
-    if (unlikely(!txn->tw.retired_pages || !txn->tw.repnl)) {
-      rc = MDBX_ENOMEM;
-      goto bailout;
-    }
+    env->basal_txn->env = env;
     env_options_adjust_defaults(env);
   }
 
