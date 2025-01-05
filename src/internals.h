@@ -210,7 +210,6 @@ struct MDBX_txn {
     } to;
     struct {
       troika_t troika;
-      /* In write txns, array of cursors for each DB */
       pnl_t __restrict repnl; /* Reclaimed GC pages */
       struct {
         /* The list of reclaimed txn-ids from GC */
@@ -249,6 +248,7 @@ struct MDBX_txn {
         size_t writemap_dirty_npages;
         size_t writemap_spilled_npages;
       };
+      /* In write txns, next is located the array of cursors for each DB */
     } tw;
   };
 };
