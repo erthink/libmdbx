@@ -10,10 +10,11 @@ __attribute__((__no_sanitize_thread__, __noinline__))
 int mdbx_txn_straggler(const MDBX_txn *txn, int *percent)
 {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (likely(rc == MDBX_SUCCESS))
+    rc = check_env(txn->env, true);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR((rc > 0) ? -rc : rc);
 
-  MDBX_env *env = txn->env;
   if (unlikely((txn->flags & MDBX_TXN_RDONLY) == 0)) {
     if (percent)
       *percent = (int)((txn->geo.first_unallocated * UINT64_C(100) + txn->geo.end_pgno / 2) / txn->geo.end_pgno);
@@ -21,15 +22,15 @@ int mdbx_txn_straggler(const MDBX_txn *txn, int *percent)
   }
 
   txnid_t lag;
-  troika_t troika = meta_tap(env);
+  troika_t troika = meta_tap(txn->env);
   do {
-    const meta_ptr_t head = meta_recent(env, &troika);
+    const meta_ptr_t head = meta_recent(txn->env, &troika);
     if (percent) {
       const pgno_t maxpg = head.ptr_v->geometry.now;
       *percent = (int)((head.ptr_v->geometry.first_unallocated * UINT64_C(100) + maxpg / 2) / maxpg);
     }
     lag = (head.txnid - txn->txnid) / xMDBX_TXNID_STEP;
-  } while (unlikely(meta_should_retry(env, &troika)));
+  } while (unlikely(meta_should_retry(txn->env, &troika)));
 
   return (lag > INT_MAX) ? INT_MAX : (int)lag;
 }
