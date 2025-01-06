@@ -46,7 +46,8 @@ MDBX_INTERNAL int txn_renew(MDBX_txn *txn, unsigned flags);
 MDBX_INTERNAL int txn_park(MDBX_txn *txn, bool autounpark);
 MDBX_INTERNAL int txn_unpark(MDBX_txn *txn);
 MDBX_INTERNAL int txn_check_badbits_parked(const MDBX_txn *txn, int bad_bits);
-MDBX_INTERNAL void txn_done_cursors(MDBX_txn *txn, const bool merge);
+MDBX_INTERNAL void txn_done_cursors(MDBX_txn *txn);
+MDBX_INTERNAL int txn_shadow_cursors(const MDBX_txn *parent, const size_t dbi);
 
 #define TXN_END_NAMES                                                                                                  \
   {"committed", "empty-commit", "abort", "reset", "fail-begin", "fail-beginchild", "ousted", nullptr}
@@ -63,8 +64,7 @@ enum {
   TXN_END_OPMASK = 0x07 /* mask for txn_end() operation number */,
   TXN_END_UPDATE = 0x10 /* update env state (DBIs) */,
   TXN_END_FREE = 0x20 /* free txn unless it is env.basal_txn */,
-  TXN_END_EOTDONE = 0x40 /* txn's cursors already closed */,
-  TXN_END_SLOT = 0x80 /* release any reader slot if NOSTICKYTHREADS */
+  TXN_END_SLOT = 0x40 /* release any reader slot if NOSTICKYTHREADS */
 };
 MDBX_INTERNAL int txn_end(MDBX_txn *txn, unsigned mode);
 MDBX_INTERNAL int txn_write(MDBX_txn *txn, iov_ctx_t *ctx);

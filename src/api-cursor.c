@@ -88,6 +88,7 @@ int mdbx_cursor_bind(const MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
 
   mc->next = txn->cursors[dbi];
   txn->cursors[dbi] = mc;
+  ((MDBX_txn *)txn)->flags |= txn_may_have_cursors;
   return MDBX_SUCCESS;
 }
 

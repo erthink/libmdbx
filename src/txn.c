@@ -7,19 +7,51 @@ __hot txnid_t txn_snapshot_oldest(const MDBX_txn *const txn) {
   return mvcc_shapshot_oldest(txn->env, txn->tw.troika.txnid[txn->tw.troika.prefer_steady]);
 }
 
-void txn_done_cursors(MDBX_txn *txn, const bool merge) {
+void txn_done_cursors(MDBX_txn *txn) {
+  tASSERT(txn, txn->flags & txn_may_have_cursors);
   tASSERT(txn, txn->cursors[FREE_DBI] == nullptr);
+
   TXN_FOREACH_DBI_FROM(txn, i, /* skip FREE_DBI */ 1) {
-    MDBX_cursor *mc = txn->cursors[i];
-    if (mc) {
+    MDBX_cursor *cursor = txn->cursors[i];
+    if (cursor) {
       txn->cursors[i] = nullptr;
       do {
-        MDBX_cursor *const next = mc->next;
-        cursor_eot(mc, merge);
-        mc = next;
-      } while (mc);
+        MDBX_cursor *const next = cursor->next;
+        cursor_eot(cursor);
+        cursor = next;
+      } while (cursor);
     }
   }
+  txn->flags &= ~txn_may_have_cursors;
+}
+
+int txn_shadow_cursors(const MDBX_txn *parent, const size_t dbi) {
+  tASSERT(parent, dbi > FREE_DBI && dbi < parent->n_dbi);
+  MDBX_cursor *cursor = parent->cursors[dbi];
+  if (!cursor)
+    return MDBX_SUCCESS;
+
+  MDBX_txn *const txn = parent->nested;
+  tASSERT(parent, parent->flags & txn_may_have_cursors);
+  MDBX_cursor *next = nullptr;
+  do {
+    next = cursor->next;
+    if (cursor->signature != cur_signature_live)
+      continue;
+    tASSERT(parent, cursor->txn == parent && dbi == cursor_dbi(cursor));
+
+    int err = cursor_shadow(cursor, txn, dbi);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      /* не получилось забекапить курсоры */
+      txn->dbi_state[dbi] = DBI_OLDEN | DBI_LINDO | DBI_STALE;
+      txn->flags |= MDBX_TXN_ERROR;
+      return err;
+    }
+    cursor->next = txn->cursors[dbi];
+    txn->cursors[dbi] = cursor;
+    txn->flags |= txn_may_have_cursors;
+  } while ((cursor = next) != nullptr);
+  return MDBX_SUCCESS;
 }
 
 int txn_write(MDBX_txn *txn, iov_ctx_t *ctx) {
@@ -847,7 +879,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
   }
 bailout:
   tASSERT(txn, rc != MDBX_SUCCESS);
-  txn_end(txn, TXN_END_SLOT | TXN_END_EOTDONE | TXN_END_FAIL_BEGIN);
+  txn_end(txn, TXN_END_SLOT | TXN_END_FAIL_BEGIN);
   return rc;
 }
 
@@ -859,8 +891,10 @@ int txn_end(MDBX_txn *txn, unsigned mode) {
         txn->txnid, (txn->flags & MDBX_TXN_RDONLY) ? 'r' : 'w', txn->flags, (void *)txn, (void *)env,
         txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
 
-  if (!(mode & TXN_END_EOTDONE)) /* !(already closed cursors) */
-    txn_done_cursors(txn, false);
+  if (txn->flags & txn_may_have_cursors) {
+    txn->flags |= /* avoid merge cursors' state */ MDBX_TXN_ERROR;
+    txn_done_cursors(txn);
+  }
 
   int rc = MDBX_SUCCESS;
   if (txn->flags & MDBX_TXN_RDONLY) {

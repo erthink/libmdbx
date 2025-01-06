@@ -87,19 +87,12 @@ __noinline int dbi_import(MDBX_txn *txn, const size_t dbi) {
     if (parent) {
       /* вложенная пишущая транзакция */
       int rc = dbi_check(parent, dbi);
-      /* копируем состояние table очищая new-флаги. */
+      /* копируем состояние dbi-хендла очищая new-флаги. */
       eASSERT(env, txn->dbi_seqs == parent->dbi_seqs);
       txn->dbi_state[dbi] = parent->dbi_state[dbi] & ~(DBI_FRESH | DBI_CREAT | DBI_DIRTY);
       if (likely(rc == MDBX_SUCCESS)) {
         txn->dbs[dbi] = parent->dbs[dbi];
-        if (parent->cursors[dbi]) {
-          rc = cursor_shadow(parent->cursors[dbi], txn, dbi);
-          if (unlikely(rc != MDBX_SUCCESS)) {
-            /* не получилось забекапить курсоры */
-            txn->dbi_state[dbi] = DBI_OLDEN | DBI_LINDO | DBI_STALE;
-            txn->flags |= MDBX_TXN_ERROR;
-          }
-        }
+        rc = txn_shadow_cursors(parent, dbi);
       }
       return rc;
     }

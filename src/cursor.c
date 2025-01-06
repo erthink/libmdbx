@@ -184,78 +184,73 @@ __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_va
 
 /*----------------------------------------------------------------------------*/
 
-int cursor_shadow(MDBX_cursor *parent_cursor, MDBX_txn *nested_txn, const size_t dbi) {
-
+int cursor_shadow(MDBX_cursor *cursor, MDBX_txn *nested_txn, const size_t dbi) {
+  tASSERT(nested_txn, cursor->signature == cur_signature_live);
+  tASSERT(nested_txn, cursor->txn != nested_txn);
+  cASSERT(cursor, cursor->txn->flags & txn_may_have_cursors);
+  cASSERT(cursor, dbi == cursor_dbi(cursor));
   tASSERT(nested_txn, dbi > FREE_DBI && dbi < nested_txn->n_dbi);
-  const size_t size = parent_cursor->subcur ? sizeof(MDBX_cursor) + sizeof(subcur_t) : sizeof(MDBX_cursor);
-  for (MDBX_cursor *bk; parent_cursor; parent_cursor = bk->next) {
-    cASSERT(parent_cursor, parent_cursor != parent_cursor->next);
-    bk = parent_cursor;
-    if (parent_cursor->signature != cur_signature_live)
-      continue;
-    bk = osal_malloc(size);
-    if (unlikely(!bk))
-      return MDBX_ENOMEM;
+
+  const size_t size = cursor->subcur ? sizeof(MDBX_cursor) + sizeof(subcur_t) : sizeof(MDBX_cursor);
+  MDBX_cursor *const shadow = osal_malloc(size);
+  if (unlikely(!shadow))
+    return MDBX_ENOMEM;
+
 #if MDBX_DEBUG
-    memset(bk, 0xCD, size);
-    VALGRIND_MAKE_MEM_UNDEFINED(bk, size);
+  memset(shadow, 0xCD, size);
+  VALGRIND_MAKE_MEM_UNDEFINED(shadow, size);
 #endif /* MDBX_DEBUG */
-    *bk = *parent_cursor;
-    parent_cursor->backup = bk;
-    /* Kill pointers into src to reduce abuse: The
-     * user may not use mc until dst ends. But we need a valid
-     * txn pointer here for cursor fixups to keep working. */
-    parent_cursor->txn = nested_txn;
-    parent_cursor->tree = &nested_txn->dbs[dbi];
-    parent_cursor->dbi_state = &nested_txn->dbi_state[dbi];
-    subcur_t *mx = parent_cursor->subcur;
-    if (mx != nullptr) {
-      *(subcur_t *)(bk + 1) = *mx;
-      mx->cursor.txn = nested_txn;
-      mx->cursor.dbi_state = parent_cursor->dbi_state;
-    }
-    parent_cursor->next = nested_txn->cursors[dbi];
-    nested_txn->cursors[dbi] = parent_cursor;
+  *shadow = *cursor;
+  cursor->backup = shadow;
+  cursor->txn = nested_txn;
+  cursor->tree = &nested_txn->dbs[dbi];
+  cursor->dbi_state = &nested_txn->dbi_state[dbi];
+  subcur_t *subcur = cursor->subcur;
+  if (subcur) {
+    *(subcur_t *)(shadow + 1) = *subcur;
+    subcur->cursor.txn = nested_txn;
+    subcur->cursor.dbi_state = cursor->dbi_state;
   }
   return MDBX_SUCCESS;
 }
 
-void cursor_eot(MDBX_cursor *mc, const bool merge) {
-  const unsigned stage = mc->signature;
-  MDBX_cursor *const bk = mc->backup;
-  ENSURE(mc->txn->env, stage == cur_signature_live || (stage == cur_signature_wait4eot && bk));
-  if (bk) {
-    subcur_t *mx = mc->subcur;
-    cASSERT(mc, mc->txn->parent != nullptr);
-    /* Zap: Using uninitialized memory '*mc->backup'. */
+void cursor_eot(MDBX_cursor *cursor) {
+  const unsigned stage = cursor->signature;
+  MDBX_cursor *const shadow = cursor->backup;
+  ENSURE(cursor->txn->env, stage == cur_signature_live || (stage == cur_signature_wait4eot && shadow));
+  if (shadow) {
+    subcur_t *subcur = cursor->subcur;
+    cASSERT(cursor, cursor->txn->parent != nullptr);
+    /* Zap: Using uninitialized memory '*cursor->backup'. */
     MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6001);
-    ENSURE(mc->txn->env, bk->signature == cur_signature_live);
-    cASSERT(mc, mx == bk->subcur);
-    if (merge) {
+    ENSURE(cursor->txn->env, shadow->signature == cur_signature_live);
+    cASSERT(cursor, subcur == shadow->subcur);
+    if (((cursor->txn->flags | cursor->txn->parent->flags) & MDBX_TXN_ERROR) == 0) {
       /* Update pointers to parent txn */
-      mc->next = bk->next;
-      mc->backup = bk->backup;
-      mc->txn = bk->txn;
-      mc->tree = bk->tree;
-      mc->dbi_state = bk->dbi_state;
-      if (mx) {
-        mx->cursor.txn = mc->txn;
-        mx->cursor.dbi_state = mc->dbi_state;
+      cursor->next = shadow->next;
+      cursor->backup = shadow->backup;
+      cursor->txn = shadow->txn;
+      cursor->tree = shadow->tree;
+      cursor->dbi_state = shadow->dbi_state;
+      if (subcur) {
+        subcur->cursor.txn = cursor->txn;
+        subcur->cursor.dbi_state = cursor->dbi_state;
       }
     } else {
       /* Restore from backup, i.e. rollback/abort nested txn */
-      *mc = *bk;
-      if (mx)
-        *mx = *(subcur_t *)(bk + 1);
+      *cursor = *shadow;
+      if (subcur)
+        *subcur = *(subcur_t *)(shadow + 1);
     }
     if (stage == cur_signature_wait4eot /* Cursor was closed by user */)
-      mc->signature = stage /* Promote closed state to parent txn */;
-    bk->signature = 0;
-    osal_free(bk);
+      cursor->signature = stage /* Promote closed state to parent txn */;
+    shadow->signature = 0;
+    osal_free(shadow);
   } else {
-    ENSURE(mc->txn->env, stage == cur_signature_live);
-    mc->signature = cur_signature_ready4dispose /* Cursor may be reused */;
-    mc->next = mc;
+    ENSURE(cursor->txn->env, stage == cur_signature_live);
+    be_poor(cursor);
+    cursor->signature = cur_signature_ready4dispose /* Cursor may be reused */;
+    cursor->next = cursor;
   }
 }
 

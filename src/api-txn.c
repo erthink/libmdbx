@@ -344,7 +344,7 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
                      (txn->parent ? txn->parent->tw.dirtyroom : txn->env->options.dp_limit));
     env->txn = txn;
     tASSERT(parent, parent->cursors[FREE_DBI] == nullptr);
-    rc = parent->cursors[MAIN_DBI] ? cursor_shadow(parent->cursors[MAIN_DBI], txn, MAIN_DBI) : MDBX_SUCCESS;
+    rc = txn_shadow_cursors(parent, MAIN_DBI);
     if (AUDIT_ENABLED() && ASSERT_ENABLED()) {
       txn->signature = txn_signature;
       tASSERT(txn, audit_ex(txn, 0, false) == 0);
@@ -370,8 +370,8 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
       eASSERT(env, (txn->flags & ~(MDBX_NOSTICKYTHREADS | MDBX_TXN_RDONLY | MDBX_WRITEMAP |
                                    /* Win32: SRWL flag */ txn_shrink_allowed)) == 0);
     else {
-      eASSERT(env, (txn->flags & ~(MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | txn_shrink_allowed | MDBX_NOMETASYNC |
-                                   MDBX_SAFE_NOSYNC | MDBX_TXN_SPILLS)) == 0);
+      eASSERT(env, (txn->flags & ~(MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | txn_shrink_allowed | txn_may_have_cursors |
+                                   MDBX_NOMETASYNC | MDBX_SAFE_NOSYNC | MDBX_TXN_SPILLS)) == 0);
       assert(!txn->tw.spilled.list && !txn->tw.spilled.least_removed);
     }
     txn->signature = txn_signature;
@@ -521,9 +521,9 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     parent->tw.loose_count = txn->tw.loose_count;
     parent->tw.loose_pages = txn->tw.loose_pages;
 
-    /* Merge our cursors into parent's and close them */
-    txn_done_cursors(txn, true);
-    end_mode |= TXN_END_EOTDONE;
+    if (txn->flags & txn_may_have_cursors)
+      /* Merge our cursors into parent's and close them */
+      txn_done_cursors(txn);
 
     /* Update parent's DBs array */
     eASSERT(env, parent->n_dbi == txn->n_dbi);
@@ -581,8 +581,8 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     tASSERT(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
                      (txn->parent ? txn->parent->tw.dirtyroom : env->options.dp_limit));
   }
-  txn_done_cursors(txn, false);
-  end_mode |= TXN_END_EOTDONE;
+  if (txn->flags & txn_may_have_cursors)
+    txn_done_cursors(txn);
 
   if ((!txn->tw.dirtylist || txn->tw.dirtylist->length == 0) &&
       (txn->flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS)) == 0) {
@@ -766,7 +766,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     goto fail;
   }
 
-  end_mode = TXN_END_COMMITTED | TXN_END_UPDATE | TXN_END_EOTDONE;
+  end_mode = TXN_END_COMMITTED | TXN_END_UPDATE;
 
 done:
   if (latency)
