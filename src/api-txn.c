@@ -67,6 +67,10 @@ int mdbx_txn_reset(MDBX_txn *txn) {
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
+  rc = check_env(txn->env, false);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
   /* This call is only valid for read-only txns */
   if (unlikely((txn->flags & MDBX_TXN_RDONLY) == 0))
     return LOG_IFERR(MDBX_EINVAL);
@@ -116,6 +120,11 @@ int mdbx_txn_park(MDBX_txn *txn, bool autounpark) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
+
+  rc = check_env(txn->env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
   if (unlikely((txn->flags & MDBX_TXN_RDONLY) == 0))
     return LOG_IFERR(MDBX_TXN_INVALID);
 
@@ -132,6 +141,11 @@ int mdbx_txn_unpark(MDBX_txn *txn, bool restart_if_ousted) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_PARKED - MDBX_TXN_ERROR);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
+
+  rc = check_env(txn->env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
   if (unlikely(!F_ISSET(txn->flags, MDBX_TXN_RDONLY | MDBX_TXN_PARKED)))
     return MDBX_SUCCESS;
 
@@ -145,22 +159,24 @@ int mdbx_txn_unpark(MDBX_txn *txn, bool restart_if_ousted) {
 }
 
 int mdbx_txn_renew(MDBX_txn *txn) {
-  if (unlikely(!txn))
-    return LOG_IFERR(MDBX_EINVAL);
+  int rc = check_txn(txn, 0);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
 
-  if (unlikely(txn->signature != txn_signature))
-    return LOG_IFERR(MDBX_EBADSIGN);
+  rc = check_env(txn->env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
 
   if (unlikely((txn->flags & MDBX_TXN_RDONLY) == 0))
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(txn->owner != 0 || !(txn->flags & MDBX_TXN_FINISHED))) {
-    int rc = mdbx_txn_reset(txn);
+    rc = mdbx_txn_reset(txn);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
 
-  int rc = txn_renew(txn, MDBX_TXN_RDONLY);
+  rc = txn_renew(txn, MDBX_TXN_RDONLY);
   if (rc == MDBX_SUCCESS) {
     tASSERT(txn, txn->owner == (txn->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self());
     DEBUG("renew txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, txn->txnid,
@@ -171,7 +187,7 @@ int mdbx_txn_renew(MDBX_txn *txn) {
 }
 
 int mdbx_txn_set_userctx(MDBX_txn *txn, void *ctx) {
-  int rc = check_txn(txn, MDBX_TXN_FINISHED);
+  int rc = check_txn(txn, 0);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
