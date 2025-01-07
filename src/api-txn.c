@@ -270,10 +270,75 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
   return LOG_IFERR(rc);
 }
 
+static void latency_gcprof(MDBX_commit_latency *latency, const MDBX_txn *txn) {
+  if (latency && MDBX_ENABLE_PROFGC) {
+    MDBX_env *const env = txn->env;
+    pgop_stat_t *const ptr = &env->lck->pgops;
+    latency->gc_prof.work_counter = ptr->gc_prof.work.spe_counter;
+    latency->gc_prof.work_rtime_monotonic = osal_monotime_to_16dot16(ptr->gc_prof.work.rtime_monotonic);
+    latency->gc_prof.work_xtime_cpu = osal_monotime_to_16dot16(ptr->gc_prof.work.xtime_cpu);
+    latency->gc_prof.work_rsteps = ptr->gc_prof.work.rsteps;
+    latency->gc_prof.work_xpages = ptr->gc_prof.work.xpages;
+    latency->gc_prof.work_majflt = ptr->gc_prof.work.majflt;
+
+    latency->gc_prof.self_counter = ptr->gc_prof.self.spe_counter;
+    latency->gc_prof.self_rtime_monotonic = osal_monotime_to_16dot16(ptr->gc_prof.self.rtime_monotonic);
+    latency->gc_prof.self_xtime_cpu = osal_monotime_to_16dot16(ptr->gc_prof.self.xtime_cpu);
+    latency->gc_prof.self_rsteps = ptr->gc_prof.self.rsteps;
+    latency->gc_prof.self_xpages = ptr->gc_prof.self.xpages;
+    latency->gc_prof.self_majflt = ptr->gc_prof.self.majflt;
+
+    latency->gc_prof.wloops = ptr->gc_prof.wloops;
+    latency->gc_prof.coalescences = ptr->gc_prof.coalescences;
+    latency->gc_prof.wipes = ptr->gc_prof.wipes;
+    latency->gc_prof.flushes = ptr->gc_prof.flushes;
+    latency->gc_prof.kicks = ptr->gc_prof.kicks;
+
+    latency->gc_prof.pnl_merge_work.time = osal_monotime_to_16dot16(ptr->gc_prof.work.pnl_merge.time);
+    latency->gc_prof.pnl_merge_work.calls = ptr->gc_prof.work.pnl_merge.calls;
+    latency->gc_prof.pnl_merge_work.volume = ptr->gc_prof.work.pnl_merge.volume;
+    latency->gc_prof.pnl_merge_self.time = osal_monotime_to_16dot16(ptr->gc_prof.self.pnl_merge.time);
+    latency->gc_prof.pnl_merge_self.calls = ptr->gc_prof.self.pnl_merge.calls;
+    latency->gc_prof.pnl_merge_self.volume = ptr->gc_prof.self.pnl_merge.volume;
+
+    if (txn == env->basal_txn)
+      memset(&ptr->gc_prof, 0, sizeof(ptr->gc_prof));
+  }
+}
+
+struct commit_timestamp {
+  uint64_t start, prep, gc, audit, write, sync, gc_cpu;
+};
+
+static void latency_init(MDBX_commit_latency *latency, struct commit_timestamp *ts) {
+  ts->start = 0;
+  ts->gc_cpu = 0;
+  if (latency) {
+    ts->start = osal_monotime();
+    memset(latency, 0, sizeof(*latency));
+  }
+  ts->prep = ts->gc = ts->audit = ts->write = ts->sync = ts->start;
+}
+
+static void latency_done(MDBX_commit_latency *latency, struct commit_timestamp *ts) {
+  if (latency) {
+    latency->preparation = (ts->prep > ts->start) ? osal_monotime_to_16dot16(ts->prep - ts->start) : 0;
+    latency->gc_wallclock = (ts->gc > ts->prep) ? osal_monotime_to_16dot16(ts->gc - ts->prep) : 0;
+    latency->gc_cputime = ts->gc_cpu ? osal_monotime_to_16dot16(ts->gc_cpu) : 0;
+    latency->audit = (ts->audit > ts->gc) ? osal_monotime_to_16dot16(ts->audit - ts->gc) : 0;
+    latency->write = (ts->write > ts->audit) ? osal_monotime_to_16dot16(ts->write - ts->audit) : 0;
+    latency->sync = (ts->sync > ts->write) ? osal_monotime_to_16dot16(ts->sync - ts->write) : 0;
+    const uint64_t ts_end = osal_monotime();
+    latency->ending = (ts_end > ts->sync) ? osal_monotime_to_16dot16(ts_end - ts->sync) : 0;
+    latency->whole = osal_monotime_to_16dot16_noUnderflow(ts_end - ts->start);
+  }
+}
+
 int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   STATIC_ASSERT(MDBX_TXN_FINISHED == MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD - MDBX_TXN_ERROR - MDBX_TXN_PARKED);
-  const uint64_t ts_start = latency ? osal_monotime() : 0;
-  uint64_t ts_prep = 0, ts_gc = 0, ts_audit = 0, ts_write = 0, ts_sync = 0, gc_cputime = 0;
+
+  struct commit_timestamp ts;
+  latency_init(latency, &ts);
 
   /* txn_end() mode for a commit which writes nothing */
   unsigned end_mode = TXN_END_PURE_COMMIT | TXN_END_UPDATE | TXN_END_SLOT | TXN_END_FREE;
@@ -426,11 +491,11 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     }
 
     if (latency) {
-      ts_prep = osal_monotime();
-      ts_gc = /* no gc-update */ ts_prep;
-      ts_audit = /* no audit */ ts_gc;
-      ts_write = /* no write */ ts_audit;
-      ts_sync = /* no sync */ ts_write;
+      ts.prep = osal_monotime();
+      ts.gc = /* no gc-update */ ts.prep;
+      ts.audit = /* no audit */ ts.gc;
+      ts.write = /* no write */ ts.audit;
+      ts.sync = /* no sync */ ts.write;
     }
     txn_merge(parent, txn, parent_retired_len);
     env->txn = parent;
@@ -511,15 +576,15 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     txn->cursors[MAIN_DBI] = cx.outer.next;
   }
 
-  ts_prep = latency ? osal_monotime() : 0;
+  ts.prep = latency ? osal_monotime() : 0;
 
   gcu_t gcu_ctx;
-  gc_cputime = latency ? osal_cputime(nullptr) : 0;
+  ts.gc_cpu = latency ? osal_cputime(nullptr) : 0;
   rc = gc_update_init(txn, &gcu_ctx);
   if (unlikely(rc != MDBX_SUCCESS))
     goto fail;
   rc = gc_update(txn, &gcu_ctx);
-  gc_cputime = latency ? osal_cputime(nullptr) - gc_cputime : 0;
+  ts.gc_cpu = latency ? osal_cputime(nullptr) - ts.gc_cpu : 0;
   if (unlikely(rc != MDBX_SUCCESS))
     goto fail;
 
@@ -528,11 +593,11 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
 
   txn->dbs[MAIN_DBI].mod_txnid = (txn->dbi_state[MAIN_DBI] & DBI_DIRTY) ? txn->txnid : txn->dbs[MAIN_DBI].mod_txnid;
 
-  ts_gc = latency ? osal_monotime() : 0;
-  ts_audit = ts_gc;
+  ts.gc = latency ? osal_monotime() : 0;
+  ts.audit = ts.gc;
   if (AUDIT_ENABLED()) {
     rc = audit_ex(txn, MDBX_PNL_GETSIZE(txn->tw.retired_pages), true);
-    ts_audit = osal_monotime();
+    ts.audit = osal_monotime();
     if (unlikely(rc != MDBX_SUCCESS))
       goto fail;
   }
@@ -617,7 +682,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   }
 
   /* TODO: use ctx.flush_begin & ctx.flush_end for range-sync */
-  ts_write = latency ? osal_monotime() : 0;
+  ts.write = latency ? osal_monotime() : 0;
 
   meta_t meta;
   memcpy(meta.magic_and_version, head.ptr_c->magic_and_version, 8);
@@ -644,7 +709,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
 
   rc = dxb_sync_locked(env, env->flags | txn->flags | txn_shrink_allowed, &meta, &txn->tw.troika);
 
-  ts_sync = latency ? osal_monotime() : 0;
+  ts.sync = latency ? osal_monotime() : 0;
   if (unlikely(rc != MDBX_SUCCESS)) {
     env->flags |= ENV_FATAL_ERROR;
     ERROR("txn-%s: error %d", "sync", rc);
@@ -655,27 +720,17 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
 
 done:
   if (latency)
-    txn_take_gcprof(txn, latency);
+    latency_gcprof(latency, txn);
   rc = txn_end(txn, end_mode);
 
 provide_latency:
-  if (latency) {
-    latency->preparation = ts_prep ? osal_monotime_to_16dot16(ts_prep - ts_start) : 0;
-    latency->gc_wallclock = (ts_gc > ts_prep) ? osal_monotime_to_16dot16(ts_gc - ts_prep) : 0;
-    latency->gc_cputime = gc_cputime ? osal_monotime_to_16dot16(gc_cputime) : 0;
-    latency->audit = (ts_audit > ts_gc) ? osal_monotime_to_16dot16(ts_audit - ts_gc) : 0;
-    latency->write = (ts_write > ts_audit) ? osal_monotime_to_16dot16(ts_write - ts_audit) : 0;
-    latency->sync = (ts_sync > ts_write) ? osal_monotime_to_16dot16(ts_sync - ts_write) : 0;
-    const uint64_t ts_end = osal_monotime();
-    latency->ending = ts_sync ? osal_monotime_to_16dot16(ts_end - ts_sync) : 0;
-    latency->whole = osal_monotime_to_16dot16_noUnderflow(ts_end - ts_start);
-  }
+  latency_done(latency, &ts);
   return LOG_IFERR(rc);
 
 fail:
   txn->flags |= MDBX_TXN_ERROR;
   if (latency)
-    txn_take_gcprof(txn, latency);
+    latency_gcprof(latency, txn);
   txn_abort(txn);
   goto provide_latency;
 }

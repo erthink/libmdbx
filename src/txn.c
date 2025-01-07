@@ -427,43 +427,6 @@ void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t parent_
   }
 }
 
-void txn_take_gcprof(const MDBX_txn *txn, MDBX_commit_latency *latency) {
-  MDBX_env *const env = txn->env;
-  if (MDBX_ENABLE_PROFGC) {
-    pgop_stat_t *const ptr = &env->lck->pgops;
-    latency->gc_prof.work_counter = ptr->gc_prof.work.spe_counter;
-    latency->gc_prof.work_rtime_monotonic = osal_monotime_to_16dot16(ptr->gc_prof.work.rtime_monotonic);
-    latency->gc_prof.work_xtime_cpu = osal_monotime_to_16dot16(ptr->gc_prof.work.xtime_cpu);
-    latency->gc_prof.work_rsteps = ptr->gc_prof.work.rsteps;
-    latency->gc_prof.work_xpages = ptr->gc_prof.work.xpages;
-    latency->gc_prof.work_majflt = ptr->gc_prof.work.majflt;
-
-    latency->gc_prof.self_counter = ptr->gc_prof.self.spe_counter;
-    latency->gc_prof.self_rtime_monotonic = osal_monotime_to_16dot16(ptr->gc_prof.self.rtime_monotonic);
-    latency->gc_prof.self_xtime_cpu = osal_monotime_to_16dot16(ptr->gc_prof.self.xtime_cpu);
-    latency->gc_prof.self_rsteps = ptr->gc_prof.self.rsteps;
-    latency->gc_prof.self_xpages = ptr->gc_prof.self.xpages;
-    latency->gc_prof.self_majflt = ptr->gc_prof.self.majflt;
-
-    latency->gc_prof.wloops = ptr->gc_prof.wloops;
-    latency->gc_prof.coalescences = ptr->gc_prof.coalescences;
-    latency->gc_prof.wipes = ptr->gc_prof.wipes;
-    latency->gc_prof.flushes = ptr->gc_prof.flushes;
-    latency->gc_prof.kicks = ptr->gc_prof.kicks;
-
-    latency->gc_prof.pnl_merge_work.time = osal_monotime_to_16dot16(ptr->gc_prof.work.pnl_merge.time);
-    latency->gc_prof.pnl_merge_work.calls = ptr->gc_prof.work.pnl_merge.calls;
-    latency->gc_prof.pnl_merge_work.volume = ptr->gc_prof.work.pnl_merge.volume;
-    latency->gc_prof.pnl_merge_self.time = osal_monotime_to_16dot16(ptr->gc_prof.self.pnl_merge.time);
-    latency->gc_prof.pnl_merge_self.calls = ptr->gc_prof.self.pnl_merge.calls;
-    latency->gc_prof.pnl_merge_self.volume = ptr->gc_prof.self.pnl_merge.volume;
-
-    if (txn == env->basal_txn)
-      memset(&ptr->gc_prof, 0, sizeof(ptr->gc_prof));
-  } else
-    memset(&latency->gc_prof, 0, sizeof(latency->gc_prof));
-}
-
 int txn_abort(MDBX_txn *txn) {
   if (txn->flags & MDBX_TXN_RDONLY)
     /* LY: don't close DBI-handles */

@@ -68,7 +68,6 @@ enum {
 };
 MDBX_INTERNAL int txn_end(MDBX_txn *txn, unsigned mode);
 MDBX_INTERNAL int txn_write(MDBX_txn *txn, iov_ctx_t *ctx);
-MDBX_INTERNAL void txn_take_gcprof(const MDBX_txn *txn, MDBX_commit_latency *latency);
 MDBX_INTERNAL void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t parent_retired_len);
 MDBX_INTERNAL MDBX_txn *txn_alloc(const MDBX_txn_flags_t flags, MDBX_env *env);
 MDBX_INTERNAL MDBX_txn *txn_basal_create(const size_t max_dbi);
