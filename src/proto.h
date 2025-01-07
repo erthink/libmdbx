@@ -50,16 +50,16 @@ MDBX_INTERNAL void txn_done_cursors(MDBX_txn *txn);
 MDBX_INTERNAL int txn_shadow_cursors(const MDBX_txn *parent, const size_t dbi);
 
 #define TXN_END_NAMES                                                                                                  \
-  {"committed", "empty-commit", "abort", "reset", "fail-begin", "fail-beginchild", "ousted", nullptr}
+  {"committed", "pure-commit", "abort", "reset", "fail-begin", "fail-begin-nested", "ousted", nullptr}
 enum {
   /* txn_end operation number, for logging */
-  TXN_END_COMMITTED,
-  TXN_END_PURE_COMMIT,
-  TXN_END_ABORT,
-  TXN_END_RESET,
-  TXN_END_FAIL_BEGIN,
-  TXN_END_FAIL_BEGINCHILD,
-  TXN_END_OUSTED,
+  TXN_END_COMMITTED /* 0 */,
+  TXN_END_PURE_COMMIT /* 1 */,
+  TXN_END_ABORT /* 2 */,
+  TXN_END_RESET /* 3 */,
+  TXN_END_FAIL_BEGIN /* 4 */,
+  TXN_END_FAIL_BEGIN_NESTED /* 5 */,
+  TXN_END_OUSTED /* 6 */,
 
   TXN_END_OPMASK = 0x07 /* mask for txn_end() operation number */,
   TXN_END_UPDATE = 0x10 /* update env state (DBIs) */,
