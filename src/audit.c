@@ -46,11 +46,7 @@ __cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored, bool don
         return MDBX_CORRUPTED;
       }
       txnid_t id = unaligned_peek_u64(4, key.iov_base);
-      if (txn->tw.gc.retxl) {
-        for (size_t i = 1; i <= MDBX_PNL_GETSIZE(txn->tw.gc.retxl); ++i)
-          if (id == txn->tw.gc.retxl[i])
-            goto skip;
-      } else if (id <= txn->tw.gc.last_reclaimed)
+      if (txn->tw.gc.retxl ? txl_contain(txn->tw.gc.retxl, id) : (id <= txn->tw.gc.last_reclaimed))
         goto skip;
     }
     gc += *(pgno_t *)data.iov_base;
