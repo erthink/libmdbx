@@ -212,6 +212,8 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
   if (unlikely(env->flags & MDBX_RDONLY & ~flags)) /* write txn in RDONLY env */
     return LOG_IFERR(MDBX_EACCESS);
 
+  /* Reuse preallocated write txn. However, do not touch it until
+   * txn_renew() succeeds, since it currently may be active. */
   MDBX_txn *txn = nullptr;
   if (parent) {
     /* Nested transactions: Max 1 child, write txns only, no writemap */
@@ -223,157 +225,25 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
       }
       return LOG_IFERR(rc);
     }
-
-    if (env->options.spill_parent4child_denominator) {
-      /* Spill dirty-pages of parent to provide dirtyroom for child txn */
-      rc = txn_spill(parent, nullptr, parent->tw.dirtylist->length / env->options.spill_parent4child_denominator);
-      if (unlikely(rc != MDBX_SUCCESS))
-        return LOG_IFERR(rc);
-    }
-    tASSERT(parent, audit_ex(parent, 0, false) == 0);
+    if (unlikely(parent->env != env))
+      return LOG_IFERR(MDBX_BAD_TXN);
 
     flags |= parent->flags & (txn_rw_begin_flags | MDBX_TXN_SPILLS | MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP);
-  } else if ((flags & MDBX_TXN_RDONLY) == 0) {
-    /* Reuse preallocated write txn. However, do not touch it until
-     * txn_renew() succeeds, since it currently may be active. */
-    txn = env->basal_txn;
-    goto renew;
-  }
-
-  const intptr_t bitmap_bytes =
-#if MDBX_ENABLE_DBI_SPARSE
-      ceil_powerof2(env->max_dbi, CHAR_BIT * sizeof(txn->dbi_sparse[0])) / CHAR_BIT;
-#else
-      0;
-#endif /* MDBX_ENABLE_DBI_SPARSE */
-  STATIC_ASSERT(sizeof(txn->tw) > sizeof(txn->to));
-  const size_t base =
-      (flags & MDBX_TXN_RDONLY) ? sizeof(MDBX_txn) - sizeof(txn->tw) + sizeof(txn->to) : sizeof(MDBX_txn);
-  const size_t size = base +
-                      ((flags & MDBX_TXN_RDONLY) ? (size_t)bitmap_bytes + env->max_dbi * sizeof(txn->dbi_seqs[0]) : 0) +
-                      env->max_dbi * (sizeof(txn->dbs[0]) + sizeof(txn->cursors[0]) + sizeof(txn->dbi_state[0]));
-  txn = osal_malloc(size);
-  if (unlikely(txn == nullptr))
-    return LOG_IFERR(MDBX_ENOMEM);
-#if MDBX_DEBUG
-  memset(txn, 0xCD, size);
-  VALGRIND_MAKE_MEM_UNDEFINED(txn, size);
-#endif /* MDBX_DEBUG */
-  MDBX_ANALYSIS_ASSUME(size > base);
-  memset(txn, 0, (MDBX_GOOFY_MSVC_STATIC_ANALYZER && base > size) ? size : base);
-  txn->dbs = ptr_disp(txn, base);
-  txn->cursors = ptr_disp(txn->dbs, env->max_dbi * sizeof(txn->dbs[0]));
-#if MDBX_DEBUG
-  txn->cursors[FREE_DBI] = nullptr; /* avoid SIGSEGV in an assertion later */
-#endif
-  txn->dbi_state = ptr_disp(txn, size - env->max_dbi * sizeof(txn->dbi_state[0]));
-  txn->flags = flags;
-  txn->env = env;
-
-  if (parent) {
-    tASSERT(parent, dpl_check(parent));
-#if MDBX_ENABLE_DBI_SPARSE
-    txn->dbi_sparse = parent->dbi_sparse;
-#endif /* MDBX_ENABLE_DBI_SPARSE */
-    txn->dbi_seqs = parent->dbi_seqs;
-    txn->geo = parent->geo;
-    rc = dpl_alloc(txn);
-    if (likely(rc == MDBX_SUCCESS)) {
-      const size_t len = MDBX_PNL_GETSIZE(parent->tw.repnl) + parent->tw.loose_count;
-      txn->tw.repnl = pnl_alloc((len > MDBX_PNL_INITIAL) ? len : MDBX_PNL_INITIAL);
-      if (unlikely(!txn->tw.repnl))
-        rc = MDBX_ENOMEM;
-    }
-    if (unlikely(rc != MDBX_SUCCESS)) {
-    nested_failed:
-      pnl_free(txn->tw.repnl);
-      dpl_free(txn);
-      osal_free(txn);
-      return LOG_IFERR(rc);
-    }
-
-    /* Move loose pages to reclaimed list */
-    if (parent->tw.loose_count) {
-      do {
-        page_t *lp = parent->tw.loose_pages;
-        tASSERT(parent, lp->flags == P_LOOSE);
-        rc = pnl_insert_span(&parent->tw.repnl, lp->pgno, 1);
-        if (unlikely(rc != MDBX_SUCCESS))
-          goto nested_failed;
-        MDBX_ASAN_UNPOISON_MEMORY_REGION(&page_next(lp), sizeof(page_t *));
-        VALGRIND_MAKE_MEM_DEFINED(&page_next(lp), sizeof(page_t *));
-        parent->tw.loose_pages = page_next(lp);
-        /* Remove from dirty list */
-        page_wash(parent, dpl_exist(parent, lp->pgno), lp, 1);
-      } while (parent->tw.loose_pages);
-      parent->tw.loose_count = 0;
-#if MDBX_ENABLE_REFUND
-      parent->tw.loose_refund_wl = 0;
-#endif /* MDBX_ENABLE_REFUND */
-      tASSERT(parent, dpl_check(parent));
-    }
-    txn->tw.dirtyroom = parent->tw.dirtyroom;
-    txn->tw.dirtylru = parent->tw.dirtylru;
-
-    dpl_sort(parent);
-    if (parent->tw.spilled.list)
-      spill_purge(parent);
-
-    tASSERT(txn, MDBX_PNL_ALLOCLEN(txn->tw.repnl) >= MDBX_PNL_GETSIZE(parent->tw.repnl));
-    memcpy(txn->tw.repnl, parent->tw.repnl, MDBX_PNL_SIZEOF(parent->tw.repnl));
-    eASSERT(env, pnl_check_allocated(txn->tw.repnl, (txn->geo.first_unallocated /* LY: intentional assignment
-                                                                               here, only for assertion */
-                                                     = parent->geo.first_unallocated) -
-                                                        MDBX_ENABLE_REFUND));
-
-    txn->tw.gc.time_acc = parent->tw.gc.time_acc;
-    txn->tw.gc.last_reclaimed = parent->tw.gc.last_reclaimed;
-    if (parent->tw.gc.retxl) {
-      txn->tw.gc.retxl = parent->tw.gc.retxl;
-      parent->tw.gc.retxl = (void *)(intptr_t)MDBX_PNL_GETSIZE(parent->tw.gc.retxl);
-    }
-
-    txn->tw.retired_pages = parent->tw.retired_pages;
-    parent->tw.retired_pages = (void *)(intptr_t)MDBX_PNL_GETSIZE(parent->tw.retired_pages);
-
-    txn->txnid = parent->txnid;
-    txn->front_txnid = parent->front_txnid + 1;
-#if MDBX_ENABLE_REFUND
-    txn->tw.loose_refund_wl = 0;
-#endif /* MDBX_ENABLE_REFUND */
-    txn->canary = parent->canary;
-    parent->flags |= MDBX_TXN_HAS_CHILD;
-    parent->nested = txn;
-    txn->parent = parent;
-    txn->owner = parent->owner;
-    txn->tw.troika = parent->tw.troika;
-
-    txn->cursors[FREE_DBI] = nullptr;
-    txn->cursors[MAIN_DBI] = nullptr;
-    txn->dbi_state[FREE_DBI] = parent->dbi_state[FREE_DBI] & ~(DBI_FRESH | DBI_CREAT | DBI_DIRTY);
-    txn->dbi_state[MAIN_DBI] = parent->dbi_state[MAIN_DBI] & ~(DBI_FRESH | DBI_CREAT | DBI_DIRTY);
-    memset(txn->dbi_state + CORE_DBS, 0, (txn->n_dbi = parent->n_dbi) - CORE_DBS);
-    memcpy(txn->dbs, parent->dbs, sizeof(txn->dbs[0]) * CORE_DBS);
-
-    tASSERT(parent, parent->tw.dirtyroom + parent->tw.dirtylist->length ==
-                        (parent->parent ? parent->parent->tw.dirtyroom : parent->env->options.dp_limit));
-    tASSERT(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
-                     (txn->parent ? txn->parent->tw.dirtyroom : txn->env->options.dp_limit));
-    env->txn = txn;
-    tASSERT(parent, parent->cursors[FREE_DBI] == nullptr);
-    rc = txn_shadow_cursors(parent, MAIN_DBI);
-    if (AUDIT_ENABLED() && ASSERT_ENABLED()) {
+    rc = txn_nested_create(parent, flags);
+    txn = parent->nested;
+    if (unlikely(rc != MDBX_SUCCESS))
+      txn_end(txn, TXN_END_FAIL_BEGIN_NESTED);
+    else if (AUDIT_ENABLED() && ASSERT_ENABLED()) {
       txn->signature = txn_signature;
       tASSERT(txn, audit_ex(txn, 0, false) == 0);
     }
-    if (unlikely(rc != MDBX_SUCCESS))
-      txn_end(txn, TXN_END_FAIL_BEGIN_NESTED);
-  } else { /* MDBX_TXN_RDONLY */
-    txn->dbi_seqs = ptr_disp(txn->cursors, env->max_dbi * sizeof(txn->cursors[0]));
-#if MDBX_ENABLE_DBI_SPARSE
-    txn->dbi_sparse = ptr_disp(txn->dbi_state, -bitmap_bytes);
-#endif /* MDBX_ENABLE_DBI_SPARSE */
-  renew:
+  } else {
+    txn = env->basal_txn;
+    if (flags & MDBX_TXN_RDONLY) {
+      txn = txn_alloc(flags, env);
+      if (unlikely(!txn))
+        return LOG_IFERR(MDBX_ENOMEM);
+    }
     rc = txn_renew(txn, flags);
   }
 
