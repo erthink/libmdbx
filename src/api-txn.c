@@ -404,19 +404,11 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     goto fail;
   }
 
-  if (!txn->tw.dirtylist) {
-    tASSERT(txn, (txn->flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
-  } else {
-    tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
-    tASSERT(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
-                     (txn->parent ? txn->parent->tw.dirtyroom : env->options.dp_limit));
-  }
-  if (txn->flags & txn_may_have_cursors)
-    txn_done_cursors(txn);
-
-  if ((!txn->tw.dirtylist || txn->tw.dirtylist->length == 0) &&
-      (txn->flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS)) == 0) {
-    TXN_FOREACH_DBI_ALL(txn, i) { tASSERT(txn, !(txn->dbi_state[i] & DBI_DIRTY)); }
+  rc = txn_basal_commit(txn, latency ? &ts : nullptr);
+  end_mode = TXN_END_COMMITTED | TXN_END_UPDATE;
+  if (likely(rc == MDBX_SUCCESS))
+    goto done;
+  if (rc == MDBX_RESULT_TRUE) {
 #if defined(MDBX_NOSUCCESS_EMPTY_COMMIT) && MDBX_NOSUCCESS_EMPTY_COMMIT
     rc = txn_end(txn, end_mode);
     if (unlikely(rc != MDBX_SUCCESS))
@@ -428,175 +420,12 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
 #endif /* MDBX_NOSUCCESS_EMPTY_COMMIT */
   }
 
-  DEBUG("committing txn %" PRIaTXN " %p on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, txn->txnid, (void *)txn,
-        (void *)env, txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
-
-  if (txn->n_dbi > CORE_DBS) {
-    /* Update table root pointers */
-    cursor_couple_t cx;
-    rc = cursor_init(&cx.outer, txn, MAIN_DBI);
-    if (unlikely(rc != MDBX_SUCCESS))
-      goto fail;
-    cx.outer.next = txn->cursors[MAIN_DBI];
-    txn->cursors[MAIN_DBI] = &cx.outer;
-    TXN_FOREACH_DBI_USER(txn, i) {
-      if ((txn->dbi_state[i] & DBI_DIRTY) == 0)
-        continue;
-      tree_t *const db = &txn->dbs[i];
-      DEBUG("update main's entry for sub-db %zu, mod_txnid %" PRIaTXN " -> %" PRIaTXN, i, db->mod_txnid, txn->txnid);
-      /* Может быть mod_txnid > front после коммита вложенных тразакций */
-      db->mod_txnid = txn->txnid;
-      MDBX_val data = {db, sizeof(tree_t)};
-      rc = cursor_put(&cx.outer, &env->kvs[i].name, &data, N_TREE);
-      if (unlikely(rc != MDBX_SUCCESS)) {
-        txn->cursors[MAIN_DBI] = cx.outer.next;
-        goto fail;
-      }
-    }
-    txn->cursors[MAIN_DBI] = cx.outer.next;
-  }
-
-  ts.prep = latency ? osal_monotime() : 0;
-
-  gcu_t gcu_ctx;
-  ts.gc_cpu = latency ? osal_cputime(nullptr) : 0;
-  rc = gc_update_init(txn, &gcu_ctx);
-  if (unlikely(rc != MDBX_SUCCESS))
-    goto fail;
-  rc = gc_update(txn, &gcu_ctx);
-  ts.gc_cpu = latency ? osal_cputime(nullptr) - ts.gc_cpu : 0;
-  if (unlikely(rc != MDBX_SUCCESS))
-    goto fail;
-
-  tASSERT(txn, txn->tw.loose_count == 0);
-  txn->dbs[FREE_DBI].mod_txnid = (txn->dbi_state[FREE_DBI] & DBI_DIRTY) ? txn->txnid : txn->dbs[FREE_DBI].mod_txnid;
-
-  txn->dbs[MAIN_DBI].mod_txnid = (txn->dbi_state[MAIN_DBI] & DBI_DIRTY) ? txn->txnid : txn->dbs[MAIN_DBI].mod_txnid;
-
-  ts.gc = latency ? osal_monotime() : 0;
-  ts.audit = ts.gc;
-  if (AUDIT_ENABLED()) {
-    rc = audit_ex(txn, MDBX_PNL_GETSIZE(txn->tw.retired_pages), true);
-    ts.audit = osal_monotime();
-    if (unlikely(rc != MDBX_SUCCESS))
-      goto fail;
-  }
-
-  bool need_flush_for_nometasync = false;
-  const meta_ptr_t head = meta_recent(env, &txn->tw.troika);
-  const uint32_t meta_sync_txnid = atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed);
-  /* sync prev meta */
-  if (head.is_steady && meta_sync_txnid != (uint32_t)head.txnid) {
-    /* Исправление унаследованного от LMDB недочета:
-     *
-     * Всё хорошо, если все процессы работающие с БД не используют WRITEMAP.
-     * Тогда мета-страница (обновленная, но не сброшенная на диск) будет
-     * сохранена в результате fdatasync() при записи данных этой транзакции.
-     *
-     * Всё хорошо, если все процессы работающие с БД используют WRITEMAP
-     * без MDBX_AVOID_MSYNC.
-     * Тогда мета-страница (обновленная, но не сброшенная на диск) будет
-     * сохранена в результате msync() при записи данных этой транзакции.
-     *
-     * Если же в процессах работающих с БД используется оба метода, как sync()
-     * в режиме MDBX_WRITEMAP, так и записи через файловый дескриптор, то
-     * становится невозможным обеспечить фиксацию на диске мета-страницы
-     * предыдущей транзакции и данных текущей транзакции, за счет одной
-     * sync-операцией выполняемой после записи данных текущей транзакции.
-     * Соответственно, требуется явно обновлять мета-страницу, что полностью
-     * уничтожает выгоду от NOMETASYNC. */
-    const uint32_t txnid_dist = ((txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC) ? MDBX_NOMETASYNC_LAZY_FD
-                                                                                        : MDBX_NOMETASYNC_LAZY_WRITEMAP;
-    /* Смысл "магии" в том, чтобы избежать отдельного вызова fdatasync()
-     * или msync() для гарантированной фиксации на диске мета-страницы,
-     * которая была "лениво" отправлена на запись в предыдущей транзакции,
-     * но не сброшена на диск из-за активного режима MDBX_NOMETASYNC. */
-    if (
-#if defined(_WIN32) || defined(_WIN64)
-        !env->ioring.overlapped_fd &&
-#endif
-        meta_sync_txnid == (uint32_t)head.txnid - txnid_dist)
-      need_flush_for_nometasync = true;
-    else {
-      rc = meta_sync(env, head);
-      if (unlikely(rc != MDBX_SUCCESS)) {
-        ERROR("txn-%s: error %d", "presync-meta", rc);
-        goto fail;
-      }
-    }
-  }
-
-  if (txn->tw.dirtylist) {
-    tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
-    tASSERT(txn, txn->tw.loose_count == 0);
-
-    mdbx_filehandle_t fd =
-#if defined(_WIN32) || defined(_WIN64)
-        env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
-    (void)need_flush_for_nometasync;
-#else
-        (need_flush_for_nometasync || env->dsync_fd == INVALID_HANDLE_VALUE ||
-         txn->tw.dirtylist->length > env->options.writethrough_threshold ||
-         atomic_load64(&env->lck->unsynced_pages, mo_Relaxed))
-            ? env->lazy_fd
-            : env->dsync_fd;
-#endif /* Windows */
-
-    iov_ctx_t write_ctx;
-    rc = iov_init(txn, &write_ctx, txn->tw.dirtylist->length, txn->tw.dirtylist->pages_including_loose, fd, false);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      ERROR("txn-%s: error %d", "iov-init", rc);
-      goto fail;
-    }
-
-    rc = txn_write(txn, &write_ctx);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      ERROR("txn-%s: error %d", "write", rc);
-      goto fail;
-    }
-  } else {
-    tASSERT(txn, (txn->flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
-    env->lck->unsynced_pages.weak += txn->tw.writemap_dirty_npages;
-    if (!env->lck->eoos_timestamp.weak)
-      env->lck->eoos_timestamp.weak = osal_monotime();
-  }
-
-  /* TODO: use ctx.flush_begin & ctx.flush_end for range-sync */
-  ts.write = latency ? osal_monotime() : 0;
-
-  meta_t meta;
-  memcpy(meta.magic_and_version, head.ptr_c->magic_and_version, 8);
-  meta.reserve16 = head.ptr_c->reserve16;
-  meta.validator_id = head.ptr_c->validator_id;
-  meta.extra_pagehdr = head.ptr_c->extra_pagehdr;
-  unaligned_poke_u64(4, meta.pages_retired,
-                     unaligned_peek_u64(4, head.ptr_c->pages_retired) + MDBX_PNL_GETSIZE(txn->tw.retired_pages));
-  meta.geometry = txn->geo;
-  meta.trees.gc = txn->dbs[FREE_DBI];
-  meta.trees.main = txn->dbs[MAIN_DBI];
-  meta.canary = txn->canary;
-  memcpy(&meta.dxbid, &head.ptr_c->dxbid, sizeof(meta.dxbid));
-
-  txnid_t commit_txnid = txn->txnid;
-#if MDBX_ENABLE_BIGFOOT
-  if (gcu_ctx.bigfoot > txn->txnid) {
-    commit_txnid = gcu_ctx.bigfoot;
-    TRACE("use @%" PRIaTXN " (+%zu) for commit bigfoot-txn", commit_txnid, (size_t)(commit_txnid - txn->txnid));
-  }
-#endif
-  meta.unsafe_sign = DATASIGN_NONE;
-  meta_set_txnid(env, &meta, commit_txnid);
-
-  rc = dxb_sync_locked(env, env->flags | txn->flags | txn_shrink_allowed, &meta, &txn->tw.troika);
-
-  ts.sync = latency ? osal_monotime() : 0;
-  if (unlikely(rc != MDBX_SUCCESS)) {
-    env->flags |= ENV_FATAL_ERROR;
-    ERROR("txn-%s: error %d", "sync", rc);
-    goto fail;
-  }
-
-  end_mode = TXN_END_COMMITTED | TXN_END_UPDATE;
+fail:
+  txn->flags |= MDBX_TXN_ERROR;
+  if (latency)
+    latency_gcprof(latency, txn);
+  txn_abort(txn);
+  goto provide_latency;
 
 done:
   if (latency)
@@ -606,13 +435,6 @@ done:
 provide_latency:
   latency_done(latency, &ts);
   return LOG_IFERR(rc);
-
-fail:
-  txn->flags |= MDBX_TXN_ERROR;
-  if (latency)
-    latency_gcprof(latency, txn);
-  txn_abort(txn);
-  goto provide_latency;
 }
 
 int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {

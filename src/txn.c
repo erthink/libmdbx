@@ -54,7 +54,7 @@ int txn_shadow_cursors(const MDBX_txn *parent, const size_t dbi) {
   return MDBX_SUCCESS;
 }
 
-int txn_write(MDBX_txn *txn, iov_ctx_t *ctx) {
+static int txn_write(MDBX_txn *txn, iov_ctx_t *ctx) {
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
   dpl_t *const dl = dpl_sort(txn);
   int rc = MDBX_SUCCESS;
@@ -1416,5 +1416,202 @@ int txn_nested_join(MDBX_txn *txn, struct commit_timestamp *ts) {
   txn->signature = 0;
   osal_free(txn);
   tASSERT(parent, audit_ex(parent, 0, false) == 0);
+  return MDBX_SUCCESS;
+}
+
+int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
+  MDBX_env *const env = txn->env;
+  tASSERT(txn, txn == env->basal_txn && !txn->parent && !txn->nested);
+  if (!txn->tw.dirtylist) {
+    tASSERT(txn, (txn->flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
+  } else {
+    tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
+    tASSERT(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length == env->options.dp_limit);
+  }
+
+  if (txn->flags & txn_may_have_cursors)
+    txn_done_cursors(txn);
+
+  if ((!txn->tw.dirtylist || txn->tw.dirtylist->length == 0) &&
+      (txn->flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS)) == 0) {
+    TXN_FOREACH_DBI_ALL(txn, i) { tASSERT(txn, !(txn->dbi_state[i] & DBI_DIRTY)); }
+    /* fast completion of pure transaction */
+    return MDBX_RESULT_TRUE;
+  }
+
+  DEBUG("committing txn %" PRIaTXN " %p on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, txn->txnid, (void *)txn,
+        (void *)env, txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
+
+  if (txn->n_dbi > CORE_DBS) {
+    /* Update table root pointers */
+    cursor_couple_t cx;
+    int err = cursor_init(&cx.outer, txn, MAIN_DBI);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+    cx.outer.next = txn->cursors[MAIN_DBI];
+    txn->cursors[MAIN_DBI] = &cx.outer;
+    TXN_FOREACH_DBI_USER(txn, i) {
+      if ((txn->dbi_state[i] & DBI_DIRTY) == 0)
+        continue;
+      tree_t *const db = &txn->dbs[i];
+      DEBUG("update main's entry for sub-db %zu, mod_txnid %" PRIaTXN " -> %" PRIaTXN, i, db->mod_txnid, txn->txnid);
+      /* Может быть mod_txnid > front после коммита вложенных тразакций */
+      db->mod_txnid = txn->txnid;
+      MDBX_val data = {db, sizeof(tree_t)};
+      err = cursor_put(&cx.outer, &env->kvs[i].name, &data, N_TREE);
+      if (unlikely(err != MDBX_SUCCESS)) {
+        txn->cursors[MAIN_DBI] = cx.outer.next;
+        return err;
+      }
+    }
+    txn->cursors[MAIN_DBI] = cx.outer.next;
+  }
+
+  if (ts) {
+    ts->prep = osal_monotime();
+    ts->gc_cpu = osal_cputime(nullptr);
+  }
+
+  gcu_t gcu_ctx;
+  int rc = gc_update_init(txn, &gcu_ctx);
+  if (likely(rc == MDBX_SUCCESS))
+    rc = gc_update(txn, &gcu_ctx);
+  if (ts)
+    ts->gc_cpu = osal_cputime(nullptr) - ts->gc_cpu;
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  tASSERT(txn, txn->tw.loose_count == 0);
+  txn->dbs[FREE_DBI].mod_txnid = (txn->dbi_state[FREE_DBI] & DBI_DIRTY) ? txn->txnid : txn->dbs[FREE_DBI].mod_txnid;
+  txn->dbs[MAIN_DBI].mod_txnid = (txn->dbi_state[MAIN_DBI] & DBI_DIRTY) ? txn->txnid : txn->dbs[MAIN_DBI].mod_txnid;
+
+  if (ts) {
+    ts->gc = osal_monotime();
+    ts->audit = ts->gc;
+  }
+  if (AUDIT_ENABLED()) {
+    rc = audit_ex(txn, MDBX_PNL_GETSIZE(txn->tw.retired_pages), true);
+    if (ts)
+      ts->audit = osal_monotime();
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+  }
+
+  bool need_flush_for_nometasync = false;
+  const meta_ptr_t head = meta_recent(env, &txn->tw.troika);
+  const uint32_t meta_sync_txnid = atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed);
+  /* sync prev meta */
+  if (head.is_steady && meta_sync_txnid != (uint32_t)head.txnid) {
+    /* Исправление унаследованного от LMDB недочета:
+     *
+     * Всё хорошо, если все процессы работающие с БД не используют WRITEMAP.
+     * Тогда мета-страница (обновленная, но не сброшенная на диск) будет
+     * сохранена в результате fdatasync() при записи данных этой транзакции.
+     *
+     * Всё хорошо, если все процессы работающие с БД используют WRITEMAP
+     * без MDBX_AVOID_MSYNC.
+     * Тогда мета-страница (обновленная, но не сброшенная на диск) будет
+     * сохранена в результате msync() при записи данных этой транзакции.
+     *
+     * Если же в процессах работающих с БД используется оба метода, как sync()
+     * в режиме MDBX_WRITEMAP, так и записи через файловый дескриптор, то
+     * становится невозможным обеспечить фиксацию на диске мета-страницы
+     * предыдущей транзакции и данных текущей транзакции, за счет одной
+     * sync-операцией выполняемой после записи данных текущей транзакции.
+     * Соответственно, требуется явно обновлять мета-страницу, что полностью
+     * уничтожает выгоду от NOMETASYNC. */
+    const uint32_t txnid_dist = ((txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC) ? MDBX_NOMETASYNC_LAZY_FD
+                                                                                        : MDBX_NOMETASYNC_LAZY_WRITEMAP;
+    /* Смысл "магии" в том, чтобы избежать отдельного вызова fdatasync()
+     * или msync() для гарантированной фиксации на диске мета-страницы,
+     * которая была "лениво" отправлена на запись в предыдущей транзакции,
+     * но не сброшена на диск из-за активного режима MDBX_NOMETASYNC. */
+    if (
+#if defined(_WIN32) || defined(_WIN64)
+        !env->ioring.overlapped_fd &&
+#endif
+        meta_sync_txnid == (uint32_t)head.txnid - txnid_dist)
+      need_flush_for_nometasync = true;
+    else {
+      rc = meta_sync(env, head);
+      if (unlikely(rc != MDBX_SUCCESS)) {
+        ERROR("txn-%s: error %d", "presync-meta", rc);
+        return rc;
+      }
+    }
+  }
+
+  if (txn->tw.dirtylist) {
+    tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
+    tASSERT(txn, txn->tw.loose_count == 0);
+
+    mdbx_filehandle_t fd =
+#if defined(_WIN32) || defined(_WIN64)
+        env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
+    (void)need_flush_for_nometasync;
+#else
+        (need_flush_for_nometasync || env->dsync_fd == INVALID_HANDLE_VALUE ||
+         txn->tw.dirtylist->length > env->options.writethrough_threshold ||
+         atomic_load64(&env->lck->unsynced_pages, mo_Relaxed))
+            ? env->lazy_fd
+            : env->dsync_fd;
+#endif /* Windows */
+
+    iov_ctx_t write_ctx;
+    rc = iov_init(txn, &write_ctx, txn->tw.dirtylist->length, txn->tw.dirtylist->pages_including_loose, fd, false);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      ERROR("txn-%s: error %d", "iov-init", rc);
+      return rc;
+    }
+
+    rc = txn_write(txn, &write_ctx);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      ERROR("txn-%s: error %d", "write", rc);
+      return rc;
+    }
+  } else {
+    tASSERT(txn, (txn->flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
+    env->lck->unsynced_pages.weak += txn->tw.writemap_dirty_npages;
+    if (!env->lck->eoos_timestamp.weak)
+      env->lck->eoos_timestamp.weak = osal_monotime();
+  }
+
+  /* TODO: use ctx.flush_begin & ctx.flush_end for range-sync */
+  if (ts)
+    ts->write = osal_monotime();
+
+  meta_t meta;
+  memcpy(meta.magic_and_version, head.ptr_c->magic_and_version, 8);
+  meta.reserve16 = head.ptr_c->reserve16;
+  meta.validator_id = head.ptr_c->validator_id;
+  meta.extra_pagehdr = head.ptr_c->extra_pagehdr;
+  unaligned_poke_u64(4, meta.pages_retired,
+                     unaligned_peek_u64(4, head.ptr_c->pages_retired) + MDBX_PNL_GETSIZE(txn->tw.retired_pages));
+  meta.geometry = txn->geo;
+  meta.trees.gc = txn->dbs[FREE_DBI];
+  meta.trees.main = txn->dbs[MAIN_DBI];
+  meta.canary = txn->canary;
+  memcpy(&meta.dxbid, &head.ptr_c->dxbid, sizeof(meta.dxbid));
+
+  txnid_t commit_txnid = txn->txnid;
+#if MDBX_ENABLE_BIGFOOT
+  if (gcu_ctx.bigfoot > txn->txnid) {
+    commit_txnid = gcu_ctx.bigfoot;
+    TRACE("use @%" PRIaTXN " (+%zu) for commit bigfoot-txn", commit_txnid, (size_t)(commit_txnid - txn->txnid));
+  }
+#endif
+  meta.unsafe_sign = DATASIGN_NONE;
+  meta_set_txnid(env, &meta, commit_txnid);
+
+  rc = dxb_sync_locked(env, env->flags | txn->flags | txn_shrink_allowed, &meta, &txn->tw.troika);
+
+  if (ts)
+    ts->sync = osal_monotime();
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    env->flags |= ENV_FATAL_ERROR;
+    ERROR("txn-%s: error %d", "sync", rc);
+    return rc;
+  }
+
   return MDBX_SUCCESS;
 }

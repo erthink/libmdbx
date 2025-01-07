@@ -67,7 +67,6 @@ enum {
   TXN_END_SLOT = 0x40 /* release any reader slot if NOSTICKYTHREADS */
 };
 MDBX_INTERNAL int txn_end(MDBX_txn *txn, unsigned mode);
-MDBX_INTERNAL int txn_write(MDBX_txn *txn, iov_ctx_t *ctx);
 MDBX_INTERNAL MDBX_txn *txn_alloc(const MDBX_txn_flags_t flags, MDBX_env *env);
 MDBX_INTERNAL MDBX_txn *txn_basal_create(const size_t max_dbi);
 MDBX_INTERNAL void txn_basal_destroy(MDBX_txn *txn);
@@ -78,6 +77,7 @@ struct commit_timestamp {
   uint64_t start, prep, gc, audit, write, sync, gc_cpu;
 };
 MDBX_INTERNAL int txn_nested_join(MDBX_txn *txn, struct commit_timestamp *ts);
+MDBX_INTERNAL int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts);
 
 /* env.c */
 MDBX_INTERNAL int env_open(MDBX_env *env, mdbx_mode_t mode);
