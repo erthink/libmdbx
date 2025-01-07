@@ -272,8 +272,8 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
 
 int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   STATIC_ASSERT(MDBX_TXN_FINISHED == MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD - MDBX_TXN_ERROR - MDBX_TXN_PARKED);
-  const uint64_t ts_0 = latency ? osal_monotime() : 0;
-  uint64_t ts_1 = 0, ts_2 = 0, ts_3 = 0, ts_4 = 0, ts_5 = 0, gc_cputime = 0;
+  const uint64_t ts_start = latency ? osal_monotime() : 0;
+  uint64_t ts_prep = 0, ts_gc = 0, ts_audit = 0, ts_write = 0, ts_sync = 0, gc_cputime = 0;
 
   /* txn_end() mode for a commit which writes nothing */
   unsigned end_mode = TXN_END_PURE_COMMIT | TXN_END_UPDATE | TXN_END_SLOT | TXN_END_FREE;
@@ -426,11 +426,11 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     }
 
     if (latency) {
-      ts_1 = osal_monotime();
-      ts_2 = /* no gc-update */ ts_1;
-      ts_3 = /* no audit */ ts_2;
-      ts_4 = /* no write */ ts_3;
-      ts_5 = /* no sync */ ts_4;
+      ts_prep = osal_monotime();
+      ts_gc = /* no gc-update */ ts_prep;
+      ts_audit = /* no audit */ ts_gc;
+      ts_write = /* no write */ ts_audit;
+      ts_sync = /* no sync */ ts_write;
     }
     txn_merge(parent, txn, parent_retired_len);
     env->txn = parent;
@@ -511,7 +511,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     txn->cursors[MAIN_DBI] = cx.outer.next;
   }
 
-  ts_1 = latency ? osal_monotime() : 0;
+  ts_prep = latency ? osal_monotime() : 0;
 
   gcu_t gcu_ctx;
   gc_cputime = latency ? osal_cputime(nullptr) : 0;
@@ -528,11 +528,11 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
 
   txn->dbs[MAIN_DBI].mod_txnid = (txn->dbi_state[MAIN_DBI] & DBI_DIRTY) ? txn->txnid : txn->dbs[MAIN_DBI].mod_txnid;
 
-  ts_2 = latency ? osal_monotime() : 0;
-  ts_3 = ts_2;
+  ts_gc = latency ? osal_monotime() : 0;
+  ts_audit = ts_gc;
   if (AUDIT_ENABLED()) {
     rc = audit_ex(txn, MDBX_PNL_GETSIZE(txn->tw.retired_pages), true);
-    ts_3 = osal_monotime();
+    ts_audit = osal_monotime();
     if (unlikely(rc != MDBX_SUCCESS))
       goto fail;
   }
@@ -617,7 +617,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   }
 
   /* TODO: use ctx.flush_begin & ctx.flush_end for range-sync */
-  ts_4 = latency ? osal_monotime() : 0;
+  ts_write = latency ? osal_monotime() : 0;
 
   meta_t meta;
   memcpy(meta.magic_and_version, head.ptr_c->magic_and_version, 8);
@@ -644,7 +644,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
 
   rc = dxb_sync_locked(env, env->flags | txn->flags | txn_shrink_allowed, &meta, &txn->tw.troika);
 
-  ts_5 = latency ? osal_monotime() : 0;
+  ts_sync = latency ? osal_monotime() : 0;
   if (unlikely(rc != MDBX_SUCCESS)) {
     env->flags |= ENV_FATAL_ERROR;
     ERROR("txn-%s: error %d", "sync", rc);
@@ -660,15 +660,15 @@ done:
 
 provide_latency:
   if (latency) {
-    latency->preparation = ts_1 ? osal_monotime_to_16dot16(ts_1 - ts_0) : 0;
-    latency->gc_wallclock = (ts_2 > ts_1) ? osal_monotime_to_16dot16(ts_2 - ts_1) : 0;
+    latency->preparation = ts_prep ? osal_monotime_to_16dot16(ts_prep - ts_start) : 0;
+    latency->gc_wallclock = (ts_gc > ts_prep) ? osal_monotime_to_16dot16(ts_gc - ts_prep) : 0;
     latency->gc_cputime = gc_cputime ? osal_monotime_to_16dot16(gc_cputime) : 0;
-    latency->audit = (ts_3 > ts_2) ? osal_monotime_to_16dot16(ts_3 - ts_2) : 0;
-    latency->write = (ts_4 > ts_3) ? osal_monotime_to_16dot16(ts_4 - ts_3) : 0;
-    latency->sync = (ts_5 > ts_4) ? osal_monotime_to_16dot16(ts_5 - ts_4) : 0;
-    const uint64_t ts_6 = osal_monotime();
-    latency->ending = ts_5 ? osal_monotime_to_16dot16(ts_6 - ts_5) : 0;
-    latency->whole = osal_monotime_to_16dot16_noUnderflow(ts_6 - ts_0);
+    latency->audit = (ts_audit > ts_gc) ? osal_monotime_to_16dot16(ts_audit - ts_gc) : 0;
+    latency->write = (ts_write > ts_audit) ? osal_monotime_to_16dot16(ts_write - ts_audit) : 0;
+    latency->sync = (ts_sync > ts_write) ? osal_monotime_to_16dot16(ts_sync - ts_write) : 0;
+    const uint64_t ts_end = osal_monotime();
+    latency->ending = ts_sync ? osal_monotime_to_16dot16(ts_end - ts_sync) : 0;
+    latency->whole = osal_monotime_to_16dot16_noUnderflow(ts_end - ts_start);
   }
   return LOG_IFERR(rc);
 
