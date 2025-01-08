@@ -90,8 +90,6 @@ int mdbx_txn_break(MDBX_txn *txn) {
     if (unlikely(rc != MDBX_SUCCESS))
       return LOG_IFERR(rc);
     txn->flags |= MDBX_TXN_ERROR;
-    if (txn->flags & MDBX_TXN_RDONLY)
-      break;
     txn = txn->nested;
   } while (txn);
   return MDBX_SUCCESS;
