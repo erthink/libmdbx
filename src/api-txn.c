@@ -356,6 +356,10 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   }
 
   if (unlikely(txn->flags & MDBX_TXN_RDONLY)) {
+    if (unlikely(txn->parent || (txn->flags & MDBX_TXN_HAS_CHILD) || txn == env->txn || txn == env->basal_txn)) {
+      ERROR("attempt to commit %s txn %p", "strange read-only", (void *)txn);
+      return MDBX_PROBLEM;
+    }
     if (txn->flags & MDBX_TXN_ERROR) {
       rc = MDBX_RESULT_TRUE;
       goto fail;
@@ -383,15 +387,13 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
 
   if (unlikely(txn != env->txn)) {
     ERROR("attempt to commit %s txn %p", "unknown", (void *)txn);
-    rc = MDBX_EINVAL;
-    return LOG_IFERR(rc);
+    return MDBX_EINVAL;
   }
 
   if (txn->parent) {
     if (unlikely(txn->parent->nested != txn || txn->parent->env != env)) {
       ERROR("attempt to commit %s txn %p", "strange nested", (void *)txn);
-      rc = MDBX_PROBLEM;
-      return LOG_IFERR(rc);
+      return MDBX_PROBLEM;
     }
     rc = txn_nested_join(txn, latency ? &ts : nullptr);
     if (likely(rc == MDBX_SUCCESS))

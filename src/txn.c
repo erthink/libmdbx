@@ -893,90 +893,90 @@ static int txn_ro_end(MDBX_txn *txn, unsigned mode) {
 }
 
 int txn_end(MDBX_txn *txn, unsigned mode) {
-  MDBX_env *const env = txn->env;
   static const char *const names[] = TXN_END_NAMES;
-
   DEBUG("%s txn %" PRIaTXN "%c-0x%X %p  on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, names[mode & TXN_END_OPMASK],
-        txn->txnid, (txn->flags & MDBX_TXN_RDONLY) ? 'r' : 'w', txn->flags, (void *)txn, (void *)env,
+        txn->txnid, (txn->flags & MDBX_TXN_RDONLY) ? 'r' : 'w', txn->flags, (void *)txn, (void *)txn->env,
         txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
 
+  tASSERT(txn, txn->signature == txn_signature && !txn->nested && !(txn->flags & MDBX_TXN_HAS_CHILD));
   if (txn->flags & txn_may_have_cursors) {
     txn->flags |= /* avoid merge cursors' state */ MDBX_TXN_ERROR;
     txn_done_cursors(txn);
   }
 
-  if (txn->flags & MDBX_TXN_RDONLY)
-    return txn_ro_end(txn, mode);
+  MDBX_env *const env = txn->env;
+  MDBX_txn *const parent = txn->parent;
+  if (txn == env->basal_txn) {
+    tASSERT(txn, !parent && !(txn->flags & MDBX_TXN_RDONLY));
+    tASSERT(txn, (txn->flags & MDBX_TXN_FINISHED) == 0 && txn->owner);
+    if (unlikely(txn->flags & MDBX_TXN_FINISHED))
+      return MDBX_SUCCESS;
 
-  int rc = MDBX_SUCCESS;
-  if (!(txn->flags & MDBX_TXN_FINISHED)) {
-    ENSURE(env, txn->txnid >=
-                    /* paranoia is appropriate here */ env->lck->cached_oldest.weak);
-    if (txn == env->basal_txn)
-      dxb_sanitize_tail(env, nullptr);
+    ENSURE(env, txn->txnid >= /* paranoia is appropriate here */ env->lck->cached_oldest.weak);
+    dxb_sanitize_tail(env, nullptr);
 
-    MDBX_txn *const parent = txn->parent;
     txn->flags = MDBX_TXN_FINISHED;
-    env->txn = parent;
+    env->txn = nullptr;
     pnl_free(txn->tw.spilled.list);
     txn->tw.spilled.list = nullptr;
 
-    if (txn == env->basal_txn) {
-      eASSERT(env, txn->parent == nullptr);
-      /* Export or close DBI handles created in this txn */
-      rc = dbi_update(txn, mode & TXN_END_UPDATE);
-      pnl_shrink(&txn->tw.retired_pages);
-      pnl_shrink(&txn->tw.repnl);
-      if (!(env->flags & MDBX_WRITEMAP))
-        dpl_release_shadows(txn);
-      /* The writer mutex was locked in mdbx_txn_begin. */
-      lck_txn_unlock(env);
-    } else {
-      if (unlikely(!parent || parent->signature != txn_signature || parent->nested != txn ||
-                   !(parent->flags & MDBX_TXN_HAS_CHILD))) {
-        ERROR("parent txn %p is invalid or mismatch for nested txn %p", (void *)parent, (void *)txn);
-        return MDBX_PROBLEM;
-      }
-      tASSERT(txn, pnl_check_allocated(txn->tw.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
-      tASSERT(txn, memcmp(&txn->tw.troika, &parent->tw.troika, sizeof(troika_t)) == 0);
-      tASSERT(txn, mode & TXN_END_FREE);
+    eASSERT(env, txn->parent == nullptr);
+    pnl_shrink(&txn->tw.retired_pages);
+    pnl_shrink(&txn->tw.repnl);
+    if (!(env->flags & MDBX_WRITEMAP))
+      dpl_release_shadows(txn);
 
-      const bool need_undo_resize = (parent->geo.upper != txn->geo.upper || parent->geo.now != txn->geo.now) &&
-                                    !(parent->flags & MDBX_TXN_ERROR) && !(env->flags & ENV_FATAL_ERROR);
-      if (need_undo_resize) {
-        /* undo resize performed by child txn */
-        rc = dxb_resize(env, parent->geo.first_unallocated, parent->geo.now, parent->geo.upper, impilict_shrink);
-        if (rc == MDBX_EPERM) {
-          /* unable undo resize (it is regular for Windows),
-           * therefore promote size changes from child to the parent txn */
-          WARNING("unable undo resize performed by child txn, promote to "
-                  "the parent (%u->%u, %u->%u)",
-                  txn->geo.now, parent->geo.now, txn->geo.upper, parent->geo.upper);
-          parent->geo.now = txn->geo.now;
-          parent->geo.upper = txn->geo.upper;
-          parent->flags |= MDBX_TXN_DIRTY;
-          rc = MDBX_SUCCESS;
-        } else if (unlikely(rc != MDBX_SUCCESS)) {
-          ERROR("error %d while undo resize performed by child txn, fail "
-                "the parent",
-                rc);
-          parent->flags |= MDBX_TXN_ERROR;
-          if (!env->dxb_mmap.base)
-            env->flags |= ENV_FATAL_ERROR;
-        }
-      }
-      txn_nested_abort(txn);
-      return rc;
+    /* Export or close DBI handles created in this txn */
+    int err = dbi_update(txn, (mode & TXN_END_UPDATE) != 0);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      ERROR("unexpected error %d during export the state of dbi-handles to env", err);
+      err = MDBX_PROBLEM;
+    }
+
+    /* The writer mutex was locked in mdbx_txn_begin. */
+    lck_txn_unlock(env);
+    return err;
+  }
+
+  if (txn->flags & MDBX_TXN_RDONLY) {
+    tASSERT(txn, txn != env->txn && !parent);
+    return txn_ro_end(txn, mode);
+  }
+
+  if (unlikely(!parent || txn != env->txn || parent->signature != txn_signature || parent->nested != txn ||
+               !(parent->flags & MDBX_TXN_HAS_CHILD) || txn == env->basal_txn)) {
+    ERROR("parent txn %p is invalid or mismatch for nested txn %p", (void *)parent, (void *)txn);
+    return MDBX_PROBLEM;
+  }
+  tASSERT(txn, pnl_check_allocated(txn->tw.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
+  tASSERT(txn, memcmp(&txn->tw.troika, &parent->tw.troika, sizeof(troika_t)) == 0);
+  tASSERT(txn, mode & TXN_END_FREE);
+  env->txn = parent;
+  const pgno_t nested_now = txn->geo.now, nested_upper = txn->geo.upper;
+  txn_nested_abort(txn);
+
+  if (unlikely(parent->geo.upper != nested_upper || parent->geo.now != nested_now) &&
+      !(parent->flags & MDBX_TXN_ERROR) && !(env->flags & ENV_FATAL_ERROR)) {
+    /* undo resize performed by nested txn */
+    int err = dxb_resize(env, parent->geo.first_unallocated, parent->geo.now, parent->geo.upper, impilict_shrink);
+    if (err == MDBX_EPERM) {
+      /* unable undo resize (it is regular for Windows),
+       * therefore promote size changes from nested to the parent txn */
+      WARNING("unable undo resize performed by nested txn, promote to "
+              "the parent (%u->%u, %u->%u)",
+              nested_now, parent->geo.now, nested_upper, parent->geo.upper);
+      parent->geo.now = nested_now;
+      parent->flags |= MDBX_TXN_DIRTY;
+    } else if (unlikely(err != MDBX_SUCCESS)) {
+      ERROR("error %d while undo resize performed by nested txn, fail the parent", err);
+      mdbx_txn_break(env->basal_txn);
+      parent->flags |= MDBX_TXN_ERROR;
+      if (!env->dxb_mmap.base)
+        env->flags |= ENV_FATAL_ERROR;
+      return err;
     }
   }
-
-  eASSERT(env, txn == env->basal_txn || txn->owner == 0);
-  if ((mode & TXN_END_FREE) != 0 && txn != env->basal_txn) {
-    txn->signature = 0;
-    osal_free(txn);
-  }
-
-  return rc;
+  return MDBX_SUCCESS;
 }
 
 int txn_check_badbits_parked(const MDBX_txn *txn, int bad_bits) {

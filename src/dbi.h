@@ -81,7 +81,7 @@ struct dbi_snap_result {
 };
 MDBX_INTERNAL struct dbi_snap_result dbi_snap(const MDBX_env *env, const size_t dbi);
 
-MDBX_INTERNAL int dbi_update(MDBX_txn *txn, int keep);
+MDBX_INTERNAL int dbi_update(MDBX_txn *txn, bool keep);
 
 static inline uint8_t dbi_state(const MDBX_txn *txn, const size_t dbi) {
   STATIC_ASSERT((int)DBI_DIRTY == MDBX_DBI_DIRTY && (int)DBI_STALE == MDBX_DBI_STALE &&

@@ -176,7 +176,7 @@ int dbi_defer_release(MDBX_env *const env, defer_free_item_t *const chain) {
 }
 
 /* Export or close DBI handles opened in this txn. */
-int dbi_update(MDBX_txn *txn, int keep) {
+int dbi_update(MDBX_txn *txn, bool keep) {
   MDBX_env *const env = txn->env;
   tASSERT(txn, !txn->parent && txn == env->basal_txn);
   bool locked = false;
@@ -216,6 +216,7 @@ int dbi_update(MDBX_txn *txn, int keep) {
 
   if (locked) {
     size_t i = env->n_dbi;
+    eASSERT(env, env->n_dbi >= CORE_DBS);
     while ((env->dbs_flags[i - 1] & DB_VALID) == 0) {
       --i;
       eASSERT(env, i >= CORE_DBS);
