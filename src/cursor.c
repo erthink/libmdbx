@@ -775,8 +775,9 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
     rc = MDBX_NO_ROOT;
   } else if ((flags & MDBX_CURRENT) == 0) {
     bool exact = false;
-    MDBX_val last_key, old_data;
+    MDBX_val old_data;
     if ((flags & MDBX_APPEND) && mc->tree->items > 0) {
+      MDBX_val last_key;
       old_data.iov_base = nullptr;
       old_data.iov_len = 0;
       rc = (mc->flags & z_inner) ? inner_last(mc, &last_key) : outer_last(mc, &last_key, &old_data);
@@ -794,51 +795,53 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
         }
       }
     } else {
-      csr_t csr =
-          /* olddata may not be updated in case DUPFIX-page of dupfix-table */
-          cursor_seek(mc, (MDBX_val *)key, &old_data, MDBX_SET);
+      csr_t csr = cursor_seek(mc, (MDBX_val *)key, &old_data, MDBX_SET);
       rc = csr.err;
       exact = csr.exact;
     }
-    if (likely(rc == MDBX_SUCCESS)) {
-      if (exact) {
-        if (unlikely(flags & MDBX_NOOVERWRITE)) {
-          DEBUG("duplicate key [%s]", DKEY_DEBUG(key));
-          *data = old_data;
-          return MDBX_KEYEXIST;
-        }
-        if (unlikely(mc->flags & z_inner)) {
-          /* nested subtree of DUPSORT-database with the same key,
-           * nothing to update */
-          eASSERT(env, data->iov_len == 0 && (old_data.iov_len == 0 ||
-                                              /* olddata may not be updated in case
-                                                 DUPFIX-page of dupfix-table */
-                                              (mc->tree->flags & MDBX_DUPFIXED)));
-          return MDBX_SUCCESS;
-        }
-        if (unlikely(flags & MDBX_ALLDUPS) && inner_pointed(mc)) {
-          err = cursor_del(mc, MDBX_ALLDUPS);
-          if (unlikely(err != MDBX_SUCCESS))
-            return err;
+    if (exact) {
+      cASSERT(mc, rc == MDBX_SUCCESS);
+      if (unlikely(flags & MDBX_NOOVERWRITE)) {
+        DEBUG("duplicate key [%s]", DKEY_DEBUG(key));
+        *data = old_data;
+        return MDBX_KEYEXIST;
+      }
+      if (unlikely(mc->flags & z_inner)) {
+        /* nested subtree of DUPSORT-database with the same key, nothing to update */
+        cASSERT(mc, !"Should not happen since");
+        return (flags & MDBX_NODUPDATA) ? MDBX_KEYEXIST : MDBX_SUCCESS;
+      }
+      if (inner_pointed(mc)) {
+        if (unlikely(flags & MDBX_ALLDUPS)) {
+          rc = cursor_del(mc, MDBX_ALLDUPS);
+          if (unlikely(rc != MDBX_SUCCESS))
+            return rc;
           flags -= MDBX_ALLDUPS;
           cASSERT(mc, mc->top + 1 == mc->tree->height);
           rc = (mc->top >= 0) ? MDBX_NOTFOUND : MDBX_NO_ROOT;
-          exact = false;
-        } else if (!(flags & (MDBX_RESERVE | MDBX_MULTIPLE))) {
-          /* checking for early exit without dirtying pages */
-          if (unlikely(eq_fast(data, &old_data))) {
-            cASSERT(mc, mc->clc->v.cmp(data, &old_data) == 0);
-            if (mc->subcur) {
-              if (flags & MDBX_NODUPDATA)
-                return MDBX_KEYEXIST;
-              if (flags & MDBX_APPENDDUP)
-                return MDBX_EKEYMISMATCH;
-            }
+        } else if ((flags & (MDBX_RESERVE | MDBX_MULTIPLE)) == 0) {
+          old_data = *data;
+          csr_t csr = cursor_seek(&mc->subcur->cursor, &old_data, nullptr, MDBX_SET_RANGE);
+          if (unlikely(csr.exact)) {
+            cASSERT(mc, csr.err == MDBX_SUCCESS);
+            if (flags & MDBX_NODUPDATA)
+              return MDBX_KEYEXIST;
+            if (flags & MDBX_APPENDDUP)
+              return MDBX_EKEYMISMATCH;
             /* the same data, nothing to update */
             return MDBX_SUCCESS;
+          } else if (csr.err != MDBX_SUCCESS && unlikely(csr.err != MDBX_NOTFOUND)) {
+            be_poor(mc);
+            return csr.err;
           }
-          cASSERT(mc, mc->clc->v.cmp(data, &old_data) != 0);
         }
+      } else if ((flags & MDBX_RESERVE) == 0) {
+        if (unlikely(eq_fast(data, &old_data))) {
+          cASSERT(mc, mc->clc->v.cmp(data, &old_data) == 0);
+          /* the same data, nothing to update */
+          return (mc->subcur && (flags & MDBX_NODUPDATA)) ? MDBX_KEYEXIST : MDBX_SUCCESS;
+        }
+        cASSERT(mc, mc->clc->v.cmp(data, &old_data) != 0);
       }
     } else if (unlikely(rc != MDBX_NOTFOUND))
       return rc;
@@ -1042,6 +1045,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
               return MDBX_EKEYMISMATCH;
           } else if (eq_fast(data, &old_data)) {
             cASSERT(mc, mc->clc->v.cmp(data, &old_data) == 0);
+            cASSERT(mc, !"Should not happen since" || batch_dupfix_done);
             if (flags & MDBX_NODUPDATA)
               return MDBX_KEYEXIST;
             /* data is match exactly byte-to-byte, nothing to update */
