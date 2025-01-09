@@ -263,8 +263,8 @@ public:
   }
 
   static bool review_params(actor_params &params, unsigned space_id) {
+    (void)space_id;
     // silently fix key/data length for fixed-length modes
-    params.prng_seed += bleach32(space_id);
     if ((params.table_flags & MDBX_INTEGERKEY) && params.keylen_min != params.keylen_max)
       params.keylen_min = params.keylen_max;
     if ((params.table_flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED)) && params.datalen_min != params.datalen_max)

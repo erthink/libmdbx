@@ -770,7 +770,7 @@ static bool execute_thunk(const actor_config *const_config, const mdbx_pid_t pid
     size_t iter = 0;
     do {
       if (iter) {
-        prng_seed(config.params.prng_seed += INT32_C(0xA4F4D37B));
+        prng_salt(iter);
         log_verbose("turn PRNG to %u", config.params.prng_seed);
       }
       iter++;

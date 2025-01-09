@@ -313,6 +313,7 @@ void prng_fill(uint64_t &state, void *ptr, size_t bytes);
 
 extern uint64_t prng_state;
 void prng_seed(uint64_t seed);
+void prng_salt(unsigned salt);
 uint32_t prng32(void);
 uint64_t prng64(void);
 void prng_fill(void *ptr, size_t bytes);

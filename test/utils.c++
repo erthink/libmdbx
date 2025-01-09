@@ -124,7 +124,8 @@ void prng_fill(uint64_t &state, void *ptr, size_t bytes) {
 
 /* __thread */ uint64_t prng_state;
 
-void prng_seed(uint64_t seed) { prng_state = bleach64(seed); }
+void prng_seed(uint64_t seed) { prng_state = seed; }
+void prng_salt(unsigned salt) { prng_state += bleach32(salt) * UINT64_C(0xD14A2783862DAB); }
 
 uint32_t prng32(void) { return prng32_white(prng_state); }
 
