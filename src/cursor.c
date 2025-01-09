@@ -638,7 +638,7 @@ static __always_inline int cursor_step(const bool inner, const bool forward, MDB
       inner_gone(mc);
   } else {
     if (mc->flags & z_hollow) {
-      cASSERT(mc, !inner_pointed(mc));
+      cASSERT(mc, !inner_pointed(mc) || inner_hollow(mc));
       return MDBX_ENODATA;
     }
 
@@ -1818,8 +1818,9 @@ __hot csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cur
          * Поэтому переводим курсор в неустановленное состояние, но без сброса
          * top, что позволяет работать fastpath при последующем поиске по дереву
          * страниц. */
-        mc->flags = z_hollow | (mc->flags & z_clear_mask);
-        inner_gone(mc);
+        mc->flags |= z_hollow;
+        if (inner_pointed(mc))
+          mc->subcur->cursor.flags |= z_hollow;
         ret.err = MDBX_NOTFOUND;
         return ret;
       }

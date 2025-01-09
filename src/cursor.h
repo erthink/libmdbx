@@ -151,7 +151,7 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_hollow(const 
     cASSERT(mc, mc->top >= 0);
     cASSERT(mc, (mc->flags & z_eof_hard) || mc->ki[mc->top] < page_numkeys(mc->pg[mc->top]));
   } else if (mc->subcur)
-    cASSERT(mc, is_poor(&mc->subcur->cursor));
+    cASSERT(mc, is_poor(&mc->subcur->cursor) || (is_pointed(mc) && mc->subcur->cursor.flags < 0));
   return r;
 }
 
