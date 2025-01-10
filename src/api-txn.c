@@ -411,7 +411,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   if (likely(rc == MDBX_SUCCESS))
     goto done;
   if (rc == MDBX_RESULT_TRUE) {
-#if defined(MDBX_NOSUCCESS_EMPTY_COMMIT) && MDBX_NOSUCCESS_EMPTY_COMMIT
+#if MDBX_NOSUCCESS_PURE_COMMIT
     rc = txn_end(txn, end_mode);
     if (unlikely(rc != MDBX_SUCCESS))
       goto fail;
@@ -419,7 +419,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     goto provide_latency;
 #else
     goto done;
-#endif /* MDBX_NOSUCCESS_EMPTY_COMMIT */
+#endif /* MDBX_NOSUCCESS_PURE_COMMIT */
   }
 
 fail:
