@@ -3071,7 +3071,7 @@ public:
     };
 
     /// \brief The lower bound of database size in bytes.
-    intptr_t size_lower{minimal_value};
+    intptr_t size_lower{default_value};
 
     /// \brief The size in bytes to setup the database size for now.
     /// \details It is recommended always pass \ref default_value in this
@@ -3088,7 +3088,7 @@ public:
     /// robustly because there may be a lack of appropriate system resources
     /// (which are extremely volatile in a multi-process multi-threaded
     /// environment).
-    intptr_t size_upper{maximal_value};
+    intptr_t size_upper{default_value};
 
     /// \brief The growth step in bytes, must be greater than zero to allow the
     /// database to grow.
@@ -3105,12 +3105,12 @@ public:
     intptr_t pagesize{default_value};
 
     inline geometry &make_fixed(intptr_t size) noexcept;
-    inline geometry &make_dynamic(intptr_t lower = minimal_value, intptr_t upper = maximal_value) noexcept;
+    inline geometry &make_dynamic(intptr_t lower = default_value, intptr_t upper = default_value) noexcept;
     MDBX_CXX11_CONSTEXPR geometry() noexcept {}
     MDBX_CXX11_CONSTEXPR
     geometry(const geometry &) noexcept = default;
     MDBX_CXX11_CONSTEXPR geometry(intptr_t size_lower, intptr_t size_now = default_value,
-                                  intptr_t size_upper = maximal_value, intptr_t growth_step = default_value,
+                                  intptr_t size_upper = default_value, intptr_t growth_step = default_value,
                                   intptr_t shrink_threshold = default_value, intptr_t pagesize = default_value) noexcept
         : size_lower(size_lower), size_now(size_now), size_upper(size_upper), growth_step(growth_step),
           shrink_threshold(shrink_threshold), pagesize(pagesize) {}
