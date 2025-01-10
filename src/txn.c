@@ -439,6 +439,7 @@ int txn_abort(MDBX_txn *txn) {
     txn_abort(txn->nested);
 
   tASSERT(txn, (txn->flags & MDBX_TXN_ERROR) || dpl_check(txn));
+  txn->flags |= /* avoid merge cursors' state */ MDBX_TXN_ERROR;
   return txn_end(txn, TXN_END_ABORT | TXN_END_SLOT | TXN_END_FREE);
 }
 
@@ -839,8 +840,9 @@ bailout:
   return rc;
 }
 
-static int txn_ro_end(MDBX_txn *txn, unsigned mode) {
+int txn_ro_end(MDBX_txn *txn, unsigned mode) {
   MDBX_env *const env = txn->env;
+  tASSERT(txn, (txn->flags & txn_may_have_cursors) == 0);
   txn->n_dbi = 0; /* prevent further DBI activity */
   if (txn->to.reader) {
     reader_slot_t *slot = txn->to.reader;
@@ -899,43 +901,14 @@ int txn_end(MDBX_txn *txn, unsigned mode) {
         txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
 
   tASSERT(txn, txn->signature == txn_signature && !txn->nested && !(txn->flags & MDBX_TXN_HAS_CHILD));
-  if (txn->flags & txn_may_have_cursors) {
-    txn->flags |= /* avoid merge cursors' state */ MDBX_TXN_ERROR;
+  if (txn->flags & txn_may_have_cursors)
     txn_done_cursors(txn);
-  }
 
   MDBX_env *const env = txn->env;
   MDBX_txn *const parent = txn->parent;
   if (txn == env->basal_txn) {
-    tASSERT(txn, !parent && !(txn->flags & MDBX_TXN_RDONLY));
-    tASSERT(txn, (txn->flags & MDBX_TXN_FINISHED) == 0 && txn->owner);
-    if (unlikely(txn->flags & MDBX_TXN_FINISHED))
-      return MDBX_SUCCESS;
-
-    ENSURE(env, txn->txnid >= /* paranoia is appropriate here */ env->lck->cached_oldest.weak);
-    dxb_sanitize_tail(env, nullptr);
-
-    txn->flags = MDBX_TXN_FINISHED;
-    env->txn = nullptr;
-    pnl_free(txn->tw.spilled.list);
-    txn->tw.spilled.list = nullptr;
-
-    eASSERT(env, txn->parent == nullptr);
-    pnl_shrink(&txn->tw.retired_pages);
-    pnl_shrink(&txn->tw.repnl);
-    if (!(env->flags & MDBX_WRITEMAP))
-      dpl_release_shadows(txn);
-
-    /* Export or close DBI handles created in this txn */
-    int err = dbi_update(txn, (mode & TXN_END_UPDATE) != 0);
-    if (unlikely(err != MDBX_SUCCESS)) {
-      ERROR("unexpected error %d during export the state of dbi-handles to env", err);
-      err = MDBX_PROBLEM;
-    }
-
-    /* The writer mutex was locked in mdbx_txn_begin. */
-    lck_txn_unlock(env);
-    return err;
+    tASSERT(txn, !parent && !(txn->flags & (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED)) && txn->owner);
+    return txn_basal_end(txn, mode);
   }
 
   if (txn->flags & MDBX_TXN_RDONLY) {
@@ -1072,7 +1045,7 @@ int txn_unpark(MDBX_txn *txn) {
   return err ? err : MDBX_OUSTED;
 }
 
-MDBX_txn *txn_basal_create(const size_t max_dbi) {
+__cold MDBX_txn *txn_basal_create(const size_t max_dbi) {
   MDBX_txn *txn = nullptr;
   const intptr_t bitmap_bytes =
 #if MDBX_ENABLE_DBI_SPARSE
@@ -1107,7 +1080,7 @@ MDBX_txn *txn_basal_create(const size_t max_dbi) {
   return txn;
 }
 
-void txn_basal_destroy(MDBX_txn *txn) {
+__cold void txn_basal_destroy(MDBX_txn *txn) {
   dpl_free(txn);
   txl_free(txn->tw.gc.retxl);
   pnl_free(txn->tw.retired_pages);
@@ -1266,6 +1239,7 @@ int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
 
 void txn_nested_abort(MDBX_txn *nested) {
   MDBX_txn *const parent = nested->parent;
+  tASSERT(nested, !(nested->flags & txn_may_have_cursors));
   nested->signature = 0;
   nested->owner = 0;
 
@@ -1314,7 +1288,7 @@ int txn_nested_join(MDBX_txn *txn, struct commit_timestamp *ts) {
     tASSERT(txn, txn->tw.loose_count == 0);
 
     VERBOSE("fast-complete pure nested txn %" PRIaTXN, txn->txnid);
-    return MDBX_RESULT_TRUE;
+    return txn_end(txn, TXN_END_PURE_COMMIT | TXN_END_SLOT | TXN_END_FREE);
   }
 
   /* Preserve space for spill list to avoid parent's state corruption
@@ -1396,6 +1370,7 @@ int txn_nested_join(MDBX_txn *txn, struct commit_timestamp *ts) {
   txn_merge(parent, txn, parent_retired_len);
   env->txn = parent;
   parent->nested = nullptr;
+  parent->flags &= ~MDBX_TXN_HAS_CHILD;
   tASSERT(parent, dpl_check(parent));
 
 #if MDBX_ENABLE_REFUND
@@ -1419,6 +1394,35 @@ int txn_nested_join(MDBX_txn *txn, struct commit_timestamp *ts) {
   return MDBX_SUCCESS;
 }
 
+int txn_basal_end(MDBX_txn *txn, unsigned mode) {
+  MDBX_env *const env = txn->env;
+  tASSERT(txn, (txn->flags & (MDBX_TXN_FINISHED | txn_may_have_cursors)) == 0 && txn->owner);
+  ENSURE(env, txn->txnid >= /* paranoia is appropriate here */ env->lck->cached_oldest.weak);
+  dxb_sanitize_tail(env, nullptr);
+
+  txn->flags = MDBX_TXN_FINISHED;
+  env->txn = nullptr;
+  pnl_free(txn->tw.spilled.list);
+  txn->tw.spilled.list = nullptr;
+
+  eASSERT(env, txn->parent == nullptr);
+  pnl_shrink(&txn->tw.retired_pages);
+  pnl_shrink(&txn->tw.repnl);
+  if (!(env->flags & MDBX_WRITEMAP))
+    dpl_release_shadows(txn);
+
+  /* Export or close DBI handles created in this txn */
+  int err = dbi_update(txn, (mode & TXN_END_UPDATE) != 0);
+  if (unlikely(err != MDBX_SUCCESS)) {
+    ERROR("unexpected error %d during export the state of dbi-handles to env", err);
+    err = MDBX_PROBLEM;
+  }
+
+  /* The writer mutex was locked in mdbx_txn_begin. */
+  lck_txn_unlock(env);
+  return err;
+}
+
 int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
   MDBX_env *const env = txn->env;
   tASSERT(txn, txn == env->basal_txn && !txn->parent && !txn->nested);
@@ -1432,8 +1436,53 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
   if (txn->flags & txn_may_have_cursors)
     txn_done_cursors(txn);
 
+  bool need_flush_for_nometasync = false;
+  const meta_ptr_t head = meta_recent(env, &txn->tw.troika);
+  const uint32_t meta_sync_txnid = atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed);
+  /* sync prev meta */
+  if (head.is_steady && meta_sync_txnid != (uint32_t)head.txnid) {
+    /* Исправление унаследованного от LMDB недочета:
+     *
+     * Всё хорошо, если все процессы работающие с БД не используют WRITEMAP.
+     * Тогда мета-страница (обновленная, но не сброшенная на диск) будет
+     * сохранена в результате fdatasync() при записи данных этой транзакции.
+     *
+     * Всё хорошо, если все процессы работающие с БД используют WRITEMAP
+     * без MDBX_AVOID_MSYNC.
+     * Тогда мета-страница (обновленная, но не сброшенная на диск) будет
+     * сохранена в результате msync() при записи данных этой транзакции.
+     *
+     * Если же в процессах работающих с БД используется оба метода, как sync()
+     * в режиме MDBX_WRITEMAP, так и записи через файловый дескриптор, то
+     * становится невозможным обеспечить фиксацию на диске мета-страницы
+     * предыдущей транзакции и данных текущей транзакции, за счет одной
+     * sync-операцией выполняемой после записи данных текущей транзакции.
+     * Соответственно, требуется явно обновлять мета-страницу, что полностью
+     * уничтожает выгоду от NOMETASYNC. */
+    const uint32_t txnid_dist = ((txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC) ? MDBX_NOMETASYNC_LAZY_FD
+                                                                                        : MDBX_NOMETASYNC_LAZY_WRITEMAP;
+    /* Смысл "магии" в том, чтобы избежать отдельного вызова fdatasync()
+     * или msync() для гарантированной фиксации на диске мета-страницы,
+     * которая была "лениво" отправлена на запись в предыдущей транзакции,
+     * но не сброшена на диск из-за активного режима MDBX_NOMETASYNC. */
+    if (
+#if defined(_WIN32) || defined(_WIN64)
+        !env->ioring.overlapped_fd &&
+#endif
+        meta_sync_txnid == (uint32_t)head.txnid - txnid_dist)
+      need_flush_for_nometasync = true;
+    else {
+      int err = meta_sync(env, head);
+      if (unlikely(err != MDBX_SUCCESS)) {
+        ERROR("txn-%s: error %d", "presync-meta", err);
+        return err;
+      }
+    }
+  }
+
   if ((!txn->tw.dirtylist || txn->tw.dirtylist->length == 0) &&
-      (txn->flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS)) == 0) {
+      (txn->flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS | MDBX_TXN_NOSYNC | MDBX_TXN_NOMETASYNC)) == 0 &&
+      !need_flush_for_nometasync && !head.is_steady && !AUDIT_ENABLED()) {
     TXN_FOREACH_DBI_ALL(txn, i) { tASSERT(txn, !(txn->dbi_state[i] & DBI_DIRTY)); }
     /* fast completion of pure transaction */
     return MDBX_NOSUCCESS_PURE_COMMIT ? MDBX_RESULT_TRUE : MDBX_SUCCESS;
@@ -1495,50 +1544,6 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
       ts->audit = osal_monotime();
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
-  }
-
-  bool need_flush_for_nometasync = false;
-  const meta_ptr_t head = meta_recent(env, &txn->tw.troika);
-  const uint32_t meta_sync_txnid = atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed);
-  /* sync prev meta */
-  if (head.is_steady && meta_sync_txnid != (uint32_t)head.txnid) {
-    /* Исправление унаследованного от LMDB недочета:
-     *
-     * Всё хорошо, если все процессы работающие с БД не используют WRITEMAP.
-     * Тогда мета-страница (обновленная, но не сброшенная на диск) будет
-     * сохранена в результате fdatasync() при записи данных этой транзакции.
-     *
-     * Всё хорошо, если все процессы работающие с БД используют WRITEMAP
-     * без MDBX_AVOID_MSYNC.
-     * Тогда мета-страница (обновленная, но не сброшенная на диск) будет
-     * сохранена в результате msync() при записи данных этой транзакции.
-     *
-     * Если же в процессах работающих с БД используется оба метода, как sync()
-     * в режиме MDBX_WRITEMAP, так и записи через файловый дескриптор, то
-     * становится невозможным обеспечить фиксацию на диске мета-страницы
-     * предыдущей транзакции и данных текущей транзакции, за счет одной
-     * sync-операцией выполняемой после записи данных текущей транзакции.
-     * Соответственно, требуется явно обновлять мета-страницу, что полностью
-     * уничтожает выгоду от NOMETASYNC. */
-    const uint32_t txnid_dist = ((txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC) ? MDBX_NOMETASYNC_LAZY_FD
-                                                                                        : MDBX_NOMETASYNC_LAZY_WRITEMAP;
-    /* Смысл "магии" в том, чтобы избежать отдельного вызова fdatasync()
-     * или msync() для гарантированной фиксации на диске мета-страницы,
-     * которая была "лениво" отправлена на запись в предыдущей транзакции,
-     * но не сброшена на диск из-за активного режима MDBX_NOMETASYNC. */
-    if (
-#if defined(_WIN32) || defined(_WIN64)
-        !env->ioring.overlapped_fd &&
-#endif
-        meta_sync_txnid == (uint32_t)head.txnid - txnid_dist)
-      need_flush_for_nometasync = true;
-    else {
-      rc = meta_sync(env, head);
-      if (unlikely(rc != MDBX_SUCCESS)) {
-        ERROR("txn-%s: error %d", "presync-meta", rc);
-        return rc;
-      }
-    }
   }
 
   if (txn->tw.dirtylist) {

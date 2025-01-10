@@ -271,8 +271,8 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
 }
 
 static void latency_gcprof(MDBX_commit_latency *latency, const MDBX_txn *txn) {
-  if (latency && MDBX_ENABLE_PROFGC) {
-    MDBX_env *const env = txn->env;
+  MDBX_env *const env = txn->env;
+  if (latency && likely(env->lck) && MDBX_ENABLE_PROFGC) {
     pgop_stat_t *const ptr = &env->lck->pgops;
     latency->gc_prof.work_counter = ptr->gc_prof.work.spe_counter;
     latency->gc_prof.work_rtime_monotonic = osal_monotime_to_16dot16(ptr->gc_prof.work.rtime_monotonic);
@@ -336,12 +336,9 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   struct commit_timestamp ts;
   latency_init(latency, &ts);
 
-  /* txn_end() mode for a commit which writes nothing */
-  unsigned end_mode = TXN_END_PURE_COMMIT | TXN_END_UPDATE | TXN_END_SLOT | TXN_END_FREE;
-
   int rc = check_txn(txn, MDBX_TXN_FINISHED);
   if (unlikely(rc != MDBX_SUCCESS)) {
-    if (rc == MDBX_BAD_TXN && (txn->flags & MDBX_TXN_RDONLY)) {
+    if (rc == MDBX_BAD_TXN && F_ISSET(txn->flags, MDBX_TXN_FINISHED | MDBX_TXN_RDONLY)) {
       rc = MDBX_RESULT_TRUE;
       goto fail;
     }
@@ -355,19 +352,18 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     return LOG_IFERR(rc);
   }
 
-  if (unlikely(txn->flags & MDBX_TXN_RDONLY)) {
+  if (txn->flags & MDBX_TXN_RDONLY) {
     if (unlikely(txn->parent || (txn->flags & MDBX_TXN_HAS_CHILD) || txn == env->txn || txn == env->basal_txn)) {
       ERROR("attempt to commit %s txn %p", "strange read-only", (void *)txn);
       return MDBX_PROBLEM;
     }
-    if (txn->flags & MDBX_TXN_ERROR) {
-      rc = MDBX_RESULT_TRUE;
-      goto fail;
-    }
+    latency_gcprof(latency, txn);
+    rc = (txn->flags & MDBX_TXN_ERROR) ? MDBX_RESULT_TRUE : MDBX_SUCCESS;
+    txn_end(txn, TXN_END_PURE_COMMIT | TXN_END_UPDATE | TXN_END_SLOT | TXN_END_FREE);
     goto done;
   }
 
-  if (!txn->parent && (txn->flags & MDBX_NOSTICKYTHREADS) && unlikely(txn->owner != osal_thread_self())) {
+  if ((txn->flags & MDBX_NOSTICKYTHREADS) && txn == env->basal_txn && unlikely(txn->owner != osal_thread_self())) {
     txn->flags |= MDBX_TXN_ERROR;
     rc = MDBX_THREAD_MISMATCH;
     return LOG_IFERR(rc);
@@ -375,7 +371,12 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
 
   if (unlikely(txn->flags & MDBX_TXN_ERROR)) {
     rc = MDBX_RESULT_TRUE;
-    goto fail;
+  fail:
+    latency_gcprof(latency, txn);
+    int err = txn_abort(txn);
+    if (unlikely(err != MDBX_SUCCESS))
+      rc = err;
+    goto done;
   }
 
   if (txn->nested) {
@@ -395,46 +396,27 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
       ERROR("attempt to commit %s txn %p", "strange nested", (void *)txn);
       return MDBX_PROBLEM;
     }
+
+    latency_gcprof(latency, txn);
     rc = txn_nested_join(txn, latency ? &ts : nullptr);
-    if (likely(rc == MDBX_SUCCESS))
-      goto provide_latency;
-    if (rc == MDBX_RESULT_TRUE) {
-      /* fast completion of pure nested transaction */
-      end_mode = TXN_END_PURE_COMMIT | TXN_END_SLOT | TXN_END_FREE;
-      goto done;
-    }
-    goto fail;
+    goto done;
   }
 
   rc = txn_basal_commit(txn, latency ? &ts : nullptr);
-  end_mode = TXN_END_COMMITTED | TXN_END_UPDATE;
-  if (likely(rc == MDBX_SUCCESS))
-    goto done;
-  if (rc == MDBX_RESULT_TRUE) {
-#if MDBX_NOSUCCESS_PURE_COMMIT
-    rc = txn_end(txn, end_mode);
-    if (unlikely(rc != MDBX_SUCCESS))
-      goto fail;
-    rc = MDBX_RESULT_TRUE;
-    goto provide_latency;
-#else
-    goto done;
-#endif /* MDBX_NOSUCCESS_PURE_COMMIT */
+  latency_gcprof(latency, txn);
+  int end = TXN_END_COMMITTED | TXN_END_UPDATE;
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    end = TXN_END_ABORT;
+    if (rc == MDBX_RESULT_TRUE) {
+      end = TXN_END_PURE_COMMIT | TXN_END_UPDATE;
+      rc = MDBX_NOSUCCESS_PURE_COMMIT ? MDBX_RESULT_TRUE : MDBX_SUCCESS;
+    }
   }
-
-fail:
-  txn->flags |= MDBX_TXN_ERROR;
-  if (latency)
-    latency_gcprof(latency, txn);
-  txn_abort(txn);
-  goto provide_latency;
+  int err = txn_end(txn, end);
+  if (unlikely(err != MDBX_SUCCESS))
+    rc = err;
 
 done:
-  if (latency)
-    latency_gcprof(latency, txn);
-  rc = txn_end(txn, end_mode);
-
-provide_latency:
   latency_done(latency, &ts);
   return LOG_IFERR(rc);
 }
