@@ -956,7 +956,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
   const bool inside_txn = txn0_owned && env->txn;
   bool should_unlock = false;
 
-#if MDBX_DEBUG
+#if MDBX_DEBUG && 0 /* минимальные шаги для проверки/отладки уже не нужны */
   if (growth_step < 0) {
     growth_step = 1;
     if (shrink_threshold < 0)
@@ -1045,9 +1045,10 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
     goto bailout;
   }
 
+  const bool size_lower_default = size_lower < 0;
   if (size_lower <= 0) {
-    size_lower = MIN_MAPSIZE;
-    if (MIN_MAPSIZE / pagesize < MIN_PAGENO)
+    size_lower = (size_lower == 0) ? MIN_MAPSIZE : pagesize * MDBX_WORDBITS;
+    if (size_lower / pagesize < MIN_PAGENO)
       size_lower = MIN_PAGENO * pagesize;
   }
   if (size_lower >= INTPTR_MAX) {
@@ -1056,11 +1057,6 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
       size_lower = pagesize * (MAX_PAGENO + 1);
   }
 
-  if (size_now <= 0) {
-    size_now = size_lower;
-    if (size_upper >= size_lower && size_now > size_upper)
-      size_now = size_upper;
-  }
   if (size_now >= INTPTR_MAX) {
     size_now = reasonable_db_maxsize();
     if ((size_t)size_now / pagesize > MAX_PAGENO + 1)
@@ -1068,9 +1064,9 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
   }
 
   if (size_upper <= 0) {
-    if (growth_step == 0 || size_upper == 0)
+    if ((growth_step == 0 || size_upper == 0) && size_now >= size_lower)
       size_upper = size_now;
-    else if (size_now >= reasonable_db_maxsize() / 2)
+    else if (size_now <= 0 || size_now >= reasonable_db_maxsize() / 2)
       size_upper = reasonable_db_maxsize();
     else if ((size_t)size_now >= MAX_MAPSIZE32 / 2 && (size_t)size_now <= MAX_MAPSIZE32 / 4 * 3)
       size_upper = MAX_MAPSIZE32;
@@ -1089,13 +1085,21 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
   }
 
   if (unlikely(size_lower < (intptr_t)MIN_MAPSIZE || size_lower > size_upper)) {
+    /* паранойа на случай переполнения при невероятных значениях */
     rc = MDBX_EINVAL;
     goto bailout;
+  }
+
+  if (size_now <= 0) {
+    size_now = size_lower;
+    if (size_upper >= size_lower && size_now > size_upper)
+      size_now = size_upper;
   }
 
   if ((uint64_t)size_lower / pagesize < MIN_PAGENO) {
     size_lower = pagesize * MIN_PAGENO;
     if (unlikely(size_lower > size_upper)) {
+      /* паранойа на случай переполнения при невероятных значениях */
       rc = MDBX_EINVAL;
       goto bailout;
     }
@@ -1135,12 +1139,17 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
 
   if (growth_step < 0) {
     growth_step = ((size_t)(size_upper - size_lower)) / 42;
-    if (growth_step > size_lower && size_lower < (intptr_t)MEGABYTE)
+    if (!size_lower_default && growth_step > size_lower && size_lower < (intptr_t)MEGABYTE)
       growth_step = size_lower;
+    else if (growth_step / size_lower > 64)
+      growth_step = size_lower << 6;
     if (growth_step < 65536)
       growth_step = 65536;
-    if ((size_t)growth_step > MAX_MAPSIZE / 64)
-      growth_step = MAX_MAPSIZE / 64;
+    if ((size_upper - size_lower) / growth_step > 65536)
+      growth_step = (size_upper - size_lower) >> 16;
+    const intptr_t growth_step_limit = MEGABYTE * ((MDBX_WORDBITS > 32) ? 4096 : 256);
+    if (growth_step > growth_step_limit)
+      growth_step = growth_step_limit;
   }
   if (growth_step == 0 && shrink_threshold > 0)
     growth_step = 1;
