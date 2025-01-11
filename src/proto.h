@@ -79,7 +79,7 @@ struct commit_timestamp {
 MDBX_INTERNAL int txn_nested_join(MDBX_txn *txn, struct commit_timestamp *ts);
 MDBX_INTERNAL int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts);
 MDBX_INTERNAL int txn_basal_end(MDBX_txn *txn, unsigned mode);
-MDBX_INTERNAL int txn_rdo_end(MDBX_txn *txn, unsigned mode);
+MDBX_INTERNAL int txn_ro_end(MDBX_txn *txn, unsigned mode);
 
 /* env.c */
 MDBX_INTERNAL int env_open(MDBX_env *env, mdbx_mode_t mode);
