@@ -1343,6 +1343,7 @@ MDBX_INTERNAL int osal_openfile(const enum osal_openfile_purpose purpose, const 
     assert(stub_fd2 == -1);
     *fd = dup(stub_fd2 = *fd);
   }
+  const int err = errno;
   if (stub_fd0 != -1)
     close(stub_fd0);
   if (stub_fd1 != -1)
@@ -1361,7 +1362,7 @@ MDBX_INTERNAL int osal_openfile(const enum osal_openfile_purpose purpose, const 
 #endif /* STDIN_FILENO == 0 && STDERR_FILENO == 2 */
 
   if (*fd < 0)
-    return errno;
+    return err;
 
 #if defined(FD_CLOEXEC) && !defined(O_CLOEXEC)
   const int fd_flags = fcntl(*fd, F_GETFD);
