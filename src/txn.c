@@ -503,7 +503,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
       txn->flags = MDBX_TXN_RDONLY | MDBX_TXN_FINISHED;
       return MDBX_SUCCESS;
     }
-    txn->owner = (uintptr_t)r->tid.weak;
+    txn->owner = likely(r) ? (uintptr_t)r->tid.weak : ((env->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self());
     if ((env->flags & MDBX_NOSTICKYTHREADS) == 0 && env->txn && unlikely(env->basal_txn->owner == txn->owner) &&
         (globals.runtime_flags & MDBX_DBG_LEGACY_OVERLAP) == 0)
       return MDBX_TXN_OVERLAPPING;

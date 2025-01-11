@@ -823,10 +823,11 @@ MDBX_INTERNAL void lck_rdt_unlock(MDBX_env *env) {
 
 int lck_txn_lock(MDBX_env *env, bool dont_wait) {
   TRACE("%swait %s", dont_wait ? "dont-" : "", ">>");
+  eASSERT(env, env->basal_txn || (env->lck == lckless_stub(env) && (env->flags & MDBX_RDONLY)));
   jitter4testing(true);
   const int err = osal_ipclock_lock(env, &env->lck->wrt_lock, dont_wait);
   int rc = err;
-  if (likely(!MDBX_IS_ERROR(err))) {
+  if (likely(env->basal_txn && !MDBX_IS_ERROR(err))) {
     eASSERT(env, !env->basal_txn->owner || err == /* если другой поток в этом-же процессе завершился
                                                      не освободив блокировку */
                                                MDBX_RESULT_TRUE);
@@ -839,8 +840,12 @@ int lck_txn_lock(MDBX_env *env, bool dont_wait) {
 
 void lck_txn_unlock(MDBX_env *env) {
   TRACE("%s", ">>");
-  eASSERT(env, env->basal_txn->owner == osal_thread_self());
-  env->basal_txn->owner = 0;
+  if (env->basal_txn) {
+    eASSERT(env, !env->basal_txn || env->basal_txn->owner == osal_thread_self());
+    env->basal_txn->owner = 0;
+  } else {
+    eASSERT(env, env->lck == lckless_stub(env) && (env->flags & MDBX_RDONLY));
+  }
   int err = osal_ipclock_unlock(env, &env->lck->wrt_lock);
   TRACE("<< err %d", err);
   if (unlikely(err != MDBX_SUCCESS))
