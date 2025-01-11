@@ -135,25 +135,22 @@ __cold int lck_setup(MDBX_env *env, mdbx_mode_t mode) {
     switch (err) {
     default:
       return err;
-    case MDBX_ENOFILE:
     case MDBX_EACCESS:
     case MDBX_EPERM:
       if (!F_ISSET(env->flags, MDBX_RDONLY | MDBX_EXCLUSIVE))
         return err;
       break;
+    case MDBX_ENOFILE:
     case MDBX_EROFS:
       if ((env->flags & MDBX_RDONLY) == 0)
         return err;
-      break;
-    }
-
-    if (err != MDBX_ENOFILE) {
       /* ENSURE the file system is read-only */
       err = osal_check_fs_rdonly(env->lazy_fd, env->pathname.lck, err);
       if (err != MDBX_SUCCESS &&
           /* ignore ERROR_NOT_SUPPORTED for exclusive mode */
           !(err == MDBX_ENOSYS && (env->flags & MDBX_EXCLUSIVE)))
         return err;
+      break;
     }
 
     /* LY: without-lck mode (e.g. exclusive or on read-only filesystem) */
