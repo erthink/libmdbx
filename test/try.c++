@@ -1,9 +1,11 @@
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2024
+/// \copyright SPDX-License-Identifier: Apache-2.0
+
 #include "test.h++"
 
 class testcase_try : public testcase {
 public:
-  testcase_try(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid) {}
+  testcase_try(const actor_config &config, const mdbx_pid_t pid) : testcase(config, pid) {}
   bool run() override;
 };
 REGISTER_TESTCASE(try);

@@ -3,8 +3,7 @@
 
 #include "internals.h"
 
-#if MDBX_VERSION_MAJOR != ${MDBX_VERSION_MAJOR} ||                             \
-    MDBX_VERSION_MINOR != ${MDBX_VERSION_MINOR}
+#if MDBX_VERSION_MAJOR != ${MDBX_VERSION_MAJOR} || MDBX_VERSION_MINOR != ${MDBX_VERSION_MINOR}
 #error "API version mismatch! Had `git fetch --tags` done?"
 #endif
 
@@ -18,17 +17,17 @@ __dll_export
 #endif
 #ifdef __attribute_externally_visible__
         __attribute_externally_visible__
-#elif (defined(__GNUC__) && !defined(__clang__)) ||                            \
-    __has_attribute(__externally_visible__)
+#elif (defined(__GNUC__) && !defined(__clang__)) || __has_attribute(__externally_visible__)
     __attribute__((__externally_visible__))
 #endif
     const struct MDBX_version_info mdbx_version = {
         ${MDBX_VERSION_MAJOR},
         ${MDBX_VERSION_MINOR},
-        ${MDBX_VERSION_RELEASE},
-        ${MDBX_VERSION_REVISION},
-        {"@MDBX_GIT_TIMESTAMP@", "@MDBX_GIT_TREE@", "@MDBX_GIT_COMMIT@",
-         "@MDBX_GIT_DESCRIBE@"},
+        ${MDBX_VERSION_PATCH},
+        ${MDBX_VERSION_TWEAK},
+        "@MDBX_VERSION_PRERELEASE@", /* pre-release suffix of SemVer
+                                        @MDBX_VERSION_PURE@ */
+        {"@MDBX_GIT_TIMESTAMP@", "@MDBX_GIT_TREE@", "@MDBX_GIT_COMMIT@", "@MDBX_GIT_DESCRIBE@"},
         sourcery};
 
 __dll_export
@@ -39,8 +38,7 @@ __dll_export
 #endif
 #ifdef __attribute_externally_visible__
         __attribute_externally_visible__
-#elif (defined(__GNUC__) && !defined(__clang__)) ||                            \
-    __has_attribute(__externally_visible__)
+#elif (defined(__GNUC__) && !defined(__clang__)) || __has_attribute(__externally_visible__)
     __attribute__((__externally_visible__))
 #endif
     const char *const mdbx_sourcery_anchor = sourcery;

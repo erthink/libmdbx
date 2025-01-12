@@ -1,16 +1,5 @@
-/*
- * Copyright 2017-2024 Leonid Yuriev <leo@yuriev.ru>
- * and other libmdbx authors: please see AUTHORS file.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted only as authorized by the OpenLDAP
- * Public License.
- *
- * A copy of this license is available in the file LICENSE in the
- * top-level directory of the distribution or, alternatively, at
- * <http://www.OpenLDAP.org/license.html>.
- */
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2024
+/// \copyright SPDX-License-Identifier: Apache-2.0
 
 #include "test.h++"
 
@@ -36,8 +25,7 @@
 
 class testcase_hill : public testcase {
 public:
-  testcase_hill(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid) {}
+  testcase_hill(const actor_config &config, const mdbx_pid_t pid) : testcase(config, pid) {}
   bool run() override;
 };
 REGISTER_TESTCASE(hill);
@@ -52,7 +40,7 @@ bool testcase_hill::run() {
   speculum_committed.clear();
 
   /* TODO: работа в несколько потоков */
-  keyvalue_maker.setup(config.params, config.actor_id, 0 /* thread_number */);
+  keyvalue_maker.setup(config.params, 0 /* thread_number */);
 
   keygen::buffer a_key = keygen::alloc(config.params.keylen_max);
   keygen::buffer a_data_0 = keygen::alloc(config.params.datalen_max);
@@ -61,13 +49,9 @@ bool testcase_hill::run() {
   keygen::buffer b_data = keygen::alloc(config.params.datalen_max);
 
   const MDBX_put_flags_t insert_flags =
-      (config.params.table_flags & MDBX_DUPSORT)
-          ? MDBX_NODUPDATA
-          : MDBX_NODUPDATA | MDBX_NOOVERWRITE;
+      (config.params.table_flags & MDBX_DUPSORT) ? MDBX_NODUPDATA : MDBX_NODUPDATA | MDBX_NOOVERWRITE;
   const MDBX_put_flags_t update_flags =
-      (config.params.table_flags & MDBX_DUPSORT)
-          ? MDBX_CURRENT | MDBX_NODUPDATA | MDBX_NOOVERWRITE
-          : MDBX_NODUPDATA;
+      (config.params.table_flags & MDBX_DUPSORT) ? MDBX_CURRENT | MDBX_NODUPDATA | MDBX_NOOVERWRITE : MDBX_NODUPDATA;
 
   uint64_t serial_count = 0;
   uint64_t committed_serial = serial_count;
@@ -90,9 +74,8 @@ bool testcase_hill::run() {
     assert(b_serial > a_serial);
 
     // создаем первую запись из пары
-    const keygen::serial_t age_shift = UINT64_C(1) << (a_serial % 31);
-    log_trace("uphill: insert-a (age %" PRIu64 ") %" PRIu64, age_shift,
-              a_serial);
+    const keygen::serial_t age_shift = keyvalue_maker.remix_age(a_serial);
+    log_trace("uphill: insert-a (age %" PRIu64 ") %" PRIu64, age_shift, a_serial);
     generate_pair(a_serial, a_key, a_data_1, age_shift);
 
     err = insert(a_key, a_data_1, insert_flags);
@@ -165,8 +148,7 @@ bool testcase_hill::run() {
     }
 
     // обновляем данные в первой записи
-    log_trace("uphill: update-a (age %" PRIu64 "->0) %" PRIu64, age_shift,
-              a_serial);
+    log_trace("uphill: update-a (age %" PRIu64 "->0) %" PRIu64, age_shift, a_serial);
     generate_pair(a_serial, a_key, a_data_0, 0);
     checkdata("uphill: update-a", dbi, a_key->value, a_data_1->value);
     err = replace(a_key, a_data_0, a_data_1, update_flags);
@@ -282,8 +264,7 @@ bool testcase_hill::run() {
       if (str.back() == '-')
         str.append(std::to_string(prev));
 
-      log_notice("hill: reached %d tree depth & %s sub-tree depth(s)",
-                 stat.ms_depth, str.c_str());
+      log_notice("hill: reached %d tree depth & %s sub-tree depth(s)", stat.ms_depth, str.c_str());
     }
 
     if ((config.params.table_flags & MDBX_DUPSORT) == 0) {
@@ -302,17 +283,15 @@ bool testcase_hill::run() {
     assert(b_serial > a_serial);
 
     // обновляем первую запись из пары
-    const keygen::serial_t age_shift = UINT64_C(1) << (a_serial % 31);
-    log_trace("downhill: update-a (age 0->%" PRIu64 ") %" PRIu64, age_shift,
-              a_serial);
+    const keygen::serial_t age_shift = keyvalue_maker.remix_age(a_serial);
+    log_trace("downhill: update-a (age 0->%" PRIu64 ") %" PRIu64, age_shift, a_serial);
     generate_pair(a_serial, a_key, a_data_0, 0);
     generate_pair(a_serial, a_key, a_data_1, age_shift);
     checkdata("downhill: update-a", dbi, a_key->value, a_data_0->value);
     err = replace(a_key, a_data_1, a_data_0, update_flags);
     if (unlikely(err != MDBX_SUCCESS)) {
       if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
-        log_notice("downhill: bailout at update-a due '%s'",
-                   mdbx_strerror(err));
+        log_notice("downhill: bailout at update-a due '%s'", mdbx_strerror(err));
         txn_end(true);
         speculum = speculum_committed;
         break;
@@ -345,8 +324,7 @@ bool testcase_hill::run() {
     err = insert(b_key, b_data, insert_flags);
     if (unlikely(err != MDBX_SUCCESS)) {
       if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
-        log_notice("downhill: bailout at insert-a due '%s'",
-                   mdbx_strerror(err));
+        log_notice("downhill: bailout at insert-a due '%s'", mdbx_strerror(err));
         txn_end(true);
         speculum = speculum_committed;
         break;
@@ -374,14 +352,12 @@ bool testcase_hill::run() {
     }
 
     // удаляем первую запись
-    log_trace("downhill: delete-a (age %" PRIu64 ") %" PRIu64, age_shift,
-              a_serial);
+    log_trace("downhill: delete-a (age %" PRIu64 ") %" PRIu64, age_shift, a_serial);
     checkdata("downhill: delete-a", dbi, a_key->value, a_data_1->value);
     err = remove(a_key, a_data_1);
     if (unlikely(err != MDBX_SUCCESS)) {
       if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
-        log_notice("downhill: bailout at delete-a due '%s'",
-                   mdbx_strerror(err));
+        log_notice("downhill: bailout at delete-a due '%s'", mdbx_strerror(err));
         txn_end(true);
         speculum = speculum_committed;
         break;
@@ -414,8 +390,7 @@ bool testcase_hill::run() {
     err = remove(b_key, b_data);
     if (unlikely(err != MDBX_SUCCESS)) {
       if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
-        log_notice("downhill: bailout at delete-b due '%s'",
-                   mdbx_strerror(err));
+        log_notice("downhill: bailout at delete-b due '%s'", mdbx_strerror(err));
         txn_end(true);
         speculum = speculum_committed;
         break;

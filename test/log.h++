@@ -1,16 +1,5 @@
-/*
- * Copyright 2017-2024 Leonid Yuriev <leo@yuriev.ru>
- * and other libmdbx authors: please see AUTHORS file.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted only as authorized by the OpenLDAP
- * Public License.
- *
- * A copy of this license is available in the file LICENSE in the
- * top-level directory of the distribution or, alternatively, at
- * <http://www.OpenLDAP.org/license.html>.
- */
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2024
+/// \copyright SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
@@ -40,24 +29,20 @@ inline bool lower(loglevel left, loglevel right) {
   return left > right;
 }
 
-inline bool same_or_higher(loglevel left, loglevel right) {
-  return left <= right;
-}
+inline bool same_or_higher(loglevel left, loglevel right) { return left <= right; }
 
 const char *level2str(const loglevel level);
 void setup(loglevel priority, const std::string &prefix);
 void setup(const std::string &prefix);
 void setlevel(loglevel priority);
 
-void output_nocheckloglevel_ap(const loglevel priority, const char *format,
-                               va_list ap);
-bool MDBX_PRINTF_ARGS(2, 3)
-    output(const loglevel priority, const char *format, ...);
+void output_nocheckloglevel_ap(const loglevel priority, const char *format, va_list ap);
+bool MDBX_PRINTF_ARGS(2, 3) output(const loglevel priority, const char *format, ...);
 bool feed_ap(const char *format, va_list ap);
 bool MDBX_PRINTF_ARGS(1, 2) feed(const char *format, ...);
+void ln();
 
-void inline MDBX_PRINTF_ARGS(2, 3)
-    output_nocheckloglevel(const loglevel priority, const char *format, ...) {
+void inline MDBX_PRINTF_ARGS(2, 3) output_nocheckloglevel(const loglevel priority, const char *format, ...) {
   va_list ap;
   va_start(ap, format);
   output_nocheckloglevel_ap(priority, format, ap);
@@ -85,9 +70,7 @@ public:
 
 } // namespace logging
 
-void MDBX_PRINTF_ARGS(1, 2) static inline log_null(const char *msg, ...) {
-  return (void)msg;
-}
+void MDBX_PRINTF_ARGS(1, 2) static inline log_null(const char *msg, ...) { return (void)msg; }
 void MDBX_PRINTF_ARGS(1, 2) log_extra(const char *msg, ...);
 void MDBX_PRINTF_ARGS(1, 2) log_trace(const char *msg, ...);
 void MDBX_PRINTF_ARGS(1, 2) log_debug(const char *msg, ...);
@@ -100,6 +83,7 @@ void log_trouble(const char *where, const char *what, int errnum);
 void log_flush(void);
 bool log_enabled(const logging::loglevel priority);
 
+#undef TRACE
 #ifdef _DEBUG
 #define TRACE(...) log_trace(__VA_ARGS__)
 #else

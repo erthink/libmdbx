@@ -1,23 +1,11 @@
-/*
- * Copyright 2017-2024 Leonid Yuriev <leo@yuriev.ru>
- * and other libmdbx authors: please see AUTHORS file.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted only as authorized by the OpenLDAP
- * Public License.
- *
- * A copy of this license is available in the file LICENSE in the
- * top-level directory of the distribution or, alternatively, at
- * <http://www.OpenLDAP.org/license.html>.
- */
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2024
+/// \copyright SPDX-License-Identifier: Apache-2.0
 
 #include "test.h++"
 
 class testcase_deadread : public testcase {
 public:
-  testcase_deadread(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid) {}
+  testcase_deadread(const actor_config &config, const mdbx_pid_t pid) : testcase(config, pid) {}
   bool run() override;
 };
 REGISTER_TESTCASE(deadread);
@@ -35,8 +23,7 @@ bool testcase_deadread::run() {
 
 class testcase_deadwrite : public testcase {
 public:
-  testcase_deadwrite(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid) {}
+  testcase_deadwrite(const actor_config &config, const mdbx_pid_t pid) : testcase(config, pid) {}
   bool run() override;
 };
 

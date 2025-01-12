@@ -42,8 +42,7 @@ int pthread_barrierattr_destroy(pthread_barrierattr_t *attr) {
   return m ? m : c;
 }
 
-int pthread_barrierattr_getpshared(const pthread_barrierattr_t *__restrict attr,
-                                   int *__restrict pshared) {
+int pthread_barrierattr_getpshared(const pthread_barrierattr_t *__restrict attr, int *__restrict pshared) {
   return pthread_condattr_getpshared(&attr->cattr, pshared);
 }
 
@@ -53,8 +52,7 @@ int pthread_barrierattr_setpshared(pthread_barrierattr_t *attr, int pshared) {
   return m ? m : c;
 }
 
-int pthread_barrier_init(pthread_barrier_t *__restrict barrier,
-                         const pthread_barrierattr_t *__restrict attr,
+int pthread_barrier_init(pthread_barrier_t *__restrict barrier, const pthread_barrierattr_t *__restrict attr,
                          unsigned count) {
   if (count == 0)
     return errno = EINVAL;

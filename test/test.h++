@@ -1,16 +1,5 @@
-/*
- * Copyright 2017-2024 Leonid Yuriev <leo@yuriev.ru>
- * and other libmdbx authors: please see AUTHORS file.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted only as authorized by the OpenLDAP
- * Public License.
- *
- * A copy of this license is available in the file LICENSE in the
- * top-level directory of the distribution or, alternatively, at
- * <http://www.OpenLDAP.org/license.html>.
- */
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2024
+/// \copyright SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
@@ -42,10 +31,9 @@
 
 bool test_execute(const actor_config &config);
 std::string thunk_param(const actor_config &config);
-void testcase_setup(const char *casename, const actor_params &params,
-                    unsigned &last_space_id);
-void configure_actor(unsigned &last_space_id, const actor_testcase testcase,
-                     const char *space_id_cstr, actor_params params);
+void testcase_setup(const char *casename, const actor_params &params, unsigned &last_space_id);
+void configure_actor(unsigned &last_space_id, const actor_testcase testcase, const char *space_id_cstr,
+                     actor_params params);
 void keycase_setup(const char *casename, actor_params &params);
 
 namespace global {
@@ -103,7 +91,7 @@ class registry {
   struct record {
     actor_testcase id = ac_none;
     std::string name;
-    bool (*review_params)(actor_params &) = nullptr;
+    bool (*review_params)(actor_params &, unsigned space_id) = nullptr;
     testcase *(*constructor)(const actor_config &, const mdbx_pid_t) = nullptr;
   };
   std::unordered_map<std::string, const record *> name2id;
@@ -117,34 +105,26 @@ public:
       this->id = id;
       this->name = name;
       review_params = TESTCASE::review_params;
-      constructor = [](const actor_config &config,
-                       const mdbx_pid_t pid) -> testcase * {
+      constructor = [](const actor_config &config, const mdbx_pid_t pid) -> testcase * {
         return new TESTCASE(config, pid);
       };
       add(this);
     }
   };
-  static bool review_actor_params(const actor_testcase id,
-                                  actor_params &params);
-  static testcase *create_actor(const actor_config &config,
-                                const mdbx_pid_t pid);
+  static bool review_actor_params(const actor_testcase id, actor_params &params, const unsigned space_id);
+  static testcase *create_actor(const actor_config &config, const mdbx_pid_t pid);
 };
 
-#define REGISTER_TESTCASE(NAME)                                                \
-  static registry::factory<testcase_##NAME> gRegister_##NAME(                  \
-      ac_##NAME, MDBX_STRINGIFY(NAME))
+#define REGISTER_TESTCASE(NAME)                                                                                        \
+  static registry::factory<testcase_##NAME> gRegister_##NAME(ac_##NAME, MDBX_STRINGIFY(NAME))
 
 class testcase {
 protected:
   using data_view = mdbx::slice;
   static inline data_view iov2dataview(const MDBX_val &v) {
-    return (v.iov_base && v.iov_len)
-               ? data_view(static_cast<const char *>(v.iov_base), v.iov_len)
-               : data_view();
+    return (v.iov_base && v.iov_len) ? data_view(static_cast<const char *>(v.iov_base), v.iov_len) : data_view();
   }
-  static inline data_view iov2dataview(const keygen::buffer &b) {
-    return iov2dataview(b->value);
-  }
+  static inline data_view iov2dataview(const keygen::buffer &b) { return iov2dataview(b->value); }
 
   using Item = std::pair<::mdbx::buffer<>, ::mdbx::buffer<>>;
 
@@ -156,16 +136,13 @@ protected:
   }
   struct ItemCompare {
     const testcase *context;
-    ItemCompare(const testcase *owner) : context(owner) {
-      /* The context->txn_guard may be empty/null here */
-    }
+    ItemCompare(const testcase *owner) : context(owner) { /* The context->txn_guard may be empty/null here */ }
 
     bool operator()(const Item &a, const Item &b) const {
       MDBX_val va = dataview2iov(a.first), vb = dataview2iov(b.first);
       assert(context->txn_guard.get() != nullptr);
       int cmp = mdbx_cmp(context->txn_guard.get(), context->dbi, &va, &vb);
-      if (cmp == 0 &&
-          (context->config.params.table_flags & MDBX_DUPSORT) != 0) {
+      if (cmp == 0 && (context->config.params.table_flags & MDBX_DUPSORT) != 0) {
         va = dataview2iov(a.second);
         vb = dataview2iov(b.second);
         cmp = mdbx_dcmp(context->txn_guard.get(), context->dbi, &va, &vb);
@@ -205,67 +182,59 @@ protected:
 #if SPECULUM_CURSORS
   scoped_cursor_guard speculum_cursors[5 + 1];
   void speculum_prepare_cursors(const Item &item);
-  void speculum_check_cursor(const char *where, const char *stage,
-                             const testcase::SET::const_iterator &it,
-                             int cursor_err, const MDBX_val &cursor_key,
-                             const MDBX_val &cursor_data) const;
-  void speculum_check_cursor(const char *where, const char *stage,
-                             const testcase::SET::const_iterator &it,
-                             MDBX_cursor *cursor,
-                             const MDBX_cursor_op op) const;
+  bool speculum_check_cursor(const char *where, const char *stage, const testcase::SET::const_iterator &it,
+                             int cursor_err, const MDBX_val &cursor_key, const MDBX_val &cursor_data,
+                             MDBX_cursor *cursor) const;
+  bool speculum_check_cursor(const char *where, const char *stage, const testcase::SET::const_iterator &it,
+                             MDBX_cursor *cursor, const MDBX_cursor_op op) const;
+  void speculum_render(const testcase::SET::const_iterator &it, const MDBX_cursor *ref) const;
 #endif /* SPECULUM_CURSORS */
-  void speculum_check_iterator(const char *where, const char *stage,
-                               const testcase::SET::const_iterator &it,
-                               const MDBX_val &k, const MDBX_val &v) const;
+  bool speculum_check_iterator(const char *where, const char *stage, const testcase::SET::const_iterator &it,
+                               const MDBX_val &k, const MDBX_val &v, MDBX_cursor *cursor) const;
 
-  void verbose(const char *where, const char *stage,
-               const testcase::SET::const_iterator &it) const;
-  void verbose(const char *where, const char *stage, const MDBX_val &k,
-               const MDBX_val &v, int err = MDBX_SUCCESS) const;
+  void verbose(const char *where, const char *stage, const testcase::SET::const_iterator &it) const;
+  void verbose(const char *where, const char *stage, const MDBX_val &k, const MDBX_val &v,
+               int err = MDBX_SUCCESS) const;
 
   bool is_same(const Item &a, const Item &b) const;
-  bool is_same(const SET::const_iterator &it, const MDBX_val &k,
-               const MDBX_val &v) const;
+  bool is_same(const SET::const_iterator &it, const MDBX_val &k, const MDBX_val &v) const;
 
   bool speculum_verify();
   bool check_batch_get();
-  int insert(const keygen::buffer &akey, const keygen::buffer &adata,
-             MDBX_put_flags_t flags);
-  int replace(const keygen::buffer &akey, const keygen::buffer &new_value,
-              const keygen::buffer &old_value, MDBX_put_flags_t flags);
+  int insert(const keygen::buffer &akey, const keygen::buffer &adata, MDBX_put_flags_t flags);
+  int replace(const keygen::buffer &akey, const keygen::buffer &new_value, const keygen::buffer &old_value,
+              MDBX_put_flags_t flags, bool hush_keygen_mistakes = true);
   int remove(const keygen::buffer &akey, const keygen::buffer &adata);
 
-  static int hsr_callback(const MDBX_env *env, const MDBX_txn *txn,
-                          mdbx_pid_t pid, mdbx_tid_t tid, uint64_t laggard,
-                          unsigned gap, size_t space,
-                          int retry) MDBX_CXX17_NOEXCEPT;
+  static int hsr_callback(const MDBX_env *env, const MDBX_txn *txn, mdbx_pid_t pid, mdbx_tid_t tid, uint64_t laggard,
+                          unsigned gap, size_t space, int retry) MDBX_CXX17_NOEXCEPT;
 
   MDBX_env_flags_t actual_env_mode{MDBX_ENV_DEFAULTS};
-  bool is_nested_txn_available() const {
-    return (actual_env_mode & MDBX_WRITEMAP) == 0;
-  }
+  bool is_nested_txn_available() const { return (actual_env_mode & MDBX_WRITEMAP) == 0; }
   void kick_progress(bool active) const;
   void db_prepare();
   void db_open();
   void db_close();
-  void txn_begin(bool readonly, MDBX_txn_flags_t flags = MDBX_TXN_READWRITE);
+  virtual void txn_begin(bool readonly, MDBX_txn_flags_t flags = MDBX_TXN_READWRITE);
   int breakable_commit();
-  void txn_end(bool abort);
+  virtual void txn_end(bool abort);
   int breakable_restart();
-  void txn_restart(bool abort, bool readonly,
-                   MDBX_txn_flags_t flags = MDBX_TXN_READWRITE);
+  void txn_restart(bool abort, bool readonly, MDBX_txn_flags_t flags = MDBX_TXN_READWRITE);
   void cursor_open(MDBX_dbi handle);
   void cursor_close();
   void cursor_renew();
   void txn_inject_writefault(void);
   void txn_inject_writefault(MDBX_txn *txn);
+  bool txn_probe_parking();
+
   void fetch_canary();
   void update_canary(uint64_t increment);
-  void checkdata(const char *step, MDBX_dbi handle, MDBX_val key2check,
-                 MDBX_val expected_valued);
+  bool checkdata(const char *step, MDBX_dbi handle, MDBX_val key2check, MDBX_val expected_valued);
   unsigned txn_underutilization_x256(MDBX_txn *txn) const;
 
-  MDBX_dbi db_table_open(bool create);
+  using tablename_buf = char[32];
+  const char *db_tablename(tablename_buf &buffer, const char *suffix = "") const;
+  MDBX_dbi db_table_open(bool create, bool expect_failure = false);
   void db_table_drop(MDBX_dbi handle);
   void db_table_clear(MDBX_dbi handle, MDBX_txn *txn = nullptr);
   void db_table_close(MDBX_dbi handle);
@@ -277,34 +246,28 @@ protected:
   void signal();
   bool should_continue(bool check_timeout_only = false) const;
 
-  void failure(const char *fmt, ...) const;
-  void generate_pair(const keygen::serial_t serial, keygen::buffer &out_key,
-                     keygen::buffer &out_value, keygen::serial_t data_age) {
+  bool MDBX_PRINTF_ARGS(2, 3) failure(const char *fmt, ...) const;
+  void generate_pair(const keygen::serial_t serial, keygen::buffer &out_key, keygen::buffer &out_value,
+                     keygen::serial_t data_age) {
     keyvalue_maker.pair(serial, out_key, out_value, data_age, false);
   }
 
-  void generate_pair(const keygen::serial_t serial) {
-    keyvalue_maker.pair(serial, key, data, 0, true);
-  }
+  void generate_pair(const keygen::serial_t serial) { keyvalue_maker.pair(serial, key, data, 0, true); }
 
-  bool mode_readonly() const {
-    return (config.params.mode_flags & MDBX_RDONLY) ? true : false;
-  }
+  bool mode_readonly() const { return (config.params.mode_flags & MDBX_RDONLY) ? true : false; }
 
 public:
-  testcase(const actor_config &config, const mdbx_pid_t pid)
-      : config(config), pid(pid) {
+  testcase(const actor_config &config, const mdbx_pid_t pid) : config(config), pid(pid) {
     start_timestamp.reset();
     memset(&last, 0, sizeof(last));
   }
 
-  static bool review_params(actor_params &params) {
+  static bool review_params(actor_params &params, unsigned space_id) {
     // silently fix key/data length for fixed-length modes
-    if ((params.table_flags & MDBX_INTEGERKEY) &&
-        params.keylen_min != params.keylen_max)
+    params.prng_seed += bleach32(space_id);
+    if ((params.table_flags & MDBX_INTEGERKEY) && params.keylen_min != params.keylen_max)
       params.keylen_min = params.keylen_max;
-    if ((params.table_flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED)) &&
-        params.datalen_min != params.datalen_max)
+    if ((params.table_flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED)) && params.datalen_min != params.datalen_max)
       params.datalen_min = params.datalen_max;
     return true;
   }
@@ -329,8 +292,7 @@ protected:
   unsigned edge2count(uint64_t edge);
 
 public:
-  testcase_ttl(const actor_config &config, const mdbx_pid_t pid)
-      : inherited(config, pid) {}
+  testcase_ttl(const actor_config &config, const mdbx_pid_t pid) : inherited(config, pid) {}
   bool setup() override;
   bool run() override;
 };

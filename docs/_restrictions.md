@@ -35,11 +35,12 @@ or debugging of a client application while retaining an active read
 transaction. LMDB this results in `MDB_MAP_FULL` error and subsequent write
 performance degradation.
 
-MDBX mostly solve "long-lived" readers issue by using the
+MDBX mostly solve "long-lived" readers issue by offering to use a
+transaction parking-and-ousting approach by \ref mdbx_txn_park(),
 Handle-Slow-Readers \ref MDBX_hsr_func callback which allows to abort
 long-lived read transactions, and using the \ref MDBX_LIFORECLAIM mode
 which addresses subsequent performance degradation. The "next" version
-of libmdbx (\ref MithrilDB) will completely solve this.
+of libmdbx (aka \ref MithrilDB) will completely solve this.
 
 - Avoid suspending a process with active transactions. These would then be
   "long-lived" as above.
@@ -106,6 +107,7 @@ reservation can deplete system resources (trigger ENOMEM error, etc)
 when setting an inadequately large upper DB size using \ref
 mdbx_env_set_geometry() or \ref mdbx::env::geometry. So just avoid this.
 
+
 ## Remote filesystems
 Do not use MDBX databases on remote filesystems, even between processes
 on the same host. This breaks file locks on some platforms, possibly
@@ -131,6 +133,11 @@ corruption in such cases.
 
 On the other hand, MDBX allow calling \ref mdbx_env_close() in such cases to
 release resources, but no more and in general this is a wrong way.
+
+#### Since v0.13.1 and later
+Начиная с версии 0.13.1 в API доступна функция \ref mdbx_env_resurrect_after_fork(),
+которая позволяет пере-использовать в дочерних процессах уже открытую среду БД,
+но строго без наследования транзакций от родительского процесса.
 
 
 ## Read-only mode
@@ -184,18 +191,20 @@ readers without writer" case.
 
 
 ## One thread - One transaction
-  A thread can only use one transaction at a time, plus any nested
-  read-write transactions in the non-writemap mode. Each transaction
-  belongs to one thread. The \ref MDBX_NOTLS flag changes this for read-only
-  transactions. See below.
+A thread can only use one transaction at a time, plus any nested
+read-write transactions in the non-writemap mode. Each transaction
+belongs to one thread. The \ref MDBX_NOSTICKYTHREADS flag changes this,
+see below.
 
-  Do not start more than one transaction for a one thread. If you think
-  about this, it's really strange to do something with two data snapshots
-  at once, which may be different. MDBX checks and preventing this by
-  returning corresponding error code (\ref MDBX_TXN_OVERLAPPING, \ref MDBX_BAD_RSLOT,
-  \ref MDBX_BUSY) unless you using \ref MDBX_NOTLS option on the environment.
-  Nonetheless, with the `MDBX_NOTLS` option, you must know exactly what you
-  are doing, otherwise you will get deadlocks or reading an alien data.
+Do not start more than one transaction for a one thread. If you think
+about this, it's really strange to do something with two data snapshots
+at once, which may be different. MDBX checks and preventing this by
+returning corresponding error code (\ref MDBX_TXN_OVERLAPPING,
+\ref MDBX_BAD_RSLOT, \ref MDBX_BUSY) unless you using
+\ref MDBX_NOSTICKYTHREADS option on the environment.
+Nonetheless, with the `MDBX_NOSTICKYTHREADS` option, you must know
+exactly what you are doing, otherwise you will get deadlocks or reading
+an alien data.
 
 
 ## Do not open twice

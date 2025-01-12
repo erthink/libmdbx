@@ -1,16 +1,5 @@
-/*
- * Copyright 2017-2024 Leonid Yuriev <leo@yuriev.ru>
- * and other libmdbx authors: please see AUTHORS file.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted only as authorized by the OpenLDAP
- * Public License.
- *
- * A copy of this license is available in the file LICENSE in the
- * top-level directory of the distribution or, alternatively, at
- * <http://www.OpenLDAP.org/license.html>.
- */
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2024
+/// \copyright SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
@@ -25,6 +14,10 @@ enum actor_testcase {
   ac_hill,
   ac_deadread,
   ac_deadwrite,
+#if !defined(_WIN32) && !defined(_WIN64)
+  ac_forkread,
+  ac_forkwrite,
+#endif /* Windows */
   ac_jitter,
   ac_try,
   ac_copy,
@@ -59,20 +52,18 @@ const char *keygencase2str(const keygen_case);
 
 namespace config {
 
-enum scale_mode { no_scale, decimal, binary, duration };
+enum scale_mode { no_scale, decimal, binary, duration, intkey, entropy };
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  const char **value, const char *default_value = nullptr);
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, const char **value,
+                  const char *default_value = nullptr);
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  std::string &value, bool allow_empty = false);
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, std::string &value,
+                  bool allow_empty = false);
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  std::string &value, bool allow_empty,
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, std::string &value, bool allow_empty,
                   const char *default_value);
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  bool &value);
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, bool &value);
 
 struct option_verb {
   const char *const verb;
@@ -80,8 +71,7 @@ struct option_verb {
 };
 
 template <typename MASK>
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  MASK &mask, const option_verb *verbs) {
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, MASK &mask, const option_verb *verbs) {
   static_assert(sizeof(MASK) <= sizeof(unsigned), "WTF?");
   unsigned u = unsigned(mask);
   if (parse_option<unsigned>(argc, argv, narg, option, u, verbs)) {
@@ -92,49 +82,36 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 }
 
 template <>
-bool parse_option<unsigned>(int argc, char *const argv[], int &narg,
-                            const char *option, unsigned &mask,
+bool parse_option<unsigned>(int argc, char *const argv[], int &narg, const char *option, unsigned &mask,
                             const option_verb *verbs);
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  uint64_t &value, const scale_mode scale,
-                  const uint64_t minval = 0, const uint64_t maxval = INT64_MAX,
-                  const uint64_t default_value = 0);
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, uint64_t &value, const scale_mode scale,
+                  const uint64_t minval = 0, const uint64_t maxval = INT64_MAX, const uint64_t default_value = 0);
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  unsigned &value, const scale_mode scale,
-                  const unsigned minval = 0, const unsigned maxval = INT32_MAX,
-                  const unsigned default_value = 0);
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, unsigned &value, const scale_mode scale,
+                  const unsigned minval = 0, const unsigned maxval = INT32_MAX, const unsigned default_value = 0);
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  uint8_t &value, const uint8_t minval = 0,
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, uint8_t &value, const uint8_t minval = 0,
                   const uint8_t maxval = 255, const uint8_t default_value = 0);
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  int64_t &value, const int64_t minval, const int64_t maxval,
-                  const int64_t default_value = -1);
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, int64_t &value, const int64_t minval,
+                  const int64_t maxval, const int64_t default_value = -1);
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  int32_t &value, const int32_t minval, const int32_t maxval,
-                  const int32_t default_value = -1);
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, int32_t &value, const int32_t minval,
+                  const int32_t maxval, const int32_t default_value = -1);
 
-inline bool parse_option_intptr(int argc, char *const argv[], int &narg,
-                                const char *option, intptr_t &value,
-                                const intptr_t minval, const intptr_t maxval,
-                                const intptr_t default_value = -1) {
+inline bool parse_option_intptr(int argc, char *const argv[], int &narg, const char *option, intptr_t &value,
+                                const intptr_t minval, const intptr_t maxval, const intptr_t default_value = -1) {
   static_assert(sizeof(intptr_t) == 4 || sizeof(intptr_t) == 8, "WTF?");
   if (sizeof(intptr_t) == 8)
-    return parse_option(argc, argv, narg, option,
-                        *reinterpret_cast<int64_t *>(&value), int64_t(minval),
+    return parse_option(argc, argv, narg, option, *reinterpret_cast<int64_t *>(&value), int64_t(minval),
                         int64_t(maxval), int64_t(default_value));
   else
-    return parse_option(argc, argv, narg, option,
-                        *reinterpret_cast<int32_t *>(&value), int32_t(minval),
+    return parse_option(argc, argv, narg, option, *reinterpret_cast<int32_t *>(&value), int32_t(minval),
                         int32_t(maxval), int32_t(default_value));
 }
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  logging::loglevel &);
+bool parse_option(int argc, char *const argv[], int &narg, const char *option, logging::loglevel &);
 //-----------------------------------------------------------------------------
 
 struct keygen_params_pod {
@@ -270,6 +247,7 @@ struct actor_params_pod {
   unsigned batch_read{0};
   unsigned batch_write{0};
 
+  unsigned prng_seed{0};
   unsigned delaystart{0};
   unsigned waitfor_nops{0};
   unsigned inject_writefaultn{0};
@@ -288,7 +266,7 @@ struct actor_params_pod {
     // FIXME: TODO
     return 0;
   }
-  static MDBX_PURE_FUNCTION uint64_t serial_mask(unsigned bits) {
+  MDBX_PURE_FUNCTION static uint64_t serial_mask(unsigned bits) {
     assert(bits > 0 && bits <= 64);
     return (~(uint64_t)0u) >> (64 - bits);
   }
@@ -301,10 +279,8 @@ struct actor_config_pod {
   unsigned signal_nops{0};
 
   actor_config_pod() = default;
-  actor_config_pod(unsigned actor_id, actor_testcase testcase,
-                   unsigned space_id, unsigned wait4id)
-      : actor_id(actor_id), space_id(space_id), testcase(testcase),
-        wait4id(wait4id) {}
+  actor_config_pod(unsigned actor_id, actor_testcase testcase, unsigned space_id, unsigned wait4id)
+      : actor_id(actor_id), space_id(space_id), testcase(testcase), wait4id(wait4id) {}
 };
 
 extern const struct option_verb mode_bits[];
@@ -332,8 +308,7 @@ struct actor_config : public config::actor_config_pod {
   bool wanna_event4signalling() const { return true /* TODO ? */; }
 
   actor_config() = default;
-  actor_config(actor_testcase testcase, const actor_params &params,
-               unsigned space_id, unsigned wait4id);
+  actor_config(actor_testcase testcase, const actor_params &params, unsigned space_id, unsigned wait4id);
 
   actor_config(const char *str) : actor_config() {
     if (!deserialize(str, *this))

@@ -129,20 +129,23 @@ no open MDBX-instance(s) during fork(), or at least close it immediately after
    necessary) in a child process would be both extreme complicated and so
    fragile.
 
-Do not start more than one transaction for a one thread. If you think about
-this, it's really strange to do something with two data snapshots at once,
-which may be different. MDBX checks and preventing this by returning
-corresponding error code (\ref MDBX_TXN_OVERLAPPING, \ref MDBX_BAD_RSLOT, \ref MDBX_BUSY)
-unless you using \ref MDBX_NOTLS option on the environment. Nonetheless, with the
-\ref MDBX_NOTLS option, you must know exactly what you are doing, otherwise you
-will get deadlocks or reading an alien data.
+Do not start more than one transaction for a one thread. If you think
+about this, it's really strange to do something with two data snapshots
+at once, which may be different. MDBX checks and preventing this by
+returning corresponding error code (\ref MDBX_TXN_OVERLAPPING,
+\ref MDBX_BAD_RSLOT, \ref MDBX_BUSY) unless you using
+\ref MDBX_NOSTICKYTHREADS option on the environment. Nonetheless,
+with the \ref MDBX_NOSTICKYTHREADS option, you must know exactly what
+you are doing, otherwise you will get deadlocks or reading an alien
+data.
 
-Also note that a transaction is tied to one thread by default using Thread
-Local Storage. If you want to pass read-only transactions across threads,
-you can use the \ref MDBX_NOTLS option on the environment. Nevertheless, a write
-transaction entirely should only be used in one thread from start to finish.
-MDBX checks this in a reasonable manner and return the \ref MDBX_THREAD_MISMATCH
-error in rules violation.
+Also note that a transaction is tied to one thread by default using
+Thread Local Storage. If you want to pass transactions across threads,
+you can use the \ref MDBX_NOSTICKYTHREADS option on the environment.
+Nevertheless, a write transaction must be committed or aborted in the
+same thread which it was started. MDBX checks this in a reasonable
+manner and return the \ref MDBX_THREAD_MISMATCH error in rules
+violation.
 
 
 ## Transactions, rollbacks etc

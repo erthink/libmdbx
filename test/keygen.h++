@@ -1,16 +1,5 @@
-/*
- * Copyright 2017-2024 Leonid Yuriev <leo@yuriev.ru>
- * and other libmdbx authors: please see AUTHORS file.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted only as authorized by the OpenLDAP
- * Public License.
- *
- * A copy of this license is available in the file LICENSE in the
- * top-level directory of the distribution or, alternatively, at
- * <http://www.OpenLDAP.org/license.html>.
- */
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2024
+/// \copyright SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
@@ -71,11 +60,7 @@ namespace keygen {
 
 typedef uint64_t serial_t;
 
-enum : serial_t {
-  serial_minwith = 8,
-  serial_maxwith = sizeof(serial_t) * 8,
-  serial_allones = ~(serial_t)0u
-};
+enum : serial_t { serial_minwith = 8, serial_maxwith = sizeof(serial_t) * 8, serial_allones = ~(serial_t)0u };
 
 struct result {
   MDBX_val value;
@@ -86,9 +71,7 @@ struct result {
     uint64_t u64;
   };
 
-  std::string as_string() const {
-    return std::string((const char *)value.iov_base, value.iov_len);
-  }
+  std::string as_string() const { return std::string((const char *)value.iov_base, value.iov_len); }
 };
 
 //-----------------------------------------------------------------------------
@@ -108,31 +91,26 @@ class maker {
 
   struct essentials {
     uint16_t minlen{0};
-    enum { prng_fill_flag = 1 };
+    enum { prng_fill_flag = 1, value_age_minwidth = 5 };
     uint16_t flags{0};
     uint32_t maxlen{0};
+    serial_t mask{0};
+    unsigned bits{0};
   } key_essentials, value_essentials;
+  unsigned value_age_bits{0};
+  serial_t value_age_mask{0};
 
-  static void mk_begin(const serial_t serial, const essentials &params,
-                       result &out);
-  static void mk_continue(const serial_t serial, const essentials &params,
-                          result &out);
-  static void mk(const serial_t serial, const essentials &params, result &out) {
-    mk_begin(serial, params, out);
-    mk_continue(serial, params, out);
-  }
+  static serial_t mk_begin(serial_t serial, const essentials &params, result &out);
+  static void mk_continue(const serial_t serial, const essentials &params, result &out);
 
 public:
-  void pair(serial_t serial, const buffer &key, buffer &value,
-            serial_t value_age, const bool keylen_changeable);
-  void setup(const config::actor_params_pod &actor, unsigned actor_id,
-             unsigned thread_number);
+  void pair(serial_t serial, const buffer &key, buffer &value, serial_t value_age, const bool keylen_changeable);
+  void setup(const config::actor_params_pod &actor, unsigned thread_number);
   bool is_unordered() const;
   void seek2end(serial_t &serial) const;
 
   bool increment(serial_t &serial, int64_t delta) const;
-  bool increment_key_part(serial_t &serial, int64_t delta,
-                          bool reset_value_part = true) const {
+  bool increment_key_part(serial_t &serial, int64_t delta, bool reset_value_part = true) const {
     if (reset_value_part) {
       serial_t value_part_bits = ((serial_t(1) << mapping.split) - 1);
       serial |= value_part_bits;
@@ -141,9 +119,12 @@ public:
     }
     return increment(serial, int64_t(uint64_t(delta) << mapping.split));
   }
+
+  serial_t remix_age(serial_t serial) const {
+    return (UINT64_C(768097847591) * (serial ^ UINT64_C(768097847591))) & value_age_mask;
+  }
 };
 
-void log_pair(logging::loglevel level, const char *prefix, const buffer &key,
-              buffer &value);
+void log_pair(logging::loglevel level, const char *prefix, const buffer &key, buffer &value);
 
 } /* namespace keygen */
