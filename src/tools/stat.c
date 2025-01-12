@@ -92,6 +92,21 @@ static void error(const char *func, int rc) {
     fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc, mdbx_strerror(rc));
 }
 
+static void logger(MDBX_log_level_t level, const char *function, int line, const char *fmt, va_list args) {
+  static const char *const prefixes[] = {
+      "!!!fatal: ", // 0 fatal
+      " ! ",        // 1 error
+      " ~ ",        // 2 warning
+      "   ",        // 3 notice
+      "   //",      // 4 verbose
+  };
+  if (level < MDBX_LOG_DEBUG) {
+    if (function && line)
+      fprintf(stderr, "%s", prefixes[level]);
+    vfprintf(stderr, fmt, args);
+  }
+}
+
 int main(int argc, char *argv[]) {
   int opt, rc;
   MDBX_env *env;
@@ -183,6 +198,7 @@ int main(int argc, char *argv[]) {
     printf("mdbx_stat %s (%s, T-%s)\nRunning for %s...\n", mdbx_version.git.describe, mdbx_version.git.datetime,
            mdbx_version.git.tree, envname);
     fflush(nullptr);
+    mdbx_setup_debug(MDBX_LOG_NOTICE, MDBX_DBG_DONTCHANGE, logger);
   }
 
   rc = mdbx_env_create(&env);
@@ -287,7 +303,7 @@ int main(int argc, char *argv[]) {
       goto txn_abort;
     }
     if (rc == MDBX_RESULT_TRUE)
-      printf("Reader Table is empty\n");
+      printf("Reader Table is absent\n");
     else if (rc == MDBX_SUCCESS && rdrinfo > 1) {
       int dead;
       rc = mdbx_reader_check(env, &dead);

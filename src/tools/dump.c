@@ -223,6 +223,21 @@ static void usage(void) {
   exit(EXIT_FAILURE);
 }
 
+static void logger(MDBX_log_level_t level, const char *function, int line, const char *fmt, va_list args) {
+  static const char *const prefixes[] = {
+      "!!!fatal: ", // 0 fatal
+      " ! ",        // 1 error
+      " ~ ",        // 2 warning
+      "   ",        // 3 notice
+      "   //",      // 4 verbose
+  };
+  if (level < MDBX_LOG_DEBUG) {
+    if (function && line)
+      fprintf(stderr, "%s", prefixes[level]);
+    vfprintf(stderr, fmt, args);
+  }
+}
+
 static int equal_or_greater(const MDBX_val *a, const MDBX_val *b) {
   return (a->iov_len == b->iov_len && memcmp(a->iov_base, b->iov_base, a->iov_len) == 0) ? 0 : 1;
 }
@@ -330,6 +345,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "mdbx_dump %s (%s, T-%s)\nRunning for %s...\n", mdbx_version.git.describe,
             mdbx_version.git.datetime, mdbx_version.git.tree, envname);
     fflush(nullptr);
+    mdbx_setup_debug(MDBX_LOG_NOTICE, MDBX_DBG_DONTCHANGE, logger);
   }
 
   err = mdbx_env_create(&env);

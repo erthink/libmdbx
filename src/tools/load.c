@@ -51,6 +51,21 @@ static void error(const char *func, int rc) {
   }
 }
 
+static void logger(MDBX_log_level_t level, const char *function, int line, const char *fmt, va_list args) {
+  static const char *const prefixes[] = {
+      "!!!fatal: ", // 0 fatal
+      " ! ",        // 1 error
+      " ~ ",        // 2 warning
+      "   ",        // 3 notice
+      "   //",      // 4 verbose
+  };
+  if (level < MDBX_LOG_DEBUG) {
+    if (function && line)
+      fprintf(stderr, "%s", prefixes[level]);
+    vfprintf(stderr, fmt, args);
+  }
+}
+
 static char *valstr(char *line, const char *item) {
   const size_t len = strlen(item);
   if (strncmp(line, item, len) != 0)
@@ -544,10 +559,12 @@ int main(int argc, char *argv[]) {
 #endif /* !WINDOWS */
 
   envname = argv[optind];
-  if (!quiet)
+  if (!quiet) {
     printf("mdbx_load %s (%s, T-%s)\nRunning for %s...\n", mdbx_version.git.describe, mdbx_version.git.datetime,
            mdbx_version.git.tree, envname);
-  fflush(nullptr);
+    fflush(nullptr);
+    mdbx_setup_debug(MDBX_LOG_NOTICE, MDBX_DBG_DONTCHANGE, logger);
+  }
 
   dbuf.iov_len = 4096;
   dbuf.iov_base = osal_malloc(dbuf.iov_len);
