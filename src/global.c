@@ -424,6 +424,9 @@ __dll_export
 #ifdef MDBX_BUILD_FLAGS_CONFIG
     MDBX_BUILD_FLAGS_CONFIG
 #endif /* MDBX_BUILD_FLAGS_CONFIG */
+#if defined(MDBX_BUILD_FLAGS_CONFIG) && defined(MDBX_BUILD_FLAGS)
+    " "
+#endif
 #ifdef MDBX_BUILD_FLAGS
     MDBX_BUILD_FLAGS
 #endif /* MDBX_BUILD_FLAGS */
