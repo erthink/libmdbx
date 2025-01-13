@@ -1999,7 +1999,12 @@ typedef enum MDBX_error {
   MDBX_EPERM = EPERM,
   MDBX_EINTR = EINTR,
   MDBX_ENOFILE = ENOENT,
+#if defined(EREMOTEIO) || defined(DOXYGEN)
+  /** Cannot use the database on a network file system or when exporting it via NFS. */
+  MDBX_EREMOTE = EREMOTEIO,
+#else
   MDBX_EREMOTE = ENOTBLK,
+#endif /* EREMOTEIO */
   MDBX_EDEADLK = EDEADLK
 #endif /* !Windows */
 } MDBX_error_t;
