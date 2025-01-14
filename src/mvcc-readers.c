@@ -308,7 +308,7 @@ __cold txnid_t mvcc_kick_laggards(MDBX_env *env, const txnid_t straggler) {
   bool notify_eof_of_loop = false;
   int retry = 0;
   do {
-    const txnid_t steady = env->txn->tw.troika.txnid[env->txn->tw.troika.prefer_steady];
+    const txnid_t steady = env->txn->wr.troika.txnid[env->txn->wr.troika.prefer_steady];
     env->lck->rdt_refresh_flag.weak = /* force refresh */ true;
     oldest = mvcc_shapshot_oldest(env, steady);
     eASSERT(env, oldest < env->basal_txn->txnid);
@@ -374,7 +374,7 @@ __cold txnid_t mvcc_kick_laggards(MDBX_env *env, const txnid_t straggler) {
     if (safe64_read(&stucked->txnid) != straggler || !pid)
       continue;
 
-    const meta_ptr_t head = meta_recent(env, &env->txn->tw.troika);
+    const meta_ptr_t head = meta_recent(env, &env->txn->wr.troika);
     const txnid_t gap = (head.txnid - straggler) / xMDBX_TXNID_STEP;
     const uint64_t head_retired = unaligned_peek_u64(4, head.ptr_c->pages_retired);
     const size_t space = (head_retired > hold_retired) ? pgno2bytes(env, (pgno_t)(head_retired - hold_retired)) : 0;

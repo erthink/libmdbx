@@ -56,8 +56,8 @@ MDBX_txn_flags_t mdbx_txn_flags(const MDBX_txn *txn) {
   assert(0 == (int)(txn->flags & MDBX_TXN_INVALID));
 
   MDBX_txn_flags_t flags = txn->flags;
-  if (F_ISSET(flags, MDBX_TXN_PARKED | MDBX_TXN_RDONLY) && txn->to.reader &&
-      safe64_read(&txn->to.reader->tid) == MDBX_TID_TXN_OUSTED)
+  if (F_ISSET(flags, MDBX_TXN_PARKED | MDBX_TXN_RDONLY) && txn->ro.slot &&
+      safe64_read(&txn->ro.slot->tid) == MDBX_TID_TXN_OUSTED)
     flags |= MDBX_TXN_OUSTED;
   return flags;
 }
@@ -257,7 +257,7 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
     else {
       eASSERT(env, (txn->flags & ~(MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | txn_shrink_allowed | txn_may_have_cursors |
                                    MDBX_NOMETASYNC | MDBX_SAFE_NOSYNC | MDBX_TXN_SPILLS)) == 0);
-      assert(!txn->tw.spilled.list && !txn->tw.spilled.least_removed);
+      assert(!txn->wr.spilled.list && !txn->wr.spilled.least_removed);
     }
     txn->signature = txn_signature;
     txn->userctx = context;
@@ -456,10 +456,10 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
     info->txn_reader_lag = head.txnid - info->txn_id;
     info->txn_space_dirty = info->txn_space_retired = 0;
     uint64_t reader_snapshot_pages_retired = 0;
-    if (txn->to.reader &&
-        ((txn->flags & MDBX_TXN_PARKED) == 0 || safe64_read(&txn->to.reader->tid) != MDBX_TID_TXN_OUSTED) &&
+    if (txn->ro.slot &&
+        ((txn->flags & MDBX_TXN_PARKED) == 0 || safe64_read(&txn->ro.slot->tid) != MDBX_TID_TXN_OUSTED) &&
         head_retired >
-            (reader_snapshot_pages_retired = atomic_load64(&txn->to.reader->snapshot_pages_retired, mo_Relaxed))) {
+            (reader_snapshot_pages_retired = atomic_load64(&txn->ro.slot->snapshot_pages_retired, mo_Relaxed))) {
       info->txn_space_dirty = info->txn_space_retired =
           pgno2bytes(env, (pgno_t)(head_retired - reader_snapshot_pages_retired));
 
@@ -486,7 +486,7 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
             if (snap_txnid < next_reader && snap_tid >= MDBX_TID_TXN_OUSTED) {
               next_reader = snap_txnid;
               retired_next_reader = pgno2bytes(
-                  env, (pgno_t)(snap_retired - atomic_load64(&txn->to.reader->snapshot_pages_retired, mo_Relaxed)));
+                  env, (pgno_t)(snap_retired - atomic_load64(&txn->ro.slot->snapshot_pages_retired, mo_Relaxed)));
             }
           }
         }
@@ -497,11 +497,11 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
     info->txn_space_limit_soft = pgno2bytes(env, txn->geo.now);
     info->txn_space_limit_hard = pgno2bytes(env, txn->geo.upper);
     info->txn_space_retired =
-        pgno2bytes(env, txn->nested ? (size_t)txn->tw.retired_pages : MDBX_PNL_GETSIZE(txn->tw.retired_pages));
-    info->txn_space_leftover = pgno2bytes(env, txn->tw.dirtyroom);
+        pgno2bytes(env, txn->nested ? (size_t)txn->wr.retired_pages : MDBX_PNL_GETSIZE(txn->wr.retired_pages));
+    info->txn_space_leftover = pgno2bytes(env, txn->wr.dirtyroom);
     info->txn_space_dirty =
-        pgno2bytes(env, txn->tw.dirtylist ? txn->tw.dirtylist->pages_including_loose
-                                          : (txn->tw.writemap_dirty_npages + txn->tw.writemap_spilled_npages));
+        pgno2bytes(env, txn->wr.dirtylist ? txn->wr.dirtylist->pages_including_loose
+                                          : (txn->wr.writemap_dirty_npages + txn->wr.writemap_spilled_npages));
     info->txn_reader_lag = INT64_MAX;
     lck_t *const lck = env->lck_mmap.lck;
     if (scan_rlt && lck) {

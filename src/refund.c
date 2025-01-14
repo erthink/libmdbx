@@ -7,7 +7,7 @@
 static void refund_reclaimed(MDBX_txn *txn) {
   /* Scanning in descend order */
   pgno_t first_unallocated = txn->geo.first_unallocated;
-  const pnl_t pnl = txn->tw.repnl;
+  const pnl_t pnl = txn->wr.repnl;
   tASSERT(txn, MDBX_PNL_GETSIZE(pnl) && MDBX_PNL_MOST(pnl) == first_unallocated - 1);
 #if MDBX_PNL_ASCENDING
   size_t i = MDBX_PNL_GETSIZE(pnl);
@@ -28,16 +28,16 @@ static void refund_reclaimed(MDBX_txn *txn) {
   VERBOSE("refunded %" PRIaPGNO " pages: %" PRIaPGNO " -> %" PRIaPGNO, txn->geo.first_unallocated - first_unallocated,
           txn->geo.first_unallocated, first_unallocated);
   txn->geo.first_unallocated = first_unallocated;
-  tASSERT(txn, pnl_check_allocated(txn->tw.repnl, txn->geo.first_unallocated - 1));
+  tASSERT(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - 1));
 }
 
 static void refund_loose(MDBX_txn *txn) {
-  tASSERT(txn, txn->tw.loose_pages != nullptr);
-  tASSERT(txn, txn->tw.loose_count > 0);
+  tASSERT(txn, txn->wr.loose_pages != nullptr);
+  tASSERT(txn, txn->wr.loose_count > 0);
 
-  dpl_t *const dl = txn->tw.dirtylist;
+  dpl_t *const dl = txn->wr.dirtylist;
   if (dl) {
-    tASSERT(txn, dl->length >= txn->tw.loose_count);
+    tASSERT(txn, dl->length >= txn->wr.loose_count);
     tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
   } else {
     tASSERT(txn, (txn->flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
@@ -46,22 +46,22 @@ static void refund_loose(MDBX_txn *txn) {
   pgno_t onstack[MDBX_CACHELINE_SIZE * 8 / sizeof(pgno_t)];
   pnl_t suitable = onstack;
 
-  if (!dl || dl->length - dl->sorted > txn->tw.loose_count) {
+  if (!dl || dl->length - dl->sorted > txn->wr.loose_count) {
     /* Dirty list is useless since unsorted. */
-    if (pnl_bytes2size(sizeof(onstack)) < txn->tw.loose_count) {
-      suitable = pnl_alloc(txn->tw.loose_count);
+    if (pnl_bytes2size(sizeof(onstack)) < txn->wr.loose_count) {
+      suitable = pnl_alloc(txn->wr.loose_count);
       if (unlikely(!suitable))
         return /* this is not a reason for transaction fail */;
     }
 
     /* Collect loose-pages which may be refunded. */
-    tASSERT(txn, txn->geo.first_unallocated >= MIN_PAGENO + txn->tw.loose_count);
+    tASSERT(txn, txn->geo.first_unallocated >= MIN_PAGENO + txn->wr.loose_count);
     pgno_t most = MIN_PAGENO;
     size_t w = 0;
-    for (const page_t *lp = txn->tw.loose_pages; lp; lp = page_next(lp)) {
+    for (const page_t *lp = txn->wr.loose_pages; lp; lp = page_next(lp)) {
       tASSERT(txn, lp->flags == P_LOOSE);
       tASSERT(txn, txn->geo.first_unallocated > lp->pgno);
-      if (likely(txn->geo.first_unallocated - txn->tw.loose_count <= lp->pgno)) {
+      if (likely(txn->geo.first_unallocated - txn->wr.loose_count <= lp->pgno)) {
         tASSERT(txn, w < ((suitable == onstack) ? pnl_bytes2size(sizeof(onstack)) : MDBX_PNL_ALLOCLEN(suitable)));
         suitable[++w] = lp->pgno;
         most = (lp->pgno > most) ? lp->pgno : most;
@@ -90,11 +90,11 @@ static void refund_loose(MDBX_txn *txn) {
       const size_t refunded = txn->geo.first_unallocated - most;
       DEBUG("refund-suitable %zu pages %" PRIaPGNO " -> %" PRIaPGNO, refunded, most, txn->geo.first_unallocated);
       txn->geo.first_unallocated = most;
-      txn->tw.loose_count -= refunded;
+      txn->wr.loose_count -= refunded;
       if (dl) {
-        txn->tw.dirtyroom += refunded;
+        txn->wr.dirtyroom += refunded;
         dl->pages_including_loose -= refunded;
-        assert(txn->tw.dirtyroom <= txn->env->options.dp_limit);
+        assert(txn->wr.dirtyroom <= txn->env->options.dp_limit);
 
         /* Filter-out dirty list */
         size_t r = 0;
@@ -115,8 +115,8 @@ static void refund_loose(MDBX_txn *txn) {
           }
         }
         dpl_setlen(dl, w);
-        tASSERT(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
-                         (txn->parent ? txn->parent->tw.dirtyroom : txn->env->options.dp_limit));
+        tASSERT(txn, txn->wr.dirtyroom + txn->wr.dirtylist->length ==
+                         (txn->parent ? txn->parent->wr.dirtyroom : txn->env->options.dp_limit));
       }
       goto unlink_loose;
     }
@@ -141,15 +141,15 @@ static void refund_loose(MDBX_txn *txn) {
     if (dl->sorted != dl->length) {
       const size_t refunded = dl->sorted - dl->length;
       dl->sorted = dl->length;
-      txn->tw.loose_count -= refunded;
-      txn->tw.dirtyroom += refunded;
+      txn->wr.loose_count -= refunded;
+      txn->wr.dirtyroom += refunded;
       dl->pages_including_loose -= refunded;
-      tASSERT(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
-                       (txn->parent ? txn->parent->tw.dirtyroom : txn->env->options.dp_limit));
+      tASSERT(txn, txn->wr.dirtyroom + txn->wr.dirtylist->length ==
+                       (txn->parent ? txn->parent->wr.dirtyroom : txn->env->options.dp_limit));
 
       /* Filter-out loose chain & dispose refunded pages. */
     unlink_loose:
-      for (page_t *__restrict *__restrict link = &txn->tw.loose_pages; *link;) {
+      for (page_t *__restrict *__restrict link = &txn->wr.loose_pages; *link;) {
         page_t *dp = *link;
         tASSERT(txn, dp->flags == P_LOOSE);
         MDBX_ASAN_UNPOISON_MEMORY_REGION(&page_next(dp), sizeof(page_t *));
@@ -168,21 +168,21 @@ static void refund_loose(MDBX_txn *txn) {
   tASSERT(txn, dpl_check(txn));
   if (suitable != onstack)
     pnl_free(suitable);
-  txn->tw.loose_refund_wl = txn->geo.first_unallocated;
+  txn->wr.loose_refund_wl = txn->geo.first_unallocated;
 }
 
 bool txn_refund(MDBX_txn *txn) {
   const pgno_t before = txn->geo.first_unallocated;
 
-  if (txn->tw.loose_pages && txn->tw.loose_refund_wl > txn->geo.first_unallocated)
+  if (txn->wr.loose_pages && txn->wr.loose_refund_wl > txn->geo.first_unallocated)
     refund_loose(txn);
 
   while (true) {
-    if (MDBX_PNL_GETSIZE(txn->tw.repnl) == 0 || MDBX_PNL_MOST(txn->tw.repnl) != txn->geo.first_unallocated - 1)
+    if (MDBX_PNL_GETSIZE(txn->wr.repnl) == 0 || MDBX_PNL_MOST(txn->wr.repnl) != txn->geo.first_unallocated - 1)
       break;
 
     refund_reclaimed(txn);
-    if (!txn->tw.loose_pages || txn->tw.loose_refund_wl <= txn->geo.first_unallocated)
+    if (!txn->wr.loose_pages || txn->wr.loose_refund_wl <= txn->geo.first_unallocated)
       break;
 
     const pgno_t memo = txn->geo.first_unallocated;
@@ -194,7 +194,7 @@ bool txn_refund(MDBX_txn *txn) {
   if (before == txn->geo.first_unallocated)
     return false;
 
-  if (txn->tw.spilled.list)
+  if (txn->wr.spilled.list)
     /* Squash deleted pagenums if we refunded any */
     spill_purge(txn);
 

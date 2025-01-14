@@ -443,8 +443,8 @@ static __always_inline pgr_t page_get_inline(const uint16_t ILL, const MDBX_curs
 
       const size_t i = dpl_search(spiller, pgno);
       tASSERT(txn, (intptr_t)i > 0);
-      if (spiller->tw.dirtylist->items[i].pgno == pgno) {
-        r.page = spiller->tw.dirtylist->items[i].ptr;
+      if (spiller->wr.dirtylist->items[i].pgno == pgno) {
+        r.page = spiller->wr.dirtylist->items[i].ptr;
         break;
       }
 

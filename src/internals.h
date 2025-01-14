@@ -206,9 +206,9 @@ struct MDBX_txn {
 
   union {
     struct {
-      /* For read txns: This thread/txn's reader table slot, or nullptr. */
-      reader_slot_t *reader;
-    } to;
+      /* For read txns: This thread/txn's slot table slot, or nullptr. */
+      reader_slot_t *slot;
+    } ro;
     struct {
       troika_t troika;
       pnl_t __restrict repnl; /* Reclaimed GC pages */
@@ -236,7 +236,7 @@ struct MDBX_txn {
       /* The list of loose pages that became unused and may be reused
        * in this transaction, linked through `page_next()`. */
       page_t *__restrict loose_pages;
-      /* Number of loose pages (tw.loose_pages) */
+      /* Number of loose pages (wr.loose_pages) */
       size_t loose_count;
       union {
         struct {
@@ -250,7 +250,7 @@ struct MDBX_txn {
         size_t writemap_spilled_npages;
       };
       /* In write txns, next is located the array of cursors for each DB */
-    } tw;
+    } wr;
   };
 };
 

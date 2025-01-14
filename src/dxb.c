@@ -370,7 +370,7 @@ void dxb_sanitize_tail(MDBX_env *env, MDBX_txn *txn) {
       return;
     } else if (env->txn && env_txn0_owned(env)) {
       /* inside write-txn */
-      last = meta_recent(env, &env->basal_txn->tw.troika).ptr_v->geometry.first_unallocated;
+      last = meta_recent(env, &env->basal_txn->wr.troika).ptr_v->geometry.first_unallocated;
     } else if (env->flags & MDBX_RDONLY) {
       /* read-only mode, no write-txn, no wlock mutex */
       last = NUM_METAS;
@@ -1300,8 +1300,8 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
 
   *troika = meta_tap(env);
   for (MDBX_txn *txn = env->basal_txn; txn; txn = txn->nested)
-    if (troika != &txn->tw.troika)
-      txn->tw.troika = *troika;
+    if (troika != &txn->wr.troika)
+      txn->wr.troika = *troika;
 
   /* LY: shrink datafile if needed */
   if (unlikely(shrink)) {

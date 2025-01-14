@@ -6,12 +6,12 @@
 #include "internals.h"
 
 __cold int cursor_check(const MDBX_cursor *mc) {
-  if (!mc->txn->tw.dirtylist) {
+  if (!mc->txn->wr.dirtylist) {
     cASSERT(mc, (mc->txn->flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
   } else {
     cASSERT(mc, (mc->txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
-    cASSERT(mc, mc->txn->tw.dirtyroom + mc->txn->tw.dirtylist->length ==
-                    (mc->txn->parent ? mc->txn->parent->tw.dirtyroom : mc->txn->env->options.dp_limit));
+    cASSERT(mc, mc->txn->wr.dirtyroom + mc->txn->wr.dirtylist->length ==
+                    (mc->txn->parent ? mc->txn->parent->wr.dirtyroom : mc->txn->env->options.dp_limit));
   }
 
   cASSERT(mc, (mc->checking & z_updating) ? mc->top + 1 <= mc->tree->height : mc->top + 1 == mc->tree->height);

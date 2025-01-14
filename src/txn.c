@@ -4,7 +4,7 @@
 #include "internals.h"
 
 __hot txnid_t txn_snapshot_oldest(const MDBX_txn *const txn) {
-  return mvcc_shapshot_oldest(txn->env, txn->tw.troika.txnid[txn->tw.troika.prefer_steady]);
+  return mvcc_shapshot_oldest(txn->env, txn->wr.troika.txnid[txn->wr.troika.prefer_steady]);
 }
 
 void txn_done_cursors(MDBX_txn *txn) {
@@ -79,7 +79,6 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
     rc = txn_ro_start(txn, flags);
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
-    tASSERT(txn, rc == MDBX_SUCCESS);
     ENSURE(env, txn->txnid >=
                     /* paranoia is appropriate here */ env->lck->cached_oldest.weak);
     tASSERT(txn, txn->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
@@ -119,8 +118,8 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
     }
 #endif /* Windows */
 
-    txn->tw.troika = meta_tap(env);
-    const meta_ptr_t head = meta_recent(env, &txn->tw.troika);
+    txn->wr.troika = meta_tap(env);
+    const meta_ptr_t head = meta_recent(env, &txn->wr.troika);
     uint64_t timestamp = 0;
     while ("workaround for https://libmdbx.dqdkfa.ru/dead-github/issues/269") {
       rc = coherency_fetch_head(txn, head, &timestamp);
@@ -141,18 +140,18 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
     tASSERT(txn, check_table_flags(txn->dbs[MAIN_DBI].flags));
     txn->flags = flags;
     txn->nested = nullptr;
-    txn->tw.loose_pages = nullptr;
-    txn->tw.loose_count = 0;
+    txn->wr.loose_pages = nullptr;
+    txn->wr.loose_count = 0;
 #if MDBX_ENABLE_REFUND
-    txn->tw.loose_refund_wl = 0;
+    txn->wr.loose_refund_wl = 0;
 #endif /* MDBX_ENABLE_REFUND */
-    MDBX_PNL_SETSIZE(txn->tw.retired_pages, 0);
-    txn->tw.spilled.list = nullptr;
-    txn->tw.spilled.least_removed = 0;
-    txn->tw.gc.time_acc = 0;
-    txn->tw.gc.last_reclaimed = 0;
-    if (txn->tw.gc.retxl)
-      MDBX_PNL_SETSIZE(txn->tw.gc.retxl, 0);
+    MDBX_PNL_SETSIZE(txn->wr.retired_pages, 0);
+    txn->wr.spilled.list = nullptr;
+    txn->wr.spilled.least_removed = 0;
+    txn->wr.gc.time_acc = 0;
+    txn->wr.gc.last_reclaimed = 0;
+    if (txn->wr.gc.retxl)
+      MDBX_PNL_SETSIZE(txn->wr.gc.retxl, 0);
     env->txn = txn;
   }
 
@@ -326,16 +325,16 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
         rc = dpl_alloc(txn);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
-        txn->tw.dirtyroom = txn->env->options.dp_limit;
-        txn->tw.dirtylru = MDBX_DEBUG ? UINT32_MAX / 3 - 42 : 0;
+        txn->wr.dirtyroom = txn->env->options.dp_limit;
+        txn->wr.dirtylru = MDBX_DEBUG ? UINT32_MAX / 3 - 42 : 0;
       } else {
-        tASSERT(txn, txn->tw.dirtylist == nullptr);
-        txn->tw.dirtylist = nullptr;
-        txn->tw.dirtyroom = MAX_PAGENO;
-        txn->tw.dirtylru = 0;
+        tASSERT(txn, txn->wr.dirtylist == nullptr);
+        txn->wr.dirtylist = nullptr;
+        txn->wr.dirtyroom = MAX_PAGENO;
+        txn->wr.dirtylru = 0;
       }
-      eASSERT(env, txn->tw.writemap_dirty_npages == 0);
-      eASSERT(env, txn->tw.writemap_spilled_npages == 0);
+      eASSERT(env, txn->wr.writemap_dirty_npages == 0);
+      eASSERT(env, txn->wr.writemap_spilled_npages == 0);
 
       MDBX_cursor *const gc = ptr_disp(txn, sizeof(MDBX_txn));
       rc = cursor_init(gc, txn, FREE_DBI);
@@ -378,8 +377,8 @@ int txn_end(MDBX_txn *txn, unsigned mode) {
     ERROR("parent txn %p is invalid or mismatch for nested txn %p", (void *)parent, (void *)txn);
     return MDBX_PROBLEM;
   }
-  tASSERT(txn, pnl_check_allocated(txn->tw.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
-  tASSERT(txn, memcmp(&txn->tw.troika, &parent->tw.troika, sizeof(troika_t)) == 0);
+  tASSERT(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
+  tASSERT(txn, memcmp(&txn->wr.troika, &parent->wr.troika, sizeof(troika_t)) == 0);
   tASSERT(txn, mode & TXN_END_FREE);
   env->txn = parent;
   const pgno_t nested_now = txn->geo.now, nested_upper = txn->geo.upper;
@@ -434,9 +433,9 @@ MDBX_txn *txn_alloc(const MDBX_txn_flags_t flags, MDBX_env *env) {
 #else
       0;
 #endif /* MDBX_ENABLE_DBI_SPARSE */
-  STATIC_ASSERT(sizeof(txn->tw) > sizeof(txn->to));
+  STATIC_ASSERT(sizeof(txn->wr) > sizeof(txn->ro));
   const size_t base =
-      (flags & MDBX_TXN_RDONLY) ? sizeof(MDBX_txn) - sizeof(txn->tw) + sizeof(txn->to) : sizeof(MDBX_txn);
+      (flags & MDBX_TXN_RDONLY) ? sizeof(MDBX_txn) - sizeof(txn->wr) + sizeof(txn->ro) : sizeof(MDBX_txn);
   const size_t size = base +
                       ((flags & MDBX_TXN_RDONLY) ? (size_t)bitmap_bytes + env->max_dbi * sizeof(txn->dbi_seqs[0]) : 0) +
                       env->max_dbi * (sizeof(txn->dbs[0]) + sizeof(txn->cursors[0]) + sizeof(txn->dbi_state[0]));

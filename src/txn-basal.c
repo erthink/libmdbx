@@ -32,16 +32,16 @@ static int txn_write(MDBX_txn *txn, iov_ctx_t *ctx) {
       txn->env->lck->eoos_timestamp.weak = osal_monotime();
   }
 
-  txn->tw.dirtylist->pages_including_loose -= total_npages;
+  txn->wr.dirtylist->pages_including_loose -= total_npages;
   while (r <= dl->length)
     dl->items[++w] = dl->items[r++];
 
   dl->sorted = dpl_setlen(dl, w);
-  txn->tw.dirtyroom += r - 1 - w;
-  tASSERT(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
-                   (txn->parent ? txn->parent->tw.dirtyroom : txn->env->options.dp_limit));
-  tASSERT(txn, txn->tw.dirtylist->length == txn->tw.loose_count);
-  tASSERT(txn, txn->tw.dirtylist->pages_including_loose == txn->tw.loose_count);
+  txn->wr.dirtyroom += r - 1 - w;
+  tASSERT(txn, txn->wr.dirtyroom + txn->wr.dirtylist->length ==
+                   (txn->parent ? txn->parent->wr.dirtyroom : txn->env->options.dp_limit));
+  tASSERT(txn, txn->wr.dirtylist->length == txn->wr.loose_count);
+  tASSERT(txn, txn->wr.dirtylist->pages_including_loose == txn->wr.loose_count);
   return rc;
 }
 
@@ -70,9 +70,9 @@ __cold MDBX_txn *txn_basal_create(const size_t max_dbi) {
   txn->dbi_sparse = ptr_disp(txn->dbi_state, -bitmap_bytes);
 #endif /* MDBX_ENABLE_DBI_SPARSE */
   txn->flags = MDBX_TXN_FINISHED;
-  txn->tw.retired_pages = pnl_alloc(MDBX_PNL_INITIAL);
-  txn->tw.repnl = pnl_alloc(MDBX_PNL_INITIAL);
-  if (unlikely(!txn->tw.retired_pages || !txn->tw.repnl)) {
+  txn->wr.retired_pages = pnl_alloc(MDBX_PNL_INITIAL);
+  txn->wr.repnl = pnl_alloc(MDBX_PNL_INITIAL);
+  if (unlikely(!txn->wr.retired_pages || !txn->wr.repnl)) {
     txn_basal_destroy(txn);
     txn = nullptr;
   }
@@ -82,10 +82,10 @@ __cold MDBX_txn *txn_basal_create(const size_t max_dbi) {
 
 __cold void txn_basal_destroy(MDBX_txn *txn) {
   dpl_free(txn);
-  txl_free(txn->tw.gc.retxl);
-  pnl_free(txn->tw.retired_pages);
-  pnl_free(txn->tw.spilled.list);
-  pnl_free(txn->tw.repnl);
+  txl_free(txn->wr.gc.retxl);
+  pnl_free(txn->wr.retired_pages);
+  pnl_free(txn->wr.spilled.list);
+  pnl_free(txn->wr.repnl);
   osal_free(txn);
 }
 
@@ -97,12 +97,12 @@ int txn_basal_end(MDBX_txn *txn, unsigned mode) {
 
   txn->flags = MDBX_TXN_FINISHED;
   env->txn = nullptr;
-  pnl_free(txn->tw.spilled.list);
-  txn->tw.spilled.list = nullptr;
+  pnl_free(txn->wr.spilled.list);
+  txn->wr.spilled.list = nullptr;
 
   eASSERT(env, txn->parent == nullptr);
-  pnl_shrink(&txn->tw.retired_pages);
-  pnl_shrink(&txn->tw.repnl);
+  pnl_shrink(&txn->wr.retired_pages);
+  pnl_shrink(&txn->wr.repnl);
   if (!(env->flags & MDBX_WRITEMAP))
     dpl_release_shadows(txn);
 
@@ -121,18 +121,18 @@ int txn_basal_end(MDBX_txn *txn, unsigned mode) {
 int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
   MDBX_env *const env = txn->env;
   tASSERT(txn, txn == env->basal_txn && !txn->parent && !txn->nested);
-  if (!txn->tw.dirtylist) {
+  if (!txn->wr.dirtylist) {
     tASSERT(txn, (txn->flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
   } else {
     tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
-    tASSERT(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length == env->options.dp_limit);
+    tASSERT(txn, txn->wr.dirtyroom + txn->wr.dirtylist->length == env->options.dp_limit);
   }
 
   if (txn->flags & txn_may_have_cursors)
     txn_done_cursors(txn);
 
   bool need_flush_for_nometasync = false;
-  const meta_ptr_t head = meta_recent(env, &txn->tw.troika);
+  const meta_ptr_t head = meta_recent(env, &txn->wr.troika);
   const uint32_t meta_sync_txnid = atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed);
   /* sync prev meta */
   if (head.is_steady && meta_sync_txnid != (uint32_t)head.txnid) {
@@ -175,7 +175,7 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
     }
   }
 
-  if ((!txn->tw.dirtylist || txn->tw.dirtylist->length == 0) &&
+  if ((!txn->wr.dirtylist || txn->wr.dirtylist->length == 0) &&
       (txn->flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS | MDBX_TXN_NOSYNC | MDBX_TXN_NOMETASYNC)) == 0 &&
       !need_flush_for_nometasync && !head.is_steady && !AUDIT_ENABLED()) {
     TXN_FOREACH_DBI_ALL(txn, i) { tASSERT(txn, !(txn->dbi_state[i] & DBI_DIRTY)); }
@@ -225,7 +225,7 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  tASSERT(txn, txn->tw.loose_count == 0);
+  tASSERT(txn, txn->wr.loose_count == 0);
   txn->dbs[FREE_DBI].mod_txnid = (txn->dbi_state[FREE_DBI] & DBI_DIRTY) ? txn->txnid : txn->dbs[FREE_DBI].mod_txnid;
   txn->dbs[MAIN_DBI].mod_txnid = (txn->dbi_state[MAIN_DBI] & DBI_DIRTY) ? txn->txnid : txn->dbs[MAIN_DBI].mod_txnid;
 
@@ -234,16 +234,16 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
     ts->audit = ts->gc;
   }
   if (AUDIT_ENABLED()) {
-    rc = audit_ex(txn, MDBX_PNL_GETSIZE(txn->tw.retired_pages), true);
+    rc = audit_ex(txn, MDBX_PNL_GETSIZE(txn->wr.retired_pages), true);
     if (ts)
       ts->audit = osal_monotime();
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
 
-  if (txn->tw.dirtylist) {
+  if (txn->wr.dirtylist) {
     tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
-    tASSERT(txn, txn->tw.loose_count == 0);
+    tASSERT(txn, txn->wr.loose_count == 0);
 
     mdbx_filehandle_t fd =
 #if defined(_WIN32) || defined(_WIN64)
@@ -251,14 +251,14 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
     (void)need_flush_for_nometasync;
 #else
         (need_flush_for_nometasync || env->dsync_fd == INVALID_HANDLE_VALUE ||
-         txn->tw.dirtylist->length > env->options.writethrough_threshold ||
+         txn->wr.dirtylist->length > env->options.writethrough_threshold ||
          atomic_load64(&env->lck->unsynced_pages, mo_Relaxed))
             ? env->lazy_fd
             : env->dsync_fd;
 #endif /* Windows */
 
     iov_ctx_t write_ctx;
-    rc = iov_init(txn, &write_ctx, txn->tw.dirtylist->length, txn->tw.dirtylist->pages_including_loose, fd, false);
+    rc = iov_init(txn, &write_ctx, txn->wr.dirtylist->length, txn->wr.dirtylist->pages_including_loose, fd, false);
     if (unlikely(rc != MDBX_SUCCESS)) {
       ERROR("txn-%s: error %d", "iov-init", rc);
       return rc;
@@ -271,7 +271,7 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
     }
   } else {
     tASSERT(txn, (txn->flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
-    env->lck->unsynced_pages.weak += txn->tw.writemap_dirty_npages;
+    env->lck->unsynced_pages.weak += txn->wr.writemap_dirty_npages;
     if (!env->lck->eoos_timestamp.weak)
       env->lck->eoos_timestamp.weak = osal_monotime();
   }
@@ -286,7 +286,7 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
   meta.validator_id = head.ptr_c->validator_id;
   meta.extra_pagehdr = head.ptr_c->extra_pagehdr;
   unaligned_poke_u64(4, meta.pages_retired,
-                     unaligned_peek_u64(4, head.ptr_c->pages_retired) + MDBX_PNL_GETSIZE(txn->tw.retired_pages));
+                     unaligned_peek_u64(4, head.ptr_c->pages_retired) + MDBX_PNL_GETSIZE(txn->wr.retired_pages));
   meta.geometry = txn->geo;
   meta.trees.gc = txn->dbs[FREE_DBI];
   meta.trees.main = txn->dbs[MAIN_DBI];
@@ -303,7 +303,7 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
   meta.unsafe_sign = DATASIGN_NONE;
   meta_set_txnid(env, &meta, commit_txnid);
 
-  rc = dxb_sync_locked(env, env->flags | txn->flags | txn_shrink_allowed, &meta, &txn->tw.troika);
+  rc = dxb_sync_locked(env, env->flags | txn->flags | txn_shrink_allowed, &meta, &txn->wr.troika);
 
   if (ts)
     ts->sync = osal_monotime();

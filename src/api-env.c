@@ -683,7 +683,7 @@ static int env_info_snap(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo 
 #endif
   }
 
-  *troika = (txn && !(txn->flags & MDBX_TXN_RDONLY)) ? txn->tw.troika : meta_tap(env);
+  *troika = (txn && !(txn->flags & MDBX_TXN_RDONLY)) ? txn->wr.troika : meta_tap(env);
   const meta_ptr_t head = meta_recent(env, troika);
   const meta_t *const meta0 = METAPAGE(env, 0);
   const meta_t *const meta1 = METAPAGE(env, 1);
@@ -947,9 +947,9 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
       if (unlikely(err != MDBX_SUCCESS))
         return LOG_IFERR(err);
       should_unlock = true;
-      env->basal_txn->tw.troika = meta_tap(env);
+      env->basal_txn->wr.troika = meta_tap(env);
       eASSERT(env, !env->txn && !env->basal_txn->nested);
-      env->basal_txn->txnid = env->basal_txn->tw.troika.txnid[env->basal_txn->tw.troika.recent];
+      env->basal_txn->txnid = env->basal_txn->wr.troika.txnid[env->basal_txn->wr.troika.recent];
       txn_snapshot_oldest(env->basal_txn);
     }
 
@@ -957,7 +957,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
     if (pagesize <= 0 || pagesize >= INT_MAX)
       pagesize = env->ps;
     const geo_t *const geo =
-        inside_txn ? &env->txn->geo : &meta_recent(env, &env->basal_txn->tw.troika).ptr_c->geometry;
+        inside_txn ? &env->txn->geo : &meta_recent(env, &env->basal_txn->wr.troika).ptr_c->geometry;
     if (size_lower < 0)
       size_lower = pgno2bytes(env, geo->lower);
     if (size_now < 0)
@@ -1173,7 +1173,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
     memset(&meta, 0, sizeof(meta));
     if (!inside_txn) {
       eASSERT(env, should_unlock);
-      const meta_ptr_t head = meta_recent(env, &env->basal_txn->tw.troika);
+      const meta_ptr_t head = meta_recent(env, &env->basal_txn->wr.troika);
 
       uint64_t timestamp = 0;
       while ("workaround for "
@@ -1267,7 +1267,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
         env->txn->flags |= MDBX_TXN_DIRTY;
       } else {
         meta.geometry = new_geo;
-        rc = dxb_sync_locked(env, env->flags, &meta, &env->basal_txn->tw.troika);
+        rc = dxb_sync_locked(env, env->flags, &meta, &env->basal_txn->wr.troika);
         if (likely(rc == MDBX_SUCCESS)) {
           env->geo_in_bytes.now = pgno2bytes(env, new_geo.now = meta.geometry.now);
           env->geo_in_bytes.upper = pgno2bytes(env, new_geo.upper = meta.geometry.upper);

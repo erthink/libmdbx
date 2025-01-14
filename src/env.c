@@ -71,7 +71,7 @@ retry:;
     goto bailout;
   }
 
-  const troika_t troika = (txn0_owned | should_unlock) ? env->basal_txn->tw.troika : meta_tap(env);
+  const troika_t troika = (txn0_owned | should_unlock) ? env->basal_txn->wr.troika : meta_tap(env);
   const meta_ptr_t head = meta_recent(env, &troika);
   const uint64_t unsynced_pages = atomic_load64(&env->lck->unsynced_pages, mo_Relaxed);
   if (unsynced_pages == 0) {
@@ -153,7 +153,7 @@ retry:;
 #if MDBX_ENABLE_PGOP_STAT
       env->lck->pgops.wops.weak += wops;
 #endif /* MDBX_ENABLE_PGOP_STAT */
-      env->basal_txn->tw.troika = meta_tap(env);
+      env->basal_txn->wr.troika = meta_tap(env);
       eASSERT(env, !env->txn && !env->basal_txn->nested);
       goto retry;
     }
@@ -177,7 +177,7 @@ retry:;
     DEBUG("meta-head %" PRIaPGNO ", %s, sync_pending %" PRIu64, data_page(head.ptr_c)->pgno,
           durable_caption(head.ptr_c), unsynced_pages);
     meta_t meta = *head.ptr_c;
-    rc = dxb_sync_locked(env, flags, &meta, &env->basal_txn->tw.troika);
+    rc = dxb_sync_locked(env, flags, &meta, &env->basal_txn->wr.troika);
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
   }

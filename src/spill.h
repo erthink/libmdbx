@@ -13,7 +13,7 @@ MDBX_INTERNAL int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, con
 
 static inline size_t spill_search(const MDBX_txn *txn, pgno_t pgno) {
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
-  const pnl_t pnl = txn->tw.spilled.list;
+  const pnl_t pnl = txn->wr.spilled.list;
   if (likely(!pnl))
     return 0;
   pgno <<= 1;
@@ -22,7 +22,7 @@ static inline size_t spill_search(const MDBX_txn *txn, pgno_t pgno) {
 }
 
 static inline bool spill_intersect(const MDBX_txn *txn, pgno_t pgno, size_t npages) {
-  const pnl_t pnl = txn->tw.spilled.list;
+  const pnl_t pnl = txn->wr.spilled.list;
   if (likely(!pnl))
     return false;
   const size_t len = MDBX_PNL_GETSIZE(pnl);
@@ -56,10 +56,10 @@ static inline int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0, const si
   tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
   tASSERT(txn, !m0 || cursor_is_tracked(m0));
 
-  const intptr_t wanna_spill_entries = txn->tw.dirtylist ? (need - txn->tw.dirtyroom - txn->tw.loose_count) : 0;
+  const intptr_t wanna_spill_entries = txn->wr.dirtylist ? (need - txn->wr.dirtyroom - txn->wr.loose_count) : 0;
   const intptr_t wanna_spill_npages =
-      need + (txn->tw.dirtylist ? txn->tw.dirtylist->pages_including_loose : txn->tw.writemap_dirty_npages) -
-      txn->tw.loose_count - txn->env->options.dp_limit;
+      need + (txn->wr.dirtylist ? txn->wr.dirtylist->pages_including_loose : txn->wr.writemap_dirty_npages) -
+      txn->wr.loose_count - txn->env->options.dp_limit;
 
   /* production mode */
   if (likely(wanna_spill_npages < 1 && wanna_spill_entries < 1)

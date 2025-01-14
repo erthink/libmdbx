@@ -4,7 +4,7 @@
 #include "internals.h"
 
 static inline int txn_ro_rslot(MDBX_txn *txn) {
-  reader_slot_t *slot = txn->to.reader;
+  reader_slot_t *slot = txn->ro.slot;
   STATIC_ASSERT(sizeof(uintptr_t) <= sizeof(slot->tid));
   if (likely(slot)) {
     if (likely(slot->pid.weak == txn->env->pid && slot->txnid.weak >= SAFE64_INVALID_THRESHOLD)) {
@@ -26,7 +26,7 @@ static inline int txn_ro_rslot(MDBX_txn *txn) {
       if (likely(slot->pid.weak == env->pid && slot->txnid.weak >= SAFE64_INVALID_THRESHOLD)) {
         tASSERT(txn, slot->pid.weak == osal_getpid());
         tASSERT(txn, slot->tid.weak == ((env->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self()));
-        txn->to.reader = slot;
+        txn->ro.slot = slot;
         return MDBX_SUCCESS;
       }
       if (unlikely(slot->pid.weak) || !(globals.runtime_flags & MDBX_DBG_LEGACY_MULTIOPEN))
@@ -42,7 +42,7 @@ static inline int txn_ro_rslot(MDBX_txn *txn) {
     tASSERT(txn, brs.slot->pid.weak == osal_getpid());
     tASSERT(txn, brs.slot->tid.weak == ((env->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self()));
   }
-  txn->to.reader = brs.slot;
+  txn->ro.slot = brs.slot;
   return brs.err;
 }
 
@@ -55,7 +55,7 @@ static inline int txn_ro_seize(MDBX_txn *txn) {
     MDBX_env *const env = txn->env;
     const meta_ptr_t head = likely(env->stuck_meta < 0) ? /* regular */ meta_recent(env, &troika)
                                                         : /* recovery mode */ meta_ptr(env, env->stuck_meta);
-    reader_slot_t *const r = txn->to.reader;
+    reader_slot_t *const r = txn->ro.slot;
     if (likely(r != nullptr)) {
       safe64_reset(&r->txnid, true);
       atomic_store32(&r->snapshot_pages_used, head.ptr_v->geometry.first_unallocated, mo_Relaxed);
@@ -117,7 +117,7 @@ int txn_ro_start(MDBX_txn *txn, unsigned flags) {
     goto bailout;
 
   STATIC_ASSERT(MDBX_TXN_RDONLY_PREPARE > MDBX_TXN_RDONLY);
-  reader_slot_t *r = txn->to.reader;
+  reader_slot_t *r = txn->ro.slot;
   if (flags & (MDBX_TXN_RDONLY_PREPARE - MDBX_TXN_RDONLY)) {
     eASSERT(env, txn->txnid == 0);
     eASSERT(env, txn->owner == 0);
@@ -153,8 +153,8 @@ int txn_ro_start(MDBX_txn *txn, unsigned flags) {
 bailout:
   tASSERT(txn, err != MDBX_SUCCESS);
   txn->txnid = INVALID_TXNID;
-  if (likely(txn->to.reader))
-    safe64_reset(&txn->to.reader->txnid, true);
+  if (likely(txn->ro.slot))
+    safe64_reset(&txn->ro.slot->txnid, true);
   return err;
 }
 
@@ -162,10 +162,10 @@ int txn_ro_end(MDBX_txn *txn, unsigned mode) {
   MDBX_env *const env = txn->env;
   tASSERT(txn, (txn->flags & txn_may_have_cursors) == 0);
   txn->n_dbi = 0; /* prevent further DBI activity */
-  if (txn->to.reader) {
-    reader_slot_t *slot = txn->to.reader;
+  if (txn->ro.slot) {
+    reader_slot_t *slot = txn->ro.slot;
     if (unlikely(!env->lck))
-      txn->to.reader = nullptr;
+      txn->ro.slot = nullptr;
     else {
       eASSERT(env, slot->pid.weak == env->pid);
       if (likely((txn->flags & MDBX_TXN_FINISHED) == 0)) {
@@ -194,7 +194,7 @@ int txn_ro_end(MDBX_txn *txn, unsigned mode) {
       if (mode & TXN_END_SLOT) {
         if ((env->flags & ENV_TXKEY) == 0)
           atomic_store32(&slot->pid, 0, mo_Relaxed);
-        txn->to.reader = nullptr;
+        txn->ro.slot = nullptr;
       }
     }
   }
@@ -213,9 +213,9 @@ int txn_ro_end(MDBX_txn *txn, unsigned mode) {
 }
 
 int txn_ro_park(MDBX_txn *txn, bool autounpark) {
-  reader_slot_t *const rslot = txn->to.reader;
+  reader_slot_t *const rslot = txn->ro.slot;
   tASSERT(txn, (txn->flags & (MDBX_TXN_FINISHED | MDBX_TXN_RDONLY | MDBX_TXN_PARKED)) == MDBX_TXN_RDONLY);
-  tASSERT(txn, txn->to.reader->tid.weak < MDBX_TID_TXN_OUSTED);
+  tASSERT(txn, txn->ro.slot->tid.weak < MDBX_TID_TXN_OUSTED);
   if (unlikely((txn->flags & (MDBX_TXN_FINISHED | MDBX_TXN_RDONLY | MDBX_TXN_PARKED)) != MDBX_TXN_RDONLY))
     return MDBX_BAD_TXN;
 
@@ -244,7 +244,7 @@ int txn_ro_unpark(MDBX_txn *txn) {
                (MDBX_TXN_RDONLY | MDBX_TXN_PARKED)))
     return MDBX_BAD_TXN;
 
-  for (reader_slot_t *const rslot = txn->to.reader; rslot; atomic_yield()) {
+  for (reader_slot_t *const rslot = txn->ro.slot; rslot; atomic_yield()) {
     const uint32_t pid = atomic_load32(&rslot->pid, mo_Relaxed);
     uint64_t tid = safe64_read(&rslot->tid);
     uint64_t txnid = safe64_read(&rslot->txnid);

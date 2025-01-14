@@ -28,8 +28,8 @@ __cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored, bool don
   const MDBX_env *const env = txn->env;
   size_t pending = 0;
   if ((txn->flags & MDBX_TXN_RDONLY) == 0)
-    pending = txn->tw.loose_count + MDBX_PNL_GETSIZE(txn->tw.repnl) +
-              (MDBX_PNL_GETSIZE(txn->tw.retired_pages) - retired_stored);
+    pending = txn->wr.loose_count + MDBX_PNL_GETSIZE(txn->wr.repnl) +
+              (MDBX_PNL_GETSIZE(txn->wr.retired_pages) - retired_stored);
 
   cursor_couple_t cx;
   int rc = cursor_init(&cx.outer, txn, FREE_DBI);
@@ -46,7 +46,7 @@ __cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored, bool don
         return MDBX_CORRUPTED;
       }
       txnid_t id = unaligned_peek_u64(4, key.iov_base);
-      if (txn->tw.gc.retxl ? txl_contain(txn->tw.gc.retxl, id) : (id <= txn->tw.gc.last_reclaimed))
+      if (txn->wr.gc.retxl ? txl_contain(txn->wr.gc.retxl, id) : (id <= txn->wr.gc.last_reclaimed))
         goto skip;
     }
     gc += *(pgno_t *)data.iov_base;
@@ -89,8 +89,8 @@ __cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored, bool don
   if ((txn->flags & MDBX_TXN_RDONLY) == 0)
     ERROR("audit @%" PRIaTXN ": %zu(pending) = %zu(loose) + "
           "%zu(reclaimed) + %zu(retired-pending) - %zu(retired-stored)",
-          txn->txnid, pending, txn->tw.loose_count, MDBX_PNL_GETSIZE(txn->tw.repnl),
-          txn->tw.retired_pages ? MDBX_PNL_GETSIZE(txn->tw.retired_pages) : 0, retired_stored);
+          txn->txnid, pending, txn->wr.loose_count, MDBX_PNL_GETSIZE(txn->wr.repnl),
+          txn->wr.retired_pages ? MDBX_PNL_GETSIZE(txn->wr.retired_pages) : 0, retired_stored);
   ERROR("audit @%" PRIaTXN ": %zu(pending) + %zu"
         "(gc) + %zu(count) = %zu(total) <> %zu"
         "(allocated)",

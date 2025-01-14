@@ -252,9 +252,9 @@ __cold int meta_wipe_steady(MDBX_env *env, txnid_t inclusive_upto) {
   /* force oldest refresh */
   atomic_store32(&env->lck->rdt_refresh_flag, true, mo_Relaxed);
 
-  env->basal_txn->tw.troika = meta_tap(env);
+  env->basal_txn->wr.troika = meta_tap(env);
   for (MDBX_txn *scan = env->basal_txn->nested; scan; scan = scan->nested)
-    scan->tw.troika = env->basal_txn->tw.troika;
+    scan->wr.troika = env->basal_txn->wr.troika;
   return err;
 }
 
