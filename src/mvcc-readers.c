@@ -50,23 +50,23 @@ bsr_t mvcc_bind_slot(MDBX_env *env) {
     }
   }
 
-  result.rslot = &env->lck->rdt[slot];
+  result.slot = &env->lck->rdt[slot];
   /* Claim the reader slot, carefully since other code
    * uses the reader table un-mutexed: First reset the
    * slot, next publish it in lck->rdt_length.  After
    * that, it is safe for mdbx_env_close() to touch it.
    * When it will be closed, we can finally claim it. */
-  atomic_store32(&result.rslot->pid, 0, mo_AcquireRelease);
-  safe64_reset(&result.rslot->txnid, true);
+  atomic_store32(&result.slot->pid, 0, mo_AcquireRelease);
+  safe64_reset(&result.slot->txnid, true);
   if (slot == nreaders)
     env->lck->rdt_length.weak = (uint32_t)++nreaders;
-  result.rslot->tid.weak = (env->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self();
-  atomic_store32(&result.rslot->pid, env->pid, mo_AcquireRelease);
+  result.slot->tid.weak = (env->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self();
+  atomic_store32(&result.slot->pid, env->pid, mo_AcquireRelease);
   lck_rdt_unlock(env);
 
   if (likely(env->flags & ENV_TXKEY)) {
     eASSERT(env, env->registered_reader_pid == env->pid);
-    thread_rthc_set(env->me_txkey, result.rslot);
+    thread_rthc_set(env->me_txkey, result.slot);
   }
   return result;
 }

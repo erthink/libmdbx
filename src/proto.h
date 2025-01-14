@@ -43,8 +43,8 @@ MDBX_INTERNAL bool txn_refund(MDBX_txn *txn);
 MDBX_INTERNAL txnid_t txn_snapshot_oldest(const MDBX_txn *const txn);
 MDBX_INTERNAL int txn_abort(MDBX_txn *txn);
 MDBX_INTERNAL int txn_renew(MDBX_txn *txn, unsigned flags);
-MDBX_INTERNAL int txn_park(MDBX_txn *txn, bool autounpark);
-MDBX_INTERNAL int txn_unpark(MDBX_txn *txn);
+MDBX_INTERNAL int txn_ro_park(MDBX_txn *txn, bool autounpark);
+MDBX_INTERNAL int txn_ro_unpark(MDBX_txn *txn);
 MDBX_INTERNAL int txn_check_badbits_parked(const MDBX_txn *txn, int bad_bits);
 MDBX_INTERNAL void txn_done_cursors(MDBX_txn *txn);
 MDBX_INTERNAL int txn_shadow_cursors(const MDBX_txn *parent, const size_t dbi);
@@ -80,6 +80,7 @@ MDBX_INTERNAL int txn_nested_join(MDBX_txn *txn, struct commit_timestamp *ts);
 MDBX_INTERNAL int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts);
 MDBX_INTERNAL int txn_basal_end(MDBX_txn *txn, unsigned mode);
 MDBX_INTERNAL int txn_ro_end(MDBX_txn *txn, unsigned mode);
+MDBX_INTERNAL int txn_ro_start(MDBX_txn *txn, unsigned flags);
 
 /* env.c */
 MDBX_INTERNAL int env_open(MDBX_env *env, mdbx_mode_t mode);

@@ -131,7 +131,7 @@ int mdbx_txn_park(MDBX_txn *txn, bool autounpark) {
     return LOG_IFERR(rc ? rc : MDBX_OUSTED);
   }
 
-  return LOG_IFERR(txn_park(txn, autounpark));
+  return LOG_IFERR(txn_ro_park(txn, autounpark));
 }
 
 int mdbx_txn_unpark(MDBX_txn *txn, bool restart_if_ousted) {
@@ -147,7 +147,7 @@ int mdbx_txn_unpark(MDBX_txn *txn, bool restart_if_ousted) {
   if (unlikely(!F_ISSET(txn->flags, MDBX_TXN_RDONLY | MDBX_TXN_PARKED)))
     return MDBX_SUCCESS;
 
-  rc = txn_unpark(txn);
+  rc = txn_ro_unpark(txn);
   if (likely(rc != MDBX_OUSTED) || !restart_if_ousted)
     return LOG_IFERR(rc);
 

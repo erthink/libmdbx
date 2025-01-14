@@ -41,7 +41,7 @@ typedef struct node_search_result {
 
 typedef struct bind_reader_slot_result {
   int err;
-  reader_slot_t *rslot;
+  reader_slot_t *slot;
 } bsr_t;
 
 #include "atomics-ops.h"
