@@ -89,6 +89,47 @@ __cold void txn_basal_destroy(MDBX_txn *txn) {
   osal_free(txn);
 }
 
+int txn_basal_start(MDBX_txn *txn, unsigned flags) {
+  MDBX_env *const env = txn->env;
+
+  txn->wr.troika = meta_tap(env);
+  const meta_ptr_t head = meta_recent(env, &txn->wr.troika);
+  uint64_t timestamp = 0;
+  while ("workaround for https://libmdbx.dqdkfa.ru/dead-github/issues/269") {
+    int err = coherency_fetch_head(txn, head, &timestamp);
+    if (likely(err == MDBX_SUCCESS))
+      break;
+    if (unlikely(err != MDBX_RESULT_TRUE))
+      return err;
+  }
+  eASSERT(env, meta_txnid(head.ptr_v) == txn->txnid);
+  txn->txnid = safe64_txnid_next(txn->txnid);
+  if (unlikely(txn->txnid > MAX_TXNID)) {
+    ERROR("txnid overflow, raise %d", MDBX_TXN_FULL);
+    return MDBX_TXN_FULL;
+  }
+
+  tASSERT(txn, txn->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
+  tASSERT(txn, check_table_flags(txn->dbs[MAIN_DBI].flags));
+  txn->flags = flags;
+  txn->nested = nullptr;
+  txn->wr.loose_pages = nullptr;
+  txn->wr.loose_count = 0;
+#if MDBX_ENABLE_REFUND
+  txn->wr.loose_refund_wl = 0;
+#endif /* MDBX_ENABLE_REFUND */
+  MDBX_PNL_SETSIZE(txn->wr.retired_pages, 0);
+  txn->wr.spilled.list = nullptr;
+  txn->wr.spilled.least_removed = 0;
+  txn->wr.gc.time_acc = 0;
+  txn->wr.gc.last_reclaimed = 0;
+  if (txn->wr.gc.retxl)
+    MDBX_PNL_SETSIZE(txn->wr.gc.retxl, 0);
+  env->txn = txn;
+
+  return MDBX_SUCCESS;
+}
+
 int txn_basal_end(MDBX_txn *txn, unsigned mode) {
   MDBX_env *const env = txn->env;
   tASSERT(txn, (txn->flags & (MDBX_TXN_FINISHED | txn_may_have_cursors)) == 0 && txn->owner);

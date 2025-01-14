@@ -70,6 +70,19 @@ int txn_abort(MDBX_txn *txn) {
   return txn_end(txn, TXN_END_ABORT | TXN_END_SLOT | TXN_END_FREE);
 }
 
+static bool txn_check_overlapped(lck_t *const lck, const uint32_t pid, const uintptr_t tid) {
+  const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
+  for (size_t i = 0; i < snap_nreaders; ++i) {
+    if (atomic_load32(&lck->rdt[i].pid, mo_Relaxed) == pid &&
+        unlikely(atomic_load64(&lck->rdt[i].tid, mo_Relaxed) == tid)) {
+      const txnid_t txnid = safe64_read(&lck->rdt[i].txnid);
+      if (txnid >= MIN_TXNID && txnid <= MAX_TXNID)
+        return true;
+    }
+  }
+  return false;
+}
+
 int txn_renew(MDBX_txn *txn, unsigned flags) {
   MDBX_env *const env = txn->env;
   int rc;
@@ -90,17 +103,9 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
                  /* not recovery mode */ env->stuck_meta >= 0))
       return MDBX_BUSY;
     lck_t *const lck = env->lck_mmap.lck;
-    if (lck && (env->flags & MDBX_NOSTICKYTHREADS) == 0 && (globals.runtime_flags & MDBX_DBG_LEGACY_OVERLAP) == 0) {
-      const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
-      for (size_t i = 0; i < snap_nreaders; ++i) {
-        if (atomic_load32(&lck->rdt[i].pid, mo_Relaxed) == env->pid &&
-            unlikely(atomic_load64(&lck->rdt[i].tid, mo_Relaxed) == tid)) {
-          const txnid_t txnid = safe64_read(&lck->rdt[i].txnid);
-          if (txnid >= MIN_TXNID && txnid <= MAX_TXNID)
-            return MDBX_TXN_OVERLAPPING;
-        }
-      }
-    }
+    if (lck && !(env->flags & MDBX_NOSTICKYTHREADS) && !(globals.runtime_flags & MDBX_DBG_LEGACY_OVERLAP) &&
+        txn_check_overlapped(lck, env->pid, tid))
+      return MDBX_TXN_OVERLAPPING;
 
     /* Not yet touching txn == env->basal_txn, it may be active */
     jitter4testing(false);
@@ -118,41 +123,9 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
     }
 #endif /* Windows */
 
-    txn->wr.troika = meta_tap(env);
-    const meta_ptr_t head = meta_recent(env, &txn->wr.troika);
-    uint64_t timestamp = 0;
-    while ("workaround for https://libmdbx.dqdkfa.ru/dead-github/issues/269") {
-      rc = coherency_fetch_head(txn, head, &timestamp);
-      if (likely(rc == MDBX_SUCCESS))
-        break;
-      if (unlikely(rc != MDBX_RESULT_TRUE))
-        goto bailout;
-    }
-    eASSERT(env, meta_txnid(head.ptr_v) == txn->txnid);
-    txn->txnid = safe64_txnid_next(txn->txnid);
-    if (unlikely(txn->txnid > MAX_TXNID)) {
-      rc = MDBX_TXN_FULL;
-      ERROR("txnid overflow, raise %d", rc);
+    rc = txn_basal_start(txn, flags);
+    if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
-    }
-
-    tASSERT(txn, txn->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
-    tASSERT(txn, check_table_flags(txn->dbs[MAIN_DBI].flags));
-    txn->flags = flags;
-    txn->nested = nullptr;
-    txn->wr.loose_pages = nullptr;
-    txn->wr.loose_count = 0;
-#if MDBX_ENABLE_REFUND
-    txn->wr.loose_refund_wl = 0;
-#endif /* MDBX_ENABLE_REFUND */
-    MDBX_PNL_SETSIZE(txn->wr.retired_pages, 0);
-    txn->wr.spilled.list = nullptr;
-    txn->wr.spilled.least_removed = 0;
-    txn->wr.gc.time_acc = 0;
-    txn->wr.gc.last_reclaimed = 0;
-    if (txn->wr.gc.retxl)
-      MDBX_PNL_SETSIZE(txn->wr.gc.retxl, 0);
-    env->txn = txn;
   }
 
   txn->front_txnid = txn->txnid + ((flags & (MDBX_WRITEMAP | MDBX_RDONLY)) == 0);
