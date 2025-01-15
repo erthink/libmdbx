@@ -1,4 +1,4 @@
-/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2024
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2025
 /// \copyright SPDX-License-Identifier: Apache-2.0
 
 #pragma once
