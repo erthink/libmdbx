@@ -4189,7 +4189,10 @@ LIBMDBX_API int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency);
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
  * \retval MDBX_RESULT_TRUE      Transaction was aborted since it should
- *                               be aborted due to previous errors.
+ *                               be aborted due to previous errors,
+ *                               either no changes were made during the transaction,
+ *                               and the build time option
+ *                               \ref MDBX_NOSUCCESS_PURE_COMMIT was enabled.
  * \retval MDBX_PANIC            A fatal error occurred earlier
  *                               and the environment must be shut down.
  * \retval MDBX_BAD_TXN          Transaction is already finished or never began.
