@@ -2,7 +2,10 @@ The source code is availale on [Gitflic](https://gitflic.ru/project/erthink/libm
 Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`.
 Всё будет хорошо!
 
-> Questions, feedback and suggestions are welcome to the [Telegram' group](https://t.me/libmdbx).
+> Questions, feedback and suggestions are welcome to the [Telegram' group](https://t.me/libmdbx) (archive [1](https://libmdbx.dqdkfa.ru/tg-archive/messages1.html),
+> [2](https://libmdbx.dqdkfa.ru/tg-archive/messages2.html), [3](https://libmdbx.dqdkfa.ru/tg-archive/messages3.html), [4](https://libmdbx.dqdkfa.ru/tg-archive/messages4.html),
+> [5](https://libmdbx.dqdkfa.ru/tg-archive/messages5.html), [6](https://libmdbx.dqdkfa.ru/tg-archive/messages6.html), [7](https://libmdbx.dqdkfa.ru/tg-archive/messages7.html)).
+> See the [ChangeLog](https://gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md) for `NEWS` and latest updates.
 
 \section toc Table of Contents
 
