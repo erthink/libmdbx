@@ -42,18 +42,33 @@ long-lived read transactions, and using the \ref MDBX_LIFORECLAIM mode
 which addresses subsequent performance degradation. The "next" version
 of libmdbx (aka \ref MithrilDB) will completely solve this.
 
-- Avoid suspending a process with active transactions. These would then be
-  "long-lived" as above.
+Nonetheless, situations that encourage lengthy read transactions while
+intensively updating data should be avoided. For example, you should
+avoid suspending/blocking processes/threads performing read
+transactions, including during debugging, and use transaction parking if
+necessary.
 
-- Avoid aborting a process with an active read-only transaction in scenarios
-  with high rate of write transactions. The transaction becomes "long-lived"
-  as above until a check for stale readers is performed or the LCK-file is
-  reset, since the process may not remove it from the lockfile. This does
-  not apply to write transactions if the system clears stale writers, see
-  above.
+You should also beware of aborting processes that perform reading
+transactions. Despite the fact that libmdbx automatically checks and
+cleans readers, as an a process aborting (especially with core dump) can
+take a long time, and checking readers cannot be performed too often due
+to performance degradation.
+
+This issue will be addressed in MithrlDB and one of libmdbx releases,
+presumably in 2025. To do this, nonlinear GC recycling will be
+implemented, without stopping garbage recycling on the old MVCC snapshot
+used by a long read transaction.
+
+After the planned implementation, any long-term reading transaction will
+still keep the used MVCC-snapshot (all the database pages forming it)
+from being recycled, but it will allow all unused MVCC snapshots to be
+recycled, both before and after the readable one. This will eliminate
+one of the main architectural flaws inherited from LMDB and caused the
+growth of a database in proportion to a volume of data changes made
+concurrently with a long-running read transaction.
 
 
-## Large data items and huge transactions
+## Large data items
 
 MDBX allows you to store values up to 1 gigabyte in size, but this is
 not the main functionality for a key-value storage, but an additional
@@ -71,6 +86,18 @@ and in the absence of a sufficient sequence of free pages, increase the
 DB file. Thus, for long values, MDBX provides maximum read performance
 at the expense of write performance.
 
+Some aspects related to GC have been refined and improved in 2022 within
+the first releases of the 0.12.x series. In particular the search for
+free consecutive/adjacent pages through GC has been significantly
+speeded, including acceleration using NOEN/SSE2/AVX2/AVX512
+instructions.
+
+This issue will be addressed in MithrlDB and refined within one of
+0.15.x libmdbx releases, presumably at end of 2025.
+
+
+### Huge transactions
+
 A similar situation can be with huge transactions, in which a lot of
 database pages are retired. The retired pages should be put into GC as a
 list of page numbers for future reuse. But in huge transactions, such a
@@ -80,20 +107,15 @@ you delete large amounts of information from the database in a single
 transaction, MDBX may need to increase the database file to save the
 list of pages to be retired.
 
-Both of these issues will be addressed in MithrilDB.
+This issue was fixed in 2022 within the first releases of the 0.12.x
+series by `Big Foot` feature, which now is enabled by default.
+See \ref MDBX_ENABLE_BIGFOOT build-time option.
 
-#### Since v0.12.1 and later
-Some aspects related to GC have been refined and improved, in particular:
-
-  - The search for free consecutive/adjacent pages through GC has been
-    significantly speeded, including acceleration using
-    NOEN/SSE2/AVX2/AVX512 instructions.
-
-  - The `Big Foot` feature which significantly reduces GC overhead for
-    processing large lists of retired pages from huge transactions. Now
-    libmdbx avoid creating large chunks of PNLs (page number lists) which
-    required a long sequences of free pages, aka large/overflow pages. Thus
-    avoiding searching, allocating and storing such sequences inside GC.
+The `Big Foot` feature which significantly reduces GC overhead for
+processing large lists of retired pages from huge transactions. Now
+libmdbx avoid creating large chunks of PNLs (page number lists) which
+required a long sequences of free pages, aka large/overflow pages. Thus
+avoiding searching, allocating and storing such sequences inside GC.
 
 
 ## Space reservation
@@ -135,9 +157,11 @@ On the other hand, MDBX allow calling \ref mdbx_env_close() in such cases to
 release resources, but no more and in general this is a wrong way.
 
 #### Since v0.13.1 and later
-Начиная с версии 0.13.1 в API доступна функция \ref mdbx_env_resurrect_after_fork(),
-которая позволяет пере-использовать в дочерних процессах уже открытую среду БД,
-но строго без наследования транзакций от родительского процесса.
+
+Starting from the v0.13.1 release, the \ref mdbx_env_resurrect_after_work()
+is available, which allows you to reuse an already open database
+environment in child processes, but strictly without inheriting any
+transactions from a parent process.
 
 
 ## Read-only mode
@@ -148,9 +172,6 @@ So MDBX always tries to open/create LCK-file for read-write, but switches
 to without-LCK mode on appropriate errors (`EROFS`, `EACCESS`, `EPERM`)
 if the read-only mode was requested by the \ref MDBX_RDONLY flag which is
 described below.
-
-The "next" version of libmdbx (\ref MithrilDB) will solve this issue for the "many
-readers without writer" case.
 
 
 ## Troubleshooting the LCK-file
@@ -165,8 +186,6 @@ readers without writer" case.
   corruption, since the LCK-file is updated concurrently by
   multiple processes in a lock-free manner and any locking is
   unwise due to a large overhead.
-
-  The "next" version of libmdbx (\ref MithrilDB) will solve this issue.
 
   \note Workaround: Just make all programs using the database close it;
   the LCK-file is always reset on first open.
