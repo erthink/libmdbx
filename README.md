@@ -647,7 +647,8 @@ Bindings
 | Go      | [mdbx-go](https://github.com/torquem-ch/mdbx-go)      | [Alex Sharov](https://github.com/AskAlexSharov) |
 | Ruby    | [ruby-mdbx](https://rubygems.org/gems/mdbx/)          | [Mahlon E. Smith](https://github.com/mahlonsmith) |
 
-Obsolete/Outdated/Unsupported bindings:
+##### Obsolete/Outdated/Unsupported:
+
 | Runtime |  Repo  | Author |
 | ------- | ------ | ------ |
 | .NET    | [mdbx.NET](https://github.com/wangjia184/mdbx.NET) | [Jerry Wang](https://github.com/wangjia184) |
