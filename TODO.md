@@ -11,6 +11,11 @@ For the same reason ~~Github~~ is blacklisted forever.
 
 So currently most of the links are broken due to noted malicious ~~Github~~ sabotage.
 
+ - Рефакторинг gc-get/gc-put c переходом на интервальные списки.
+ - Ранняя/не-отложенная очистка GC.
+ - Явная и автоматическая компактификация/дефрагментация.
+ - Нелинейная обработка GC.
+ - Перевести курсоры на двухсвязный список вместо односвязного.
  - Внутри `txn_renew()` вынести проверку когерентности mmap за/после изменение размера.
  - [Migration guide from LMDB to MDBX](https://libmdbx.dqdkfa.ru/dead-github/issues/199).
  - [Support for RAW devices](https://libmdbx.dqdkfa.ru/dead-github/issues/124).
