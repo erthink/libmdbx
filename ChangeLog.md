@@ -2459,7 +2459,7 @@ Deprecated functions and flags:
  - Rework `MADV_DONTNEED` threshold.
  - Fix `mdbx_chk` utility for don't checking some numbers if walking on the B-tree was disabled.
  - Use page's mp_txnid for basic integrity checking.
- - Add `MDBX_FORCE_ASSERTIONS` built-time option.
+ - Add `MDBX_FORCE_ASSERTIONS` build-time option.
  - Rework `MDBX_DBG_DUMP` to avoid performance degradation.
  - Rename `MDBX_NOSYNC` to `MDBX_SAFE_NOSYNC` for clarity.
  - Interpret `ERROR_ACCESS_DENIED` from `OpenProcess()` as 'process exists'.
