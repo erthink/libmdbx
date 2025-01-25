@@ -146,20 +146,12 @@ static inline void zeroize_reserved(const MDBX_env *env, MDBX_val pnl) {
 
 static int gcu_loose(MDBX_txn *txn, gcu_t *ctx) {
   tASSERT(txn, txn->tw.loose_count > 0);
-  /* Return loose page numbers to tw.repnl,
-   * though usually none are left at this point.
+  /* Return loose page numbers to tw.repnl, though usually none are left at this point.
    * The pages themselves remain in dirtylist. */
   if (unlikely(!txn->tw.gc.retxl && txn->tw.gc.last_reclaimed < 1)) {
-    TRACE("%s: try allocate gc-slot for %zu loose-pages", dbg_prefix(ctx), txn->tw.loose_count);
-    int err = gc_alloc_ex(&ctx->cursor, 0, ALLOC_RESERVE).err;
-    if (err == MDBX_SUCCESS) {
-      TRACE("%s: retry since gc-slot for %zu loose-pages available", dbg_prefix(ctx), txn->tw.loose_count);
-      return MDBX_RESULT_TRUE;
-    }
-
-    /* Put loose page numbers in tw.retired_pages,
-     * since unable to return ones to tw.repnl. */
-    err = pnl_need(&txn->tw.retired_pages, txn->tw.loose_count);
+    /* Put loose page numbers in tw.retired_pages, since unable to return ones to tw.repnl. */
+    TRACE("%s: merge %zu loose-pages into %s-pages", dbg_prefix(ctx), txn->tw.loose_count, "retired");
+    int err = pnl_need(&txn->tw.retired_pages, txn->tw.loose_count);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
     for (page_t *lp = txn->tw.loose_pages; lp; lp = page_next(lp)) {
@@ -167,9 +159,9 @@ static int gcu_loose(MDBX_txn *txn, gcu_t *ctx) {
       MDBX_ASAN_UNPOISON_MEMORY_REGION(&page_next(lp), sizeof(page_t *));
       VALGRIND_MAKE_MEM_DEFINED(&page_next(lp), sizeof(page_t *));
     }
-    TRACE("%s: append %zu loose-pages to retired-pages", dbg_prefix(ctx), txn->tw.loose_count);
   } else {
     /* Room for loose pages + temp PNL with same */
+    TRACE("%s: merge %zu loose-pages into %s-pages", dbg_prefix(ctx), txn->tw.loose_count, "reclaimed");
     int err = pnl_need(&txn->tw.repnl, 2 * txn->tw.loose_count + 2);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
@@ -185,7 +177,6 @@ static int gcu_loose(MDBX_txn *txn, gcu_t *ctx) {
     MDBX_PNL_SETSIZE(loose, count);
     pnl_sort(loose, txn->geo.first_unallocated);
     pnl_merge(txn->tw.repnl, loose);
-    TRACE("%s: append %zu loose-pages to reclaimed-pages", dbg_prefix(ctx), txn->tw.loose_count);
   }
 
   /* filter-out list of dirty-pages from loose-pages */
