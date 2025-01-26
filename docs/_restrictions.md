@@ -158,7 +158,7 @@ release resources, but no more and in general this is a wrong way.
 
 #### Since v0.13.1 and later
 
-Starting from the v0.13.1 release, the \ref mdbx_env_resurrect_after_work()
+Starting from the v0.13.1 release, the \ref mdbx_env_resurrect_after_fork()
 is available, which allows you to reuse an already open database
 environment in child processes, but strictly without inheriting any
 transactions from a parent process.
