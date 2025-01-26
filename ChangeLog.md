@@ -8,6 +8,12 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx
 
 Первый выпуск в новом кусте/линейке версий с добавлением функционала, расширением API и внутренними переработками.
 
+Благодарности:
+
+ - [Erigon](https://docs.erigon.tech/) за спонсорство.
+ - [Alain Picard](https://github.com/castortech) for support [Java bindings](https://github.com/castortech/mdbxjni) and MacOS universal binaries patch for CMake build scenario.
+ - [Alex Sharov](https://github.com/AskAlexSharov) for reporting and testing.
+
 Новое:
 
  - Добавлена опция сборки `MDBX_NOSUCCESS_PURE_COMMIT` предназначенная для отладки кода пользователя.
@@ -18,6 +24,8 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx
  - Добавлена опция сборки `MDBX_ENABLE_NON_READONLY_EXPORT` позволяющая использовать в режиме чтения-записи БД расположенных в файловых системах экспортированных через NFS.
    По-умолчанию опция выключена и при открытии в неэксклюзивном режиме чтения-записи БД расположенных  файловых системах доступных извне по NFS будет возвращаться ошибка `MDBX_EREMOTE`.
    Включение опции позволяет открывать БД в описанных выше ситуациях, но риск чтения неверных данных на удалённой стороне ложится на пользователя.
+
+ - Поддержка MacOS universal binaries при сборке посредством CMake.
 
 Изменение поведения:
 
