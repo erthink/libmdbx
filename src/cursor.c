@@ -145,7 +145,7 @@ __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_va
     if (!cursor_is_gc(mc)) {
       need += txn->dbs[FREE_DBI].height + (size_t)3;
       /* 3) Named DBs also dirty the main DB */
-      if (cursor_is_main(mc))
+      if (!cursor_is_main(mc))
         need += txn->dbs[MAIN_DBI].height + (size_t)3;
     }
 #if xMDBX_DEBUG_SPILLING != 2
