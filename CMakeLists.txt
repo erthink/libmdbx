@@ -213,6 +213,20 @@ if(DEFINED PROJECT_NAME AND NOT MDBX_FORCE_BUILD_AS_MAIN_PROJECT)
 else()
   set(SUBPROJECT OFF)
   set(NOT_SUBPROJECT ON)
+
+  # Setup Apple stuff which should be set prior to the first project() or enable_language()
+  if(APPLE)
+    # Enable universal binaries for macOS (target arm64 and x86_64)
+    if(NOT DEFINED CMAKE_OSX_ARCHITECTURES)
+      set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
+    endif()
+
+    # Set the minimum macOS deployment target if not already defined
+    if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
+      set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0")
+    endif()
+  endif()
+
   project(libmdbx C)
   if(NOT MDBX_AMALGAMATED_SOURCE AND NOT DEFINED BUILD_TESTING)
     set(BUILD_TESTING ON)
