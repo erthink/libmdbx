@@ -50,6 +50,7 @@ int __must_check_result node_add_branch(MDBX_cursor *mc, size_t indx, const MDBX
         is_subpage(mp) ? "sub-" : "", mp->pgno, indx, pgno, key ? key->iov_len : 0, DKEY_DEBUG(key));
 
   cASSERT(mc, page_type(mp) == P_BRANCH);
+  cASSERT(mc, mp->txnid >= mc->txn->front_txnid);
   STATIC_ASSERT(NODESIZE % 2 == 0);
 
   /* Move higher pointers up one slot. */

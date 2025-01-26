@@ -457,6 +457,8 @@ static __always_inline pgr_t page_get_inline(const uint16_t ILL, const MDBX_curs
     goto bailout;
   }
 
+  TRACE("dbi %zu, mc %p, page %u, %p", cursor_dbi(mc), __Wpedantic_format_voidptr(mc), pgno,
+        __Wpedantic_format_voidptr(r.page));
   if (unlikely(mc->checking & z_pagecheck))
     return check_page_complete(ILL, r.page, mc, front);
 

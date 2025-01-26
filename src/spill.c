@@ -72,6 +72,8 @@ static size_t spill_cursor_keep(const MDBX_txn *const txn, const MDBX_cursor *mc
     intptr_t i = 0;
     do {
       mp = mc->pg[i];
+      TRACE("dbi %zu, mc-%p[%zu], page %u %p", cursor_dbi(mc), __Wpedantic_format_voidptr(mc), i, mp->pgno,
+            __Wpedantic_format_voidptr(mp));
       tASSERT(txn, !is_subpage(mp));
       if (is_modifable(txn, mp)) {
         size_t const n = dpl_search(txn, mp->pgno);
@@ -81,16 +83,18 @@ static size_t spill_cursor_keep(const MDBX_txn *const txn, const MDBX_cursor *mc
           *ptr = txn->wr.dirtylru;
           tASSERT(txn, dpl_age(txn, n) == 0);
           ++keep;
+          DEBUG("keep page %" PRIaPGNO " (%p), dbi %zu, %scursor %p[%zu]", mp->pgno, __Wpedantic_format_voidptr(mp),
+                cursor_dbi(mc), is_inner(mc) ? "sub-" : "", __Wpedantic_format_voidptr(mc), i);
         }
       }
     } while (++i <= mc->top);
 
     tASSERT(txn, is_leaf(mp));
-    if (!mc->subcur || mc->ki[mc->top] >= page_numkeys(mp))
-      break;
-    if (!(node_flags(page_node(mp, mc->ki[mc->top])) & N_TREE))
+    if (!inner_pointed(mc))
       break;
     mc = &mc->subcur->cursor;
+    if (is_subpage(mc->pg[0]))
+      break;
   }
   return keep;
 }
