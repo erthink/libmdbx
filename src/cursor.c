@@ -168,7 +168,7 @@ __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_va
       return err;
   }
 
-  if (likely(mc->top >= 0) && !is_modifable(mc->txn, mc->pg[mc->top])) {
+  if (likely(is_pointed(mc)) && ((mc->txn->flags & MDBX_TXN_SPILLS) || !is_modifable(mc->txn, mc->pg[mc->top]))) {
     const int8_t top = mc->top;
     mc->top = 0;
     do {
