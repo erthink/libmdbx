@@ -12,7 +12,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx
 
  - [Erigon](https://docs.erigon.tech/) за спонсорство.
  - [Alain Picard](https://github.com/castortech) for support [Java bindings](https://github.com/castortech/mdbxjni) and MacOS universal binaries patch for CMake build scenario.
- - [Alex Sharov](https://github.com/AskAlexSharov) for reporting and testing.
+ - [Alex Sharov](https://github.com/AskAlexSharov) за сообщение об ошибках и тестирование.
 
 Новое:
 
@@ -44,6 +44,8 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx
 Прочие доработки:
 
  - Существенный рефакторинг с реструктуризацией кода, переименованием внутренних структур, их полей и внутренних функций.
+
+ - Доработка использования LTO в CMake-сценариях: использование `-flto=auto` для GCC >= 11.4, расслабление условий для включения LTO для CLANG на Linux, расширение поиска `LLVMgold.so` в относительных lib-директориях.
 
 
 --------------------------------------------------------------------------------
