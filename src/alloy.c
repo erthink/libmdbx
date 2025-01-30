@@ -41,6 +41,7 @@
 #include "page-ops.c"
 #include "pnl.c"
 #include "refund.c"
+#include "rkl.c"
 #include "spill.c"
 #include "table.c"
 #include "tls.c"

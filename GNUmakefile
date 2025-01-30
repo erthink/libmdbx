@@ -710,6 +710,7 @@ $(DIST_DIR)/@tmp-internals.inc: $(DIST_DIR)/@tmp-essentials.inc src/version.c $(
 		-e '/#include "essentials.h"/d' \
 		-e '/#include "atomics-ops.h"/r src/atomics-ops.h' \
 		-e '/#include "proto.h"/r src/proto.h' \
+		-e '/#include "rkl.h"/r src/rkl.h' \
 		-e '/#include "txl.h"/r src/txl.h' \
 		-e '/#include "unaligned.h"/r src/unaligned.h' \
 		-e '/#include "cogs.h"/r src/cogs.h' \

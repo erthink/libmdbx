@@ -46,6 +46,7 @@ typedef struct bind_reader_slot_result {
 
 #include "atomics-ops.h"
 #include "proto.h"
+#include "rkl.h"
 #include "txl.h"
 #include "unaligned.h"
 #if defined(_WIN32) || defined(_WIN64)
@@ -537,7 +538,9 @@ MDBX_MAYBE_UNUSED static void static_checks(void) {
   STATIC_ASSERT(offsetof(lck_t, cached_oldest) % MDBX_CACHELINE_SIZE == 0);
   STATIC_ASSERT(offsetof(lck_t, rdt_length) % MDBX_CACHELINE_SIZE == 0);
 #endif /* MDBX_LOCKING */
+#if FLEXIBLE_ARRAY_MEMBERS
   STATIC_ASSERT(offsetof(lck_t, rdt) % MDBX_CACHELINE_SIZE == 0);
+#endif /* FLEXIBLE_ARRAY_MEMBERS */
 
 #if FLEXIBLE_ARRAY_MEMBERS
   STATIC_ASSERT(NODESIZE == offsetof(node_t, payload));
