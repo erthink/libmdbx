@@ -13,6 +13,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx
  - [Erigon](https://docs.erigon.tech/) за спонсорство.
  - [Alain Picard](https://github.com/castortech) for support [Java bindings](https://github.com/castortech/mdbxjni) and MacOS universal binaries patch for CMake build scenario.
  - [Alex Sharov](https://github.com/AskAlexSharov) за сообщение об ошибках и тестирование.
+ - [Виктору Логунову](https://t.me/vl_username) за сообщение об опечатки в имени переменной в Conan-рецепте.
 
 Новое:
 
