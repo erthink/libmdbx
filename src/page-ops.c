@@ -726,7 +726,7 @@ void recalculate_subpage_thresholds(MDBX_env *env) {
     env->subpage_reserve_prereq = page_space(env);
   else if (env->subpage_reserve_prereq < env->subpage_room_threshold + env->subpage_reserve_limit)
     env->subpage_reserve_prereq = env->subpage_room_threshold + env->subpage_reserve_limit;
-  eASSERT(env, env->subpage_reserve_prereq > env->subpage_room_threshold + env->subpage_reserve_limit);
+  eASSERT(env, env->subpage_reserve_prereq >= env->subpage_room_threshold + env->subpage_reserve_limit);
 }
 
 size_t page_subleaf2_reserve(const MDBX_env *env, size_t host_page_room, size_t subpage_len, size_t item_len) {
