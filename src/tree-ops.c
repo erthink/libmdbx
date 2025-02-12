@@ -38,11 +38,10 @@ static MDBX_cursor *cursor_clone(const MDBX_cursor *csrc, cursor_couple_t *coupl
 /*----------------------------------------------------------------------------*/
 
 void recalculate_merge_thresholds(MDBX_env *env) {
-  const size_t bytes = page_space(env);
-  env->merge_threshold = (uint16_t)(bytes - (bytes * env->options.merge_threshold_16dot16_percent >> 16));
-  env->merge_threshold_gc =
-      (uint16_t)(bytes - ((env->options.merge_threshold_16dot16_percent > 19005) ? bytes / 3 /* 33 % */
-                                                                                 : bytes / 4 /* 25 % */));
+  const size_t whole_page_space = page_space(env);
+  env->merge_threshold =
+      (uint16_t)(whole_page_space - (whole_page_space * env->options.merge_threshold_16dot16_percent >> 16));
+  eASSERT(env, env->merge_threshold >= whole_page_space / 2 && env->merge_threshold <= whole_page_space / 64 * 63);
 }
 
 int tree_drop(MDBX_cursor *mc, const bool may_have_tables) {
@@ -446,8 +445,8 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   cASSERT(cdst, cdst->top > 0);
   cASSERT(cdst, cdst->top + 1 < cdst->tree->height || is_leaf(cdst->pg[cdst->tree->height - 1]));
   cASSERT(csrc, csrc->top + 1 < csrc->tree->height || is_leaf(csrc->pg[csrc->tree->height - 1]));
-  cASSERT(cdst,
-          csrc->txn->env->options.prefer_waf_insteadof_balance || page_room(pdst) >= page_used(cdst->txn->env, psrc));
+  cASSERT(cdst, cursor_dbi(csrc) == FREE_DBI || csrc->txn->env->options.prefer_waf_insteadof_balance ||
+                    page_room(pdst) >= page_used(cdst->txn->env, psrc));
   const int pagetype = page_type(psrc);
 
   /* Move all nodes from src to dst */
@@ -680,8 +679,18 @@ int tree_rebalance(MDBX_cursor *mc) {
   const size_t minkeys = (pagetype & P_BRANCH) + (size_t)1;
 
   /* Pages emptier than this are candidates for merging. */
-  size_t room_threshold =
-      likely(mc->tree != &mc->txn->dbs[FREE_DBI]) ? mc->txn->env->merge_threshold : mc->txn->env->merge_threshold_gc;
+  size_t room_threshold = mc->txn->env->merge_threshold;
+  bool minimize_waf = mc->txn->env->options.prefer_waf_insteadof_balance;
+  if (unlikely(mc->tree == &mc->txn->dbs[FREE_DBI])) {
+    /* В случае GC всегда минимизируем WAF, а рыхлые страницы объединяем только при наличии запаса в gc_stockpile().
+     * Это позволяет уменьшить WAF и избавиться от лишних действий/циклов как при переработке GC,
+     * так и при возврате неиспользованных страниц. Сбалансированность b-tree при этом почти не деградирует,
+     * ибо добавление/удаление/обновление запиcей происходит почти всегда только по краям. */
+    minimize_waf = true;
+    room_threshold = page_space(mc->txn->env);
+    if (gc_stockpile(mc->txn) > mc->tree->height + mc->tree->height)
+      room_threshold >>= 1;
+  }
 
   const size_t numkeys = page_numkeys(tp);
   const size_t room = page_room(tp);
@@ -802,10 +811,26 @@ int tree_rebalance(MDBX_cursor *mc) {
   const size_t right_room = right ? page_room(right) : 0;
   const size_t left_nkeys = left ? page_numkeys(left) : 0;
   const size_t right_nkeys = right ? page_numkeys(right) : 0;
+
+  /* Нужно выбрать между правой и левой страницами для слияния текущей или перемещения узла в текущую.
+   * Таким образом, нужно выбрать один из четырёх вариантов согласно критериям.
+   *
+   * Если включен minimize_waf, то стараемся не вовлекать чистые страницы,
+   * пренебрегая идеальностью баланса ради уменьшения WAF.
+   *
+   * При этом отдельные варианты могут быть не доступны, либо "не сработать" из-за того что:
+   *  - в какой-то branch-странице не хватит места из-за распространения/обновления первых ключей,
+   *    которые хранятся в родительских страницах;
+   *  - при включенном minimize_waf распространение/обновление первых ключей
+   *    потребуется разделение какой-либо странице, что увеличит WAF и поэтому обесценивает дальнейшее
+   *    следование minimize_waf. */
+
   bool involve = !(left && right);
 retry:
   cASSERT(mc, mc->top > 0);
-  if (left_room > room_threshold && left_room >= right_room && (is_modifable(mc->txn, left) || involve)) {
+  const bool consider_left = left && (involve || is_modifable(mc->txn, left));
+  const bool consider_right = right && (involve || is_modifable(mc->txn, right));
+  if (consider_left && left_room > room_threshold && left_room >= right_room) {
     /* try merge with left */
     cASSERT(mc, left_nkeys >= minkeys);
     mn->pg[mn->top] = left;
@@ -825,7 +850,7 @@ retry:
       return rc;
     }
   }
-  if (right_room > room_threshold && (is_modifable(mc->txn, right) || involve)) {
+  if (consider_right && right_room > room_threshold) {
     /* try merge with right */
     cASSERT(mc, right_nkeys >= minkeys);
     mn->pg[mn->top] = right;
@@ -843,8 +868,7 @@ retry:
     }
   }
 
-  if (left_nkeys > minkeys && (right_nkeys <= left_nkeys || right_room >= left_room) &&
-      (is_modifable(mc->txn, left) || involve)) {
+  if (consider_left && left_nkeys > minkeys && (right_nkeys <= left_nkeys || right_room >= left_room)) {
     /* try move from left */
     mn->pg[mn->top] = left;
     mn->ki[mn->top - 1] = (indx_t)(ki_pre_top - 1);
@@ -860,7 +884,7 @@ retry:
       return rc;
     }
   }
-  if (right_nkeys > minkeys && (is_modifable(mc->txn, right) || involve)) {
+  if (consider_right && right_nkeys > minkeys) {
     /* try move from right */
     mn->pg[mn->top] = right;
     mn->ki[mn->top - 1] = (indx_t)(ki_pre_top + 1);
@@ -884,17 +908,20 @@ retry:
     return MDBX_SUCCESS;
   }
 
-  if (mc->txn->env->options.prefer_waf_insteadof_balance && likely(room_threshold > 0)) {
+  if (minimize_waf && room_threshold > 0) {
+    /* Если включен minimize_waf, то переходим к попыткам слияния с сильно
+     * заполненными страницами до вовлечения чистых страниц (не измененных в этой транзакции) */
     room_threshold = 0;
     goto retry;
   }
-  if (likely(!involve) &&
-      (likely(mc->tree != &mc->txn->dbs[FREE_DBI]) || mc->txn->wr.loose_pages || MDBX_PNL_GETSIZE(mc->txn->wr.repnl) ||
-       (mc->flags & z_gcu_preparation) || (mc->txn->flags & txn_gc_drained) || room_threshold)) {
+  if (!involve) {
+    /* Теперь допускаем вовлечение чистых страниц (не измененных в этой транзакции),
+     * что улучшает баланс в дереве, но увеличивает WAF. */
     involve = true;
     goto retry;
   }
-  if (likely(room_threshold > 0)) {
+  if (room_threshold > 0) {
+    /* Если не нашли подходящей соседней, то допускаем слияние с сильно заполненными страницами */
     room_threshold = 0;
     goto retry;
   }
