@@ -4,6 +4,17 @@ ChangeLog
 English version [by liar Google](https://libmdbx-dqdkfa-ru.translate.goog/md__change_log.html?_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx.dqdkfa.ru/md__change_log.html).
 
+## v0.13.5 в процессе накопления изменений
+
+Поддерживающий выпуск стабильной ветки с исправлением обнаруженных ошибок и устранением недочётов.
+
+Благодарности:
+
+ - [Erigon](https://docs.erigon.tech/) за спонсорство.
+
+
+--------------------------------------------------------------------------------
+
 
 ## v0.13.4 "Sigma Boy" от 2025-02-14
 
@@ -11,8 +22,8 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx
 
 Благодарности:
 
- - [Алексею Костюку (aka Keller)](https://t.me/keller18306) за сообщения об ошибках и недочетах.
  - [Erigon](https://docs.erigon.tech/) за спонсорство.
+ - [Алексею Костюку (aka Keller)](https://t.me/keller18306) за сообщения об ошибках и недочетах.
  - [Alain Picard](https://github.com/castortech) for support [Java bindings](https://github.com/castortech/mdbxjni) and MacOS universal binaries patch for CMake build scenario.
  - [Alex Sharov](https://github.com/AskAlexSharov) за сообщение об ошибках и тестирование.
  - [Виктору Логунову](https://t.me/vl_username) за сообщение об опечатки в имени переменной в Conan-рецепте.
@@ -25,7 +36,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx
 
  - Устранён регресс допускающий SIGSEGV в операциях обновления после вытеснения/spilling страниц в больших транзакциях.
    Ошибка присутствует в выпусках v0.13.1, v0.13.2, v0.13.3 и оставалась незамеченной из-за специфических условий и низкой вероятности проявления.
-   Более подробная информация в описании коммита `a060057e480aa5196c7d5c00ea441c962e3b952d`.
+   Более подробная информация в описании коммита `21630ea115690a5cb39cfa921f9d199271a08102`.
 
  - Исправлена опечатка в документации в упоминании `mdbx_env_resurrect_after_fork()`.
 
