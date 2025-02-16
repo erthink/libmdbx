@@ -279,7 +279,7 @@ which is also (mostly) applicable to _libmdbx_ with minor clarification:
  - a database could shared by multiple processes, i.e. no multi-process issues;
  - no issues with moving a cursor(s) after the deletion;
  - _libmdbx_ provides zero-overhead database compactification, so a database file could be shrinked/truncated in particular cases;
- - excluding dist I/O time _libmdbx_ could be -3 times faster than BoltDB and up to 10-100K times faster than both BoltDB and LMDB in particular extreme cases;
+ - excluding disk I/O time _libmdbx_ could be ≈3 times faster than BoltDB and up to 10-100K times faster than both BoltDB and LMDB in particular extreme cases;
  - _libmdbx_ provides more features compared to BoltDB and/or LMDB.
 
 <!-- section-end -->
