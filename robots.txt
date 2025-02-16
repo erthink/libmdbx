@@ -1,0 +1,4 @@
+User-agent: *
+Sitemap: https://libmdbx.dqdkfa.ru/sitemap.xml
+Disallow: /search
+
