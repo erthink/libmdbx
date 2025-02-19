@@ -567,6 +567,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
       return err;
   }
 
+  bool new_size_from_user = false;
   const size_t used_bytes = pgno2bytes(env, header.geometry.first_unallocated);
   const size_t used_aligned2os_bytes = ceil_powerof2(used_bytes, globals.sys_pagesize);
   if ((env->flags & MDBX_RDONLY)    /* readonly */
@@ -601,6 +602,8 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
         /* pre-shrink if enabled */
         env->geo_in_bytes.now = used_bytes + env->geo_in_bytes.shrink - used_bytes % env->geo_in_bytes.shrink;
 
+      /* сейчас БД еще не открыта, поэтому этот вызов не изменит геометрию, но проверит и скорректирует параметры
+       * с учетом реального размера страницы. */
       err = mdbx_env_set_geometry(env, env->geo_in_bytes.lower, env->geo_in_bytes.now, env->geo_in_bytes.upper,
                                   env->geo_in_bytes.grow, env->geo_in_bytes.shrink, header.pagesize);
       if (unlikely(err != MDBX_SUCCESS)) {
@@ -608,8 +611,10 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
         return (err == MDBX_EINVAL) ? MDBX_INCOMPATIBLE : err;
       }
 
-      /* update meta fields */
-      header.geometry.now = bytes2pgno(env, env->geo_in_bytes.now);
+      /* altering fields to match geometry given from user */
+      new_size_from_user = header.geometry.now != bytes2pgno(env, env->geo_in_bytes.now);
+      if (new_size_from_user)
+        header.geometry.now = bytes2pgno(env, env->geo_in_bytes.now);
       header.geometry.lower = bytes2pgno(env, env->geo_in_bytes.lower);
       header.geometry.upper = bytes2pgno(env, env->geo_in_bytes.upper);
       header.geometry.grow_pv = pages2pv(bytes2pgno(env, env->geo_in_bytes.grow));
@@ -646,9 +651,10 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
               env->geo_in_bytes.now, bytes2pgno(env, env->geo_in_bytes.now), filesize_before,
               bytes2pgno(env, (size_t)filesize_before));
     } else {
-      WARNING("filesize mismatch (expect %" PRIuSIZE "b/%" PRIaPGNO "p, have %" PRIu64 "b/%" PRIaPGNO "p)",
-              env->geo_in_bytes.now, bytes2pgno(env, env->geo_in_bytes.now), filesize_before,
-              bytes2pgno(env, (size_t)filesize_before));
+      if (!new_size_from_user)
+        WARNING("filesize mismatch (expect %" PRIuSIZE "b/%" PRIaPGNO "p, have %" PRIu64 "b/%" PRIaPGNO "p)",
+                env->geo_in_bytes.now, bytes2pgno(env, env->geo_in_bytes.now), filesize_before,
+                bytes2pgno(env, (size_t)filesize_before));
       if (filesize_before < used_bytes) {
         ERROR("last-page beyond end-of-file (last %" PRIaPGNO ", have %" PRIaPGNO ")",
               header.geometry.first_unallocated, bytes2pgno(env, (size_t)filesize_before));
