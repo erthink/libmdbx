@@ -44,6 +44,13 @@ int main(int argc, const char *argv[]) {
     txn2.commit();
   }
 
+  {
+    mdbx::env::operate_parameters operateParameters(100, 10);
+    mdbx::env_managed::create_parameters createParameters;
+    createParameters.geometry.make_dynamic(21 * mdbx::env::geometry::MiB, mdbx::env::geometry::GiB / 2);
+    mdbx::env_managed env(path, createParameters, operateParameters);
+  }
+
   mdbx::env::operate_parameters operateParameters(100, 10);
   mdbx::env_managed::create_parameters createParameters;
   createParameters.geometry.make_dynamic(21 * mdbx::env::geometry::MiB, 84 * mdbx::env::geometry::MiB);
