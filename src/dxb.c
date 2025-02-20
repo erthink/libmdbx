@@ -567,7 +567,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
       return err;
   }
 
-  bool new_size_from_user = false;
+  size_t expected_filesize = 0;
   const size_t used_bytes = pgno2bytes(env, header.geometry.first_unallocated);
   const size_t used_aligned2os_bytes = ceil_powerof2(used_bytes, globals.sys_pagesize);
   if ((env->flags & MDBX_RDONLY)    /* readonly */
@@ -612,28 +612,25 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
       }
 
       /* altering fields to match geometry given from user */
-      new_size_from_user = header.geometry.now != bytes2pgno(env, env->geo_in_bytes.now);
-      if (new_size_from_user)
-        header.geometry.now = bytes2pgno(env, env->geo_in_bytes.now);
+      expected_filesize = pgno_align2os_bytes(env, header.geometry.now);
+      header.geometry.now = bytes2pgno(env, env->geo_in_bytes.now);
       header.geometry.lower = bytes2pgno(env, env->geo_in_bytes.lower);
       header.geometry.upper = bytes2pgno(env, env->geo_in_bytes.upper);
       header.geometry.grow_pv = pages2pv(bytes2pgno(env, env->geo_in_bytes.grow));
       header.geometry.shrink_pv = pages2pv(bytes2pgno(env, env->geo_in_bytes.shrink));
 
-      VERBOSE("amended: root %" PRIaPGNO "/%" PRIaPGNO ", geo %" PRIaPGNO "/%" PRIaPGNO "-%" PRIaPGNO "/%" PRIaPGNO
+      VERBOSE("amending: root %" PRIaPGNO "/%" PRIaPGNO ", geo %" PRIaPGNO "/%" PRIaPGNO "-%" PRIaPGNO "/%" PRIaPGNO
               " +%u -%u, txn_id %" PRIaTXN ", %s",
               header.trees.main.root, header.trees.gc.root, header.geometry.lower, header.geometry.first_unallocated,
               header.geometry.now, header.geometry.upper, pv2pages(header.geometry.grow_pv),
               pv2pages(header.geometry.shrink_pv), unaligned_peek_u64(4, header.txnid_a), durable_caption(&header));
     } else {
-      /* fetch back 'now/current' size, since it was ignored during comparison
-       * and may differ. */
+      /* fetch back 'now/current' size, since it was ignored during comparison and may differ. */
       env->geo_in_bytes.now = pgno_align2os_bytes(env, header.geometry.now);
     }
     ENSURE(env, header.geometry.now >= header.geometry.first_unallocated);
   } else {
-    /* geo-params are not pre-configured by user,
-     * get current values from the meta. */
+    /* geo-params are not pre-configured by user, get current values from the meta. */
     env->geo_in_bytes.now = pgno2bytes(env, header.geometry.now);
     env->geo_in_bytes.lower = pgno2bytes(env, header.geometry.lower);
     env->geo_in_bytes.upper = pgno2bytes(env, header.geometry.upper);
@@ -643,18 +640,19 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
 
   ENSURE(env, pgno_align2os_bytes(env, header.geometry.now) == env->geo_in_bytes.now);
   ENSURE(env, env->geo_in_bytes.now >= used_bytes);
+  if (!expected_filesize)
+    expected_filesize = env->geo_in_bytes.now;
   const uint64_t filesize_before = env->dxb_mmap.filesize;
   if (unlikely(filesize_before != env->geo_in_bytes.now)) {
     if (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE) {
-      VERBOSE("filesize mismatch (expect %" PRIuPTR "b/%" PRIaPGNO "p, have %" PRIu64 "b/%" PRIaPGNO "p), "
-              "assume other process working",
+      VERBOSE("filesize mismatch (expect %" PRIuPTR "b/%" PRIaPGNO "p, have %" PRIu64 "b/%" PRIu64
+              "p), assume other process working",
               env->geo_in_bytes.now, bytes2pgno(env, env->geo_in_bytes.now), filesize_before,
-              bytes2pgno(env, (size_t)filesize_before));
+              filesize_before >> env->ps2ln);
     } else {
-      if (!new_size_from_user)
-        WARNING("filesize mismatch (expect %" PRIuSIZE "b/%" PRIaPGNO "p, have %" PRIu64 "b/%" PRIaPGNO "p)",
-                env->geo_in_bytes.now, bytes2pgno(env, env->geo_in_bytes.now), filesize_before,
-                bytes2pgno(env, (size_t)filesize_before));
+      if (filesize_before != expected_filesize)
+        WARNING("filesize mismatch (expect %" PRIuSIZE "b/%" PRIaPGNO "p, have %" PRIu64 "b/%" PRIu64 "p)",
+                expected_filesize, bytes2pgno(env, expected_filesize), filesize_before, filesize_before >> env->ps2ln);
       if (filesize_before < used_bytes) {
         ERROR("last-page beyond end-of-file (last %" PRIaPGNO ", have %" PRIaPGNO ")",
               header.geometry.first_unallocated, bytes2pgno(env, (size_t)filesize_before));
