@@ -47,7 +47,7 @@ int main(int argc, const char *argv[]) {
   {
     mdbx::env::operate_parameters operateParameters(100, 10);
     mdbx::env_managed::create_parameters createParameters;
-    createParameters.geometry.make_dynamic(21 * mdbx::env::geometry::MiB, 2 * mdbx::env::geometry::TiB);
+    createParameters.geometry.make_dynamic(21 * mdbx::env::geometry::MiB, mdbx::env::geometry::GiB);
     mdbx::env_managed env(path, createParameters, operateParameters);
   }
 
