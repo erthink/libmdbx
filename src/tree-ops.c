@@ -1228,6 +1228,7 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *const ne
 
     /* root split? */
     prev_top += mc->top - top;
+    cASSERT(mn, prev_top <= mn->top && prev_top <= mc->top);
 
     /* Right page might now have changed parent.
      * Check if left page also changed parent. */
