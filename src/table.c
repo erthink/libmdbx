@@ -38,7 +38,7 @@ int tbl_fetch(MDBX_txn *txn, size_t dbi) {
   rc = tree_search(&couple.outer, &kvx->name, 0);
   if (unlikely(rc != MDBX_SUCCESS)) {
   bailout:
-    NOTICE("dbi %zu refs to inaccessible table `%*s` for txn %" PRIaTXN " (err %d)", dbi, (int)kvx->name.iov_len,
+    NOTICE("dbi %zu refs to inaccessible table `%.*s` for txn %" PRIaTXN " (err %d)", dbi, (int)kvx->name.iov_len,
            (const char *)kvx->name.iov_base, txn->txnid, rc);
     return (rc == MDBX_NOTFOUND) ? MDBX_BAD_DBI : rc;
   }
@@ -50,7 +50,7 @@ int tbl_fetch(MDBX_txn *txn, size_t dbi) {
     goto bailout;
   }
   if (unlikely((node_flags(nsr.node) & (N_DUP | N_TREE)) != N_TREE)) {
-    NOTICE("dbi %zu refs to not a named table `%*s` for txn %" PRIaTXN " (%s)", dbi, (int)kvx->name.iov_len,
+    NOTICE("dbi %zu refs to not a named table `%.*s` for txn %" PRIaTXN " (%s)", dbi, (int)kvx->name.iov_len,
            (const char *)kvx->name.iov_base, txn->txnid, "wrong flags");
     return MDBX_INCOMPATIBLE; /* not a named DB */
   }
@@ -60,7 +60,7 @@ int tbl_fetch(MDBX_txn *txn, size_t dbi) {
     return rc;
 
   if (unlikely(data.iov_len != sizeof(tree_t))) {
-    NOTICE("dbi %zu refs to not a named table `%*s` for txn %" PRIaTXN " (%s)", dbi, (int)kvx->name.iov_len,
+    NOTICE("dbi %zu refs to not a named table `%.*s` for txn %" PRIaTXN " (%s)", dbi, (int)kvx->name.iov_len,
            (const char *)kvx->name.iov_base, txn->txnid, "wrong rec-size");
     return MDBX_INCOMPATIBLE; /* not a named DB */
   }
@@ -70,7 +70,7 @@ int tbl_fetch(MDBX_txn *txn, size_t dbi) {
    * have dropped and recreated the DB with other flags. */
   tree_t *const db = &txn->dbs[dbi];
   if (unlikely((db->flags & DB_PERSISTENT_FLAGS) != flags)) {
-    NOTICE("dbi %zu refs to the re-created table `%*s` for txn %" PRIaTXN
+    NOTICE("dbi %zu refs to the re-created table `%.*s` for txn %" PRIaTXN
            " with different flags (present 0x%X != wanna 0x%X)",
            dbi, (int)kvx->name.iov_len, (const char *)kvx->name.iov_base, txn->txnid, db->flags & DB_PERSISTENT_FLAGS,
            flags);

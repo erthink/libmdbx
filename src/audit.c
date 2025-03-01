@@ -78,7 +78,7 @@ __cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored, bool don
     if (db)
       ctx.used += audit_db_used(db);
     else if (dbi_state(txn, dbi))
-      WARNING("audit %s@%" PRIaTXN ": unable account dbi %zd / \"%*s\", state 0x%02x", txn->parent ? "nested-" : "",
+      WARNING("audit %s@%" PRIaTXN ": unable account dbi %zd / \"%.*s\", state 0x%02x", txn->parent ? "nested-" : "",
               txn->txnid, dbi, (int)env->kvs[dbi].name.iov_len, (const char *)env->kvs[dbi].name.iov_base,
               dbi_state(txn, dbi));
   }
