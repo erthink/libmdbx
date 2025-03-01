@@ -677,7 +677,7 @@ __cold const tree_t *dbi_dig(const MDBX_txn *txn, const size_t dbi, tree_t *fall
       case DBI_OLDEN:
         return dig->dbs + dbi;
       case 0:
-        return nullptr;
+        return fallback;
       case DBI_VALID | DBI_STALE:
       case DBI_OLDEN | DBI_STALE:
         break;
