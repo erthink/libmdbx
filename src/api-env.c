@@ -11,6 +11,12 @@ __cold static intptr_t reasonable_db_maxsize(void) {
       /* the 32-bit limit is good enough for fallback */
       return cached_result = MAX_MAPSIZE32;
 
+#if defined(__SANITIZE_ADDRESS__)
+    total_ram_pages >>= 4;
+#endif /* __SANITIZE_ADDRESS__ */
+    if (RUNNING_ON_VALGRIND)
+      total_ram_pages >>= 4;
+
     if (unlikely((size_t)total_ram_pages * 2 > MAX_MAPSIZE / (size_t)pagesize))
       return cached_result = MAX_MAPSIZE;
     assert(MAX_MAPSIZE >= (size_t)(total_ram_pages * pagesize * 2));
