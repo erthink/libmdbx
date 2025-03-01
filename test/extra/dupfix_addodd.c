@@ -25,6 +25,9 @@ int main() {
   MDBX_val key, data;
   MDBX_txn *txn = NULL;
 
+  const char *db_filename = "./example-db";
+  mdbx_env_delete(db_filename, MDBX_ENV_JUST_DELETE);
+
   rc = mdbx_env_create(&env);
   if (rc != MDBX_SUCCESS) {
     fprintf(stderr, "mdbx_env_create: (%d) %s\n", rc, mdbx_strerror(rc));
@@ -37,7 +40,7 @@ int main() {
     exit(EXIT_FAILURE);
   }
 
-  rc = mdbx_env_open(env, "./example-db", MDBX_NOSUBDIR | MDBX_LIFORECLAIM, 0664);
+  rc = mdbx_env_open(env, db_filename, MDBX_NOSUBDIR | MDBX_LIFORECLAIM, 0664);
   if (rc != MDBX_SUCCESS) {
     fprintf(stderr, "mdbx_env_open: (%d) %s\n", rc, mdbx_strerror(rc));
     exit(EXIT_FAILURE);
