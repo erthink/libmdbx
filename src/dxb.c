@@ -368,7 +368,7 @@ void dxb_sanitize_tail(MDBX_env *env, MDBX_txn *txn) {
     if (env->pid != osal_getpid()) {
       /* resurrect after fork */
       return;
-    } else if (env->txn && env_txn0_owned(env)) {
+    } else if (env_owned_wrtxn(env)) {
       /* inside write-txn */
       last = meta_recent(env, &env->basal_txn->wr.troika).ptr_v->geometry.first_unallocated;
     } else if (env->flags & MDBX_RDONLY) {

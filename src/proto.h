@@ -92,7 +92,7 @@ MDBX_INTERNAL int env_open(MDBX_env *env, mdbx_mode_t mode);
 MDBX_INTERNAL int env_info(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo *out, size_t bytes, troika_t *troika);
 MDBX_INTERNAL int env_sync(MDBX_env *env, bool force, bool nonblock);
 MDBX_INTERNAL int env_close(MDBX_env *env, bool resurrect_after_fork);
-MDBX_INTERNAL bool env_txn0_owned(const MDBX_env *env);
+MDBX_INTERNAL MDBX_txn *env_owned_wrtxn(const MDBX_env *env);
 MDBX_INTERNAL int __must_check_result env_page_auxbuffer(MDBX_env *env);
 MDBX_INTERNAL unsigned env_setup_pagesize(MDBX_env *env, const size_t pagesize);
 

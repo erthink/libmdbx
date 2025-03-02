@@ -342,7 +342,7 @@ __cold int mdbx_env_set_flags(MDBX_env *env, MDBX_env_flags_t flags, bool onoff)
   if (unlikely(env->flags & MDBX_RDONLY))
     return LOG_IFERR(MDBX_EACCESS);
 
-  const bool lock_needed = (env->flags & ENV_ACTIVE) && !env_txn0_owned(env);
+  const bool lock_needed = (env->flags & ENV_ACTIVE) && !env_owned_wrtxn(env);
   bool should_unlock = false;
   if (lock_needed) {
     rc = lck_txn_lock(env, false);
