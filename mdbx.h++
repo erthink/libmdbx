@@ -4474,11 +4474,11 @@ public:
 
   /// \brief Renew/bind a cursor with a new transaction and previously used
   /// key-value map handle.
-  inline void renew(const ::mdbx::txn &txn);
+  inline void renew(::mdbx::txn &txn);
 
   /// \brief Bind/renew a cursor with a new transaction and specified key-value
   /// map handle.
-  inline void bind(const ::mdbx::txn &txn, ::mdbx::map_handle map_handle);
+  inline void bind(::mdbx::txn &txn, ::mdbx::map_handle map_handle);
 
   /// \brief Unbind cursor from a transaction.
   inline void unbind();
@@ -6167,9 +6167,9 @@ inline cursor::estimate_result cursor::estimate(move_operation operation) const 
   return estimate_result(*this, operation);
 }
 
-inline void cursor::renew(const ::mdbx::txn &txn) { error::success_or_throw(::mdbx_cursor_renew(txn, handle_)); }
+inline void cursor::renew(::mdbx::txn &txn) { error::success_or_throw(::mdbx_cursor_renew(txn, handle_)); }
 
-inline void cursor::bind(const ::mdbx::txn &txn, ::mdbx::map_handle map_handle) {
+inline void cursor::bind(::mdbx::txn &txn, ::mdbx::map_handle map_handle) {
   error::success_or_throw(::mdbx_cursor_bind(txn, handle_, map_handle.dbi));
 }
 
