@@ -159,6 +159,19 @@ __cold static MDBX_chk_line_t *MDBX_PRINTF_ARGS(2, 3) chk_print(MDBX_chk_line_t 
   return line;
 }
 
+__cold MDBX_MAYBE_UNUSED static void chk_println_va(MDBX_chk_scope_t *const scope, enum MDBX_chk_severity severity,
+                                                    const char *fmt, va_list args) {
+  chk_line_end(chk_print_va(chk_line_begin(scope, severity), fmt, args));
+}
+
+__cold MDBX_MAYBE_UNUSED static void chk_println(MDBX_chk_scope_t *const scope, enum MDBX_chk_severity severity,
+                                                 const char *fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  chk_println_va(scope, severity, fmt, args);
+  va_end(args);
+}
+
 __cold static MDBX_chk_line_t *chk_print_size(MDBX_chk_line_t *line, const char *prefix, const uint64_t value,
                                               const char *suffix) {
   static const char sf[] = "KMGTPEZY"; /* LY: Kilo, Mega, Giga, Tera, Peta, Exa, Zetta, Yotta! */
@@ -455,9 +468,8 @@ __cold static void chk_dispose(MDBX_chk_internal_t *chk) {
         chk->cb->table_dispose(chk->usr, tbl);
         tbl->cookie = nullptr;
       }
-      if (tbl != &chk->table_gc && tbl != &chk->table_main) {
+      if (tbl != &chk->table_gc && tbl != &chk->table_main)
         osal_free(tbl);
-      }
     }
   }
   osal_free(chk->v2a_buf.iov_base);
