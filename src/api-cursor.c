@@ -122,8 +122,8 @@ int mdbx_cursor_unbind(MDBX_cursor *mc) {
     }
     mc->next = mc;
   }
+  be_poor(mc);
   mc->signature = cur_signature_ready4dispose;
-  mc->flags = 0;
   return MDBX_SUCCESS;
 }
 
@@ -172,6 +172,7 @@ void mdbx_cursor_close(MDBX_cursor *mc) {
       /* Cursor closed before nested txn ends */
       tASSERT(txn, mc->signature == cur_signature_live);
       ENSURE(txn->env, check_txn_rw(txn, 0) == MDBX_SUCCESS);
+      be_poor(mc);
       mc->signature = cur_signature_wait4eot;
     }
   }
@@ -219,8 +220,8 @@ int mdbx_txn_release_all_cursors(const MDBX_txn *txn, bool unbind) {
         txn->cursors[i] = mc->next;
         mc->next = mc;
         if (unbind) {
+          be_poor(mc);
           mc->signature = cur_signature_ready4dispose;
-          mc->flags = 0;
         } else {
           mc->signature = 0;
           osal_free(mc);
