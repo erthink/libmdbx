@@ -3,9 +3,14 @@
 
 #include "internals.h"
 
-bool env_txn0_owned(const MDBX_env *env) {
-  return (env->flags & MDBX_NOSTICKYTHREADS) ? (env->basal_txn->owner != 0)
-                                             : (env->basal_txn->owner == osal_thread_self());
+MDBX_txn *env_owned_wrtxn(const MDBX_env *env) {
+  if (likely(env->basal_txn)) {
+    const bool is_owned = (env->flags & MDBX_NOSTICKYTHREADS) ? (env->basal_txn->owner != 0)
+                                                              : (env->basal_txn->owner == osal_thread_self());
+    if (is_owned)
+      return env->txn ? env->txn : env->basal_txn;
+  }
+  return nullptr;
 }
 
 int env_page_auxbuffer(MDBX_env *env) {
@@ -60,7 +65,7 @@ __cold int env_sync(MDBX_env *env, bool force, bool nonblock) {
   if (unlikely(env->flags & MDBX_RDONLY))
     return MDBX_EACCESS;
 
-  const bool txn0_owned = env_txn0_owned(env);
+  MDBX_txn *const txn_owned = env_owned_wrtxn(env);
   bool should_unlock = false;
   int rc = MDBX_RESULT_TRUE /* means "nothing to sync" */;
 
@@ -71,7 +76,7 @@ retry:;
     goto bailout;
   }
 
-  const troika_t troika = (txn0_owned | should_unlock) ? env->basal_txn->tw.troika : meta_tap(env);
+  const troika_t troika = (txn_owned || should_unlock) ? env->basal_txn->tw.troika : meta_tap(env);
   const meta_ptr_t head = meta_recent(env, &troika);
   const uint64_t unsynced_pages = atomic_load64(&env->lck->unsynced_pages, mo_Relaxed);
   if (unsynced_pages == 0) {
@@ -104,7 +109,7 @@ retry:;
        osal_monotime() - eoos_timestamp >= autosync_period))
     flags &= MDBX_WRITEMAP /* clear flags for full steady sync */;
 
-  if (!txn0_owned) {
+  if (!txn_owned) {
     if (!should_unlock) {
 #if MDBX_ENABLE_PGOP_STAT
       unsigned wops = 0;
@@ -163,8 +168,8 @@ retry:;
     flags |= txn_shrink_allowed;
   }
 
-  eASSERT(env, txn0_owned || should_unlock);
-  eASSERT(env, !txn0_owned || (flags & txn_shrink_allowed) == 0);
+  eASSERT(env, txn_owned || should_unlock);
+  eASSERT(env, !txn_owned || (flags & txn_shrink_allowed) == 0);
 
   if (!head.is_steady && unlikely(env->stuck_meta >= 0) && troika.recent != (uint8_t)env->stuck_meta) {
     NOTICE("skip %s since wagering meta-page (%u) is mispatch the recent "
