@@ -114,8 +114,12 @@ int mdbx_cursor_unbind(MDBX_cursor *mc) {
     cASSERT(mc, dbi < mc->txn->n_dbi);
     if (dbi < mc->txn->n_dbi) {
       MDBX_cursor **prev = &mc->txn->cursors[dbi];
-      while (*prev && *prev != mc)
+      while (*prev) {
+        ENSURE(mc->txn->env, (*prev)->signature == cur_signature_live || (*prev)->signature == cur_signature_wait4eot);
+        if (*prev == mc)
+          break;
         prev = &(*prev)->next;
+      }
       cASSERT(mc, *prev == mc);
       *prev = mc->next;
     }
@@ -158,8 +162,12 @@ void mdbx_cursor_close(MDBX_cursor *mc) {
         tASSERT(txn, dbi < txn->n_dbi);
         if (dbi < txn->n_dbi) {
           MDBX_cursor **prev = &txn->cursors[dbi];
-          while (*prev && *prev != mc)
+          while (*prev) {
+            ENSURE(txn->env, (*prev)->signature == cur_signature_live || (*prev)->signature == cur_signature_wait4eot);
+            if (*prev == mc)
+              break;
             prev = &(*prev)->next;
+          }
           tASSERT(txn, *prev == mc);
           *prev = mc->next;
         }
