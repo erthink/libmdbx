@@ -164,6 +164,10 @@ else
   $(info $(TIP) Use `make V=1` for verbose.)
 endif
 
+ifeq ($(UNAME),Darwin)
+  $(info $(TIP) Use `brew install gnu-sed gnu-tar` and add ones to the beginning of the PATH.)
+endif
+
 all: show-options $(LIBRARIES) $(MDBX_TOOLS)
 
 help:
@@ -392,6 +396,9 @@ TEST_ITER  := $(shell $(uname2titer))
 TEST_SRC   := test/osal-$(TEST_OSAL).c++ $(filter-out $(wildcard test/osal-*.c++),$(wildcard test/*.c++)) $(call select_by,MDBX_BUILD_CXX,,src/mdbx.c++)
 TEST_INC   := $(wildcard test/*.h++)
 TEST_OBJ   := $(patsubst %.c++,%.o,$(TEST_SRC))
+ifndef SED
+SED        := $(shell which gnu-sed 2>&- || echo sed)
+endif
 TAR        ?= $(shell which gnu-tar 2>&- || echo tar)
 ZIP        ?= $(shell which zip || echo "echo 'Please install zip'")
 CLANG_FORMAT ?= $(shell (which clang-format-19 || which clang-format) 2>/dev/null)
@@ -408,11 +415,11 @@ MAN_SRCDIR := src/man1/
 ALLOY_DEPS := $(shell git ls-files src/ | grep -e /tools -e /man -v)
 MDBX_GIT_DIR := $(shell if [ -d .git ]; then echo .git; elif [ -s .git -a -f .git ]; then grep '^gitdir: ' .git | cut -d ':' -f 2; else echo git_directory_is_absent; fi)
 MDBX_GIT_LASTVTAG := $(shell git describe --tags --dirty=-DIRTY --abbrev=0 '--match=v[0-9]*' 2>&- || echo 'Please fetch tags and/or install non-obsolete git version')
-MDBX_GIT_3DOT := $(shell set -o pipefail; echo "$(MDBX_GIT_LASTVTAG)" | sed -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)|\1|p' || echo 'Please fetch tags and/or use non-obsolete git version')
+MDBX_GIT_3DOT := $(shell set -o pipefail; echo "$(MDBX_GIT_LASTVTAG)" | $(SED) -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)|\1|p' || echo 'Please fetch tags and/or use non-obsolete git version')
 MDBX_GIT_TWEAK := $(shell set -o pipefail; git rev-list $(shell git describe --tags --abbrev=0 '--match=v[0-9]*')..HEAD --count 2>&- || echo 'Please fetch tags and/or use non-obsolete git version')
 MDBX_GIT_TIMESTAMP := $(shell git show --no-patch --format=%cI HEAD 2>&- || echo 'Please install latest get version')
 MDBX_GIT_DESCRIBE := $(shell git describe --tags --long --dirty '--match=v[0-9]*' 2>&- || echo 'Please fetch tags and/or install non-obsolete git version')
-MDBX_GIT_PRERELEASE := $(shell echo "$(MDBX_GIT_LASTVTAG)" | sed -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)-\([-.0-1a-zA-Z]\+\)|\3|p')
+MDBX_GIT_PRERELEASE := $(shell echo "$(MDBX_GIT_LASTVTAG)" | $(SED) -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)-\([-.0-1a-zA-Z]\+\)|\3|p')
 MDBX_VERSION_PURE = $(MDBX_GIT_3DOT)$(if $(filter-out 0,$(MDBX_GIT_TWEAK)),.$(MDBX_GIT_TWEAK),)$(if $(MDBX_GIT_PRERELEASE),-$(MDBX_GIT_PRERELEASE),)
 MDBX_VERSION_IDENT = $(shell set -o pipefail; echo -n '$(MDBX_GIT_DESCRIBE)' | tr -c -s '[a-zA-Z0-9.]' _)
 MDBX_VERSION_NODOT = $(subst .,_,$(MDBX_VERSION_IDENT))
@@ -552,7 +559,7 @@ $(MDBX_GIT_DIR)/HEAD $(MDBX_GIT_DIR)/index $(MDBX_GIT_DIR)/refs/tags:
 
 src/version.c: src/version.c.in $(lastword $(MAKEFILE_LIST)) $(MDBX_GIT_DIR)/HEAD $(MDBX_GIT_DIR)/index $(MDBX_GIT_DIR)/refs/tags LICENSE NOTICE
 	@echo '  MAKE $@'
-	$(QUIET)sed \
+	$(QUIET)$(SED) \
 		-e "s|@MDBX_GIT_TIMESTAMP@|$(MDBX_GIT_TIMESTAMP)|" \
 		-e "s|@MDBX_GIT_TREE@|$(shell git show --no-patch --format=%T HEAD || echo 'Please install latest get version')|" \
 		-e "s|@MDBX_GIT_COMMIT@|$(shell git show --no-patch --format=%H HEAD || echo 'Please install latest get version')|" \
@@ -586,7 +593,7 @@ mdbx-static.o: src/config.h src/version.c src/alloy.c $(ALLOY_DEPS) $(lastword $
 
 docs/Doxyfile: docs/Doxyfile.in src/version.c $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
-	$(QUIET)sed \
+	$(QUIET)$(SED) \
 		-e "s|@MDBX_GIT_TIMESTAMP@|$(MDBX_GIT_TIMESTAMP)|" \
 		-e "s|@MDBX_GIT_TREE@|$(shell git show --no-patch --format=%T HEAD || echo 'Please install latest get version')|" \
 		-e "s|@MDBX_GIT_COMMIT@|$(shell git show --no-patch --format=%H HEAD || echo 'Please install latest get version')|" \
@@ -602,7 +609,7 @@ docs/Doxyfile: docs/Doxyfile.in src/version.c $(lastword $(MAKEFILE_LIST))
 define md-extract-section
 docs/__$(1).md: $(2) $(lastword $(MAKEFILE_LIST))
 	@echo '  EXTRACT $1'
-	$(QUIET)sed -n '/<!-- section-begin $(1) -->/,/<!-- section-end -->/p' $(2) >$$@ && test -s $$@
+	$(QUIET)$(SED) -n '/<!-- section-begin $(1) -->/,/<!-- section-end -->/p' $(2) >$$@ && test -s $$@
 
 endef
 $(foreach section,overview mithril characteristics improvements history usage performance bindings,$(eval $(call md-extract-section,$(section),README.md)))
@@ -617,16 +624,16 @@ docs/overall.md: docs/__overview.md docs/_toc.md docs/__mithril.md docs/__histor
 
 docs/intro.md: docs/_preface.md docs/__characteristics.md docs/__improvements.md docs/_restrictions.md docs/__performance.md
 	@echo '  MAKE $@'
-	$(QUIET)cat $^ | sed 's/^Performance comparison$$/Performance comparison {#performance}/;s/^Improvements beyond LMDB$$/Improvements beyond LMDB {#improvements}/' >$@
+	$(QUIET)cat $^ | $(SED) 's/^Performance comparison$$/Performance comparison {#performance}/;s/^Improvements beyond LMDB$$/Improvements beyond LMDB {#improvements}/' >$@
 
 docs/usage.md: docs/__usage.md docs/_starting.md docs/__bindings.md
 	@echo '  MAKE $@'
-	$(QUIET)echo -e "\\page usage Usage\n\\section getting Building & Embedding" | cat - $^ | sed 's/^Bindings$$/Bindings {#bindings}/' >$@
+	$(QUIET)echo -e "\\page usage Usage\n\\section getting Building & Embedding" | cat - $^ | $(SED) 's/^Bindings$$/Bindings {#bindings}/' >$@
 
 doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md mdbx.h mdbx.h++ src/options.h ChangeLog.md COPYRIGHT LICENSE NOTICE docs/favicon.ico docs/manifest.webmanifest $(lastword $(MAKEFILE_LIST))
 	@echo '  RUNNING doxygen...'
 	$(QUIET)rm -rf docs/html && \
-	cat mdbx.h | tr '\n' '\r' | sed -e 's/LIBMDBX_INLINE_API\s*(\s*\([^,]\+\),\s*\([^,]\+\),\s*(\s*\([^)]\+\)\s*)\s*)\s*{/inline \1 \2(\3) {/g' | tr '\r' '\n' >docs/mdbx.h && \
+	cat mdbx.h | tr '\n' '\r' | $(SED) -e 's/LIBMDBX_INLINE_API\s*(\s*\([^,]\+\),\s*\([^,]\+\),\s*(\s*\([^)]\+\)\s*)\s*)\s*{/inline \1 \2(\3) {/g' | tr '\r' '\n' >docs/mdbx.h && \
 	cp mdbx.h++ src/options.h ChangeLog.md docs/ && (cd docs && doxygen Doxyfile $(HUSH)) && cp COPYRIGHT LICENSE NOTICE docs/favicon.ico docs/manifest.webmanifest docs/html/
 
 mdbx++-dylib.o: src/config.h src/mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE_LIST))
@@ -650,7 +657,7 @@ release-assets: libmdbx-amalgamated-$(MDBX_GIT_3DOT).zpaq \
 	libmdbx-amalgamated-$(MDBX_GIT_3DOT).tar.gz \
 	libmdbx-amalgamated-$(subst .,_,$(MDBX_GIT_3DOT)).zip
 	$(QUIET)([ \
-		"$$(set -o pipefail; git describe | sed -n '/^v[0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}$$/p' || echo fail-left)" \
+		"$$(set -o pipefail; git describe | $(SED) -n '/^v[0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}$$/p' || echo fail-left)" \
 	== \
 		"$$(git describe --tags --dirty=-dirty || echo fail-right)" ] \
 		|| (echo 'ERROR: Is not a valid release because not in the clean state with a suitable annotated tag!!!' >&2 && false)) \
@@ -687,7 +694,7 @@ $(DIST_DIR)/@tmp-essentials.inc: src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFI
 	@echo '  ALLOYING...'
 	$(QUIET)mkdir -p dist \
 	&& (grep -v '#include ' src/alloy.c && echo '#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)' \
-	&& sed \
+	&& $(SED) \
 		-e 's|#include "../mdbx.h"|@INCLUDE "mdbx.h"|' \
 		-e '/#include "preface.h"/r src/preface.h' \
 		-e '/#include "osal.h"/r src/osal.h' \
@@ -699,14 +706,14 @@ $(DIST_DIR)/@tmp-essentials.inc: src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFI
 		-e '/#include "utils.h"/r src/utils.h' \
 		-e '/#include "pnl.h"/r src/pnl.h' \
 		src/essentials.h \
-	| sed \
+	| $(SED) \
 		-e '/#pragma once/d' -e '/#include "/d' \
 		-e '/ clang-format o/d' -e '/ \*INDENT-O/d' \
 		| grep -v '^/// ') >$@
 
 $(DIST_DIR)/@tmp-internals.inc: $(DIST_DIR)/@tmp-essentials.inc src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
 	$(QUIET)(cat $(DIST_DIR)/@tmp-essentials.inc \
-	&& sed \
+	&& $(SED) \
 		-e '/#include "essentials.h"/d' \
 		-e '/#include "atomics-ops.h"/r src/atomics-ops.h' \
 		-e '/#include "proto.h"/r src/proto.h' \
@@ -728,22 +735,22 @@ $(DIST_DIR)/@tmp-internals.inc: $(DIST_DIR)/@tmp-essentials.inc src/version.c $(
 		-e '/#include "walk.h"/r src/walk.h' \
 		-e '/#include "windows-import.h"/r src/windows-import.h' \
 		src/internals.h \
-	| sed \
+	| $(SED) \
 		-e '/#pragma once/d' -e '/#include "/d' \
 		-e '/ clang-format o/d' -e '/ \*INDENT-O/d' \
 		| grep -v '^/// ') >$@
 
 $(DIST_DIR)/mdbx.c: $(DIST_DIR)/@tmp-internals.inc $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
-	$(QUIET)(cat $(DIST_DIR)/@tmp-internals.inc $(shell git ls-files src/*.c | grep -v alloy) src/version.c | sed \
+	$(QUIET)(cat $(DIST_DIR)/@tmp-internals.inc $(shell git ls-files src/*.c | grep -v alloy) src/version.c | $(SED) \
 		-e '/#include "debug_begin.h"/r src/debug_begin.h' \
 		-e '/#include "debug_end.h"/r src/debug_end.h' \
-	) | sed -e '/#include "/d;/#pragma once/d' -e 's|@INCLUDE|#include|' \
+	) | $(SED) -e '/#include "/d;/#pragma once/d' -e 's|@INCLUDE|#include|' \
 		-e '/ clang-format o/d;/ \*INDENT-O/d' -e '3i /* clang-format off */' | cat -s >$@
 
 $(DIST_DIR)/mdbx.c++: $(DIST_DIR)/@tmp-essentials.inc src/mdbx.c++ $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
-	$(QUIET)cat $(DIST_DIR)/@tmp-essentials.inc src/mdbx.c++ | sed \
+	$(QUIET)cat $(DIST_DIR)/@tmp-essentials.inc src/mdbx.c++ | $(SED) \
 		-e '/#define xMDBX_ALLOY/d' \
 		-e '/#include "/d;/#pragma once/d' \
 		-e 's|@INCLUDE|#include|;s|"mdbx.h"|"mdbx.h++"|' \
@@ -753,12 +760,12 @@ define dist-tool-rule
 $(DIST_DIR)/mdbx_$(1).c: src/tools/$(1).c src/tools/wingetopt.h src/tools/wingetopt.c \
 		$(DIST_DIR)/@tmp-internals.inc $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $$@'
-	$(QUIET)mkdir -p dist && sed \
+	$(QUIET)mkdir -p dist && $(SED) \
 		-e '/#include "essentials.h"/r $(DIST_DIR)/@tmp-essentials.inc' \
 		-e '/#include "wingetopt.h"/r src/tools/wingetopt.c' \
 		-e '/ clang-format o/d' -e '/ \*INDENT-O/d' \
 		src/tools/$(1).c \
-	| sed -e '/#include "/d;/#pragma once/d;/#define xMDBX_ALLOY/d' -e 's|@INCLUDE|#include|' \
+	| $(SED) -e '/#include "/d;/#pragma once/d;/#define xMDBX_ALLOY/d' -e 's|@INCLUDE|#include|' \
 		-e '/ clang-format o/d;/ \*INDENT-O/d' -e '9i /* clang-format off */' | cat -s >$$@
 
 endef
@@ -767,7 +774,7 @@ $(foreach file,$(TOOLS),$(eval $(call dist-tool-rule,$(file))))
 define dist-extra-rule
 $(DIST_DIR)/$(1): $(1) src/version.c $(lastword $(MAKEFILE_LIST))
 	@echo '  REFINE $$@'
-	$(QUIET)mkdir -p $$(dir $$@) && sed -e '/^#> dist-cutoff-begin/,/^#< dist-cutoff-end/d' $$< | cat -s >$$@
+	$(QUIET)mkdir -p $$(dir $$@) && $(SED) -e '/^#> dist-cutoff-begin/,/^#< dist-cutoff-end/d' $$< | cat -s >$$@
 
 endef
 $(foreach file,mdbx.h mdbx.h++ $(filter-out man1/% VERSION.json .clang-format-ignore %.in ntdll.def,$(DIST_EXTRA)),$(eval $(call dist-extra-rule,$(file))))
@@ -816,7 +823,7 @@ cross-gcc:
 	@echo "FOR INSTANCE: sudo apt install \$$(apt list 'g++-*' | grep 'g++-[a-z0-9]\+-linux-gnu/' | cut -f 1 -d / | sort -u)"
 	$(QUIET)for CC in $(CROSS_LIST_NOQEMU) $(CROSS_LIST); do \
 		echo "===================== $$CC"; \
-		$(MAKE) IOARENA=false CXXSTD= clean && CC=$$CC CXX=$$(echo $$CC | sed 's/-gcc/-g++/') EXE_LDFLAGS=-static $(MAKE) IOARENA=false all || exit $$?; \
+		$(MAKE) IOARENA=false CXXSTD= clean && CC=$$CC CXX=$$(echo $$CC | $(SED) 's/-gcc/-g++/') EXE_LDFLAGS=-static $(MAKE) IOARENA=false all || exit $$?; \
 	done
 
 # Unfortunately qemu don't provide robust support for futexes.
@@ -830,7 +837,7 @@ cross-qemu:
 	$(QUIET)for CC in $(CROSS_LIST); do \
 		echo "===================== $$CC + qemu"; \
 		$(MAKE) IOARENA=false CXXSTD= clean && \
-			CC=$$CC CXX=$$(echo $$CC | sed 's/-gcc/-g++/') EXE_LDFLAGS=-static MDBX_BUILD_OPTIONS="-DMDBX_SAFE4QEMU $(MDBX_BUILD_OPTIONS)" \
+			CC=$$CC CXX=$$(echo $$CC | $(SED) 's/-gcc/-g++/') EXE_LDFLAGS=-static MDBX_BUILD_OPTIONS="-DMDBX_SAFE4QEMU $(MDBX_BUILD_OPTIONS)" \
 			$(MAKE) IOARENA=false smoke-singleprocess test-singleprocess || exit $$?; \
 	done
 
@@ -897,13 +904,13 @@ bench-$(1)_$(2).txt: $(3) $(IOARENA) $(lastword $(MAKEFILE_LIST))
 	$(QUIET)(export LD_LIBRARY_PATH="./:$$$${LD_LIBRARY_PATH}"; \
 		ldd $(IOARENA) | grep -i $(1) && \
 		$(IOARENA) -D $(1) -B batch -m $(BENCH_CRUD_MODE) -n $(2) \
-			| tee $$@ | grep throughput | sed 's/throughput/batch×N/' && \
+			| tee $$@ | grep throughput | $(SED) 's/throughput/batch×N/' && \
 		$(IOARENA) -D $(1) -B crud -m $(BENCH_CRUD_MODE) -n $(2) \
-			| tee -a $$@ | grep throughput | sed 's/throughput/   crud/' && \
+			| tee -a $$@ | grep throughput | $(SED) 's/throughput/   crud/' && \
 		$(IOARENA) -D $(1) -B iterate,get,iterate,get,iterate -m $(BENCH_CRUD_MODE) -r 4 -n $(2) \
-			| tee -a $$@ | grep throughput | sed '0,/throughput/{s/throughput/iterate/};s/throughput/    get/' && \
+			| tee -a $$@ | grep throughput | $(SED) '0,/throughput/{s/throughput/iterate/};s/throughput/    get/' && \
 		$(IOARENA) -D $(1) -B delete -m $(BENCH_CRUD_MODE) -n $(2) \
-			| tee -a $$@ | grep throughput | sed 's/throughput/ delete/' && \
+			| tee -a $$@ | grep throughput | $(SED) 's/throughput/ delete/' && \
 	true) || mv -f $$@ $$@.error
 
 endef
