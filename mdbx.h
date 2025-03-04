@@ -5227,17 +5227,42 @@ LIBMDBX_API void mdbx_cursor_close(MDBX_cursor *cursor);
  * \see mdbx_cursor_unbind()
  * \see mdbx_cursor_close()
  *
- * \param [in] txn      A transaction handle returned by \ref mdbx_txn_begin().
- * \param [in] unbind   If non-zero, unbinds cursors and leaves ones reusable.
- *                      Otherwise close and dispose cursors.
+ * \param [in] txn        A transaction handle returned by \ref mdbx_txn_begin().
+ * \param [in] unbind     If non-zero, unbinds cursors and leaves ones reusable.
+ *                        Otherwise close and dispose cursors.
+ * \param [in,out] count  An optional pointer to return the number of cursors
+ *                        processed by the requested operation.
  *
- * \returns A negative error value on failure or the number of closed cursors
- *          on success, some possible errors are:
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
  * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
  *                               by current thread.
  * \retval MDBX_BAD_TXN          Given transaction is invalid or has
  *                               a child/nested transaction transaction. */
-LIBMDBX_API int mdbx_txn_release_all_cursors(const MDBX_txn *txn, bool unbind);
+LIBMDBX_API int mdbx_txn_release_all_cursors_ex(const MDBX_txn *txn, bool unbind, size_t *count);
+
+/** \brief Unbind or closes all cursors of a given transaction.
+ * \ingroup c_cursors
+ *
+ * Unbinds either closes all cursors associated (opened or renewed) with
+ * a given transaction in a bulk with minimal overhead.
+ *
+ * \see mdbx_cursor_unbind()
+ * \see mdbx_cursor_close()
+ *
+ * \param [in] txn      A transaction handle returned by \ref mdbx_txn_begin().
+ * \param [in] unbind   If non-zero, unbinds cursors and leaves ones reusable.
+ *                      Otherwise close and dispose cursors.
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
+ *                               by current thread.
+ * \retval MDBX_BAD_TXN          Given transaction is invalid or has
+ *                               a child/nested transaction transaction. */
+LIBMDBX_INLINE_API(int, mdbx_txn_release_all_cursors, (const MDBX_txn *txn, bool unbind)) {
+  return mdbx_txn_release_all_cursors_ex(txn, unbind, NULL);
+}
 
 /** \brief Renew a cursor handle for use within the given transaction.
  * \ingroup c_cursors

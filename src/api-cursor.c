@@ -216,14 +216,15 @@ again:
   return MDBX_SUCCESS;
 }
 
-int mdbx_txn_release_all_cursors(const MDBX_txn *txn, bool unbind) {
+int mdbx_txn_release_all_cursors_ex(const MDBX_txn *txn, bool unbind, size_t *count) {
   int rc = check_txn(txn, MDBX_TXN_FINISHED | MDBX_TXN_HAS_CHILD);
+  size_t n = 0;
   if (likely(rc == MDBX_SUCCESS)) {
     TXN_FOREACH_DBI_FROM(txn, i, MAIN_DBI) {
       while (txn->cursors[i]) {
+        ++n;
         MDBX_cursor *mc = txn->cursors[i];
         ENSURE(nullptr, mc->signature == cur_signature_live && (mc->next != mc) && !mc->backup);
-        rc = likely(rc < INT_MAX) ? rc + 1 : rc;
         txn->cursors[i] = mc->next;
         mc->next = mc;
         if (unbind) {
@@ -236,9 +237,10 @@ int mdbx_txn_release_all_cursors(const MDBX_txn *txn, bool unbind) {
       }
     }
   } else {
-    eASSERT(nullptr, rc < 0);
     LOG_IFERR(rc);
   }
+  if (count)
+    *count = n;
   return rc;
 }
 
