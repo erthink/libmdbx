@@ -621,7 +621,7 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
 #endif /* Windows */
   }
 
-  if (env->basal_txn && env->basal_txn->owner == osal_thread_self())
+  if (env->basal_txn && (MDBX_TXN_CHECKOWNER ? env->basal_txn->owner == osal_thread_self() : !!env->basal_txn->owner))
     lck_txn_unlock(env);
 
   eASSERT(env, env->signature.weak == 0);

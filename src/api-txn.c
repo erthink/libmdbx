@@ -104,11 +104,13 @@ int mdbx_txn_abort(MDBX_txn *txn) {
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
+#if MDBX_TXN_CHECKOWNER
   if ((txn->flags & (MDBX_TXN_RDONLY | MDBX_NOSTICKYTHREADS)) == MDBX_NOSTICKYTHREADS &&
       unlikely(txn->owner != osal_thread_self())) {
     mdbx_txn_break(txn);
     return LOG_IFERR(MDBX_THREAD_MISMATCH);
   }
+#endif /* MDBX_TXN_CHECKOWNER */
 
   return LOG_IFERR(txn_abort(txn));
 }
@@ -363,11 +365,13 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     goto done;
   }
 
+#if MDBX_TXN_CHECKOWNER
   if ((txn->flags & MDBX_NOSTICKYTHREADS) && txn == env->basal_txn && unlikely(txn->owner != osal_thread_self())) {
     txn->flags |= MDBX_TXN_ERROR;
     rc = MDBX_THREAD_MISMATCH;
     return LOG_IFERR(rc);
   }
+#endif /* MDBX_TXN_CHECKOWNER */
 
   if (unlikely(txn->flags & MDBX_TXN_ERROR)) {
     rc = MDBX_RESULT_TRUE;
