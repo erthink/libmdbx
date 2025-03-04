@@ -131,6 +131,7 @@ int main(int argc, const char *argv[]) {
 
     std::thread t([&]() {
       s.wait();
+#if MDBX_TXN_CHECKOWNER
       err = mdbx_txn_reset(c_txn);
       assert(err == MDBX_THREAD_MISMATCH);
       ok = ok && err == MDBX_THREAD_MISMATCH;
@@ -143,6 +144,7 @@ int main(int argc, const char *argv[]) {
       err = mdbx_txn_abort(c_txn);
       assert(err == MDBX_THREAD_MISMATCH);
       ok = ok && err == MDBX_THREAD_MISMATCH;
+#endif /* MDBX_TXN_CHECKOWNER */
       err = mdbx_txn_begin(env, txn, MDBX_TXN_READWRITE, &c_txn);
       assert(err == MDBX_BAD_TXN);
       ok = ok && err == MDBX_BAD_TXN;

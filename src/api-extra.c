@@ -117,7 +117,6 @@ __cold int mdbx_thread_unregister(const MDBX_env *env) {
     return MDBX_RESULT_TRUE /* not registered */;
 
   eASSERT(env, r->pid.weak == env->pid);
-  eASSERT(env, r->tid.weak == osal_thread_self());
   if (unlikely(r->pid.weak != env->pid || r->tid.weak != osal_thread_self()))
     return LOG_IFERR(MDBX_BAD_RSLOT);
 
@@ -154,8 +153,10 @@ int mdbx_txn_unlock(MDBX_env *env) {
 
   if (unlikely(env->flags & MDBX_RDONLY))
     return LOG_IFERR(MDBX_EACCESS);
+#if MDBX_TXN_CHECKOWNER
   if (unlikely(env->basal_txn->owner != osal_thread_self()))
     return LOG_IFERR(MDBX_THREAD_MISMATCH);
+#endif /* MDBX_TXN_CHECKOWNER */
   if (unlikely((env->basal_txn->flags & MDBX_TXN_FINISHED) == 0))
     return LOG_IFERR(MDBX_BUSY);
 
