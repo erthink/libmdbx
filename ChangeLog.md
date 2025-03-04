@@ -40,7 +40,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx
 
  - Использование системного кода ошибки `EREMOTEIO` ("Remote I/O error") вместо `ENOTBLK` ("Block device required") в качестве `MDBX_EREMOTE` для индикации ошибочной ситуации открытия БД расположенной на сетевом носителе.
 
- - Функция `dbx_txn_release_all_cursors()` возвращает только код ошибки, не смешивая его с количеством обработанных/закрытых курсоров.
+ - Функция `mdbx_txn_release_all_cursors()` возвращает только код ошибки, не смешивая его с количеством обработанных/закрытых курсоров.
    Для аналогичных действий с получением количества закрытых курсоров в API добавлена функция `mdbx_txn_release_all_cursors_ex()`.
 
 Исправления:
