@@ -1,0 +1,27 @@
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "ItemList",
+  "itemListElement": [{
+    "@type": "ListItem",
+    "position": 1,
+    "name": "Группа в Telegram",
+    "url": "https://t.me/libmdbx"
+  },{
+    "@type": "ListItem",
+    "position": 2,
+    "name": "Исходный код",
+    "url": "https://gitflic.ru/project/erthink/libmdbx"
+  },{
+    "@type": "ListItem",
+    "position": 3,
+    "name": "C++ API",
+    "url": "https://libmdbx.dqdkfa.ru/group__cxx__api.html"
+  },{
+    "@type": "ListItem",
+    "position": 4,
+    "name": "Mirror on Github",
+    "url": "https://github.com/erthink/libmdbx"
+  }]
+}
+</script>
