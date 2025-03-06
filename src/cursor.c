@@ -184,12 +184,12 @@ __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_va
 
 /*----------------------------------------------------------------------------*/
 
-int cursor_shadow(MDBX_cursor *cursor, MDBX_txn *nested_txn, const size_t dbi) {
-  tASSERT(nested_txn, cursor->signature == cur_signature_live);
-  tASSERT(nested_txn, cursor->txn != nested_txn);
+int cursor_shadow(MDBX_cursor *cursor, MDBX_txn *nested, const size_t dbi) {
+  tASSERT(nested, cursor->signature == cur_signature_live);
+  tASSERT(nested, cursor->txn != nested);
   cASSERT(cursor, cursor->txn->flags & txn_may_have_cursors);
   cASSERT(cursor, dbi == cursor_dbi(cursor));
-  tASSERT(nested_txn, dbi > FREE_DBI && dbi < nested_txn->n_dbi);
+  tASSERT(nested, dbi > FREE_DBI && dbi < nested->n_dbi);
 
   const size_t size = cursor->subcur ? sizeof(MDBX_cursor) + sizeof(subcur_t) : sizeof(MDBX_cursor);
   MDBX_cursor *const shadow = osal_malloc(size);
@@ -202,14 +202,14 @@ int cursor_shadow(MDBX_cursor *cursor, MDBX_txn *nested_txn, const size_t dbi) {
 #endif /* MDBX_DEBUG */
   *shadow = *cursor;
   cursor->backup = shadow;
-  cursor->txn = nested_txn;
-  cursor->tree = &nested_txn->dbs[dbi];
-  cursor->dbi_state = &nested_txn->dbi_state[dbi];
+  cursor->txn = nested;
+  cursor->tree = &nested->dbs[dbi];
+  cursor->dbi_state = &nested->dbi_state[dbi];
   subcur_t *subcur = cursor->subcur;
   if (subcur) {
     *(subcur_t *)(shadow + 1) = *subcur;
-    subcur->cursor.txn = nested_txn;
-    subcur->cursor.dbi_state = cursor->dbi_state;
+    subcur->cursor.txn = nested;
+    subcur->cursor.dbi_state = &nested->dbi_state[dbi];
   }
   return MDBX_SUCCESS;
 }
