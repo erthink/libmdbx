@@ -249,9 +249,9 @@ MDBX_cursor *cursor_eot(MDBX_cursor *cursor, MDBX_txn *txn) {
     osal_free(shadow);
   } else {
     ENSURE(cursor->txn->env, stage == cur_signature_live);
-    cursor_drown((cursor_couple_t *)cursor);
-    cursor->next = cursor;
     cursor->signature = cur_signature_ready4dispose /* Cursor may be reused */;
+    cursor->next = cursor;
+    cursor_drown((cursor_couple_t *)cursor);
   }
   return next;
 }

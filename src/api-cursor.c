@@ -94,6 +94,10 @@ int mdbx_cursor_unbind(MDBX_cursor *mc) {
     /* TODO: реализовать при переходе на двусвязный список курсоров */
     return LOG_IFERR(MDBX_EINVAL);
 
+  int rc = check_txn(mc->txn, MDBX_TXN_FINISHED | MDBX_TXN_HAS_CHILD);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
   if (unlikely(!mc->txn || mc->txn->signature != txn_signature)) {
     ERROR("Wrong cursor's transaction %p 0x%x", __Wpedantic_format_voidptr(mc->txn), mc->txn ? mc->txn->signature : 0);
     return LOG_IFERR(MDBX_PROBLEM);
@@ -138,40 +142,61 @@ int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
   return MDBX_SUCCESS;
 }
 
-void mdbx_cursor_close(MDBX_cursor *mc) {
-  if (likely(mc)) {
-    ENSURE(nullptr, mc->signature == cur_signature_live || mc->signature == cur_signature_ready4dispose);
-    MDBX_txn *const txn = mc->txn;
-    if (!mc->backup) {
-      mc->txn = nullptr;
-      /* Unlink from txn, if tracked. */
-      if (mc->next != mc) {
-        ENSURE(txn->env, check_txn(txn, 0) == MDBX_SUCCESS);
-        const size_t dbi = (kvx_t *)mc->clc - txn->env->kvs;
-        tASSERT(txn, dbi < txn->n_dbi);
-        if (dbi < txn->n_dbi) {
-          MDBX_cursor **prev = &txn->cursors[dbi];
-          while (*prev) {
-            ENSURE(txn->env, (*prev)->signature == cur_signature_live || (*prev)->signature == cur_signature_wait4eot);
-            if (*prev == mc)
-              break;
-            prev = &(*prev)->next;
-          }
-          tASSERT(txn, *prev == mc);
-          *prev = mc->next;
-        }
-        mc->next = mc;
-      }
-      mc->signature = 0;
-      osal_free(mc);
-    } else {
-      /* Cursor closed before nested txn ends */
-      tASSERT(txn, mc->signature == cur_signature_live);
-      ENSURE(txn->env, check_txn_rw(txn, 0) == MDBX_SUCCESS);
-      be_poor(mc);
-      mc->signature = cur_signature_wait4eot;
-    }
+void mdbx_cursor_close(MDBX_cursor *cursor) {
+  if (likely(cursor)) {
+    int err = mdbx_cursor_close2(cursor);
+    if (unlikely(err != MDBX_SUCCESS))
+      mdbx_panic("%s:%d error %d (%s) while closing cursor", __func__, __LINE__, err, mdbx_liberr2str(err));
   }
+}
+
+int mdbx_cursor_close2(MDBX_cursor *mc) {
+  if (unlikely(!mc))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  if (mc->signature == cur_signature_ready4dispose) {
+    if (unlikely(mc->txn || mc->backup))
+      return LOG_IFERR(MDBX_PANIC);
+    cursor_drown((cursor_couple_t *)mc);
+    mc->signature = 0;
+    osal_free(mc);
+    return MDBX_SUCCESS;
+  }
+
+  if (unlikely(mc->signature != cur_signature_live))
+    return LOG_IFERR(MDBX_EBADSIGN);
+
+  MDBX_txn *const txn = mc->txn;
+  int rc = check_txn(txn, MDBX_TXN_FINISHED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  if (mc->backup) {
+    /* Cursor closed before nested txn ends */
+    cursor_reset((cursor_couple_t *)mc);
+    mc->signature = cur_signature_wait4eot;
+    return MDBX_SUCCESS;
+  }
+
+  if (mc->next != mc) {
+    const size_t dbi = cursor_dbi(mc);
+    cASSERT(mc, dbi < mc->txn->n_dbi);
+    cASSERT(mc, &mc->txn->env->kvs[dbi].clc == mc->clc);
+    if (likely(dbi < txn->n_dbi)) {
+      MDBX_cursor **prev = &txn->cursors[dbi];
+      while (/* *prev && */ *prev != mc) {
+        ENSURE(txn->env, (*prev)->signature == cur_signature_live || (*prev)->signature == cur_signature_wait4eot);
+        prev = &(*prev)->next;
+      }
+      tASSERT(txn, *prev == mc);
+      *prev = mc->next;
+    }
+    mc->next = mc;
+  }
+  cursor_drown((cursor_couple_t *)mc);
+  mc->signature = 0;
+  osal_free(mc);
+  return MDBX_SUCCESS;
 }
 
 int mdbx_cursor_copy(const MDBX_cursor *src, MDBX_cursor *dest) {
