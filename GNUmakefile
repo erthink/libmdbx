@@ -299,6 +299,10 @@ lib-shared libmdbx.$(SO_SUFFIX): mdbx-dylib.o $(call select_by,MDBX_BUILD_CXX,md
 	@echo '  LD $@'
 	$(QUIET)$(call select_by,MDBX_BUILD_CXX,$(CXX) $(CXXFLAGS),$(CC) $(CFLAGS)) $^ -pthread -shared $(LDFLAGS) $(call select_by,MDBX_BUILD_CXX,$(LIB_STDCXXFS)) $(LIBS) -o $@
 
+ninja-assertions: CMAKE_OPT += -DMDBX_FORCE_ASSERTIONS=ON
+ninja-assertions: cmake-build
+ninja-debug: CMAKE_OPT += -DCMAKE_BUILD_TYPE=Debug
+ninja-debug: cmake-build
 ninja: cmake-build
 cmake-build:
 	@echo "  RUN: cmake -G Ninja && cmake --build"
@@ -431,7 +435,7 @@ MDBX_SMOKE_EXTRA ?=
 
 check: DESTDIR = $(shell pwd)/@check-install
 check: CMAKE_OPT = -Werror=dev
-check: smoke-assertion ninja dist install test ctest
+check: smoke-assertion ninja-assertions dist install test ctest
 
 smoke-assertion: MDBX_BUILD_OPTIONS:=$(strip $(MDBX_BUILD_OPTIONS) -DMDBX_FORCE_ASSERTIONS=1 -UNDEBUG -DMDBX_DEBUG=0)
 smoke-assertion: smoke
@@ -668,7 +672,7 @@ release-assets: libmdbx-amalgamated-$(MDBX_GIT_3DOT).zpaq \
 	@echo -n '  VERIFY amalgamated sources...'
 	$(QUIET)rm -rf $@ $(DIST_DIR)/@tmp-essentials.inc $(DIST_DIR)/@tmp-internals.inc \
 	&& if grep -R "define xMDBX_ALLOY" dist | grep -q MDBX_BUILD_SOURCERY; then echo "sed output is WRONG!" >&2; exit 2; fi \
-	&& rm -rf @dist-check && cp -r -p $(DIST_DIR) @dist-check && ($(MAKE) -j IOARENA=false CXXSTD=$(CXXSTD) -C @dist-check all ninja >@dist-check.log 2>@dist-check.err || (cat @dist-check.err && exit 1)) \
+	&& rm -rf @dist-check && cp -r -p $(DIST_DIR) @dist-check && ($(MAKE) -j IOARENA=false CXXSTD=$(CXXSTD) -C @dist-check all ninja-assertions >@dist-check.log 2>@dist-check.err || (cat @dist-check.err && exit 1)) \
 	&& touch $@ || (echo " FAILED! See @dist-check.log and @dist-check.err" >&2; exit 2) && echo " Ok"
 
 %.tar.gz: @dist-checked.tag
