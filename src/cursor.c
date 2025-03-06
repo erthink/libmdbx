@@ -216,7 +216,6 @@ int cursor_shadow(MDBX_cursor *cursor, MDBX_txn *nested, const size_t dbi) {
 
 MDBX_cursor *cursor_eot(MDBX_cursor *cursor, MDBX_txn *txn) {
   MDBX_cursor *const next = cursor->next;
-  cursor->next = cursor;
   const unsigned stage = cursor->signature;
   MDBX_cursor *const shadow = cursor->backup;
   ENSURE(txn->env, stage == cur_signature_live || (stage == cur_signature_wait4eot && shadow));
@@ -224,7 +223,7 @@ MDBX_cursor *cursor_eot(MDBX_cursor *cursor, MDBX_txn *txn) {
   if (shadow) {
     subcur_t *subcur = cursor->subcur;
     tASSERT(txn, txn->parent != nullptr && shadow->txn == txn->parent);
-    /* Zap: Using uninitialized memory '*mc->backup'. */
+    /* Zap: Using uninitialized memory '*subcur->backup'. */
     MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6001);
     ENSURE(txn->env, shadow->signature == cur_signature_live);
     tASSERT(txn, subcur == shadow->subcur);
@@ -250,7 +249,8 @@ MDBX_cursor *cursor_eot(MDBX_cursor *cursor, MDBX_txn *txn) {
     osal_free(shadow);
   } else {
     ENSURE(cursor->txn->env, stage == cur_signature_live);
-    be_poor(cursor);
+    cursor_drown((cursor_couple_t *)cursor);
+    cursor->next = cursor;
     cursor->signature = cur_signature_ready4dispose /* Cursor may be reused */;
   }
   return next;
