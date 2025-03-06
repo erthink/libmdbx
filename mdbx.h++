@@ -5604,10 +5604,9 @@ inline cursor_managed txn::open_cursor(map_handle map) const {
 }
 
 inline size_t txn::release_all_cursors(bool unbind) const {
-  int err = ::mdbx_txn_release_all_cursors(handle_, unbind);
-  if (MDBX_UNLIKELY(err < 0))
-    MDBX_CXX20_UNLIKELY error::throw_exception(err);
-  return size_t(err);
+  size_t count;
+  error::success_or_throw(::mdbx_txn_release_all_cursors_ex(handle_, unbind, &count));
+  return count;
 }
 
 inline ::mdbx::map_handle txn::open_map(const ::mdbx::slice &name, const ::mdbx::key_mode key_mode,
