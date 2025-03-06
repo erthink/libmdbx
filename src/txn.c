@@ -15,11 +15,9 @@ void txn_done_cursors(MDBX_txn *txn) {
     MDBX_cursor *cursor = txn->cursors[i];
     if (cursor) {
       txn->cursors[i] = nullptr;
-      do {
-        MDBX_cursor *const next = cursor->next;
-        cursor_eot(cursor);
-        cursor = next;
-      } while (cursor);
+      do
+        cursor = cursor_eot(cursor, txn);
+      while (cursor);
     }
   }
   txn->flags &= ~txn_may_have_cursors;

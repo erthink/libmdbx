@@ -214,18 +214,21 @@ int cursor_shadow(MDBX_cursor *cursor, MDBX_txn *nested, const size_t dbi) {
   return MDBX_SUCCESS;
 }
 
-void cursor_eot(MDBX_cursor *cursor) {
+MDBX_cursor *cursor_eot(MDBX_cursor *cursor, MDBX_txn *txn) {
+  MDBX_cursor *const next = cursor->next;
+  cursor->next = cursor;
   const unsigned stage = cursor->signature;
   MDBX_cursor *const shadow = cursor->backup;
-  ENSURE(cursor->txn->env, stage == cur_signature_live || (stage == cur_signature_wait4eot && shadow));
+  ENSURE(txn->env, stage == cur_signature_live || (stage == cur_signature_wait4eot && shadow));
+  tASSERT(txn, cursor->txn == txn);
   if (shadow) {
     subcur_t *subcur = cursor->subcur;
-    cASSERT(cursor, cursor->txn->parent != nullptr);
-    /* Zap: Using uninitialized memory '*cursor->backup'. */
+    tASSERT(txn, txn->parent != nullptr && shadow->txn == txn->parent);
+    /* Zap: Using uninitialized memory '*mc->backup'. */
     MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6001);
-    ENSURE(cursor->txn->env, shadow->signature == cur_signature_live);
-    cASSERT(cursor, subcur == shadow->subcur);
-    if (((cursor->txn->flags | cursor->txn->parent->flags) & MDBX_TXN_ERROR) == 0) {
+    ENSURE(txn->env, shadow->signature == cur_signature_live);
+    tASSERT(txn, subcur == shadow->subcur);
+    if ((txn->flags & MDBX_TXN_ERROR) == 0) {
       /* Update pointers to parent txn */
       cursor->next = shadow->next;
       cursor->backup = shadow->backup;
@@ -233,25 +236,24 @@ void cursor_eot(MDBX_cursor *cursor) {
       cursor->tree = shadow->tree;
       cursor->dbi_state = shadow->dbi_state;
       if (subcur) {
-        subcur->cursor.txn = cursor->txn;
-        subcur->cursor.dbi_state = cursor->dbi_state;
+        subcur->cursor.txn = shadow->txn;
+        subcur->cursor.dbi_state = shadow->dbi_state;
       }
     } else {
       /* Restore from backup, i.e. rollback/abort nested txn */
       *cursor = *shadow;
+      cursor->signature = stage /* Promote (cur_signature_wait4eot) state to parent txn */;
       if (subcur)
         *subcur = *(subcur_t *)(shadow + 1);
     }
-    if (stage == cur_signature_wait4eot /* Cursor was closed by user */)
-      cursor->signature = stage /* Promote closed state to parent txn */;
     shadow->signature = 0;
     osal_free(shadow);
   } else {
     ENSURE(cursor->txn->env, stage == cur_signature_live);
     be_poor(cursor);
     cursor->signature = cur_signature_ready4dispose /* Cursor may be reused */;
-    cursor->next = cursor;
   }
+  return next;
 }
 
 /*----------------------------------------------------------------------------*/

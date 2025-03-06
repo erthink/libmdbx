@@ -292,7 +292,7 @@ MDBX_NOTHROW_PURE_FUNCTION static inline bool check_leaf_type(const MDBX_cursor 
   return (((page_type(mp) ^ mc->checking) & (z_branch | z_leaf | z_largepage | z_dupfix)) == 0);
 }
 
-MDBX_INTERNAL void cursor_eot(MDBX_cursor *cursor);
+MDBX_INTERNAL MDBX_cursor *cursor_eot(MDBX_cursor *cursor, MDBX_txn *txn);
 MDBX_INTERNAL int cursor_shadow(MDBX_cursor *cursor, MDBX_txn *nested, const size_t dbi);
 
 MDBX_INTERNAL MDBX_cursor *cursor_cpstk(const MDBX_cursor *csrc, MDBX_cursor *cdst);
