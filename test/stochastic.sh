@@ -440,7 +440,7 @@ else
 fi
 
 if [ "$EXTRA" != "no" ]; then
-  options=(perturb nomeminit nordahead writemap lifo nostickythreads)
+  options=(perturb nomeminit nordahead writemap lifo nostickythreads validation)
 else
   options=(writemap lifo nostickythreads)
 fi

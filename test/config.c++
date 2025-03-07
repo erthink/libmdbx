@@ -342,6 +342,7 @@ const struct option_verb mode_bits[] = {{"rdonly", unsigned(MDBX_RDONLY)},
                                         {"perturb", unsigned(MDBX_PAGEPERTURB)},
                                         {"accede", unsigned(MDBX_ACCEDE)},
                                         {"exclusive", unsigned(MDBX_EXCLUSIVE)},
+                                        {"validation", unsigned(MDBX_VALIDATION)},
                                         {nullptr, 0}};
 
 const struct option_verb table_bits[] = {{"key.reverse", unsigned(MDBX_REVERSEKEY)},
