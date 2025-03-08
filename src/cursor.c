@@ -2049,27 +2049,24 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
       cASSERT(mc, is_poor(mc) && !is_filled(mc));
     return rc;
 
+  case MDBX_SEEK_AND_GET_MULTIPLE:
+    if (unlikely(!key))
+      return MDBX_EINVAL;
+    rc = cursor_seek(mc, key, data, MDBX_SET).err;
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+    __fallthrough /* fall through */;
   case MDBX_GET_MULTIPLE:
     if (unlikely(!data))
       return MDBX_EINVAL;
     if (unlikely((mc->tree->flags & MDBX_DUPFIXED) == 0))
       return MDBX_INCOMPATIBLE;
-    if (unlikely(!is_pointed(mc))) {
-      if (unlikely(!key))
-        return MDBX_EINVAL;
-      if (unlikely((mc->flags & z_fresh) == 0))
-        return MDBX_ENODATA;
-      rc = cursor_seek(mc, key, data, MDBX_SET).err;
-      if (unlikely(rc != MDBX_SUCCESS))
-        return rc;
-    } else {
-      if (unlikely(!is_filled(mc)))
-        return MDBX_ENODATA;
-      if (key) {
-        const page_t *mp = mc->pg[mc->top];
-        const node_t *node = page_node(mp, mc->ki[mc->top]);
-        *key = get_key(node);
-      }
+    if (unlikely(!is_filled(mc)))
+      return MDBX_ENODATA;
+    if (key) {
+      const page_t *mp = mc->pg[mc->top];
+      const node_t *node = page_node(mp, mc->ki[mc->top]);
+      *key = get_key(node);
     }
     cASSERT(mc, is_filled(mc));
     if (unlikely(!inner_filled(mc))) {
@@ -2104,15 +2101,6 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
       return MDBX_EINVAL;
     if (unlikely(mc->subcur == nullptr))
       return MDBX_INCOMPATIBLE;
-    if (unlikely(!is_pointed(mc))) {
-      if (unlikely((mc->flags & z_fresh) == 0))
-        return MDBX_ENODATA;
-      rc = outer_last(mc, key, data);
-      if (unlikely(rc != MDBX_SUCCESS))
-        return rc;
-      mc->subcur->cursor.ki[mc->subcur->cursor.top] = 0;
-      goto fetch_multiple;
-    }
     if (unlikely(!is_filled(mc) || !inner_filled(mc)))
       return MDBX_ENODATA;
     rc = cursor_sibling_left(&mc->subcur->cursor);
