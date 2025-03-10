@@ -234,28 +234,43 @@ int mdbx_txn_release_all_cursors_ex(const MDBX_txn *txn, bool unbind, size_t *co
   int rc = check_txn(txn, MDBX_TXN_FINISHED | MDBX_TXN_HAS_CHILD);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
-  if (unlikely(txn->parent)) {
-    rc = MDBX_BAD_TXN;
-    ERROR("%s, err %d", "must not unbind or close cursors for a nested txn", rc);
-    return rc;
-  }
 
   size_t n = 0;
-  TXN_FOREACH_DBI_FROM(txn, i, MAIN_DBI) {
-    while (txn->cursors[i]) {
-      ++n;
-      MDBX_cursor *mc = txn->cursors[i];
-      ENSURE(nullptr, mc->signature == cur_signature_live && (mc->next != mc) && !mc->backup);
-      txn->cursors[i] = mc->next;
-      mc->next = mc;
-      mc->signature = cur_signature_ready4dispose;
-      cursor_drown((cursor_couple_t *)mc);
-      if (!unbind) {
-        mc->signature = 0;
-        osal_free(mc);
+  do {
+    TXN_FOREACH_DBI_FROM(txn, i, MAIN_DBI) {
+      MDBX_cursor *mc = txn->cursors[i], *next = nullptr;
+      if (mc) {
+        txn->cursors[i] = nullptr;
+        do {
+          next = mc->next;
+          if (mc->signature == cur_signature_live) {
+            mc->signature = cur_signature_wait4eot;
+            cursor_drown((cursor_couple_t *)mc);
+          } else
+            ENSURE(nullptr, mc->signature == cur_signature_wait4eot);
+          if (mc->backup) {
+            MDBX_cursor *bk = mc->backup;
+            mc->next = bk->next;
+            mc->backup = bk->backup;
+            mc->backup = nullptr;
+            bk->signature = 0;
+            bk = bk->next;
+            osal_free(bk);
+          } else {
+            mc->signature = cur_signature_ready4dispose;
+            mc->next = mc;
+            ++n;
+            if (!unbind) {
+              mc->signature = 0;
+              osal_free(mc);
+            }
+          }
+        } while ((mc = next) != nullptr);
       }
     }
-  }
+    txn = txn->parent;
+  } while (txn);
+
   if (count)
     *count = n;
   return MDBX_SUCCESS;
