@@ -6206,7 +6206,6 @@ inline void cursor::unbind() { error::success_or_throw(::mdbx_cursor_unbind(hand
 
 inline txn cursor::txn() const {
   MDBX_txn *txn = ::mdbx_cursor_txn(handle_);
-  error::throw_on_nullptr(txn, MDBX_EINVAL);
   return ::mdbx::txn(txn);
 }
 
