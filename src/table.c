@@ -3,28 +3,37 @@
 
 #include "internals.h"
 
-int tbl_setup(const MDBX_env *env, kvx_t *const kvx, const tree_t *const db) {
+int tbl_setup(const MDBX_env *env, volatile kvx_t *const kvx, const tree_t *const db) {
+  osal_memory_fence(mo_AcquireRelease, false);
+
   if (unlikely(!check_table_flags(db->flags))) {
     ERROR("incompatible or invalid db.flags (0x%x) ", db->flags);
     return MDBX_INCOMPATIBLE;
   }
-  if (unlikely(!kvx->clc.k.cmp)) {
-    kvx->clc.k.cmp = builtin_keycmp(db->flags);
-    kvx->clc.v.cmp = builtin_datacmp(db->flags);
+
+  size_t v_lmin = valsize_min(db->flags);
+  size_t v_lmax = env_valsize_max(env, db->flags);
+  if ((db->flags & (MDBX_DUPFIXED | MDBX_INTEGERDUP)) != 0 && db->dupfix_size) {
+    if (!MDBX_DISABLE_VALIDATION && unlikely(db->dupfix_size < v_lmin || db->dupfix_size > v_lmax)) {
+      ERROR("db.dupfix_size (%u) <> min/max value-length (%zu/%zu)", db->dupfix_size, v_lmin, v_lmax);
+      return MDBX_CORRUPTED;
+    }
+    v_lmin = v_lmax = db->dupfix_size;
   }
 
   kvx->clc.k.lmin = keysize_min(db->flags);
   kvx->clc.k.lmax = env_keysize_max(env, db->flags);
-  kvx->clc.v.lmin = valsize_min(db->flags);
-  kvx->clc.v.lmax = env_valsize_max(env, db->flags);
-
-  if ((db->flags & (MDBX_DUPFIXED | MDBX_INTEGERDUP)) != 0 && db->dupfix_size) {
-    if (!MDBX_DISABLE_VALIDATION && unlikely(db->dupfix_size < kvx->clc.v.lmin || db->dupfix_size > kvx->clc.v.lmax)) {
-      ERROR("db.dupfix_size (%u) <> min/max value-length (%zu/%zu)", db->dupfix_size, kvx->clc.v.lmin, kvx->clc.v.lmax);
-      return MDBX_CORRUPTED;
-    }
-    kvx->clc.v.lmin = kvx->clc.v.lmax = db->dupfix_size;
+  if (unlikely(!kvx->clc.k.cmp)) {
+    kvx->clc.v.cmp = builtin_datacmp(db->flags);
+    kvx->clc.k.cmp = builtin_keycmp(db->flags);
   }
+  kvx->clc.v.lmin = v_lmin;
+  osal_memory_fence(mo_Relaxed, true);
+  kvx->clc.v.lmax = v_lmax;
+  osal_memory_fence(mo_AcquireRelease, true);
+
+  eASSERT(env, kvx->clc.k.lmax >= kvx->clc.k.lmin);
+  eASSERT(env, kvx->clc.v.lmax >= kvx->clc.v.lmin);
   return MDBX_SUCCESS;
 }
 
@@ -86,9 +95,12 @@ int tbl_fetch(MDBX_txn *txn, size_t dbi) {
     return MDBX_CORRUPTED;
   }
 #endif /* !MDBX_DISABLE_VALIDATION */
-  rc = tbl_setup(txn->env, kvx, db);
+  rc = tbl_setup_ifneed(txn->env, kvx, db);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
+
+  if (unlikely(dbi_changed(txn, dbi)))
+    return MDBX_BAD_DBI;
 
   txn->dbi_state[dbi] &= ~DBI_STALE;
   return MDBX_SUCCESS;
