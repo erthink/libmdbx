@@ -233,7 +233,7 @@ enum cursor_checking {
   z_pagecheck = 0x80 /* perform page checking, see MDBX_VALIDATION */
 };
 
-MDBX_INTERNAL int __must_check_result cursor_check(const MDBX_cursor *mc);
+MDBX_INTERNAL int __must_check_result cursor_validate(const MDBX_cursor *mc);
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline size_t cursor_dbi(const MDBX_cursor *mc) {
   cASSERT(mc, mc->txn && mc->txn->signature == txn_signature);
@@ -305,7 +305,7 @@ MDBX_INTERNAL int __must_check_result cursor_put_checklen(MDBX_cursor *mc, const
 
 MDBX_INTERNAL int __must_check_result cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsigned flags);
 
-MDBX_INTERNAL int __must_check_result cursor_check_updating(MDBX_cursor *mc);
+MDBX_INTERNAL int __must_check_result cursor_validate_updating(MDBX_cursor *mc);
 
 MDBX_INTERNAL int __must_check_result cursor_del(MDBX_cursor *mc, unsigned flags);
 
