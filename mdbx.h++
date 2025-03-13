@@ -4155,9 +4155,9 @@ public:
 class LIBMDBX_API_TYPE cursor {
 protected:
   MDBX_cursor *handle_{nullptr};
-  MDBX_CXX11_CONSTEXPR cursor(MDBX_cursor *ptr) noexcept;
 
 public:
+  MDBX_CXX11_CONSTEXPR cursor(MDBX_cursor *ptr) noexcept;
   MDBX_CXX11_CONSTEXPR cursor() noexcept = default;
   cursor(const cursor &) noexcept = default;
   inline cursor &operator=(cursor &&other) noexcept;
@@ -4559,6 +4559,12 @@ public:
       }
     inherited::operator=(std::move(other));
     return *this;
+  }
+
+  inline MDBX_cursor *withdraw_handle() noexcept {
+    MDBX_cursor *handle = handle_;
+    handle_ = nullptr;
+    return handle;
   }
 
   cursor_managed(const cursor_managed &) = delete;
