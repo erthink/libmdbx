@@ -1162,7 +1162,12 @@ template <typename T, typename A> struct swap_alloc<T, A, true> {
 } // namespace allocation_aware_details
 
 struct default_capacity_policy {
-  enum : size_t { extra_inplace_storage = 0, pettiness_threshold = 64, max_reserve = 65536 };
+  enum : size_t {
+    extra_inplace_storage = 0,
+    inplace_storage_size_rounding = 16,
+    pettiness_threshold = 64,
+    max_reserve = 65536
+  };
 
   static MDBX_CXX11_CONSTEXPR size_t round(const size_t value) {
     static_assert((pettiness_threshold & (pettiness_threshold - 1)) == 0, "pettiness_threshold must be a power of 2");
@@ -1486,6 +1491,10 @@ public:
     max_length = MDBX_MAXDATASIZE,
     max_capacity = (max_length / 3u * 4u + 1023u) & ~size_t(1023),
     extra_inplace_storage = reservation_policy::extra_inplace_storage,
+    inplace_storage_size_rounding =
+        (alignof(max_align_t) * 2 > size_t(reservation_policy::inplace_storage_size_rounding))
+            ? alignof(max_align_t) * 2
+            : size_t(reservation_policy::inplace_storage_size_rounding),
     pettiness_threshold = reservation_policy::pettiness_threshold
   };
 
@@ -1529,41 +1538,51 @@ private:
 #endif /* __cpp_lib_to_address */
     }
 
-    union bin {
-      struct allocated {
+    union alignas(max_align_t) bin {
+      struct stub_allocated_holder /* используется только для вычисления (минимального необходимого) размера,
+                                      с учетом выравнивания */
+      {
         allocator_pointer ptr_;
-        size_t capacity_bytes_;
-        constexpr allocated(allocator_pointer ptr, size_t bytes) noexcept : ptr_(ptr), capacity_bytes_(bytes) {}
-        constexpr allocated(const allocated &) noexcept = default;
-        constexpr allocated(allocated &&) noexcept = default;
-        MDBX_CXX17_CONSTEXPR allocated &operator=(const allocated &) noexcept = default;
-        MDBX_CXX17_CONSTEXPR allocated &operator=(allocated &&) noexcept = default;
+        size_t stub_capacity_bytes_;
       };
 
-      allocated allocated_;
-      uint64_t align_hint_;
-      byte inplace_[(sizeof(allocated) + extra_inplace_storage + 7u) & ~size_t(7)];
-
-      static constexpr bool is_suitable_for_inplace(size_t capacity_bytes) noexcept {
-        static_assert(sizeof(bin) == sizeof(inplace_), "WTF?");
-        return capacity_bytes < sizeof(bin);
-      }
-
-      enum : byte { lastbyte_inplace_signature = byte(~byte(0)) };
+      enum : byte { lastbyte_poison = 0, lastbyte_inplace_signature = byte(~byte(lastbyte_poison)) };
       enum : size_t {
         inplace_signature_limit = size_t(lastbyte_inplace_signature)
-                                  << (sizeof(size_t /* allocated::capacity_bytes_ */) - 1) * CHAR_BIT
+                                  << (sizeof(size_t /* allocated::capacity_bytes_ */) - 1) * CHAR_BIT,
+        inplace_size_rounding = size_t(inplace_storage_size_rounding) - 1,
+        inplace_size =
+            (sizeof(stub_allocated_holder) + extra_inplace_storage + inplace_size_rounding) & ~inplace_size_rounding
       };
 
-      constexpr byte inplace_lastbyte() const noexcept { return inplace_[sizeof(bin) - 1]; }
-      MDBX_CXX17_CONSTEXPR byte &inplace_lastbyte() noexcept { return inplace_[sizeof(bin) - 1]; }
+      struct capacity_holder {
+        byte pad_[inplace_size - sizeof(allocator_pointer)];
+        size_t bytes_;
+      };
+
+      struct inplace_flag_holder {
+        byte buffer_[inplace_size - sizeof(byte)];
+        byte lastbyte_;
+      };
+
+      allocator_pointer allocated_ptr_;
+      capacity_holder capacity_;
+      inplace_flag_holder inplace_;
+
+      static constexpr bool is_suitable_for_inplace(size_t capacity_bytes) noexcept {
+        static_assert((size_t(reservation_policy::inplace_storage_size_rounding) &
+                       (size_t(reservation_policy::inplace_storage_size_rounding) - 1)) == 0,
+                      "CAPACITY_POLICY::inplace_storage_size_rounding must be power of 2");
+        static_assert(sizeof(bin) == sizeof(inplace_) && sizeof(bin) == sizeof(capacity_), "WTF?");
+        return capacity_bytes < sizeof(bin);
+      }
 
       constexpr bool is_inplace() const noexcept {
         static_assert(size_t(inplace_signature_limit) > size_t(max_capacity), "WTF?");
         static_assert(std::numeric_limits<size_t>::max() - (std::numeric_limits<size_t>::max() >> CHAR_BIT) ==
                           inplace_signature_limit,
                       "WTF?");
-        return inplace_lastbyte() == lastbyte_inplace_signature;
+        return inplace_.lastbyte_ == lastbyte_inplace_signature;
       }
       constexpr bool is_allocated() const noexcept { return !is_inplace(); }
 
@@ -1571,26 +1590,27 @@ private:
         if (destroy_ptr) {
           MDBX_CONSTEXPR_ASSERT(is_allocated());
           /* properly destroy allocator::pointer */
-          allocated_.~allocated();
+          allocated_ptr_.~allocator_pointer();
         }
         if (::std::is_trivial<allocator_pointer>::value)
           /* workaround for "uninitialized" warning from some compilers */
-          memset(&allocated_.ptr_, 0, sizeof(allocated_.ptr_));
-        inplace_lastbyte() = lastbyte_inplace_signature;
-        MDBX_CONSTEXPR_ASSERT(is_inplace() && address() == inplace_ && is_suitable_for_inplace(capacity()));
+          memset(&allocated_ptr_, 0, sizeof(allocated_ptr_));
+        inplace_.lastbyte_ = lastbyte_inplace_signature;
+        MDBX_CONSTEXPR_ASSERT(is_inplace() && address() == inplace_.buffer_ && is_suitable_for_inplace(capacity()));
         return address();
       }
 
       template <bool construct_ptr>
       MDBX_CXX17_CONSTEXPR byte *make_allocated(allocator_pointer ptr, size_t capacity_bytes) noexcept {
         MDBX_CONSTEXPR_ASSERT(inplace_signature_limit > capacity_bytes);
-        if (construct_ptr)
+        if (construct_ptr) {
           /* properly construct allocator::pointer */
-          new (&allocated_) allocated(ptr, capacity_bytes);
-        else {
+          new (&allocated_ptr_) allocator_pointer(ptr);
+          capacity_.bytes_ = capacity_bytes;
+        } else {
           MDBX_CONSTEXPR_ASSERT(is_allocated());
-          allocated_.ptr_ = ptr;
-          allocated_.capacity_bytes_ = capacity_bytes;
+          allocated_ptr_ = ptr;
+          capacity_.bytes_ = capacity_bytes;
         }
         MDBX_CONSTEXPR_ASSERT(is_allocated() && address() == to_address(ptr) && capacity() == capacity_bytes);
         return address();
@@ -1608,16 +1628,17 @@ private:
       MDBX_CXX20_CONSTEXPR ~bin() {
         if (is_allocated())
           /* properly destroy allocator::pointer */
-          allocated_.~allocated();
+          allocated_ptr_.~allocator_pointer();
       }
       MDBX_CXX20_CONSTEXPR bin(bin &&ditto) noexcept {
         if (ditto.is_inplace()) {
           // micro-optimization: don't use make_inplace<> here
           //                     since memcpy() will copy the flag.
-          memcpy(inplace_, ditto.inplace_, sizeof(inplace_));
+          memcpy(&inplace_, &ditto.inplace_, sizeof(inplace_));
           MDBX_CONSTEXPR_ASSERT(is_inplace());
         } else {
-          new (&allocated_) allocated(::std::move(ditto.allocated_));
+          new (&allocated_ptr_) allocator_pointer(::std::move(ditto.allocated_ptr_));
+          capacity_.bytes_ = ditto.capacity_.bytes_;
           ditto.make_inplace<true>();
           MDBX_CONSTEXPR_ASSERT(is_allocated());
         }
@@ -1629,13 +1650,13 @@ private:
           //                     since memcpy() will copy the flag.
           if (is_allocated())
             /* properly destroy allocator::pointer */
-            allocated_.~allocated();
-          memcpy(inplace_, ditto.inplace_, sizeof(inplace_));
+            allocated_ptr_.~allocator_pointer();
+          memcpy(&inplace_, &ditto.inplace_, sizeof(inplace_));
           MDBX_CONSTEXPR_ASSERT(is_inplace());
         } else if (is_inplace())
-          make_allocated<true>(ditto.allocated_.ptr_, ditto.allocated_.capacity_bytes_);
+          make_allocated<true>(ditto.allocated_ptr_, ditto.capacity_.bytes_);
         else
-          make_allocated<false>(ditto.allocated_.ptr_, ditto.allocated_.capacity_bytes_);
+          make_allocated<false>(ditto.allocated_ptr_, ditto.capacity_.bytes_);
         return *this;
       }
 
@@ -1656,12 +1677,12 @@ private:
       }
 
       constexpr const byte *address() const noexcept {
-        return is_inplace() ? inplace_ : static_cast<const byte *>(to_address(allocated_.ptr_));
+        return is_inplace() ? inplace_.buffer_ : static_cast<const byte *>(to_address(allocated_ptr_));
       }
       MDBX_CXX17_CONSTEXPR byte *address() noexcept {
-        return is_inplace() ? inplace_ : static_cast<byte *>(to_address(allocated_.ptr_));
+        return is_inplace() ? inplace_.buffer_ : static_cast<byte *>(to_address(allocated_ptr_));
       }
-      constexpr size_t capacity() const noexcept { return is_inplace() ? sizeof(bin) - 1 : allocated_.capacity_bytes_; }
+      constexpr size_t capacity() const noexcept { return is_inplace() ? sizeof(bin) - 1 : capacity_.bytes_; }
     } bin_;
 
     MDBX_CXX20_CONSTEXPR void *init(size_t capacity) {
@@ -1678,7 +1699,7 @@ private:
 
     MDBX_CXX20_CONSTEXPR void release() noexcept {
       if (bin_.is_allocated()) {
-        deallocate_storage(bin_.allocated_.ptr_, bin_.allocated_.capacity_bytes_);
+        deallocate_storage(bin_.allocated_ptr_, bin_.capacity_.bytes_);
         bin_.template make_inplace<true>();
       }
     }
@@ -1709,7 +1730,7 @@ private:
 
       if (bin::is_suitable_for_inplace(new_capacity)) {
         assert(bin_.is_allocated());
-        const auto old_allocated = ::std::move(bin_.allocated_.ptr_);
+        const auto old_allocated = ::std::move(bin_.allocated_ptr_);
         byte *const new_place = bin_.template make_inplace<true>() + wanna_headroom;
         if (MDBX_LIKELY(length))
           MDBX_CXX20_LIKELY memcpy(new_place, content, length);
@@ -1727,7 +1748,7 @@ private:
         return new_place;
       }
 
-      const auto old_allocated = ::std::move(bin_.allocated_.ptr_);
+      const auto old_allocated = ::std::move(bin_.allocated_ptr_);
       if (external_content)
         deallocate_storage(old_allocated, old_capacity);
       const auto pair = allocate_storage(new_capacity);
