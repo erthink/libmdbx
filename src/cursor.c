@@ -2349,14 +2349,21 @@ int cursor_check(const MDBX_cursor *mc, int txn_bad_bits) {
                                         (char *)mc - stack_top < (ptrdiff_t)globals.sys_pagesize * 4));
 
   if (txn_bad_bits) {
-    int rc = check_txn(mc->txn, txn_bad_bits);
+    int rc = check_txn(mc->txn, txn_bad_bits & ~MDBX_TXN_HAS_CHILD);
     if (unlikely(rc != MDBX_SUCCESS)) {
       cASSERT(mc, rc != MDBX_RESULT_TRUE);
       return rc;
     }
 
-    if (unlikely(cursor_dbi_changed(mc)))
-      return MDBX_BAD_DBI;
+    if (likely((mc->txn->flags & MDBX_TXN_HAS_CHILD) == 0))
+      return likely(!cursor_dbi_changed(mc)) ? MDBX_SUCCESS : MDBX_BAD_DBI;
+
+    cASSERT(mc, (mc->txn->flags & MDBX_TXN_RDONLY) == 0 && mc->txn != mc->txn->env->txn && mc->txn->env->txn);
+    rc = dbi_check(mc->txn->env->txn, cursor_dbi(mc));
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+
+    cASSERT(mc, (mc->txn->flags & MDBX_TXN_RDONLY) == 0 && mc->txn == mc->txn->env->txn);
   }
 
   return MDBX_SUCCESS;

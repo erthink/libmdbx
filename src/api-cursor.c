@@ -691,11 +691,9 @@ MDBX_txn *mdbx_cursor_txn(const MDBX_cursor *mc) {
   if (unlikely(!mc || mc->signature != cur_signature_live))
     return nullptr;
   MDBX_txn *txn = mc->txn;
-  if (unlikely(!txn || txn->signature != txn_signature))
+  if (unlikely(!txn || txn->signature != txn_signature || (txn->flags & MDBX_TXN_FINISHED)))
     return nullptr;
-  if (unlikely(txn->flags & MDBX_TXN_FINISHED))
-    return nullptr;
-  return txn;
+  return (txn->flags & MDBX_TXN_HAS_CHILD) ? txn->env->txn : txn;
 }
 
 MDBX_dbi mdbx_cursor_dbi(const MDBX_cursor *mc) {
