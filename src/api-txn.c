@@ -9,7 +9,7 @@ __attribute__((__no_sanitize_thread__, __noinline__))
 #endif
 int mdbx_txn_straggler(const MDBX_txn *txn, int *percent)
 {
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_PARKED);
   if (likely(rc == MDBX_SUCCESS))
     rc = check_env(txn->env, true);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -217,9 +217,13 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
   MDBX_txn *txn = nullptr;
   if (parent) {
     /* Nested transactions: Max 1 child, write txns only, no writemap */
-    rc = check_txn_rw(parent, MDBX_TXN_RDONLY | MDBX_WRITEMAP | MDBX_TXN_BLOCKED);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      if (rc == MDBX_BAD_TXN && (parent->flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)) == 0) {
+    rc = check_txn(parent, MDBX_TXN_BLOCKED - MDBX_TXN_PARKED);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
+
+    if (unlikely(parent->flags & (MDBX_TXN_RDONLY | MDBX_WRITEMAP))) {
+      rc = MDBX_BAD_TXN;
+      if ((parent->flags & MDBX_TXN_RDONLY) == 0) {
         ERROR("%s mode is incompatible with nested transactions", "MDBX_WRITEMAP");
         rc = MDBX_INCOMPATIBLE;
       }

@@ -416,10 +416,11 @@ static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
       return MDBX_EPERM;
 
     if (unlikely(txn->flags & bad_bits)) {
+      if ((bad_bits & MDBX_TXN_RDONLY) && unlikely(txn->flags & MDBX_TXN_RDONLY))
+        return MDBX_EACCESS;
       if ((bad_bits & MDBX_TXN_PARKED) == 0)
         return MDBX_BAD_TXN;
-      else
-        return txn_check_badbits_parked(txn, bad_bits);
+      return txn_check_badbits_parked(txn, bad_bits);
     }
   }
 
@@ -437,14 +438,7 @@ static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
 }
 
 static inline int check_txn_rw(const MDBX_txn *txn, int bad_bits) {
-  int err = check_txn(txn, bad_bits & ~MDBX_TXN_PARKED);
-  if (unlikely(err))
-    return err;
-
-  if (unlikely(txn->flags & MDBX_TXN_RDONLY))
-    return MDBX_EACCESS;
-
-  return MDBX_SUCCESS;
+  return check_txn(txn, (bad_bits | MDBX_TXN_RDONLY) & ~MDBX_TXN_PARKED);
 }
 
 /*----------------------------------------------------------------------------*/

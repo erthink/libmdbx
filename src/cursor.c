@@ -2331,3 +2331,33 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
     return MDBX_EINVAL;
   }
 }
+
+int cursor_check(const MDBX_cursor *mc, int txn_bad_bits) {
+  if (unlikely(mc == nullptr))
+    return MDBX_EINVAL;
+
+  if (unlikely(mc->signature != cur_signature_live)) {
+    if (mc->signature != cur_signature_ready4dispose)
+      return MDBX_EBADSIGN;
+    return (txn_bad_bits > MDBX_TXN_FINISHED) ? MDBX_EINVAL : MDBX_SUCCESS;
+  }
+
+  /* проверяем что курсор в связном списке для отслеживания, исключение допускается только для read-only операций для
+   * служебных/временных курсоров на стеке. */
+  MDBX_MAYBE_UNUSED char stack_top[sizeof(void *)];
+  cASSERT(mc, cursor_is_tracked(mc) || (!(txn_bad_bits & MDBX_TXN_RDONLY) && stack_top < (char *)mc &&
+                                        (char *)mc - stack_top < (ptrdiff_t)globals.sys_pagesize * 4));
+
+  if (txn_bad_bits) {
+    int rc = check_txn(mc->txn, txn_bad_bits);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      cASSERT(mc, rc != MDBX_RESULT_TRUE);
+      return rc;
+    }
+
+    if (unlikely(cursor_dbi_changed(mc)))
+      return MDBX_BAD_DBI;
+  }
+
+  return MDBX_SUCCESS;
+}
