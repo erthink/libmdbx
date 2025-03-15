@@ -7,8 +7,10 @@
 
 #if MDBX_DEBUG || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
 #define NN 1024
-#else
+#elif UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
 #define NN 4096
+#else
+#define NN 2048
 #endif
 
 std::string format_va(const char *fmt, va_list ap) {
