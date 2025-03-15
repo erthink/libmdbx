@@ -4265,8 +4265,13 @@ public:
 
     batch_samelength = MDBX_GET_MULTIPLE,
     batch_samelength_next = MDBX_NEXT_MULTIPLE,
-    batch_samelength_previous = MDBX_PREV_MULTIPLE
+    batch_samelength_previous = MDBX_PREV_MULTIPLE,
+    seek_and_batch_samelength = MDBX_SEEK_AND_GET_MULTIPLE
   };
+
+  // TODO: добавить легковесный proxy-класс для замещения параметра throw_notfound более сложным набором опций,
+  //       в том числе с explicit-конструктором из bool, чтобы защититься от неявной конвертации ключей поиска
+  //       и других параметров в bool-throw_notfound.
 
   struct move_result : public pair_result {
     inline move_result(const cursor &cursor, bool throw_notfound);
@@ -4465,8 +4470,8 @@ public:
   inline move_result lower_bound_multivalue(const slice &key, const slice &value, bool throw_notfound = false);
   inline move_result upper_bound_multivalue(const slice &key, const slice &value, bool throw_notfound = false);
 
-  inline move_result get_multiple_samelength(const slice &key, bool throw_notfound = true) {
-    return move(batch_samelength, key, throw_notfound);
+  inline move_result seek_multiple_samelength(const slice &key, bool throw_notfound = true) {
+    return move(seek_and_batch_samelength, key, throw_notfound);
   }
 
   inline move_result get_multiple_samelength(bool throw_notfound = false) {
