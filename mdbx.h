@@ -6541,6 +6541,8 @@ typedef struct MDBX_chk_table {
     struct MDBX_chk_histogram key_len;
     /// Values length histogram
     struct MDBX_chk_histogram val_len;
+    /// Number of multi-values (aka duplicates) histogram
+    struct MDBX_chk_histogram multival;
   } histogram;
 } MDBX_chk_table_t;
 
