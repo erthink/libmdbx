@@ -1409,6 +1409,7 @@ insert_node:;
           data[0].iov_base = ptr_disp(data[0].iov_base, data[0].iov_len);
           insert_key = insert_data = false;
           old_singledup.iov_base = nullptr;
+          sub_root = nullptr;
           goto more;
         }
       }
