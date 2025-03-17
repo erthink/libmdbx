@@ -4100,8 +4100,9 @@ public:
     return append(map, kv.key, kv.value, multivalue_order_preserved);
   }
 
-  size_t put_multiple_samelength(map_handle map, const slice &key, const size_t value_length, const void *values_array,
-                                 size_t values_count, put_mode mode, bool allow_partial = false);
+  inline size_t put_multiple_samelength(map_handle map, const slice &key, const size_t value_length,
+                                        const void *values_array, size_t values_count, put_mode mode,
+                                        bool allow_partial = false);
   template <typename VALUE>
   size_t put_multiple_samelength(map_handle map, const slice &key, const VALUE *values_array, size_t values_count,
                                  put_mode mode, bool allow_partial = false) {
@@ -4567,6 +4568,21 @@ public:
   /// \brief Seeks and removes the particular multi-value entry of the key.
   /// \return `True` if the given key-value pair is found and removed.
   inline bool erase(const slice &key, const slice &value);
+
+  inline size_t put_multiple_samelength(const slice &key, const size_t value_length, const void *values_array,
+                                        size_t values_count, put_mode mode, bool allow_partial = false);
+  template <typename VALUE>
+  size_t put_multiple_samelength(const slice &key, const VALUE *values_array, size_t values_count, put_mode mode,
+                                 bool allow_partial = false) {
+    static_assert(::std::is_standard_layout<VALUE>::value && !::std::is_pointer<VALUE>::value &&
+                      !::std::is_array<VALUE>::value,
+                  "Must be a standard layout type!");
+    return put_multiple_samelength(key, sizeof(VALUE), values_array, values_count, mode, allow_partial);
+  }
+  template <typename VALUE>
+  void put_multiple_samelength(const slice &key, const ::std::vector<VALUE> &vector, put_mode mode) {
+    put_multiple_samelength(key, vector.data(), vector.size(), mode);
+  }
 };
 
 /// \brief Managed cursor.
@@ -6352,6 +6368,24 @@ inline bool cursor::erase(const slice &key, bool whole_multivalue) {
 inline bool cursor::erase(const slice &key, const slice &value) {
   move_result data = find_multivalue(key, value, false);
   return data.done && erase();
+}
+
+inline size_t cursor::put_multiple_samelength(const slice &key, const size_t value_length, const void *values_array,
+                                              size_t values_count, put_mode mode, bool allow_partial) {
+  MDBX_val args[2] = {{const_cast<void *>(values_array), value_length}, {nullptr, values_count}};
+  const int err = ::mdbx_cursor_put(handle_, const_cast<slice *>(&key), args, MDBX_put_flags_t(mode) | MDBX_MULTIPLE);
+  switch (err) {
+  case MDBX_SUCCESS:
+    MDBX_CXX20_LIKELY break;
+  case MDBX_KEYEXIST:
+    if (allow_partial)
+      break;
+    mdbx_txn_break(txn());
+    MDBX_CXX17_FALLTHROUGH /* fallthrough */;
+  default:
+    MDBX_CXX20_UNLIKELY error::throw_exception(err);
+  }
+  return args[1].iov_len /* done item count */;
 }
 
 /// end cxx_api @}
