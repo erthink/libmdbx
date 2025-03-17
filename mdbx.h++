@@ -107,6 +107,16 @@
 #include <span>
 #endif
 
+#if !defined(_MSC_VER) || defined(__clang__)
+/* adequate compilers */
+#define MDBX_EXTERN_API_TEMPLATE(API_ATTRIBUTES, API_TYPENAME) extern template class API_ATTRIBUTES API_TYPENAME
+#define MDBX_INSTALL_API_TEMPLATE(API_ATTRIBUTES, API_TYPENAME) template class API_TYPENAME
+#else
+/* stupid microsoft showing off */
+#define MDBX_EXTERN_API_TEMPLATE(API_ATTRIBUTES, API_TYPENAME) extern template class API_TYPENAME
+#define MDBX_INSTALL_API_TEMPLATE(API_ATTRIBUTES, API_TYPENAME) template class API_ATTRIBUTES API_TYPENAME
+#endif
+
 #if __cplusplus >= 201103L
 #include <chrono>
 #include <ratio>
@@ -1500,8 +1510,7 @@ public:
 
 private:
   friend class txn;
-  struct silo;
-  using swap_alloc = allocation_aware_details::swap_alloc<silo, allocator_type>;
+  using swap_alloc = allocation_aware_details::swap_alloc<struct silo, allocator_type>;
   struct silo /* Empty Base Class Optimization */ : public allocator_type {
     MDBX_CXX20_CONSTEXPR const allocator_type &get_allocator() const noexcept { return *this; }
     MDBX_CXX20_CONSTEXPR allocator_type &get_allocator() noexcept { return *this; }
@@ -2729,6 +2738,12 @@ inline string<ALLOCATOR> make_string(const PRODUCER &producer, const ALLOCATOR &
   return result;
 }
 
+MDBX_EXTERN_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<legacy_allocator>);
+
+#if defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L && _GLIBCXX_USE_CXX11_ABI
+MDBX_EXTERN_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<polymorphic_allocator>);
+#endif /* __cpp_lib_memory_resource >= 201603L */
+
 /// \brief Combines data slice with boolean flag to represent result of certain
 /// operations.
 struct value_result {
@@ -2854,8 +2869,12 @@ template <typename ALLOCATOR, typename CAPACITY_POLICY> struct buffer_pair_spec 
   operator pair() const noexcept { return pair(key, value); }
 };
 
+/// \brief Combines pair of buffers for key and value to hold an operands for certain operations.
 template <typename BUFFER>
 using buffer_pair = buffer_pair_spec<typename BUFFER::allocator_type, typename BUFFER::reservation_policy>;
+
+/// \brief Default pair of buffers.
+using default_buffer_pair = buffer_pair<default_buffer>;
 
 /// end of cxx_data @}
 

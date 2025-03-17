@@ -1162,11 +1162,31 @@ bool from_base64::is_erroneous() const noexcept {
 
 //------------------------------------------------------------------------------
 
-template class LIBMDBX_API_TYPE buffer<legacy_allocator>;
+#if defined(_MSC_VER)
+#pragma warning(push)
+/* warning C4251: 'mdbx::buffer<...>::silo_':
+ *   struct 'mdbx::buffer<..>::silo' needs to have dll-interface to be used by clients of class 'mdbx::buffer<...>'
+ *
+ * Microsoft не хочет признавать ошибки и пересматривать приятные решения, поэтому MSVC продолжает кошмарить
+ * и стращать разработчиков предупреждениями, тем самым перекладывая ответственность на их плечи.
+ *
+ * В данном случае предупреждение выдаётся из-за инстанцирования std::string::allocator_type::pointer и
+ * std::pmr::string::allocator_type::pointer внутри mdbx::buffer<..>::silo. А так как эти типы являются частью
+ * стандартной библиотеки C++ они всегда будут доступны и без необходимости их инстанцирования и экспорта из libmdbx.
+ *
+ * Поэтому нет других вариантов как заглушить это предупреждение и еще раз плюнуть в сторону microsoft. */
+#pragma warning(disable : 4251)
+#endif /* MSVC */
+
+MDBX_INSTALL_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<legacy_allocator>);
 
 #if defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L && _GLIBCXX_USE_CXX11_ABI
-template class LIBMDBX_API_TYPE buffer<polymorphic_allocator>;
+MDBX_INSTALL_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<polymorphic_allocator>);
 #endif /* __cpp_lib_memory_resource >= 201603L */
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif /* MSVC */
 
 //------------------------------------------------------------------------------
 
