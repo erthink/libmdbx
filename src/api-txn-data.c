@@ -266,6 +266,19 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data, M
   rc = cursor_init(&cx.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
+
+  if (unlikely(flags & MDBX_MULTIPLE)) {
+    rc = cursor_check_multiple(&cx.outer, key, data, flags);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
+  }
+
+  if (flags & MDBX_RESERVE) {
+    if (unlikely(cx.outer.tree->flags & (MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_INTEGERDUP | MDBX_DUPFIXED)))
+      return LOG_IFERR(MDBX_INCOMPATIBLE);
+    data->iov_base = nullptr;
+  }
+
   cx.outer.next = txn->cursors[dbi];
   txn->cursors[dbi] = &cx.outer;
 

@@ -315,6 +315,9 @@ MDBX_INTERNAL MDBX_cursor *cursor_cpstk(const MDBX_cursor *csrc, MDBX_cursor *cd
 MDBX_INTERNAL int __must_check_result cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
                                                  const MDBX_cursor_op op);
 
+MDBX_INTERNAL int __must_check_result cursor_check_multiple(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
+                                                            unsigned flags);
+
 MDBX_INTERNAL int __must_check_result cursor_put_checklen(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
                                                           unsigned flags);
 

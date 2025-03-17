@@ -712,22 +712,10 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, MDBX_p
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
-  /* Check this first so counter will always be zero on any early failures. */
   if (unlikely(flags & MDBX_MULTIPLE)) {
-    if (unlikely(flags & MDBX_RESERVE))
-      return LOG_IFERR(MDBX_EINVAL);
-    if (unlikely(!(mc->tree->flags & MDBX_DUPFIXED)))
-      return LOG_IFERR(MDBX_INCOMPATIBLE);
-    const size_t dcount = data[1].iov_len;
-    if (unlikely(dcount < 2 || data->iov_len == 0))
-      return LOG_IFERR(MDBX_BAD_VALSIZE);
-    if (unlikely(mc->tree->dupfix_size != data->iov_len) && mc->tree->dupfix_size)
-      return LOG_IFERR(MDBX_BAD_VALSIZE);
-    if (unlikely(dcount > MAX_MAPSIZE / 2 / (BRANCH_NODE_MAX(MDBX_MAX_PAGESIZE) - NODESIZE))) {
-      /* checking for multiplication overflow */
-      if (unlikely(dcount > MAX_MAPSIZE / 2 / data->iov_len))
-        return LOG_IFERR(MDBX_TOO_LARGE);
-    }
+    rc = cursor_check_multiple(mc, key, data, flags);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
   }
 
   if (flags & MDBX_RESERVE) {
