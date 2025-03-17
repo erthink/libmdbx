@@ -75,10 +75,7 @@ static bool basic() {
   return ok;
 }
 
-int main(int argc, const char *argv[]) {
-  (void)argc;
-  (void)argv;
-
+int doit() {
   auto ok = basic();
   for (size_t n = 0; n < 1000; ++n) {
     for (size_t length = 0; ok && length < 111; ++length) {
@@ -107,4 +104,15 @@ int main(int argc, const char *argv[]) {
   }
   std::cout << "OK\n";
   return EXIT_SUCCESS;
+}
+
+int main(int argc, char *argv[]) {
+  (void)argc;
+  (void)argv;
+  try {
+    return doit();
+  } catch (const std::exception &ex) {
+    std::cerr << "Exception: " << ex.what() << "\n";
+    return EXIT_FAILURE;
+  }
 }

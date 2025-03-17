@@ -9,7 +9,7 @@ using buffer = mdbx::default_buffer;
 
 bool case1_ordering(mdbx::env env) {
   auto txn = env.start_write();
-  auto map = txn.create_map(nullptr, mdbx::key_mode::ordinal, mdbx::value_mode::multi_ordinal);
+  auto map = txn.create_map("case1", mdbx::key_mode::ordinal, mdbx::value_mode::multi_ordinal);
 
   txn.insert(map, buffer::key_from_u64(21), buffer::key_from_u64(18));
   txn.insert(map, buffer::key_from_u64(7), buffer::key_from_u64(19));
@@ -175,7 +175,7 @@ bool case1_ordering(mdbx::env env) {
 bool case2_batch_read(mdbx::env env) {
 
   auto txn = env.start_write();
-  auto map = txn.create_map(nullptr, mdbx::key_mode::usual, mdbx::value_mode::multi_samelength);
+  auto map = txn.create_map("case2", mdbx::key_mode::usual, mdbx::value_mode::multi_samelength);
   txn.upsert(map, mdbx::slice("key1"), mdbx::slice("val1"));
   txn.upsert(map, mdbx::pair("key1", "val2"));
   txn.upsert(map, mdbx::pair("key1", "val3"));
@@ -270,7 +270,7 @@ bool case3_put_a_lot(mdbx::env env) {
 int doit() {
   mdbx::path db_filename = "test-dupfix-multiple";
   mdbx::env_managed::remove(db_filename);
-  mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(), mdbx::env::operate_parameters(1));
+  mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(), mdbx::env::operate_parameters(3));
 
   bool ok = case1_ordering(env);
   ok = case2_batch_read(env) && ok;
@@ -288,7 +288,6 @@ int doit() {
 int main(int argc, const char *argv[]) {
   (void)argc;
   (void)argv;
-
   try {
     return doit();
   } catch (const std::exception &ex) {

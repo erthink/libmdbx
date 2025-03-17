@@ -25,7 +25,7 @@ int main() {
   MDBX_val key, data;
   MDBX_txn *txn = NULL;
 
-  const char *db_filename = "./example-db";
+  const char *db_filename = "./test-dupfix-addodd";
   mdbx_env_delete(db_filename, MDBX_ENV_JUST_DELETE);
 
   rc = mdbx_env_create(&env);
