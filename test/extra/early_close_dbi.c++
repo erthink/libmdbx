@@ -65,13 +65,13 @@ int doit() {
   assert(err == MDBX_SUCCESS);
   err = mdbx_get(transaction, textindex, &mdbxkey, &mdbxval);
   assert(err == MDBX_SUCCESS);
-  assert(testval == *reinterpret_cast<uint64_t *>(mdbxval.iov_base));
+  assert(testval == mdbx::slice(mdbxval).as_uint64());
 
   err = mdbx_put(transaction, textindex, &mdbxkey, &mdbxput, MDBX_NOOVERWRITE);
   assert(err == MDBX_KEYEXIST);
   err = mdbx_get(transaction, textindex, &mdbxkey, &mdbxval);
   assert(err == MDBX_SUCCESS);
-  assert(testval == *reinterpret_cast<uint64_t *>(mdbxval.iov_base));
+  assert(testval == mdbx::slice(mdbxval).as_uint64());
 
   err = mdbx_dbi_flags_ex(transaction, textindex, &dbi_flags, &dbi_state);
   assert(err == MDBX_SUCCESS);
@@ -87,7 +87,7 @@ int doit() {
   assert(err == MDBX_SUCCESS);
   err = mdbx_get(transaction, textindex, &mdbxkey, &mdbxval);
   assert(err == MDBX_SUCCESS);
-  assert(testval == *reinterpret_cast<uint64_t *>(mdbxval.iov_base));
+  assert(testval == mdbx::slice(mdbxval).as_uint64());
 
   err = mdbx_dbi_close(environment, textindex);
   assert(err == MDBX_SUCCESS);
