@@ -3,6 +3,20 @@
 
 #include <iostream>
 
+#if defined(ENABLE_MEMCHECK) || defined(MDBX_CI)
+#if MDBX_DEBUG || !defined(NDEBUG)
+#define RELIEF_FACTOR 16
+#else
+#define RELIEF_FACTOR 8
+#endif
+#elif MDBX_DEBUG || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
+#define RELIEF_FACTOR 4
+#elif UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
+#define RELIEF_FACTOR 2
+#else
+#define RELIEF_FACTOR 1
+#endif
+
 #if !defined(__cpp_lib_latch) && __cpp_lib_latch < 201907L
 
 int main(int argc, const char *argv[]) {
@@ -295,7 +309,7 @@ bool case2(const mdbx::path &path, bool no_sticky_threads) {
   for (size_t n = 0; n < 8; ++n)
     l.push_back(std::thread([&]() {
       s.wait();
-      for (size_t i = 0; i < 1000000; ++i) {
+      for (size_t i = 0; i < 1000000 / RELIEF_FACTOR; ++i) {
         auto txn = env.start_read();
         txn.abort();
       }

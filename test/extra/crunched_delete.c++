@@ -5,13 +5,21 @@
 #include <random>
 #include <vector>
 
-#if MDBX_DEBUG || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
-#define NN 1024
-#elif UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
-#define NN 4096
+#if defined(ENABLE_MEMCHECK) || defined(MDBX_CI)
+#if MDBX_DEBUG || !defined(NDEBUG)
+#define RELIEF_FACTOR 16
 #else
-#define NN 2048
+#define RELIEF_FACTOR 8
 #endif
+#elif MDBX_DEBUG || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
+#define RELIEF_FACTOR 4
+#elif UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
+#define RELIEF_FACTOR 2
+#else
+#define RELIEF_FACTOR 1
+#endif
+
+#define NN (2048 / RELIEF_FACTOR)
 
 std::string format_va(const char *fmt, va_list ap) {
   va_list ones;

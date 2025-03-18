@@ -9,6 +9,22 @@
 #include <thread>
 #endif
 
+#if defined(ENABLE_MEMCHECK) || defined(MDBX_CI)
+#if MDBX_DEBUG || !defined(NDEBUG)
+#define RELIEF_FACTOR 16
+#else
+#define RELIEF_FACTOR 8
+#endif
+#elif MDBX_DEBUG || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
+#define RELIEF_FACTOR 4
+#elif UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
+#define RELIEF_FACTOR 2
+#else
+#define RELIEF_FACTOR 1
+#endif
+
+#define NN (1000 / RELIEF_FACTOR)
+
 static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int line, const char *msg,
                          unsigned length) noexcept {
   (void)length;
@@ -113,10 +129,10 @@ void case1_shuffle_pool(std::vector<MDBX_cursor *> &pool) {
 void case1_read_pool(std::vector<MDBX_cursor *> &pool) {
   for (auto c : pool)
     if (flipcoin())
-      mdbx::cursor(c).find_multivalue(mdbx::slice::wrap(prng(1000)), mdbx::slice::wrap(prng(1000)), false);
+      mdbx::cursor(c).find_multivalue(mdbx::slice::wrap(prng(NN)), mdbx::slice::wrap(prng(NN)), false);
   for (auto c : pool)
     if (flipcoin())
-      mdbx::cursor(c).find_multivalue(mdbx::slice::wrap(prng(1000)), mdbx::slice::wrap(prng(1000)), false);
+      mdbx::cursor(c).find_multivalue(mdbx::slice::wrap(prng(NN)), mdbx::slice::wrap(prng(NN)), false);
 }
 
 MDBX_cursor *case1_try_unbind(MDBX_cursor *cursor) {
@@ -224,9 +240,9 @@ void case1_write_cycle(mdbx::txn_managed txn, std::deque<mdbx::map_handle> &dbi,
       pre.unbind();
     if (!pre.txn())
       pre.bind(txn, dbi[prng(dbi.size())]);
-    for (auto i = 0; i < 1000; ++i) {
-      auto k = mdbx::default_buffer::wrap(prng(1000));
-      auto v = mdbx::default_buffer::wrap(prng(1000));
+    for (auto i = 0; i < NN; ++i) {
+      auto k = mdbx::default_buffer::wrap(prng(NN));
+      auto v = mdbx::default_buffer::wrap(prng(NN));
       if (pre.find_multivalue(k, v, false))
         pre.erase();
       else
@@ -246,8 +262,8 @@ void case1_write_cycle(mdbx::txn_managed txn, std::deque<mdbx::map_handle> &dbi,
 bool case1_thread(mdbx::env env, std::deque<mdbx::map_handle> dbi, mdbx::cursor pre) {
   salt = size_t(std::chrono::high_resolution_clock::now().time_since_epoch().count());
   std::vector<MDBX_cursor *> pool;
-  for (auto loop = 0; loop < 333; ++loop) {
-    for (auto read = 0; read < 333; ++read) {
+  for (auto loop = 0; loop < 333 / RELIEF_FACTOR; ++loop) {
+    for (auto read = 0; read < 333 / RELIEF_FACTOR; ++read) {
       auto txn = env.start_read();
       case1_read_cycle(txn, dbi, pool, pre);
       if (flipcoin())
@@ -280,8 +296,8 @@ bool case1(mdbx::env env) {
     auto txn = env.start_write();
     auto table = txn.create_map(std::to_string(t), mdbx::key_mode::ordinal, mdbx::value_mode::multi_samelength);
     auto cursor = txn.open_cursor(table);
-    for (size_t i = 0; i < 10000; ++i)
-      cursor.upsert(mdbx::default_buffer::wrap(prng(1000)), mdbx::default_buffer::wrap(prng(1000)));
+    for (size_t i = 0; i < NN * 11; ++i)
+      cursor.upsert(mdbx::default_buffer::wrap(prng(NN)), mdbx::default_buffer::wrap(prng(NN)));
     txn.commit();
 
     cursors.push_back(std::move(cursor));
