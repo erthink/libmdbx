@@ -766,7 +766,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
         goto skip_check_samedata;
       }
     }
-    if (!(flags & MDBX_RESERVE) && unlikely(cmp_lenfast(&current_data, data) == 0))
+    if (!(flags & MDBX_RESERVE) && unlikely(eq_fast(&current_data, data)))
       return MDBX_SUCCESS /* the same data, nothing to update */;
   skip_check_samedata:;
   }

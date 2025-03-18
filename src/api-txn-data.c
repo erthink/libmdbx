@@ -411,7 +411,7 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *
       }
 
       if (is_modifable(txn, page)) {
-        if (new_data && cmp_lenfast(&present_data, new_data) == 0) {
+        if (new_data && eq_fast(&present_data, new_data)) {
           /* если данные совпадают, то ничего делать не надо */
           *old_data = *new_data;
           goto bailout;
