@@ -5,6 +5,20 @@
 #include <chrono>
 #include <iostream>
 
+#if defined(ENABLE_MEMCHECK) || defined(MDBX_CI)
+#if MDBX_DEBUG || !defined(NDEBUG)
+#define RELIEF_FACTOR 16
+#else
+#define RELIEF_FACTOR 8
+#endif
+#elif MDBX_DEBUG || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
+#define RELIEF_FACTOR 4
+#elif UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
+#define RELIEF_FACTOR 2
+#else
+#define RELIEF_FACTOR 1
+#endif
+
 using buffer = mdbx::default_buffer;
 
 bool case1_ordering(mdbx::env env) {
@@ -224,7 +238,7 @@ static size_t prng() {
 static inline size_t prng(size_t range) { return prng() % range; }
 
 static mdbx::default_buffer_pair prng_kv(size_t n, size_t space) {
-  space = (space + !space) * 1024 * 32;
+  space = (space + !space) * 1024 * 32 / RELIEF_FACTOR;
   const size_t w = (n ^ 1455614549) * 1664525 + 1013904223;
   const size_t k = (prng(42 + w % space) ^ 1725278851) * 433750991;
   const size_t v = prng();
@@ -235,11 +249,11 @@ bool case3_put_a_lot(mdbx::env env) {
   salt = size_t(std::chrono::high_resolution_clock::now().time_since_epoch().count());
   auto txn = env.start_write();
   auto map = txn.create_map("case3", mdbx::key_mode::ordinal, mdbx::value_mode::multi_ordinal);
-  for (size_t n = 0; n < 5555555; ++n)
+  for (size_t n = 0; n < 5555555 / RELIEF_FACTOR; ++n)
     txn.upsert(map, prng_kv(n, 1));
   txn.commit();
 
-  for (size_t t = 0; t < 555; ++t) {
+  for (size_t t = 0; t < 555 / RELIEF_FACTOR; ++t) {
     txn = env.start_write();
     auto cursor = txn.open_cursor(map);
     for (size_t n = 0; n < 111; ++n) {
@@ -247,7 +261,7 @@ bool case3_put_a_lot(mdbx::env env) {
       const auto r = 1 + prng(3);
       if (r & 1) {
         const auto k = prng_kv(n + t, 2).key;
-        for (size_t i = prng(42 + prng(111) * prng(111)); i > 0; --i)
+        for (size_t i = prng(42 + prng(111) * prng(111 / RELIEF_FACTOR)); i > 0; --i)
           v.push_back(prng());
         txn.put_multiple_samelength(map, k, v, mdbx::upsert);
       }
@@ -255,7 +269,7 @@ bool case3_put_a_lot(mdbx::env env) {
         const auto k = prng_kv(n + t, 2).key;
         if (cursor.seek(k)) {
           v.clear();
-          for (size_t i = prng(42 + prng(111) * prng(111)); i > 0; --i)
+          for (size_t i = prng(42 + prng(111) * prng(111 / RELIEF_FACTOR)); i > 0; --i)
             v.push_back(prng());
           cursor.put_multiple_samelength(k, v, mdbx::upsert);
         }
