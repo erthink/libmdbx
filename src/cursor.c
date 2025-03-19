@@ -5,7 +5,7 @@
 
 #include "internals.h"
 
-__cold int cursor_check(const MDBX_cursor *mc) {
+__cold int cursor_validate(const MDBX_cursor *mc) {
   if (!mc->txn->tw.dirtylist) {
     cASSERT(mc, (mc->txn->flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
   } else {
@@ -81,10 +81,10 @@ __cold int cursor_check(const MDBX_cursor *mc) {
   return MDBX_SUCCESS;
 }
 
-__cold int cursor_check_updating(MDBX_cursor *mc) {
+__cold int cursor_validate_updating(MDBX_cursor *mc) {
   const uint8_t checking = mc->checking;
   mc->checking |= z_updating;
-  const int rc = cursor_check(mc);
+  const int rc = cursor_validate(mc);
   mc->checking = checking;
   return rc;
 }
@@ -938,7 +938,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
       }
 
       if (AUDIT_ENABLED()) {
-        err = cursor_check(mc);
+        err = cursor_validate(mc);
         if (unlikely(err != MDBX_SUCCESS))
           return err;
       }
@@ -947,7 +947,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
 
   more:
     if (AUDIT_ENABLED()) {
-      err = cursor_check(mc);
+      err = cursor_validate(mc);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
     }
@@ -1008,7 +1008,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
           memcpy(page_data(lp.page), data->iov_base, data->iov_len);
 
         if (AUDIT_ENABLED()) {
-          err = cursor_check(mc);
+          err = cursor_validate(mc);
           if (unlikely(err != MDBX_SUCCESS))
             return err;
         }
@@ -1274,7 +1274,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
         }
 
         if (AUDIT_ENABLED()) {
-          err = cursor_check(mc);
+          err = cursor_validate(mc);
           if (unlikely(err != MDBX_SUCCESS))
             return err;
         }
@@ -1292,7 +1292,7 @@ insert_node:;
   if (page_room(mc->pg[mc->top]) < nsize) {
     rc = page_split(mc, key, ref_data, P_INVALID, insert_key ? naf : naf | MDBX_SPLIT_REPLACE);
     if (rc == MDBX_SUCCESS && AUDIT_ENABLED())
-      rc = insert_key ? cursor_check(mc) : cursor_check_updating(mc);
+      rc = insert_key ? cursor_validate(mc) : cursor_validate_updating(mc);
   } else {
     /* There is room already in this leaf page. */
     if (is_dupfix_leaf(mc->pg[mc->top])) {
@@ -1414,7 +1414,7 @@ insert_node:;
         }
       }
       if (AUDIT_ENABLED())
-        rc = cursor_check(mc);
+        rc = cursor_validate(mc);
     }
     return rc;
 
@@ -1686,7 +1686,7 @@ del_key:
 
   cASSERT(mc, rc == MDBX_SUCCESS);
   if (AUDIT_ENABLED())
-    rc = cursor_check(mc);
+    rc = cursor_validate(mc);
   return rc;
 
 fail:

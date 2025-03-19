@@ -880,7 +880,7 @@ retry:
   if (nkeys >= minkeys) {
     mc->ki[mc->top] = (indx_t)ki_top;
     if (AUDIT_ENABLED())
-      return cursor_check_updating(mc);
+      return cursor_validate_updating(mc);
     return MDBX_SUCCESS;
   }
 
@@ -920,7 +920,7 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *const ne
   const size_t newindx = mc->ki[mc->top];
   size_t nkeys = page_numkeys(mp);
   if (AUDIT_ENABLED()) {
-    rc = cursor_check_updating(mc);
+    rc = cursor_validate_updating(mc);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
@@ -979,7 +979,7 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *const ne
     mc->top = 1;
     prev_top = 0;
     if (AUDIT_ENABLED()) {
-      rc = cursor_check_updating(mc);
+      rc = cursor_validate_updating(mc);
       if (unlikely(rc != MDBX_SUCCESS))
         goto done;
     }
@@ -1092,10 +1092,10 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *const ne
       }
 
       if (AUDIT_ENABLED()) {
-        rc = cursor_check_updating(mc);
+        rc = cursor_validate_updating(mc);
         if (unlikely(rc != MDBX_SUCCESS))
           goto done;
-        rc = cursor_check_updating(mn);
+        rc = cursor_validate_updating(mn);
         if (unlikely(rc != MDBX_SUCCESS))
           goto done;
       }
@@ -1221,7 +1221,7 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *const ne
       goto done;
     cASSERT(mc, mc->top - top == mc->tree->height - height);
     if (AUDIT_ENABLED()) {
-      rc = cursor_check_updating(mc);
+      rc = cursor_validate_updating(mc);
       if (unlikely(rc != MDBX_SUCCESS))
         goto done;
     }
@@ -1474,7 +1474,7 @@ done:
     mc->txn->flags |= MDBX_TXN_ERROR;
   else {
     if (AUDIT_ENABLED())
-      rc = cursor_check_updating(mc);
+      rc = cursor_validate_updating(mc);
     if (unlikely(naf & MDBX_RESERVE)) {
       node_t *node = page_node(mc->pg[mc->top], mc->ki[mc->top]);
       if (!(node_flags(node) & N_BIG))
@@ -1524,7 +1524,7 @@ int tree_propagate_key(MDBX_cursor *mc, const MDBX_val *key) {
       node_del(mc, 0);
       int err = page_split(mc, key, nullptr, pgno, MDBX_SPLIT_REPLACE);
       if (err == MDBX_SUCCESS && AUDIT_ENABLED())
-        err = cursor_check_updating(mc);
+        err = cursor_validate_updating(mc);
       return err;
     }
 
