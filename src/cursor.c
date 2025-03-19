@@ -731,8 +731,17 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
     if (mc->clc->k.cmp(key, &current_key) != 0)
       return MDBX_EKEYMISMATCH;
 
-    if (unlikely((flags & MDBX_MULTIPLE)))
-      goto drop_current;
+    if (unlikely((flags & MDBX_MULTIPLE))) {
+      if (unlikely(!mc->subcur))
+        return MDBX_EINVAL;
+      err = cursor_del(mc, flags & MDBX_ALLDUPS);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+      if (unlikely(data[1].iov_len == 0))
+        return MDBX_SUCCESS;
+      flags -= MDBX_CURRENT;
+      goto skip_check_samedata;
+    }
 
     if (mc->subcur) {
       node_t *node = page_node(mc->pg[mc->top], mc->ki[mc->top]);
@@ -742,7 +751,6 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
          * отличается, то вместо обновления требуется удаление и
          * последующая вставка. */
         if (mc->subcur->nested_tree.items > 1 || current_data.iov_len != data->iov_len) {
-        drop_current:
           err = cursor_del(mc, flags & MDBX_ALLDUPS);
           if (unlikely(err != MDBX_SUCCESS))
             return err;
@@ -847,6 +855,8 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
   size_t *batch_dupfix_done = nullptr, batch_dupfix_given = 0;
   if (unlikely(flags & MDBX_MULTIPLE)) {
     batch_dupfix_given = data[1].iov_len;
+    if (unlikely(data[1].iov_len == 0))
+      return /* nothing todo */ MDBX_SUCCESS;
     batch_dupfix_done = &data[1].iov_len;
     *batch_dupfix_done = 0;
   }
