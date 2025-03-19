@@ -298,10 +298,7 @@ static __always_inline int couple_init(cursor_couple_t *couple, const MDBX_txn *
   if (unlikely(*dbi_state & DBI_STALE))
     return tbl_fetch(couple->outer.txn, cursor_dbi(&couple->outer));
 
-  if (unlikely(kvx->clc.k.lmax == 0))
-    return tbl_setup(txn->env, kvx, tree);
-
-  return MDBX_SUCCESS;
+  return tbl_setup_ifneed(txn->env, kvx, tree);
 }
 
 __cold int cursor_init4walk(cursor_couple_t *couple, const MDBX_txn *const txn, tree_t *const tree, kvx_t *const kvx) {
@@ -387,6 +384,7 @@ int cursor_dupsort_setup(MDBX_cursor *mc, const node_t *node, const page_t *mp) 
     }
     mc->tree->dupfix_size = mx->nested_tree.dupfix_size;
     mc->clc->v.lmin = mc->clc->v.lmax = mx->nested_tree.dupfix_size;
+    cASSERT(mc, mc->clc->v.lmax >= mc->clc->v.lmin);
   }
 
   DEBUG("Sub-db dbi -%zu root page %" PRIaPGNO, cursor_dbi(&mx->cursor), mx->nested_tree.root);
