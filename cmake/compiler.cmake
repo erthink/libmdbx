@@ -502,7 +502,11 @@ if(CMAKE_COMPILER_IS_GNU${CMAKE_PRIMARY_LANG}
      AND CMAKE_GCC_RANLIB
      AND gcc_lto_wrapper)
     message(STATUS "Found GCC's LTO toolset: ${gcc_lto_wrapper}, ${CMAKE_GCC_AR}, ${CMAKE_GCC_RANLIB}")
-    set(GCC_LTO_CFLAGS "-flto -fno-fat-lto-objects -fuse-linker-plugin")
+    if(CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER_VERSION VERSION_LESS 11.4)
+      set(GCC_LTO_CFLAGS "-flto -fno-fat-lto-objects -fuse-linker-plugin")
+    else()
+      set(GCC_LTO_CFLAGS "-flto=auto -fno-fat-lto-objects -fuse-linker-plugin")
+    endif()
     set(GCC_LTO_AVAILABLE TRUE)
     message(STATUS "Link-Time Optimization by GCC is available")
   else()
