@@ -1972,8 +1972,7 @@ typedef enum MDBX_error {
    * recycling old MVCC snapshots. */
   MDBX_OUSTED = -30411,
 
-  /** MVCC snapshot used by read transaction is outdated and could not be
-   *  copied since corresponding meta-pages was overwritten. */
+  /** MVCC snapshot used by parked transaction was bygone. */
   MDBX_MVCC_RETARDED = -30410,
 
   /* The last of MDBX-added error codes */
