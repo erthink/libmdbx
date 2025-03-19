@@ -355,3 +355,19 @@ MDBX_MAYBE_UNUSED static inline void cursor_inner_refresh(const MDBX_cursor *mc,
 }
 
 MDBX_MAYBE_UNUSED MDBX_INTERNAL bool cursor_is_tracked(const MDBX_cursor *mc);
+
+static inline void cursor_reset(cursor_couple_t *couple) {
+  couple->outer.top_and_flags = z_fresh_mark;
+  couple->inner.cursor.top_and_flags = z_fresh_mark | z_inner;
+}
+
+static inline void cursor_drown(cursor_couple_t *couple) {
+  couple->outer.top_and_flags = z_poor_mark;
+  couple->inner.cursor.top_and_flags = z_poor_mark | z_inner;
+  couple->outer.txn = nullptr;
+  couple->inner.cursor.txn = nullptr;
+  couple->outer.tree = nullptr;
+  /* сохраняем clc-указатель, так он используется для вычисления dbi в mdbx_cursor_renew(). */
+  couple->outer.dbi_state = nullptr;
+  couple->inner.cursor.dbi_state = nullptr;
+}

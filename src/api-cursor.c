@@ -12,8 +12,7 @@ MDBX_cursor *mdbx_cursor_create(void *context) {
   couple->outer.signature = cur_signature_ready4dispose;
   couple->outer.next = &couple->outer;
   couple->userctx = context;
-  couple->outer.top_and_flags = z_poor_mark;
-  couple->inner.cursor.top_and_flags = z_poor_mark | z_inner;
+  cursor_reset(couple);
   VALGRIND_MAKE_MEM_DEFINED(&couple->outer.backup, sizeof(couple->outer.backup));
   VALGRIND_MAKE_MEM_DEFINED(&couple->outer.tree, sizeof(couple->outer.tree));
   VALGRIND_MAKE_MEM_DEFINED(&couple->outer.clc, sizeof(couple->outer.clc));
@@ -31,13 +30,15 @@ int mdbx_cursor_reset(MDBX_cursor *mc) {
   if (unlikely(!mc))
     return LOG_IFERR(MDBX_EINVAL);
 
-  if (unlikely(mc->signature != cur_signature_ready4dispose && mc->signature != cur_signature_live))
-    return LOG_IFERR(MDBX_EBADSIGN);
+  if (likely(mc->signature == cur_signature_live)) {
+    cursor_reset((cursor_couple_t *)mc);
+    return MDBX_SUCCESS;
+  }
 
-  cursor_couple_t *couple = (cursor_couple_t *)mc;
-  couple->outer.top_and_flags = z_poor_mark;
-  couple->inner.cursor.top_and_flags = z_poor_mark | z_inner;
-  return MDBX_SUCCESS;
+  if (likely(mc->signature == cur_signature_ready4dispose))
+    return MDBX_SUCCESS;
+
+  return LOG_IFERR(MDBX_EBADSIGN);
 }
 
 int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
@@ -112,7 +113,7 @@ int mdbx_cursor_unbind(MDBX_cursor *mc) {
     }
     mc->next = mc;
   }
-  be_poor(mc);
+  cursor_drown((cursor_couple_t *)mc);
   mc->signature = cur_signature_ready4dispose;
   return MDBX_SUCCESS;
 }
@@ -221,10 +222,9 @@ int mdbx_txn_release_all_cursors_ex(const MDBX_txn *txn, bool unbind, size_t *co
       ENSURE(nullptr, mc->signature == cur_signature_live && (mc->next != mc) && !mc->backup);
       txn->cursors[i] = mc->next;
       mc->next = mc;
-      if (unbind) {
-        be_poor(mc);
-        mc->signature = cur_signature_ready4dispose;
-      } else {
+      mc->signature = cur_signature_ready4dispose;
+      cursor_drown((cursor_couple_t *)mc);
+      if (!unbind) {
         mc->signature = 0;
         osal_free(mc);
       }

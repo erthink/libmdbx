@@ -218,7 +218,6 @@ int cursor_shadow(MDBX_cursor *mc, MDBX_txn *nested, const size_t dbi) {
 
 MDBX_cursor *cursor_eot(MDBX_cursor *mc, MDBX_txn *txn, const bool merge) {
   MDBX_cursor *const next = mc->next;
-  mc->next = mc;
   const unsigned stage = mc->signature;
   MDBX_cursor *const bk = mc->backup;
   ENSURE(txn->env, stage == cur_signature_live || (stage == cur_signature_wait4eot && bk));
@@ -253,6 +252,8 @@ MDBX_cursor *cursor_eot(MDBX_cursor *mc, MDBX_txn *txn, const bool merge) {
     osal_free(bk);
   } else {
     ENSURE(mc->txn->env, stage == cur_signature_live);
+    cursor_drown((cursor_couple_t *)mc);
+    mc->next = mc;
     mc->signature = cur_signature_ready4dispose /* Cursor may be reused */;
   }
   return next;
