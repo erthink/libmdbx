@@ -423,7 +423,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   }
 
 #if MDBX_TXN_CHECKOWNER
-  if (!txn->parent && (txn->flags & MDBX_NOSTICKYTHREADS) && unlikely(txn->owner != osal_thread_self())) {
+  if ((txn->flags & MDBX_NOSTICKYTHREADS) && txn == env->basal_txn && unlikely(txn->owner != osal_thread_self())) {
     txn->flags |= MDBX_TXN_ERROR;
     rc = MDBX_THREAD_MISMATCH;
     return LOG_IFERR(rc);
