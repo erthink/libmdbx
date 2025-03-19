@@ -16,12 +16,6 @@ __hot static int cursor_diff(const MDBX_cursor *const __restrict x, const MDBX_c
   r->level = 0;
   r->root_nkeys = 0;
 
-  if (unlikely(x->signature != cur_signature_live))
-    return (x->signature == cur_signature_ready4dispose) ? MDBX_EINVAL : MDBX_EBADSIGN;
-
-  if (unlikely(y->signature != cur_signature_live))
-    return (y->signature == cur_signature_ready4dispose) ? MDBX_EINVAL : MDBX_EBADSIGN;
-
   int rc = check_txn(x->txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -146,12 +140,20 @@ __hot static ptrdiff_t estimate(const tree_t *tree, diff_t *const __restrict dr)
  * Range-Estimation API */
 
 __hot int mdbx_estimate_distance(const MDBX_cursor *first, const MDBX_cursor *last, ptrdiff_t *distance_items) {
-  if (unlikely(first == nullptr || last == nullptr || distance_items == nullptr))
+  if (unlikely(!distance_items))
     return LOG_IFERR(MDBX_EINVAL);
+
+  int rc = cursor_check_pure(first);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  rc = cursor_check_pure(last);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
 
   *distance_items = 0;
   diff_t dr;
-  int rc = cursor_diff(last, first, &dr);
+  rc = cursor_diff(last, first, &dr);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
@@ -172,14 +174,10 @@ __hot int mdbx_estimate_distance(const MDBX_cursor *first, const MDBX_cursor *la
 
 __hot int mdbx_estimate_move(const MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data, MDBX_cursor_op move_op,
                              ptrdiff_t *distance_items) {
-  if (unlikely(cursor == nullptr || distance_items == nullptr || move_op == MDBX_GET_CURRENT ||
-               move_op == MDBX_GET_MULTIPLE))
+  if (unlikely(!distance_items || move_op == MDBX_GET_CURRENT || move_op == MDBX_GET_MULTIPLE))
     return LOG_IFERR(MDBX_EINVAL);
 
-  if (unlikely(cursor->signature != cur_signature_live))
-    return LOG_IFERR((cursor->signature == cur_signature_ready4dispose) ? MDBX_EINVAL : MDBX_EBADSIGN);
-
-  int rc = check_txn(cursor->txn, MDBX_TXN_BLOCKED);
+  int rc = cursor_check_ro(cursor);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
@@ -232,10 +230,6 @@ __hot int mdbx_estimate_move(const MDBX_cursor *cursor, MDBX_val *key, MDBX_val 
 
 __hot int mdbx_estimate_range(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *begin_key, const MDBX_val *begin_data,
                               const MDBX_val *end_key, const MDBX_val *end_data, ptrdiff_t *size_items) {
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
-
   if (unlikely(!size_items))
     return LOG_IFERR(MDBX_EINVAL);
 
@@ -247,6 +241,10 @@ __hot int mdbx_estimate_range(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val 
 
   if (unlikely(begin_key == MDBX_EPSILON && end_key == MDBX_EPSILON))
     return LOG_IFERR(MDBX_EINVAL);
+
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
 
   cursor_couple_t begin;
   /* LY: first, initialize cursor to refresh a DB in case it have DB_STALE */

@@ -141,7 +141,7 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn, MDBX_warmup
     return LOG_IFERR(MDBX_EINVAL);
 
   if (txn) {
-    int err = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR);
+    int err = check_txn(txn, MDBX_TXN_FINISHED | MDBX_TXN_ERROR);
     if (unlikely(err != MDBX_SUCCESS))
       return LOG_IFERR(err);
   }
