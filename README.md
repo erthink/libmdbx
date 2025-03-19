@@ -651,16 +651,19 @@ error when opening the database in a _WSL1_ environment.
 ### MacOS
 Current [native build tools](https://en.wikipedia.org/wiki/Xcode) for
 MacOS include GNU Make, CLANG and an outdated version of Bash.
-Therefore, to build the library, it is enough to run `make all` in the
+However, the build script uses GNU-kind of `sed` and `tar`.
+So the easiest way to install all prerequirements is to use [Homebrew](https://brew.sh/),
+just by `brew install bash make cmake ninja gnu-sed gnu-tar --with-default-names`.
+
+Next, to build the library, it is enough to run `make all` in the
 directory with source code, and run `make check` to execute the base
 tests. If something goes wrong, it is recommended to install
 [Homebrew](https://brew.sh/) and try again.
 
 To run the [long stochastic test scenario](test/stochastic.sh), you
 will need to install the current (not outdated) version of
-[Bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)). To do this, I
-recommend that you install [Homebrew](https://brew.sh/) and then execute
-`brew install bash`.
+[Bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)).
+Just install it as noted above.
 
 ### Android
 I recommend using CMake to build _libmdbx_ for Android.
