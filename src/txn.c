@@ -13,11 +13,9 @@ void txn_done_cursors(MDBX_txn *txn, const bool merge) {
     MDBX_cursor *mc = txn->cursors[i];
     if (mc) {
       txn->cursors[i] = nullptr;
-      do {
-        MDBX_cursor *const next = mc->next;
-        cursor_eot(mc, merge);
-        mc = next;
-      } while (mc);
+      do
+        mc = cursor_eot(mc, txn, merge);
+      while (mc);
     }
   }
 }

@@ -216,17 +216,21 @@ int cursor_shadow(MDBX_cursor *mc, MDBX_txn *nested, const size_t dbi) {
   return MDBX_SUCCESS;
 }
 
-void cursor_eot(MDBX_cursor *mc, const bool merge) {
+MDBX_cursor *cursor_eot(MDBX_cursor *mc, MDBX_txn *txn, const bool merge) {
+  MDBX_cursor *const next = mc->next;
+  mc->next = mc;
   const unsigned stage = mc->signature;
   MDBX_cursor *const bk = mc->backup;
-  ENSURE(mc->txn->env, stage == cur_signature_live || (stage == cur_signature_wait4eot && bk));
+  ENSURE(txn->env, stage == cur_signature_live || (stage == cur_signature_wait4eot && bk));
+  tASSERT(txn, mc->txn == txn);
   if (bk) {
     subcur_t *mx = mc->subcur;
-    cASSERT(mc, mc->txn->parent != nullptr);
+    tASSERT(txn, mc->txn->parent != nullptr);
+    tASSERT(txn, bk->txn == txn->parent);
     /* Zap: Using uninitialized memory '*mc->backup'. */
     MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6001);
     ENSURE(mc->txn->env, bk->signature == cur_signature_live);
-    cASSERT(mc, mx == bk->subcur);
+    tASSERT(txn, mx == bk->subcur);
     if (merge) {
       /* Update pointers to parent txn */
       mc->next = bk->next;
@@ -235,24 +239,23 @@ void cursor_eot(MDBX_cursor *mc, const bool merge) {
       mc->tree = bk->tree;
       mc->dbi_state = bk->dbi_state;
       if (mx) {
-        mx->cursor.txn = mc->txn;
-        mx->cursor.dbi_state = mc->dbi_state;
+        mx->cursor.txn = bk->txn;
+        mx->cursor.dbi_state = bk->dbi_state;
       }
     } else {
       /* Restore from backup, i.e. rollback/abort nested txn */
       *mc = *bk;
+      mc->signature = stage /* Promote (cur_signature_wait4eot) state to parent txn */;
       if (mx)
         *mx = *(subcur_t *)(bk + 1);
     }
-    if (stage == cur_signature_wait4eot /* Cursor was closed by user */)
-      mc->signature = stage /* Promote closed state to parent txn */;
     bk->signature = 0;
     osal_free(bk);
   } else {
     ENSURE(mc->txn->env, stage == cur_signature_live);
     mc->signature = cur_signature_ready4dispose /* Cursor may be reused */;
-    mc->next = mc;
   }
+  return next;
 }
 
 /*----------------------------------------------------------------------------*/
