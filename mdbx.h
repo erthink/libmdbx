@@ -5131,7 +5131,7 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API void *mdbx_cursor_get_userctx(const MDBX_
  * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
  *                               by current thread.
  * \retval MDBX_EINVAL  An invalid parameter was specified. */
-LIBMDBX_API int mdbx_cursor_bind(const MDBX_txn *txn, MDBX_cursor *cursor, MDBX_dbi dbi);
+LIBMDBX_API int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *cursor, MDBX_dbi dbi);
 
 /** \brief Unbind cursor from a transaction.
  * \ingroup c_cursors
@@ -5200,7 +5200,7 @@ LIBMDBX_API int mdbx_cursor_reset(MDBX_cursor *cursor);
  * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
  *                               by current thread.
  * \retval MDBX_EINVAL  An invalid parameter was specified. */
-LIBMDBX_API int mdbx_cursor_open(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **cursor);
+LIBMDBX_API int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **cursor);
 
 /** \brief Close a cursor handle.
  * \ingroup c_cursors
@@ -5288,7 +5288,7 @@ LIBMDBX_INLINE_API(int, mdbx_txn_release_all_cursors, (const MDBX_txn *txn, bool
  * \retval MDBX_EINVAL  An invalid parameter was specified.
  * \retval MDBX_BAD_DBI The cursor was not bound to a DBI-handle
  *                      or such a handle became invalid. */
-LIBMDBX_API int mdbx_cursor_renew(const MDBX_txn *txn, MDBX_cursor *cursor);
+LIBMDBX_API int mdbx_cursor_renew(MDBX_txn *txn, MDBX_cursor *cursor);
 
 /** \brief Return the cursor's transaction handle.
  * \ingroup c_cursors

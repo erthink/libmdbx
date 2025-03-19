@@ -23,7 +23,7 @@ MDBX_cursor *mdbx_cursor_create(void *context) {
   return &couple->outer;
 }
 
-int mdbx_cursor_renew(const MDBX_txn *txn, MDBX_cursor *mc) {
+int mdbx_cursor_renew(MDBX_txn *txn, MDBX_cursor *mc) {
   return likely(mc) ? mdbx_cursor_bind(txn, mc, (kvx_t *)mc->clc - txn->env->kvs) : LOG_IFERR(MDBX_EINVAL);
 }
 
@@ -40,7 +40,7 @@ int mdbx_cursor_reset(MDBX_cursor *mc) {
   return MDBX_SUCCESS;
 }
 
-int mdbx_cursor_bind(const MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
+int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
   if (unlikely(!mc))
     return LOG_IFERR(MDBX_EINVAL);
 
@@ -130,7 +130,7 @@ int mdbx_cursor_unbind(MDBX_cursor *mc) {
   return MDBX_SUCCESS;
 }
 
-int mdbx_cursor_open(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
+int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
   if (unlikely(!ret))
     return LOG_IFERR(MDBX_EINVAL);
   *ret = nullptr;
