@@ -243,7 +243,7 @@
 #endif /* MDBX_CXX20_UNLIKELY */
 
 #ifndef MDBX_HAVE_CXX20_CONCEPTS
-#if defined(__cpp_lib_concepts) && __cpp_lib_concepts >= 202002L
+#if defined(__cpp_concepts) && __cpp_concepts >= 202002L && defined(__cpp_lib_concepts) && __cpp_lib_concepts >= 202002L
 #include <concepts>
 #define MDBX_HAVE_CXX20_CONCEPTS 1
 #elif defined(DOXYGEN)
