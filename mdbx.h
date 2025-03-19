@@ -5116,6 +5116,10 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API void *mdbx_cursor_get_userctx(const MDBX_
  * the same table handle as it was created with. This may be done whether the
  * previous transaction is live or dead.
  *
+ * If the transaction is nested, then the cursor should not be used in its parent transaction.
+ * Otherwise it is no way to restore state if this nested transaction will be aborted,
+ * nor impossible to define the expected behavior.
+ *
  * \note In contrast to LMDB, the MDBX required that any opened cursors can be
  * reused and must be freed explicitly, regardless ones was opened in a
  * read-only or write transaction. The REASON for this is eliminates ambiguity
@@ -5139,6 +5143,10 @@ LIBMDBX_API int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *cursor, MDBX_dbi db
  * Unbinded cursor is disassociated with any transactions but still holds
  * the original DBI-handle internally. Thus it could be renewed with any running
  * transaction or closed.
+ *
+ * If the transaction is nested, then the cursor should not be used in its parent transaction.
+ * Otherwise it is no way to restore state if this nested transaction will be aborted,
+ * nor impossible to define the expected behavior.
  *
  * \see mdbx_cursor_renew()
  * \see mdbx_cursor_bind()
@@ -5224,6 +5232,10 @@ LIBMDBX_API void mdbx_cursor_close(MDBX_cursor *cursor);
  * Unbinds either closes all cursors associated (opened or renewed) with
  * a given transaction in a bulk with minimal overhead.
  *
+ * A transaction should not be nested, since in this case no way to restore
+ * state if this nested transaction will be aborted, nor impossible to define
+ * the expected behavior.
+ *
  * \see mdbx_cursor_unbind()
  * \see mdbx_cursor_close()
  *
@@ -5237,7 +5249,7 @@ LIBMDBX_API void mdbx_cursor_close(MDBX_cursor *cursor);
  *          some possible errors are:
  * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
  *                               by current thread.
- * \retval MDBX_BAD_TXN          Given transaction is invalid or has
+ * \retval MDBX_BAD_TXN          Given transaction is invalid, nested or has
  *                               a child/nested transaction transaction. */
 LIBMDBX_API int mdbx_txn_release_all_cursors_ex(const MDBX_txn *txn, bool unbind, size_t *count);
 
@@ -5246,6 +5258,10 @@ LIBMDBX_API int mdbx_txn_release_all_cursors_ex(const MDBX_txn *txn, bool unbind
  *
  * Unbinds either closes all cursors associated (opened or renewed) with
  * a given transaction in a bulk with minimal overhead.
+ *
+ * A transaction should not be nested, since in this case no way to restore
+ * state if this nested transaction will be aborted, nor impossible to define
+ * the expected behavior.
  *
  * \see mdbx_cursor_unbind()
  * \see mdbx_cursor_close()
@@ -5258,7 +5274,7 @@ LIBMDBX_API int mdbx_txn_release_all_cursors_ex(const MDBX_txn *txn, bool unbind
  *          some possible errors are:
  * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
  *                               by current thread.
- * \retval MDBX_BAD_TXN          Given transaction is invalid or has
+ * \retval MDBX_BAD_TXN          Given transaction is invalid, nested or has
  *                               a child/nested transaction transaction. */
 LIBMDBX_INLINE_API(int, mdbx_txn_release_all_cursors, (const MDBX_txn *txn, bool unbind)) {
   return mdbx_txn_release_all_cursors_ex(txn, unbind, NULL);
