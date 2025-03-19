@@ -1718,7 +1718,7 @@ typedef enum MDBX_cursor_op {
 
   /** \ref MDBX_DUPFIXED -only: Return up to a page of duplicate data items
    * from current cursor position. Move cursor to prepare
-   * for \ref MDBX_NEXT_MULTIPLE. */
+   * for \ref MDBX_NEXT_MULTIPLE. \see MDBX_SEEK_AND_GET_MULTIPLE */
   MDBX_GET_MULTIPLE,
 
   /** Position at last key/data item */
@@ -1734,8 +1734,8 @@ typedef enum MDBX_cursor_op {
   MDBX_NEXT_DUP,
 
   /** \ref MDBX_DUPFIXED -only: Return up to a page of duplicate data items
-   * from next cursor position. Move cursor to prepare
-   * for `MDBX_NEXT_MULTIPLE`. */
+   * from next cursor position. Move cursor to prepare for `MDBX_NEXT_MULTIPLE`.
+   * \see MDBX_SEEK_AND_GET_MULTIPLE \see MDBX_GET_MULTIPLE */
   MDBX_NEXT_MULTIPLE,
 
   /** Position at first data item of next key */
@@ -1760,7 +1760,8 @@ typedef enum MDBX_cursor_op {
   MDBX_SET_RANGE,
 
   /** \ref MDBX_DUPFIXED -only: Position at previous page and return up to
-   * a page of duplicate data items. */
+   * a page of duplicate data items.
+   * \see MDBX_SEEK_AND_GET_MULTIPLE \see MDBX_GET_MULTIPLE */
   MDBX_PREV_MULTIPLE,
 
   /** Positions cursor at first key-value pair greater than or equal to
@@ -1812,7 +1813,12 @@ typedef enum MDBX_cursor_op {
   MDBX_TO_PAIR_LESSER_OR_EQUAL /** \copydoc MDBX_TO_PAIR_LESSER_THAN */,
   MDBX_TO_PAIR_EQUAL /** \copydoc MDBX_TO_PAIR_LESSER_THAN */,
   MDBX_TO_PAIR_GREATER_OR_EQUAL /** \copydoc MDBX_TO_PAIR_LESSER_THAN */,
-  MDBX_TO_PAIR_GREATER_THAN /** \copydoc MDBX_TO_PAIR_LESSER_THAN */
+  MDBX_TO_PAIR_GREATER_THAN /** \copydoc MDBX_TO_PAIR_LESSER_THAN */,
+
+  /** \ref MDBX_DUPFIXED -only: Seek to given key and return up to a page of
+   * duplicate data items from current cursor position. Move cursor to prepare
+   * for \ref MDBX_NEXT_MULTIPLE. \see MDBX_GET_MULTIPLE */
+  MDBX_SEEK_AND_GET_MULTIPLE
 } MDBX_cursor_op;
 
 /** \brief Errors and return codes
