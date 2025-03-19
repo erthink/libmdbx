@@ -293,7 +293,7 @@ MDBX_NOTHROW_PURE_FUNCTION static inline bool check_leaf_type(const MDBX_cursor 
 }
 
 MDBX_INTERNAL void cursor_eot(MDBX_cursor *mc, const bool merge);
-MDBX_INTERNAL int cursor_shadow(MDBX_cursor *parent_cursor, MDBX_txn *nested_txn, const size_t dbi);
+MDBX_INTERNAL int cursor_shadow(MDBX_cursor *mc, MDBX_txn *nested, const size_t dbi);
 
 MDBX_INTERNAL MDBX_cursor *cursor_cpstk(const MDBX_cursor *csrc, MDBX_cursor *cdst);
 

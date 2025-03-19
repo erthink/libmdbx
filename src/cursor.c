@@ -184,14 +184,13 @@ __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_va
 
 /*----------------------------------------------------------------------------*/
 
-int cursor_shadow(MDBX_cursor *parent_cursor, MDBX_txn *nested_txn, const size_t dbi) {
-
-  tASSERT(nested_txn, dbi > FREE_DBI && dbi < nested_txn->n_dbi);
-  const size_t size = parent_cursor->subcur ? sizeof(MDBX_cursor) + sizeof(subcur_t) : sizeof(MDBX_cursor);
-  for (MDBX_cursor *bk; parent_cursor; parent_cursor = bk->next) {
-    cASSERT(parent_cursor, parent_cursor != parent_cursor->next);
-    bk = parent_cursor;
-    if (parent_cursor->signature != cur_signature_live)
+int cursor_shadow(MDBX_cursor *mc, MDBX_txn *nested, const size_t dbi) {
+  tASSERT(nested, dbi > FREE_DBI && dbi < nested->n_dbi);
+  const size_t size = mc->subcur ? sizeof(MDBX_cursor) + sizeof(subcur_t) : sizeof(MDBX_cursor);
+  for (MDBX_cursor *bk; mc; mc = bk->next) {
+    cASSERT(mc, mc != mc->next);
+    bk = mc;
+    if (mc->signature != cur_signature_live)
       continue;
     bk = osal_malloc(size);
     if (unlikely(!bk))
@@ -200,22 +199,19 @@ int cursor_shadow(MDBX_cursor *parent_cursor, MDBX_txn *nested_txn, const size_t
     memset(bk, 0xCD, size);
     VALGRIND_MAKE_MEM_UNDEFINED(bk, size);
 #endif /* MDBX_DEBUG */
-    *bk = *parent_cursor;
-    parent_cursor->backup = bk;
-    /* Kill pointers into src to reduce abuse: The
-     * user may not use mc until dst ends. But we need a valid
-     * txn pointer here for cursor fixups to keep working. */
-    parent_cursor->txn = nested_txn;
-    parent_cursor->tree = &nested_txn->dbs[dbi];
-    parent_cursor->dbi_state = &nested_txn->dbi_state[dbi];
-    subcur_t *mx = parent_cursor->subcur;
-    if (mx != nullptr) {
+    *bk = *mc;
+    mc->backup = bk;
+    mc->txn = nested;
+    mc->tree = &nested->dbs[dbi];
+    mc->dbi_state = &nested->dbi_state[dbi];
+    subcur_t *mx = mc->subcur;
+    if (mx) {
       *(subcur_t *)(bk + 1) = *mx;
-      mx->cursor.txn = nested_txn;
-      mx->cursor.dbi_state = parent_cursor->dbi_state;
+      mx->cursor.txn = nested;
+      mx->cursor.dbi_state = &nested->dbi_state[dbi];
     }
-    parent_cursor->next = nested_txn->cursors[dbi];
-    nested_txn->cursors[dbi] = parent_cursor;
+    mc->next = nested->cursors[dbi];
+    nested->cursors[dbi] = mc;
   }
   return MDBX_SUCCESS;
 }
