@@ -63,8 +63,8 @@ class trouble_location {
 #endif
 
 public:
-  MDBX_CXX11_CONSTEXPR trouble_location(unsigned line, const char *condition,
-                                   const char *function, const char *filename)
+  MDBX_CXX11_CONSTEXPR trouble_location(unsigned line, const char *condition, const char *function,
+                                        const char *filename)
       :
 #if TROUBLE_PROVIDE_LINENO
         line_(line)
@@ -133,7 +133,7 @@ public:
 
 //------------------------------------------------------------------------------
 
-__cold  std::string format_va(const char *fmt, va_list ap) {
+__cold std::string format_va(const char *fmt, va_list ap) {
   va_list ones;
   va_copy(ones, ap);
 #ifdef _MSC_VER
@@ -146,15 +146,14 @@ __cold  std::string format_va(const char *fmt, va_list ap) {
   result.reserve(size_t(needed + 1));
   result.resize(size_t(needed), '\0');
   assert(int(result.capacity()) > needed);
-  int actual = vsnprintf(const_cast<char *>(result.data()), result.capacity(),
-                         fmt, ones);
+  int actual = vsnprintf(const_cast<char *>(result.data()), result.capacity(), fmt, ones);
   assert(actual == needed);
   (void)actual;
   va_end(ones);
   return result;
 }
 
-__cold  std::string format(const char *fmt, ...) {
+__cold std::string format(const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   std::string result = format_va(fmt, ap);
@@ -175,17 +174,14 @@ public:
   virtual ~bug() noexcept;
 };
 
-__cold  bug::bug(const trouble_location &location) noexcept
-    : std::runtime_error(format("mdbx.bug: %s.%s at %s:%u", location.function(),
-                                location.condition(), location.filename(),
-                                location.line())),
+__cold bug::bug(const trouble_location &location) noexcept
+    : std::runtime_error(format("mdbx.bug: %s.%s at %s:%u", location.function(), location.condition(),
+                                location.filename(), location.line())),
       location_(location) {}
 
-__cold  bug::~bug() noexcept {}
+__cold bug::~bug() noexcept {}
 
-[[noreturn]] __cold  void raise_bug(const trouble_location &what_and_where) {
-  throw bug(what_and_where);
-}
+[[maybe_unused, noreturn]] __cold void raise_bug(const trouble_location &what_and_where) { throw bug(what_and_where); }
 
 #define RAISE_BUG(line, condition, function, file)                                                                     \
   do {                                                                                                                 \
@@ -193,6 +189,7 @@ __cold  bug::~bug() noexcept {}
     raise_bug(bug);                                                                                                    \
   } while (0)
 
+#undef ENSURE
 #define ENSURE(condition)                                                                                              \
   do                                                                                                                   \
     if (MDBX_UNLIKELY(!(condition)))                                                                                   \
