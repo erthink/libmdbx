@@ -349,12 +349,7 @@ bool simple(mdbx::env env) {
   return true;
 }
 
-int main(int argc, const char *argv[]) {
-  (void)argc;
-  (void)argv;
-
-  mdbx_setup_debug_nofmt(MDBX_LOG_NOTICE, MDBX_DBG_ASSERT, logger_nofmt, log_buffer, sizeof(log_buffer));
-
+int doit() {
   mdbx::path db_filename = "test-crunched-del";
   mdbx::env::remove(db_filename);
 
@@ -391,4 +386,16 @@ int main(int argc, const char *argv[]) {
 
   std::cout << "OK\n";
   return EXIT_SUCCESS;
+}
+
+int main(int argc, char *argv[]) {
+  (void)argc;
+  (void)argv;
+  mdbx_setup_debug_nofmt(MDBX_LOG_NOTICE, MDBX_DBG_ASSERT, logger_nofmt, log_buffer, sizeof(log_buffer));
+  try {
+    return doit();
+  } catch (const std::exception &ex) {
+    std::cerr << "Exception: " << ex.what() << "\n";
+    return EXIT_FAILURE;
+  }
 }

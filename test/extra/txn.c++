@@ -308,12 +308,7 @@ bool case2(const mdbx::path &path, bool no_sticky_threads) {
   return true;
 }
 
-int main(int argc, const char *argv[]) {
-  (void)argc;
-  (void)argv;
-
-  mdbx_setup_debug_nofmt(MDBX_LOG_VERBOSE, MDBX_DBG_ASSERT, logger_nofmt, log_buffer, sizeof(log_buffer));
-
+int doit() {
   mdbx::path path = "test-txn";
   mdbx::env::remove(path);
 
@@ -324,6 +319,18 @@ int main(int argc, const char *argv[]) {
 
   std::cout << (ok ? "OK\n" : "FAIL\n");
   return ok ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
+int main(int argc, char *argv[]) {
+  (void)argc;
+  (void)argv;
+  mdbx_setup_debug_nofmt(MDBX_LOG_VERBOSE, MDBX_DBG_ASSERT, logger_nofmt, log_buffer, sizeof(log_buffer));
+  try {
+    return doit();
+  } catch (const std::exception &ex) {
+    std::cerr << "Exception: " << ex.what() << "\n";
+    return EXIT_FAILURE;
+  }
 }
 
 #endif /* __cpp_lib_latch */

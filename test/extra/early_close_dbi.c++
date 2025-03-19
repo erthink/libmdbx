@@ -1,13 +1,11 @@
 #include "mdbx.h++"
 #include <cstring>
+#include <iostream>
 
 static const char *const testkey = "testkey";
 static uint64_t testval = 11;
 
-int main(int argc, char *argv[]) {
-  (void)argc;
-  (void)argv;
-
+int doit() {
   mdbx::path db_filename = "test-early_close_dbi";
   mdbx::env_managed::remove(db_filename);
 
@@ -125,4 +123,15 @@ int main(int argc, char *argv[]) {
     return 2;
 
   return 0;
+}
+
+int main(int argc, char *argv[]) {
+  (void)argc;
+  (void)argv;
+  try {
+    return doit();
+  } catch (const std::exception &ex) {
+    std::cerr << "Exception: " << ex.what() << "\n";
+    return EXIT_FAILURE;
+  }
 }

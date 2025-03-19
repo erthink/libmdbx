@@ -4,11 +4,8 @@
 #include "mdbx.h++"
 #include <iostream>
 
-int main(int argc, const char *argv[]) {
-  (void)argc;
-  (void)argv;
-
-  mdbx::path db_filename = "test-dupfix-multiple";
+static int doit() {
+  mdbx::path db_filename = "test-maindb-ordinal";
   mdbx::env_managed::remove(db_filename);
   mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(), mdbx::env::operate_parameters());
 
@@ -50,4 +47,15 @@ int main(int argc, const char *argv[]) {
   std::cerr << "Skipped since no std::string_view\n";
   return EXIT_SUCCESS;
 #endif /* __cpp_lib_string_view >= 201606L */
+}
+
+int main(int argc, char *argv[]) {
+  (void)argc;
+  (void)argv;
+  try {
+    return doit();
+  } catch (const std::exception &ex) {
+    std::cerr << "Exception: " << ex.what() << "\n";
+    return EXIT_FAILURE;
+  }
 }
