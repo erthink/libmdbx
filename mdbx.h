@@ -1791,26 +1791,28 @@ typedef enum MDBX_cursor_op {
    * \ref MDBX_NOTFOUND otherwise. */
   MDBX_SET_UPPERBOUND,
 
-  /* Doubtless cursor positioning at a specified key. */
+  /** Doubtless cursor positioning at a specified key. */
   MDBX_TO_KEY_LESSER_THAN,
-  MDBX_TO_KEY_LESSER_OR_EQUAL,
-  MDBX_TO_KEY_EQUAL,
-  MDBX_TO_KEY_GREATER_OR_EQUAL,
-  MDBX_TO_KEY_GREATER_THAN,
+  MDBX_TO_KEY_LESSER_OR_EQUAL /** \copydoc MDBX_TO_KEY_LESSER_THAN */,
+  MDBX_TO_KEY_EQUAL /** \copydoc MDBX_TO_KEY_LESSER_THAN */,
+  MDBX_TO_KEY_GREATER_OR_EQUAL /** \copydoc MDBX_TO_KEY_LESSER_THAN */,
+  MDBX_TO_KEY_GREATER_THAN /** \copydoc MDBX_TO_KEY_LESSER_THAN */,
 
-  /* Doubtless cursor positioning at a specified key-value pair
+  /** Doubtless cursor positioning at a specified key-value pair
    * for dupsort/multi-value hives. */
   MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN,
-  MDBX_TO_EXACT_KEY_VALUE_LESSER_OR_EQUAL,
-  MDBX_TO_EXACT_KEY_VALUE_EQUAL,
-  MDBX_TO_EXACT_KEY_VALUE_GREATER_OR_EQUAL,
-  MDBX_TO_EXACT_KEY_VALUE_GREATER_THAN,
+  MDBX_TO_EXACT_KEY_VALUE_LESSER_OR_EQUAL /** \copydoc MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN */,
+  MDBX_TO_EXACT_KEY_VALUE_EQUAL /** \copydoc MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN */,
+  MDBX_TO_EXACT_KEY_VALUE_GREATER_OR_EQUAL /** \copydoc MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN */,
+  MDBX_TO_EXACT_KEY_VALUE_GREATER_THAN /** \copydoc MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN */,
 
+  /** Doubtless cursor positioning at a specified key-value pair
+   * for dupsort/multi-value hives. */
   MDBX_TO_PAIR_LESSER_THAN,
-  MDBX_TO_PAIR_LESSER_OR_EQUAL,
-  MDBX_TO_PAIR_EQUAL,
-  MDBX_TO_PAIR_GREATER_OR_EQUAL,
-  MDBX_TO_PAIR_GREATER_THAN
+  MDBX_TO_PAIR_LESSER_OR_EQUAL /** \copydoc MDBX_TO_PAIR_LESSER_THAN */,
+  MDBX_TO_PAIR_EQUAL /** \copydoc MDBX_TO_PAIR_LESSER_THAN */,
+  MDBX_TO_PAIR_GREATER_OR_EQUAL /** \copydoc MDBX_TO_PAIR_LESSER_THAN */,
+  MDBX_TO_PAIR_GREATER_THAN /** \copydoc MDBX_TO_PAIR_LESSER_THAN */
 } MDBX_cursor_op;
 
 /** \brief Errors and return codes
