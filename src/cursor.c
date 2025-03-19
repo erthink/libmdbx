@@ -252,9 +252,9 @@ MDBX_cursor *cursor_eot(MDBX_cursor *mc, MDBX_txn *txn, const bool merge) {
     osal_free(bk);
   } else {
     ENSURE(mc->txn->env, stage == cur_signature_live);
-    cursor_drown((cursor_couple_t *)mc);
-    mc->next = mc;
     mc->signature = cur_signature_ready4dispose /* Cursor may be reused */;
+    mc->next = mc;
+    cursor_drown((cursor_couple_t *)mc);
   }
   return next;
 }

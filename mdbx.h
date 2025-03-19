@@ -5210,11 +5210,16 @@ LIBMDBX_API int mdbx_cursor_reset(MDBX_cursor *cursor);
  * \retval MDBX_EINVAL  An invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **cursor);
 
-/** \brief Close a cursor handle.
+/** \brief Closes a cursor handle without returning error code.
  * \ingroup c_cursors
  *
  * The cursor handle will be freed and must not be used again after this call,
  * but its transaction may still be live.
+ *
+ * This function returns `void` but panic in case of error. Use \ref mdbx_cursor_close2()
+ * if you need to receive an error code instead of an app crash.
+ *
+ * \see mdbx_cursor_close2
  *
  * \note In contrast to LMDB, the MDBX required that any opened cursors can be
  * reused and must be freed explicitly, regardless ones was opened in a
@@ -5225,6 +5230,29 @@ LIBMDBX_API int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **curs
  * \param [in] cursor  A cursor handle returned by \ref mdbx_cursor_open()
  *                     or \ref mdbx_cursor_create(). */
 LIBMDBX_API void mdbx_cursor_close(MDBX_cursor *cursor);
+
+/** \brief Closes a cursor handle with returning error code.
+ * \ingroup c_cursors
+ *
+ * The cursor handle will be freed and must not be used again after this call,
+ * but its transaction may still be live.
+ *
+ * \see mdbx_cursor_close
+ *
+ * \note In contrast to LMDB, the MDBX required that any opened cursors can be
+ * reused and must be freed explicitly, regardless ones was opened in a
+ * read-only or write transaction. The REASON for this is eliminates ambiguity
+ * which helps to avoid errors such as: use-after-free, double-free, i.e.
+ * memory corruption and segfaults.
+ *
+ * \param [in] cursor  A cursor handle returned by \ref mdbx_cursor_open()
+ *                     or \ref mdbx_cursor_create().
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
+ *                               by current thread.
+ * \retval MDBX_EINVAL  An invalid parameter was specified. */
+LIBMDBX_API int mdbx_cursor_close2(MDBX_cursor *cursor);
 
 /** \brief Unbind or closes all cursors of a given transaction.
  * \ingroup c_cursors

@@ -4545,7 +4545,10 @@ public:
   }
 
   /// \brief Explicitly closes the cursor.
-  void close();
+  inline void close() {
+    error::success_or_throw(::mdbx_cursor_close2(handle_));
+    handle_ = nullptr;
+  }
 
   cursor_managed(cursor_managed &&) = default;
   cursor_managed &operator=(cursor_managed &&other) noexcept {

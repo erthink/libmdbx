@@ -1590,15 +1590,6 @@ __cold bool txn::rename_map(const ::std::string &old_name, const ::std::string &
 
 //------------------------------------------------------------------------------
 
-void cursor_managed::close() {
-  if (MDBX_UNLIKELY(!handle_))
-    MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_EINVAL);
-  ::mdbx_cursor_close(handle_);
-  handle_ = nullptr;
-}
-
-//------------------------------------------------------------------------------
-
 __cold ::std::ostream &operator<<(::std::ostream &out, const slice &it) {
   out << "{";
   if (!it.is_valid())
