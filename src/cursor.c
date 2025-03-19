@@ -1438,6 +1438,21 @@ insert_node:;
   return rc;
 }
 
+int cursor_check_multiple(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsigned flags) {
+  (void)key;
+  if (unlikely(flags & MDBX_RESERVE))
+    return MDBX_EINVAL;
+  if (unlikely(!(mc->tree->flags & MDBX_DUPFIXED)))
+    return MDBX_INCOMPATIBLE;
+  const size_t number = data[1].iov_len;
+  if (unlikely(number > MAX_MAPSIZE / 2 / (BRANCH_NODE_MAX(MDBX_MAX_PAGESIZE) - NODESIZE))) {
+    /* checking for multiplication overflow */
+    if (unlikely(number > MAX_MAPSIZE / 2 / data->iov_len))
+      return MDBX_TOO_LARGE;
+  }
+  return MDBX_SUCCESS;
+}
+
 __hot int cursor_put_checklen(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsigned flags) {
   cASSERT(mc, (mc->flags & z_inner) == 0);
   if (unlikely(key->iov_len > mc->clc->k.lmax || key->iov_len < mc->clc->k.lmin)) {
