@@ -204,7 +204,7 @@ typedef mode_t mdbx_mode_t;
 #ifndef __has_cpp_attribute
 #define __has_cpp_attribute(x) 0
 #define __has_cpp_attribute_qualified(x) 0
-#elif defined(_MSC_VER)
+#elif defined(_MSC_VER) || (__clang__ && __clang__ < 14)
 /* MSVC don't support `namespace::attr` syntax */
 #define __has_cpp_attribute_qualified(x) 0
 #else
@@ -318,7 +318,7 @@ typedef mode_t mdbx_mode_t;
 #ifndef MDBX_DEPRECATED
 #ifdef __deprecated
 #define MDBX_DEPRECATED __deprecated
-#elif defined(DOXYGEN) || ((!defined(__GNUC__) || defined(__clang__) || __GNUC__ > 5) &&                               \
+#elif defined(DOXYGEN) || ((!defined(__GNUC__) || (defined(__clang__) && __clang__ > 19) || __GNUC__ > 5) &&           \
                            ((defined(__cplusplus) && __cplusplus >= 201403L && __has_cpp_attribute(deprecated) &&      \
                              __has_cpp_attribute(deprecated) >= 201309L) ||                                            \
                             (!defined(__cplusplus) && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202304L)))
@@ -504,7 +504,7 @@ typedef mode_t mdbx_mode_t;
 
 #if defined(DOXYGEN) ||                                                                                                \
     (defined(__cplusplus) && __cplusplus >= 201603L && __has_cpp_attribute(maybe_unused) &&                            \
-     __has_cpp_attribute(maybe_unused) >= 201603L) ||                                                                  \
+     __has_cpp_attribute(maybe_unused) >= 201603L && (!defined(__clang__) || __clang__ > 19)) ||                       \
     (!defined(__cplusplus) && defined(__STDC_VERSION__) && __STDC_VERSION__ > 202005L)
 #define MDBX_MAYBE_UNUSED [[maybe_unused]]
 #elif defined(__GNUC__) || __has_attribute(__unused__)
