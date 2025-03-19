@@ -1,8 +1,10 @@
 # Copyright (c) 2020-2025 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> ###############################################
 # SPDX-License-Identifier: Apache-2.0
 
-enable_language(CXX)
-include(../cmake/compiler.cmake)
+if(NOT CMAKE_CXX_COMPILER_LOADED)
+  enable_language(CXX)
+  include(../cmake/compiler.cmake)
+endif()
 
 function(add_extra_test name)
   set(options DISABLED)
