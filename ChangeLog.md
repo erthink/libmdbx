@@ -10,7 +10,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx
 
 Благодарности:
 
- - [Erigon](https://docs.erigon.tech/) за спонсорство.
+ - [Erigon](https://erigon.tech/) за спонсорство.
  - [Alain Picard](https://github.com/castortech) for support [Java bindings](https://github.com/castortech/mdbxjni) and MacOS universal binaries patch for CMake build scenario,
    also for bug reporting (put-`MDBX_MULTIPLE` regression). Big thank for assistance with debugging and testing.
  - [Alex Sharov](https://github.com/AskAlexSharov) за сообщение об ошибках и тестирование.
