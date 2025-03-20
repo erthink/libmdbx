@@ -1760,7 +1760,7 @@ static int osal_check_fs_local(mdbx_filehandle_t handle, int flags) {
       if ((RemoteProtocolInfo.Flags & REMOTE_PROTOCOL_INFO_FLAG_OFFLINE) && !(flags & MDBX_RDONLY))
         return ERROR_FILE_OFFLINE;
       if (!(RemoteProtocolInfo.Flags & REMOTE_PROTOCOL_INFO_FLAG_LOOPBACK) && !(flags & MDBX_EXCLUSIVE))
-        return ERROR_REMOTE_STORAGE_MEDIA_ERROR;
+        return MDBX_EREMOTE;
     }
   }
 
@@ -1779,7 +1779,7 @@ static int osal_check_fs_local(mdbx_filehandle_t handle, int flags) {
                                  0, &GetExternalBacking_OutputBuffer, sizeof(GetExternalBacking_OutputBuffer));
     if (NT_SUCCESS(rc)) {
       if (!(flags & MDBX_EXCLUSIVE))
-        return ERROR_REMOTE_STORAGE_MEDIA_ERROR;
+        return MDBX_EREMOTE;
     } else if (rc != STATUS_OBJECT_NOT_EXTERNALLY_BACKED && rc != STATUS_INVALID_DEVICE_REQUEST &&
                rc != STATUS_NOT_SUPPORTED)
       return ntstatus2errcode(rc);
@@ -1800,7 +1800,7 @@ static int osal_check_fs_local(mdbx_filehandle_t handle, int flags) {
 
     if ((flags & MDBX_RDONLY) == 0) {
       if (FileSystemFlags & (FILE_SEQUENTIAL_WRITE_ONCE | FILE_READ_ONLY_VOLUME | FILE_VOLUME_IS_COMPRESSED)) {
-        rc = ERROR_REMOTE_STORAGE_MEDIA_ERROR;
+        rc = MDBX_EREMOTE;
         goto bailout;
       }
     }
@@ -1808,7 +1808,7 @@ static int osal_check_fs_local(mdbx_filehandle_t handle, int flags) {
     if (imports.GetFinalPathNameByHandleW(handle, PathBuffer, INT16_MAX, FILE_NAME_NORMALIZED | VOLUME_NAME_NT)) {
       if (_wcsnicmp(PathBuffer, L"\\Device\\Mup\\", 12) == 0) {
         if (!(flags & MDBX_EXCLUSIVE)) {
-          rc = ERROR_REMOTE_STORAGE_MEDIA_ERROR;
+          rc = MDBX_EREMOTE;
           goto bailout;
         }
       }
@@ -1836,7 +1836,7 @@ static int osal_check_fs_local(mdbx_filehandle_t handle, int flags) {
       case DRIVE_REMOTE:
       default:
         if (!(flags & MDBX_EXCLUSIVE))
-          rc = ERROR_REMOTE_STORAGE_MEDIA_ERROR;
+          rc = MDBX_EREMOTE;
       // fall through
       case DRIVE_REMOVABLE:
       case DRIVE_FIXED:
@@ -1968,11 +1968,11 @@ static int osal_check_fs_local(mdbx_filehandle_t handle, int flags) {
 #endif /* ST/MNT_LOCAL */
 
 #ifdef ST_EXPORTED
-  if ((st_flags & ST_EXPORTED) != 0 && !(flags & MDBX_RDONLY))
-    return MDBX_EREMOTE;
+  if ((st_flags & ST_EXPORTED) != 0 && !(flags & (MDBX_RDONLY | MDBX_EXCLUSIVE))))
+    return MDBX_RESULT_TRUE;
 #elif defined(MNT_EXPORTED)
-  if ((mnt_flags & MNT_EXPORTED) != 0 && !(flags & MDBX_RDONLY))
-    return MDBX_EREMOTE;
+  if ((mnt_flags & MNT_EXPORTED) != 0 && !(flags & (MDBX_RDONLY | MDBX_EXCLUSIVE)))
+    return MDBX_RESULT_TRUE;
 #endif /* ST/MNT_EXPORTED */
 
   switch (type) {
@@ -2023,8 +2023,8 @@ static int check_mmap_limit(const size_t limit) {
   return MDBX_SUCCESS;
 }
 
-MDBX_INTERNAL int osal_mmap(const int flags, osal_mmap_t *map, size_t size, const size_t limit,
-                            const unsigned options) {
+MDBX_INTERNAL int osal_mmap(const int flags, osal_mmap_t *map, size_t size, const size_t limit, const unsigned options,
+                            const pathchar_t *pathname4logging) {
   assert(size <= limit);
   map->limit = 0;
   map->current = 0;
@@ -2035,8 +2035,27 @@ MDBX_INTERNAL int osal_mmap(const int flags, osal_mmap_t *map, size_t size, cons
 #endif /* Windows */
 
   int err = osal_check_fs_local(map->fd, flags);
-  if (unlikely(err != MDBX_SUCCESS))
-    return err;
+  if (unlikely(err != MDBX_SUCCESS)) {
+#if defined(_WIN32) || defined(_WIN64)
+    if (globals.running_under_Wine)
+      NOTICE("%s", "Please use native Linux application or WSL at least, instead of trouble-full Wine!");
+#endif /* Windows */
+    switch (err) {
+    case MDBX_RESULT_TRUE:
+#if MDBX_ENABLE_NON_READONLY_EXPORT
+      WARNING("%" MDBX_PRIsPATH " is exported via NFS, avoid using the file on a remote side!", pathname4logging);
+      break;
+#else
+      ERROR("%" MDBX_PRIsPATH " is exported via NFS", pathname4logging);
+      return MDBX_EREMOTE;
+#endif /* MDBX_PROHIBIT_NON_READONLY_EXPORT */
+    case MDBX_EREMOTE:
+      ERROR("%" MDBX_PRIsPATH " is on a remote file system, the %s is required", pathname4logging, "MDBX_EXCLUSIVE");
+      __fallthrough /* fall through */;
+    default:
+      return err;
+    }
+  }
 
   err = check_mmap_limit(limit);
   if (unlikely(err != MDBX_SUCCESS))
