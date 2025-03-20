@@ -34,8 +34,10 @@ int txn_shadow_cursors(const MDBX_txn *parent, const size_t dbi) {
   MDBX_cursor *next = nullptr;
   do {
     next = cursor->next;
-    if (cursor->signature != cur_signature_live)
+    if (cursor->signature != cur_signature_live) {
+      ENSURE(parent->env, cursor->signature == cur_signature_wait4eot);
       continue;
+    }
     tASSERT(parent, cursor->txn == parent && dbi == cursor_dbi(cursor));
 
     int err = cursor_shadow(cursor, txn, dbi);
