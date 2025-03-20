@@ -189,9 +189,11 @@ int cursor_shadow(MDBX_cursor *mc, MDBX_txn *nested, const size_t dbi) {
   const size_t size = mc->subcur ? sizeof(MDBX_cursor) + sizeof(subcur_t) : sizeof(MDBX_cursor);
   for (MDBX_cursor *bk; mc; mc = bk->next) {
     cASSERT(mc, mc != mc->next);
-    bk = mc;
-    if (mc->signature != cur_signature_live)
+    if (mc->signature != cur_signature_live) {
+      ENSURE(nested->env, mc->signature == cur_signature_wait4eot);
+      bk = mc;
       continue;
+    }
     bk = osal_malloc(size);
     if (unlikely(!bk))
       return MDBX_ENOMEM;
@@ -228,7 +230,7 @@ MDBX_cursor *cursor_eot(MDBX_cursor *mc, MDBX_txn *txn, const bool merge) {
     tASSERT(txn, bk->txn == txn->parent);
     /* Zap: Using uninitialized memory '*mc->backup'. */
     MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6001);
-    ENSURE(mc->txn->env, bk->signature == cur_signature_live);
+    ENSURE(txn->env, bk->signature == cur_signature_live);
     tASSERT(txn, mx == bk->subcur);
     if (merge) {
       /* Update pointers to parent txn */
