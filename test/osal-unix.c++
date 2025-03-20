@@ -562,7 +562,7 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
         continue;
     }
 
-    if (pid == 0)
+    if (pid == 0 || sigbreak)
       break;
 
     if (err != EINTR)
