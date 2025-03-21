@@ -4,7 +4,7 @@ ChangeLog
 English version [by liar Google](https://libmdbx-dqdkfa-ru.translate.goog/md__change_log.html?_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx.dqdkfa.ru/md__change_log.html).
 
-## v0.13.5 "Труба" запланирован на 2025-03-21
+## v0.13.5 "Труба" от 2025-03-21
 
 Поддерживающий выпуск стабильной ветки с исправлением обнаруженных ошибок и устранением недочётов.
 
@@ -16,7 +16,6 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx
  - [maxc0d3r](https://gitflic.ru/user/maxc0d3r) for bug reporting and testing.
  - [Alain Picard](https://github.com/castortech) for support [Java bindings](https://github.com/castortech/mdbxjni) and MacOS universal binaries patch for CMake build scenario,
    also for bug reporting (put-`MDBX_MULTIPLE` regression). Big thank for assistance with debugging and testing.
-
 
 Новое:
 
