@@ -373,7 +373,7 @@ __cold std::string error::message() const {
 __cold void error::throw_exception() const {
   switch (code()) {
   case MDBX_EINVAL:
-    throw std::invalid_argument("mdbx");
+    throw std::invalid_argument("MDBX_EINVAL");
   case MDBX_ENOMEM:
     throw std::bad_alloc();
   case MDBX_SUCCESS:
