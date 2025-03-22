@@ -8,8 +8,7 @@ __hot txnid_t txn_snapshot_oldest(const MDBX_txn *const txn) {
 }
 
 void txn_done_cursors(MDBX_txn *txn, const bool merge) {
-  tASSERT(txn, txn->cursors[FREE_DBI] == nullptr);
-  TXN_FOREACH_DBI_FROM(txn, i, /* skip FREE_DBI */ 1) {
+  TXN_FOREACH_DBI_ALL(txn, i) {
     MDBX_cursor *mc = txn->cursors[i];
     if (mc) {
       txn->cursors[i] = nullptr;
