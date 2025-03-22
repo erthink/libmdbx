@@ -9,7 +9,7 @@
 > [5](https://libmdbx.dqdkfa.ru/tg-archive/messages5.html), [6](https://libmdbx.dqdkfa.ru/tg-archive/messages6.html), [7](https://libmdbx.dqdkfa.ru/tg-archive/messages7.html)).
 > See the [ChangeLog](https://gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md) for `NEWS` and latest updates.
 
-> Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`.
+> Donations are welcome to the Ethereum/ERC-20 `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`.
 > Всё будет хорошо!
 
 
