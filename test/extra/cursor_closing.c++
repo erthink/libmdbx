@@ -332,6 +332,27 @@ bool case1(mdbx::env env) {
 
 //--------------------------------------------------------------------------------------------
 
+bool case2(mdbx::env env) {
+  bool ok = true;
+
+  auto txn = env.start_write();
+  auto dbi = txn.create_map("case2", mdbx::key_mode::usual, mdbx::value_mode::single);
+  txn.commit_embark_read();
+  auto cursor1 = txn.open_cursor(dbi);
+  auto cursor2 = txn.open_cursor(0);
+  cursor1.move(mdbx::cursor::next, false);
+  cursor2.move(mdbx::cursor::next, false);
+  txn.commit_embark_read();
+  cursor2.bind(txn, dbi);
+  cursor1.bind(txn, 0);
+  cursor1.move(mdbx::cursor::last, false);
+  cursor2.move(mdbx::cursor::last, false);
+
+  return ok;
+}
+
+//--------------------------------------------------------------------------------------------
+
 int doit() {
   mdbx::path db_filename = "test-cursor-closing";
   mdbx::env::remove(db_filename);
@@ -341,6 +362,7 @@ int doit() {
 
   bool ok = case0(env);
   ok = case1(env) && ok;
+  ok = case2(env) && ok;
 
   if (ok) {
     std::cout << "OK\n";
