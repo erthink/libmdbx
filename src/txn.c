@@ -9,9 +9,8 @@ __hot txnid_t txn_snapshot_oldest(const MDBX_txn *const txn) {
 
 void txn_done_cursors(MDBX_txn *txn) {
   tASSERT(txn, txn->flags & txn_may_have_cursors);
-  tASSERT(txn, txn->cursors[FREE_DBI] == nullptr);
 
-  TXN_FOREACH_DBI_FROM(txn, i, /* skip FREE_DBI */ 1) {
+  TXN_FOREACH_DBI_ALL(txn, i) {
     MDBX_cursor *cursor = txn->cursors[i];
     if (cursor) {
       txn->cursors[i] = nullptr;
