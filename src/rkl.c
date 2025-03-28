@@ -407,6 +407,7 @@ txnid_t rkl_turn(rkl_iter_t *iter, const bool reverse) {
     else
       return iter->rkl->list[pos - solid_len];
   }
+
   assert(pos < solid_len);
   return iter->rkl->solid_begin + pos;
 }
@@ -414,6 +415,161 @@ txnid_t rkl_turn(rkl_iter_t *iter, const bool reverse) {
 size_t rkl_left(rkl_iter_t *iter, const bool reverse) {
   assert(iter->pos <= rkl_len(iter->rkl));
   return reverse ? iter->pos : rkl_len(iter->rkl) - iter->pos;
+}
+
+#if 1
+#define DEBUG_HOLE(hole)                                                                                               \
+  do {                                                                                                                 \
+  } while (0)
+#else
+#define DEBUG_HOLE(hole)                                                                                               \
+  do {                                                                                                                 \
+    printf("  return-%sward: %d, ", reverse ? "back" : "for", __LINE__);                                               \
+    if (hole.begin == hole.end)                                                                                        \
+      printf("empty-hole\n");                                                                                          \
+    else if (hole.end - hole.begin == 1)                                                                               \
+      printf("hole %" PRIaTXN "\n", hole.begin);                                                                       \
+    else                                                                                                               \
+      printf("hole %" PRIaTXN "-%" PRIaTXN "\n", hole.begin, hole.end - 1);                                            \
+    fflush(nullptr);                                                                                                   \
+  } while (0)
+#endif
+
+rkl_hole_t rkl_hole(rkl_iter_t *iter, const bool reverse) {
+  assert((unsigned)reverse == (unsigned)!!reverse);
+  rkl_hole_t hole;
+  const size_t len = rkl_len(iter->rkl);
+  size_t pos = iter->pos;
+  if (unlikely(pos >= len)) {
+    if (len == 0) {
+      hole.begin = 1;
+      hole.end = MAX_TXNID;
+      iter->pos = 0;
+      DEBUG_HOLE(hole);
+      return hole;
+    } else if (pos == len && reverse) {
+      /* шаг назад из позиции на конце rkl */
+    } else if (reverse) {
+      hole.begin = 1;
+      hole.end = 1 /* rkl_lowest(iter->rkl); */;
+      iter->pos = 0;
+      DEBUG_HOLE(hole);
+      return hole;
+    } else {
+      hole.begin = MAX_TXNID /* rkl_highest(iter->rkl) + 1 */;
+      hole.end = MAX_TXNID;
+      iter->pos = len;
+      DEBUG_HOLE(hole);
+      return hole;
+    }
+  }
+
+  const size_t solid_len = iter->rkl->solid_end - iter->rkl->solid_begin;
+  if (iter->rkl->list_length) {
+    /* список элементов не пуст */
+    txnid_t here, there;
+    for (size_t next;; pos = next) {
+      next = reverse ? pos - 1 : pos + 1;
+      if (pos < iter->solid_offset) {
+        /* текущая позиция перед непрерывным интервалом */
+        here = iter->rkl->list[pos];
+        if (next == iter->solid_offset) {
+          /* в следующей позиции начинается непрерывный интерал (при поиске вперед) */
+          assert(!reverse);
+          hole.begin = here + 1;
+          hole.end = iter->rkl->solid_begin;
+          next += solid_len;
+          assert(hole.begin < hole.end /* зазор обязан быть, иначе это ошибка не-слияния */);
+          /* зазор между элементом списка перед сплошным интервалом и началом интервала */
+          iter->pos = next - 1;
+          DEBUG_HOLE(hole);
+          return hole;
+        }
+        if (next >= len)
+          /* уперлись в конец или начало rkl */
+          break;
+        /* следующая позиция также перед непрерывным интервалом */
+        there = iter->rkl->list[next];
+      } else if (pos >= iter->solid_offset + solid_len) {
+        /* текущая позиция после непрерывного интервала */
+        here = (pos < len) ? iter->rkl->list[pos - solid_len] : MAX_TXNID;
+        if (next >= len)
+          /* уперлись в конец или начало rkl */
+          break;
+        if (next == iter->solid_offset + solid_len - 1) {
+          /* в следующей позиции конец непрерывного интервала (при поиске назад) */
+          assert(reverse);
+          hole.begin = iter->rkl->solid_end;
+          hole.end = here;
+          pos = iter->solid_offset;
+          assert(hole.begin < hole.end /* зазор обязан быть, иначе это ошибка не-слияния */);
+          /* зазор между элементом списка после сплошного интервала и концом интервала */
+          iter->pos = pos;
+          DEBUG_HOLE(hole);
+          return hole;
+        }
+        /* следующая позиция также после непрерывного интервала */
+        there = iter->rkl->list[next - solid_len];
+      } else if (reverse) {
+        /* текущая позиция внутри непрерывного интервала и поиск назад */
+        next = iter->solid_offset - 1;
+        here = iter->rkl->solid_begin;
+        if (next >= len)
+          /* нет элементов списка перед непрерывным интервалом */
+          break;
+        /* предыдущая позиция перед непрерывным интервалом */
+        there = iter->rkl->list[next];
+      } else {
+        /* текущая позиция внутри непрерывного интервала и поиск вперед */
+        next = iter->solid_offset + solid_len;
+        here = iter->rkl->solid_end - 1;
+        if (next >= len)
+          /* нет элементов списка после непрерывного интервала */
+          break;
+        /* следующая позиция после непрерывного интервала */
+        there = iter->rkl->list[next - solid_len];
+      }
+
+      hole.begin = (reverse ? there : here) + 1;
+      hole.end = reverse ? here : there;
+      if (hole.begin < hole.end) {
+        /* есть зазор между текущей и следующей позицией */
+        iter->pos = next;
+        DEBUG_HOLE(hole);
+        return hole;
+      }
+    }
+
+    if (reverse) {
+      /* уперлись в начало rkl, возвращаем зазор перед началом rkl */
+      hole.begin = 1;
+      hole.end = here;
+      iter->pos = 0;
+      DEBUG_HOLE(hole);
+    } else {
+      /* уперлись в конец rkl, возвращаем зазор после конца rkl */
+      hole.begin = here + 1;
+      hole.end = MAX_TXNID;
+      iter->pos = len;
+      DEBUG_HOLE(hole);
+    }
+    return hole;
+  }
+
+  /* список элементов пуст, но есть непрерывный интервал */
+  iter->pos = reverse ? 0 : len;
+  if (reverse && pos < len) {
+    /* возвращаем зазор перед непрерывным интервалом */
+    hole.begin = 1;
+    hole.end = iter->rkl->solid_begin;
+    DEBUG_HOLE(hole);
+  } else {
+    /* возвращаем зазор после непрерывного интервала */
+    hole.begin = iter->rkl->solid_end;
+    hole.end = MAX_TXNID;
+    DEBUG_HOLE(hole);
+  }
+  return hole;
 }
 
 bool rkl_check(const rkl_t *rkl) {

@@ -68,3 +68,9 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __must_check_result static inline b
                                                                                                 txnid_t id) {
   return rkl_find(rkl, id, nullptr);
 }
+
+typedef struct MDBX_rkl_hole {
+  txnid_t begin;
+  txnid_t end;
+} rkl_hole_t;
+MDBX_MAYBE_UNUSED MDBX_INTERNAL __must_check_result rkl_hole_t rkl_hole(rkl_iter_t *iter, const bool reverse);
