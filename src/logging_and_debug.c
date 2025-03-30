@@ -58,10 +58,11 @@ __cold void debug_log(int level, const char *function, int line, const char *fmt
 
 __cold void log_error(const int err, const char *func, unsigned line) {
   assert(err != MDBX_SUCCESS);
-  if (unlikely(globals.loglevel >= MDBX_LOG_DEBUG) &&
-      (globals.loglevel >= MDBX_LOG_TRACE || !(err == MDBX_RESULT_TRUE || err == MDBX_NOTFOUND))) {
+  if (unlikely(globals.loglevel >= MDBX_LOG_DEBUG)) {
+    const bool is_error = err != MDBX_RESULT_TRUE && err != MDBX_NOTFOUND;
     char buf[256];
-    debug_log(MDBX_LOG_ERROR, func, line, "error %d (%s)\n", err, mdbx_strerror_r(err, buf, sizeof(buf)));
+    debug_log(is_error ? MDBX_LOG_ERROR : MDBX_LOG_VERBOSE, func, line, "%s %d (%s)\n",
+              is_error ? "error" : "condition", err, mdbx_strerror_r(err, buf, sizeof(buf)));
   }
 }
 

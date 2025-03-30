@@ -63,8 +63,8 @@ class trouble_location {
 #endif
 
 public:
-  MDBX_CXX11_CONSTEXPR trouble_location(unsigned line, const char *condition,
-                                   const char *function, const char *filename)
+  MDBX_CXX11_CONSTEXPR trouble_location(unsigned line, const char *condition, const char *function,
+                                        const char *filename)
       :
 #if TROUBLE_PROVIDE_LINENO
         line_(line)
@@ -133,7 +133,7 @@ public:
 
 //------------------------------------------------------------------------------
 
-__cold  std::string format_va(const char *fmt, va_list ap) {
+__cold std::string format_va(const char *fmt, va_list ap) {
   va_list ones;
   va_copy(ones, ap);
 #ifdef _MSC_VER
@@ -146,15 +146,14 @@ __cold  std::string format_va(const char *fmt, va_list ap) {
   result.reserve(size_t(needed + 1));
   result.resize(size_t(needed), '\0');
   assert(int(result.capacity()) > needed);
-  int actual = vsnprintf(const_cast<char *>(result.data()), result.capacity(),
-                         fmt, ones);
+  int actual = vsnprintf(const_cast<char *>(result.data()), result.capacity(), fmt, ones);
   assert(actual == needed);
   (void)actual;
   va_end(ones);
   return result;
 }
 
-__cold  std::string format(const char *fmt, ...) {
+__cold std::string format(const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   std::string result = format_va(fmt, ap);
@@ -175,17 +174,14 @@ public:
   virtual ~bug() noexcept;
 };
 
-__cold  bug::bug(const trouble_location &location) noexcept
-    : std::runtime_error(format("mdbx.bug: %s.%s at %s:%u", location.function(),
-                                location.condition(), location.filename(),
-                                location.line())),
+__cold bug::bug(const trouble_location &location) noexcept
+    : std::runtime_error(format("mdbx.bug: %s.%s at %s:%u", location.function(), location.condition(),
+                                location.filename(), location.line())),
       location_(location) {}
 
-__cold  bug::~bug() noexcept {}
+__cold bug::~bug() noexcept {}
 
-[[noreturn]] __cold  void raise_bug(const trouble_location &what_and_where) {
-  throw bug(what_and_where);
-}
+[[maybe_unused, noreturn]] __cold void raise_bug(const trouble_location &what_and_where) { throw bug(what_and_where); }
 
 #define RAISE_BUG(line, condition, function, file)                                                                     \
   do {                                                                                                                 \
@@ -193,6 +189,7 @@ __cold  bug::~bug() noexcept {}
     raise_bug(bug);                                                                                                    \
   } while (0)
 
+#undef ENSURE
 #define ENSURE(condition)                                                                                              \
   do                                                                                                                   \
     if (MDBX_UNLIKELY(!(condition)))                                                                                   \
@@ -376,7 +373,7 @@ __cold std::string error::message() const {
 __cold void error::throw_exception() const {
   switch (code()) {
   case MDBX_EINVAL:
-    throw std::invalid_argument("mdbx");
+    throw std::invalid_argument("MDBX_EINVAL");
   case MDBX_ENOMEM:
     throw std::bad_alloc();
   case MDBX_SUCCESS:
@@ -1165,11 +1162,31 @@ bool from_base64::is_erroneous() const noexcept {
 
 //------------------------------------------------------------------------------
 
-template class LIBMDBX_API_TYPE buffer<legacy_allocator>;
+#if defined(_MSC_VER)
+#pragma warning(push)
+/* warning C4251: 'mdbx::buffer<...>::silo_':
+ *   struct 'mdbx::buffer<..>::silo' needs to have dll-interface to be used by clients of class 'mdbx::buffer<...>'
+ *
+ * Microsoft не хочет признавать ошибки и пересматривать приятные решения, поэтому MSVC продолжает кошмарить
+ * и стращать разработчиков предупреждениями, тем самым перекладывая ответственность на их плечи.
+ *
+ * В данном случае предупреждение выдаётся из-за инстанцирования std::string::allocator_type::pointer и
+ * std::pmr::string::allocator_type::pointer внутри mdbx::buffer<..>::silo. А так как эти типы являются частью
+ * стандартной библиотеки C++ они всегда будут доступны и без необходимости их инстанцирования и экспорта из libmdbx.
+ *
+ * Поэтому нет других вариантов как заглушить это предупреждение и еще раз плюнуть в сторону microsoft. */
+#pragma warning(disable : 4251)
+#endif /* MSVC */
+
+MDBX_INSTALL_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<legacy_allocator>);
 
 #if defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L && _GLIBCXX_USE_CXX11_ABI
-template class LIBMDBX_API_TYPE buffer<polymorphic_allocator>;
+MDBX_INSTALL_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<polymorphic_allocator>);
 #endif /* __cpp_lib_memory_resource >= 201603L */
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif /* MSVC */
 
 //------------------------------------------------------------------------------
 
@@ -1586,15 +1603,6 @@ __cold bool txn::rename_map(const ::mdbx::slice &old_name, const ::mdbx::slice &
 
 __cold bool txn::rename_map(const ::std::string &old_name, const ::std::string &new_name, bool throw_if_absent) {
   return rename_map(::mdbx::slice(old_name), ::mdbx::slice(new_name), throw_if_absent);
-}
-
-//------------------------------------------------------------------------------
-
-void cursor_managed::close() {
-  if (MDBX_UNLIKELY(!handle_))
-    MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_EINVAL);
-  ::mdbx_cursor_close(handle_);
-  handle_ = nullptr;
 }
 
 //------------------------------------------------------------------------------

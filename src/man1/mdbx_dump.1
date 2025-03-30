@@ -12,6 +12,8 @@ mdbx_dump \- MDBX environment export tool
 [\c
 .BR \-q ]
 [\c
+.BR \-c ]
+[\c
 .BI \-f \ file\fR]
 [\c
 .BR \-l ]
@@ -40,6 +42,9 @@ Write the library version number to the standard output, and exit.
 .TP
 .BR \-q
 Be quiet.
+.TP
+.BR \-c
+Concise mode without repeating keys in a dump, but incompatible with Berkeley DB and LMDB.
 .TP
 .BR \-f \ file
 Write to the specified file instead of to the standard output.

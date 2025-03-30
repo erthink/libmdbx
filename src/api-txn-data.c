@@ -51,14 +51,14 @@ __cold int mdbx_dbi_dupsort_depthmask(const MDBX_txn *txn, MDBX_dbi dbi, uint32_
 }
 
 int mdbx_canary_get(const MDBX_txn *txn, MDBX_canary *canary) {
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(canary == nullptr))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_PARKED);
   if (unlikely(rc != MDBX_SUCCESS)) {
     memset(canary, 0, sizeof(*canary));
     return LOG_IFERR(rc);
   }
-
-  if (unlikely(canary == nullptr))
-    return LOG_IFERR(MDBX_EINVAL);
 
   *canary = txn->canary;
   return MDBX_SUCCESS;
@@ -68,12 +68,12 @@ int mdbx_get(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *d
   DKBUF_DEBUG;
   DEBUG("===> get db %u key [%s]", dbi, DKEY_DEBUG(key));
 
+  if (unlikely(!key || !data))
+    return LOG_IFERR(MDBX_EINVAL);
+
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
-
-  if (unlikely(!key || !data))
-    return LOG_IFERR(MDBX_EINVAL);
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, dbi);
@@ -84,15 +84,12 @@ int mdbx_get(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *d
 }
 
 int mdbx_get_equal_or_great(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data) {
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
-
   if (unlikely(!key || !data))
     return LOG_IFERR(MDBX_EINVAL);
 
-  if (unlikely(txn->flags & MDBX_TXN_BLOCKED))
-    return LOG_IFERR(MDBX_BAD_TXN);
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, dbi);
@@ -106,12 +103,12 @@ int mdbx_get_ex(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data
   DKBUF_DEBUG;
   DEBUG("===> get db %u key [%s]", dbi, DKEY_DEBUG(key));
 
+  if (unlikely(!key || !data))
+    return LOG_IFERR(MDBX_EINVAL);
+
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
-
-  if (unlikely(!key || !data))
-    return LOG_IFERR(MDBX_EINVAL);
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, dbi);
@@ -179,7 +176,7 @@ int mdbx_canary_put(MDBX_txn *txn, const MDBX_canary *canary) {
  * расположен в той-же странице памяти, в том числе для многостраничных
  * P_LARGE страниц с длинными данными. */
 int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_PARKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
@@ -215,18 +212,15 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
 }
 
 int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, const MDBX_val *data) {
-  int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
-
   if (unlikely(!key))
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(dbi <= FREE_DBI))
     return LOG_IFERR(MDBX_BAD_DBI);
 
-  if (unlikely(txn->flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
-    return LOG_IFERR((txn->flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN);
+  int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, dbi);
@@ -254,10 +248,6 @@ int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, const MDBX_val *d
 }
 
 int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data, MDBX_put_flags_t flags) {
-  int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
-
   if (unlikely(!key || !data))
     return LOG_IFERR(MDBX_EINVAL);
 
@@ -268,13 +258,27 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data, M
                          MDBX_APPENDDUP | MDBX_CURRENT | MDBX_MULTIPLE)))
     return LOG_IFERR(MDBX_EINVAL);
 
-  if (unlikely(txn->flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
-    return LOG_IFERR((txn->flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN);
+  int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
+
+  if (unlikely(flags & MDBX_MULTIPLE)) {
+    rc = cursor_check_multiple(&cx.outer, key, data, flags);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
+  }
+
+  if (flags & MDBX_RESERVE) {
+    if (unlikely(cx.outer.tree->flags & (MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_INTEGERDUP | MDBX_DUPFIXED)))
+      return LOG_IFERR(MDBX_INCOMPATIBLE);
+    data->iov_base = nullptr;
+  }
+
   cx.outer.next = txn->cursors[dbi];
   txn->cursors[dbi] = &cx.outer;
 
@@ -330,10 +334,6 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data, M
 
 int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *new_data, MDBX_val *old_data,
                     MDBX_put_flags_t flags, MDBX_preserve_func preserver, void *preserver_context) {
-  int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
-
   if (unlikely(!key || !old_data || old_data == new_data))
     return LOG_IFERR(MDBX_EINVAL);
 
@@ -349,6 +349,10 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *
   if (unlikely(flags & ~(MDBX_NOOVERWRITE | MDBX_NODUPDATA | MDBX_ALLDUPS | MDBX_RESERVE | MDBX_APPEND |
                          MDBX_APPENDDUP | MDBX_CURRENT)))
     return LOG_IFERR(MDBX_EINVAL);
+
+  int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, dbi);
@@ -407,7 +411,7 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *
       }
 
       if (is_modifable(txn, page)) {
-        if (new_data && cmp_lenfast(&present_data, new_data) == 0) {
+        if (new_data && eq_fast(&present_data, new_data)) {
           /* если данные совпадают, то ничего делать не надо */
           *old_data = *new_data;
           goto bailout;

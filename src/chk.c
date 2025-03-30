@@ -159,6 +159,19 @@ __cold static MDBX_chk_line_t *MDBX_PRINTF_ARGS(2, 3) chk_print(MDBX_chk_line_t 
   return line;
 }
 
+__cold MDBX_MAYBE_UNUSED static void chk_println_va(MDBX_chk_scope_t *const scope, enum MDBX_chk_severity severity,
+                                                    const char *fmt, va_list args) {
+  chk_line_end(chk_print_va(chk_line_begin(scope, severity), fmt, args));
+}
+
+__cold MDBX_MAYBE_UNUSED static void chk_println(MDBX_chk_scope_t *const scope, enum MDBX_chk_severity severity,
+                                                 const char *fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  chk_println_va(scope, severity, fmt, args);
+  va_end(args);
+}
+
 __cold static MDBX_chk_line_t *chk_print_size(MDBX_chk_line_t *line, const char *prefix, const uint64_t value,
                                               const char *suffix) {
   static const char sf[] = "KMGTPEZY"; /* LY: Kilo, Mega, Giga, Tera, Peta, Exa, Zetta, Yotta! */
@@ -455,9 +468,8 @@ __cold static void chk_dispose(MDBX_chk_internal_t *chk) {
         chk->cb->table_dispose(chk->usr, tbl);
         tbl->cookie = nullptr;
       }
-      if (tbl != &chk->table_gc && tbl != &chk->table_main) {
+      if (tbl != &chk->table_gc && tbl != &chk->table_main)
         osal_free(tbl);
-      }
     }
   }
   osal_free(chk->v2a_buf.iov_base);
@@ -1127,6 +1139,7 @@ __cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi, MDBX_chk_t
   const size_t maxkeysize = mdbx_env_get_maxkeysize_ex(env, tbl->flags);
   MDBX_val prev_key = {nullptr, 0}, prev_data = {nullptr, 0};
   MDBX_val key, data;
+  size_t dups_count = 0;
   err = mdbx_cursor_get(cursor, &key, &data, MDBX_FIRST);
   while (err == MDBX_SUCCESS) {
     err = chk_check_break(scope);
@@ -1150,6 +1163,12 @@ __cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi, MDBX_chk_t
     }
 
     if (prev_key.iov_base) {
+      if (key.iov_base == prev_key.iov_base)
+        dups_count += 1;
+      else {
+        histogram_acc(dups_count, &tbl->histogram.multival);
+        dups_count = 0;
+      }
       if (prev_data.iov_base && !bad_data && (tbl->flags & MDBX_DUPFIXED) && prev_data.iov_len != data.iov_len) {
         chk_object_issue(scope, "entry", record_count, "different data length", "%" PRIuPTR " != %" PRIuPTR,
                          prev_data.iov_len, data.iov_len);
@@ -1236,17 +1255,27 @@ __cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi, MDBX_chk_t
     err = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT);
   }
 
+  if (prev_key.iov_base)
+    histogram_acc(dups_count, &tbl->histogram.multival);
+
   err = (err != MDBX_NOTFOUND) ? chk_error_rc(scope, err, "mdbx_cursor_get") : MDBX_SUCCESS;
   if (err == MDBX_SUCCESS && record_count != db->items)
     chk_scope_issue(scope, "different number of entries %" PRIuSIZE " != %" PRIu64, record_count, db->items);
 bailout:
   if (cursor) {
     if (handler) {
-      if (tbl->histogram.key_len.count) {
+      if (record_count) {
         MDBX_chk_line_t *line = chk_line_begin(scope, MDBX_chk_info);
         line = histogram_dist(line, &tbl->histogram.key_len, "key length density", "0/1", false);
         chk_line_feed(line);
         line = histogram_dist(line, &tbl->histogram.val_len, "value length density", "0/1", false);
+        if (tbl->histogram.multival.amount) {
+          chk_line_feed(line);
+          line = histogram_dist(line, &tbl->histogram.multival, "number of multi-values density", "single", false);
+          chk_line_feed(line);
+          line = chk_print(line, "number of keys %" PRIuSIZE ", average values per key %.1f",
+                           tbl->histogram.multival.count, record_count / (double)tbl->histogram.multival.count);
+        }
         chk_line_end(line);
       }
       if (scope->stage == MDBX_chk_maindb)

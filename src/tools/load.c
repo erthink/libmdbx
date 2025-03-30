@@ -380,7 +380,16 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
       return badend();
     }
   }
-  if (fgets(buf->iov_base, (int)buf->iov_len, stdin) == nullptr)
+
+  /* modern concise mode, where space in second position mean the same (previously) value */
+  c = fgetc(stdin);
+  if (c == EOF)
+    return errno ? errno : EOF;
+  if (c == ' ')
+    return (ungetc(c, stdin) == c) ? MDBX_SUCCESS : (errno ? errno : EOF);
+
+  *(char *)buf->iov_base = c;
+  if (fgets((char *)buf->iov_base + 1, (int)buf->iov_len - 1, stdin) == nullptr)
     return errno ? errno : EOF;
   lineno++;
 
@@ -721,8 +730,8 @@ int main(int argc, char *argv[]) {
     }
 
     int batch = 0;
+    MDBX_val key = {.iov_base = nullptr, .iov_len = 0}, data = {.iov_base = nullptr, .iov_len = 0};
     while (err == MDBX_SUCCESS) {
-      MDBX_val key, data;
       err = readline(&key, &kbuf);
       if (err == EOF)
         break;

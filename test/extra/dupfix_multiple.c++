@@ -2,17 +2,28 @@
 /// \copyright SPDX-License-Identifier: Apache-2.0
 
 #include "mdbx.h++"
-#include <array>
+#include <chrono>
 #include <iostream>
 
-int doit() {
-  mdbx::path db_filename = "test-dupfix-multiple";
-  mdbx::env_managed::remove(db_filename);
-  mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(), mdbx::env::operate_parameters());
+#if defined(ENABLE_MEMCHECK) || defined(MDBX_CI)
+#if MDBX_DEBUG || !defined(NDEBUG)
+#define RELIEF_FACTOR 16
+#else
+#define RELIEF_FACTOR 8
+#endif
+#elif MDBX_DEBUG || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
+#define RELIEF_FACTOR 4
+#elif UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
+#define RELIEF_FACTOR 2
+#else
+#define RELIEF_FACTOR 1
+#endif
 
-  using buffer = mdbx::buffer<mdbx::default_allocator, mdbx::default_capacity_policy>;
+using buffer = mdbx::default_buffer;
+
+bool case1_ordering(mdbx::env env) {
   auto txn = env.start_write();
-  auto map = txn.create_map(nullptr, mdbx::key_mode::ordinal, mdbx::value_mode::multi_ordinal);
+  auto map = txn.create_map("case1", mdbx::key_mode::ordinal, mdbx::value_mode::multi_ordinal);
 
   txn.insert(map, buffer::key_from_u64(21), buffer::key_from_u64(18));
   txn.insert(map, buffer::key_from_u64(7), buffer::key_from_u64(19));
@@ -30,10 +41,9 @@ int doit() {
       cursor.to_next().value.as_uint64() != 17 || cursor.to_next().value.as_uint64() != 16 ||
       cursor.to_next().value.as_uint64() != 15 || cursor.to_next().value.as_uint64() != 14 ||
       cursor.to_next().value.as_uint64() != 13 || cursor.to_next().value.as_uint64() != 12 ||
-      cursor.to_next(false).done || !cursor.eof()) {
-    std::cerr << "Fail\n";
-    return EXIT_FAILURE;
-  }
+      cursor.to_next(false).done || !cursor.eof())
+    return false;
+
   txn.abort();
 
   const uint64_t array[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 42, 17, 99, 0, 33, 333};
@@ -87,10 +97,9 @@ int doit() {
       /* key = 24 */ cursor.to_next().value.as_uint64() != 15 ||
       /* key = 25 */ cursor.to_next().value.as_uint64() != 14 ||
       /* key = 26 */ cursor.to_next().value.as_uint64() != 13 ||
-      /* key = 27 */ cursor.to_next().value.as_uint64() != 12 || cursor.to_next(false).done || !cursor.eof()) {
-    std::cerr << "Fail\n";
-    return EXIT_FAILURE;
-  }
+      /* key = 27 */ cursor.to_next().value.as_uint64() != 12 || cursor.to_next(false).done || !cursor.eof())
+    return false;
+
   txn.abort();
 
   txn = env.start_write();
@@ -163,40 +172,24 @@ int doit() {
       cursor.to_next().value.as_uint64() != 0 || cursor.to_next().value.as_uint64() != 33 ||
       cursor.to_next().value.as_uint64() != 333 ||
 
-      cursor.to_next(false).done || !cursor.eof()) {
-    std::cerr << "Fail\n";
-    return EXIT_FAILURE;
-  }
+      cursor.to_next(false).done || !cursor.eof())
+    return false;
+
   txn.abort();
-
-  //----------------------------------------------------------------------------
-
-  // let dir = tempdir().unwrap();
-  // let db = Database::open(&dir).unwrap();
-
-  // let txn = db.begin_rw_txn().unwrap();
-  // let table = txn
-  //     .create_table(None, TableFlags::DUP_SORT | TableFlags::DUP_FIXED)
-  //     .unwrap();
-  // for (k, v) in [
-  //     (b"key1", b"val1"),
-  //     (b"key1", b"val2"),
-  //     (b"key1", b"val3"),
-  //     (b"key2", b"val1"),
-  //     (b"key2", b"val2"),
-  //     (b"key2", b"val3"),
-  // ] {
-  //     txn.put(&table, k, v, WriteFlags::empty()).unwrap();
-  // }
-
-  // let mut cursor = txn.cursor(&table).unwrap();
-  // assert_eq!(cursor.first().unwrap(), Some((*b"key1", *b"val1")));
-  // assert_eq!(cursor.get_multiple().unwrap(), Some(*b"val1val2val3"));
-  // assert_eq!(cursor.next_multiple::<(), ()>().unwrap(), None);
 
   txn = env.start_write();
   txn.clear_map(map);
-  map = txn.create_map(nullptr, mdbx::key_mode::usual, mdbx::value_mode::multi_samelength);
+  txn.commit();
+
+  return true;
+}
+
+//--------------------------------------------------------------------------------------------
+
+bool case2_batch_read(mdbx::env env) {
+
+  auto txn = env.start_write();
+  auto map = txn.create_map("case2", mdbx::key_mode::usual, mdbx::value_mode::multi_samelength);
   txn.upsert(map, mdbx::slice("key1"), mdbx::slice("val1"));
   txn.upsert(map, mdbx::pair("key1", "val2"));
   txn.upsert(map, mdbx::pair("key1", "val3"));
@@ -205,36 +198,110 @@ int doit() {
   txn.upsert(map, mdbx::pair("key2", "val3"));
 
   // cursor.close();
-  cursor = txn.open_cursor(map);
+  auto cursor = txn.open_cursor(map);
   const auto t1 = cursor.to_first();
   if (!t1 || t1.key != "key1" || t1.value != "val1") {
     std::cerr << "Fail-t1\n";
-    return EXIT_FAILURE;
+    return false;
   }
   const auto t2 = cursor.get_multiple_samelength();
   if (!t2 || t2.key != "key1" || t2.value != "val1val2val3") {
     std::cerr << "Fail-t2\n";
-    return EXIT_FAILURE;
+    return false;
   }
-  // const auto t3 = cursor.get_multiple_samelength("key2");
-  // if (!t3 || t3.key != "key2" || t3.value != "val1val2val3") {
-  //   std::cerr << "Fail-t3\n";
-  //   return EXIT_FAILURE;
-  // }
-  const auto t4 = cursor.next_multiple_samelength();
-  if (t4) {
+  const auto t3 = cursor.next_multiple_samelength();
+  if (t3) {
+    std::cerr << "Fail-t3\n";
+    return false;
+  }
+  const auto t4 = cursor.seek_multiple_samelength("key2");
+  if (!t4 || t4.key != "key2" || t4.value != "val1val2val3") {
     std::cerr << "Fail-t4\n";
-    return EXIT_FAILURE;
+    return false;
   }
 
-  std::cout << "OK\n";
-  return EXIT_SUCCESS;
+  txn.clear_map(map);
+  txn.commit();
+
+  return true;
+}
+
+//--------------------------------------------------------------------------------------------
+
+size_t salt;
+
+static size_t prng() {
+  salt = salt * 134775813 + 1;
+  return salt ^ ((salt >> 11) * 1822226723);
+}
+
+static inline size_t prng(size_t range) { return prng() % range; }
+
+static mdbx::default_buffer_pair prng_kv(size_t n, size_t space) {
+  space = (space + !space) * 1024 * 32 / RELIEF_FACTOR;
+  const size_t w = (n ^ 1455614549) * 1664525 + 1013904223;
+  const size_t k = (prng(42 + w % space) ^ 1725278851) * 433750991;
+  const size_t v = prng();
+  return mdbx::default_buffer_pair(mdbx::slice::wrap(k), mdbx::slice::wrap(v));
+}
+
+bool case3_put_a_lot(mdbx::env env) {
+  salt = size_t(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+  auto txn = env.start_write();
+  auto map = txn.create_map("case3", mdbx::key_mode::ordinal, mdbx::value_mode::multi_ordinal);
+  for (size_t n = 0; n < 5555555 / RELIEF_FACTOR; ++n)
+    txn.upsert(map, prng_kv(n, 1));
+  txn.commit();
+
+  for (size_t t = 0; t < 555 / RELIEF_FACTOR; ++t) {
+    txn = env.start_write();
+    auto cursor = txn.open_cursor(map);
+    for (size_t n = 0; n < 111; ++n) {
+      auto v = std::vector<size_t>();
+      const auto r = 1 + prng(3);
+      if (r & 1) {
+        const auto k = prng_kv(n + t, 2).key;
+        for (size_t i = prng(42 + prng(111) * prng(111 / RELIEF_FACTOR)); i > 0; --i)
+          v.push_back(prng());
+        txn.put_multiple_samelength(map, k, v, mdbx::upsert);
+      }
+      if (r & 2) {
+        const auto k = prng_kv(n + t, 2).key;
+        if (cursor.seek(k)) {
+          v.clear();
+          for (size_t i = prng(42 + prng(111) * prng(111 / RELIEF_FACTOR)); i > 0; --i)
+            v.push_back(prng());
+          cursor.put_multiple_samelength(k, v, mdbx::upsert);
+        }
+      }
+    }
+    txn.commit();
+  }
+
+  return true;
+}
+
+int doit() {
+  mdbx::path db_filename = "test-dupfix-multiple";
+  mdbx::env_managed::remove(db_filename);
+  mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(), mdbx::env::operate_parameters(3));
+
+  bool ok = case1_ordering(env);
+  ok = case2_batch_read(env) && ok;
+  ok = case3_put_a_lot(env) && ok;
+
+  if (ok) {
+    std::cout << "OK\n";
+    return EXIT_SUCCESS;
+  } else {
+    std::cerr << "Fail\n";
+    return EXIT_FAILURE;
+  }
 }
 
 int main(int argc, const char *argv[]) {
   (void)argc;
   (void)argv;
-
   try {
     return doit();
   } catch (const std::exception &ex) {

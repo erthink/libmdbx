@@ -313,12 +313,12 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option, b
     return true;
   }
 
-  if (strcasecmp(value_cstr, "yes") == 0 || strcasecmp(value_cstr, "1") == 0) {
+  if (strcasecmp(value_cstr, "yes") == 0 || strcasecmp(value_cstr, "1") == 0 || strcasecmp(value_cstr, "on") == 0) {
     value = true;
     return true;
   }
 
-  if (strcasecmp(value_cstr, "no") == 0 || strcasecmp(value_cstr, "0") == 0) {
+  if (strcasecmp(value_cstr, "no") == 0 || strcasecmp(value_cstr, "0") == 0 || strcasecmp(value_cstr, "off") == 0) {
     value = false;
     return true;
   }
@@ -342,6 +342,7 @@ const struct option_verb mode_bits[] = {{"rdonly", unsigned(MDBX_RDONLY)},
                                         {"perturb", unsigned(MDBX_PAGEPERTURB)},
                                         {"accede", unsigned(MDBX_ACCEDE)},
                                         {"exclusive", unsigned(MDBX_EXCLUSIVE)},
+                                        {"validation", unsigned(MDBX_VALIDATION)},
                                         {nullptr, 0}};
 
 const struct option_verb table_bits[] = {{"key.reverse", unsigned(MDBX_REVERSEKEY)},

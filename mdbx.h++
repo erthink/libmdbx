@@ -107,6 +107,16 @@
 #include <span>
 #endif
 
+#if !defined(_MSC_VER) || defined(__clang__)
+/* adequate compilers */
+#define MDBX_EXTERN_API_TEMPLATE(API_ATTRIBUTES, API_TYPENAME) extern template class API_ATTRIBUTES API_TYPENAME
+#define MDBX_INSTALL_API_TEMPLATE(API_ATTRIBUTES, API_TYPENAME) template class API_TYPENAME
+#else
+/* stupid microsoft showing off */
+#define MDBX_EXTERN_API_TEMPLATE(API_ATTRIBUTES, API_TYPENAME) extern template class API_TYPENAME
+#define MDBX_INSTALL_API_TEMPLATE(API_ATTRIBUTES, API_TYPENAME) template class API_ATTRIBUTES API_TYPENAME
+#endif
+
 #if __cplusplus >= 201103L
 #include <chrono>
 #include <ratio>
@@ -148,8 +158,7 @@
 #endif
 #endif /* Byte Order */
 
-/** Workaround for old compilers without properly support for `C++17 constexpr`.
- */
+/** Workaround for old compilers without properly support for `C++17 constexpr` */
 #if defined(DOXYGEN)
 #define MDBX_CXX17_CONSTEXPR constexpr
 #elif defined(__cpp_constexpr) && __cpp_constexpr >= 201603L &&                                                        \
@@ -160,8 +169,7 @@
 #define MDBX_CXX17_CONSTEXPR inline
 #endif /* MDBX_CXX17_CONSTEXPR */
 
-/** Workaround for old compilers without properly support for C++20 `constexpr`.
- */
+/** Workaround for old compilers without properly support for C++20 `constexpr`. */
 #if defined(DOXYGEN)
 #define MDBX_CXX20_CONSTEXPR constexpr
 #elif defined(__cpp_lib_is_constant_evaluated) && __cpp_lib_is_constant_evaluated >= 201811L &&                        \
@@ -185,8 +193,7 @@
 #define MDBX_CXX20_CONSTEXPR_ENUM inline
 #endif /* CONSTEXPR_ENUM_FLAGS_OPERATIONS */
 
-/** Workaround for old compilers without support assertion inside `constexpr`
- * functions. */
+/** Workaround for old compilers without support assertion inside `constexpr` functions. */
 #if defined(CONSTEXPR_ASSERT)
 #define MDBX_CONSTEXPR_ASSERT(expr) CONSTEXPR_ASSERT(expr)
 #elif defined NDEBUG
@@ -211,8 +218,7 @@
 #endif
 #endif /* MDBX_UNLIKELY */
 
-/** Workaround for old compilers without properly support for C++20 `if
- * constexpr`. */
+/** Workaround for old compilers without properly support for C++20 `if constexpr`. */
 #if defined(DOXYGEN)
 #define MDBX_IF_CONSTEXPR constexpr
 #elif defined(__cpp_if_constexpr) && __cpp_if_constexpr >= 201606L
@@ -243,7 +249,7 @@
 #endif /* MDBX_CXX20_UNLIKELY */
 
 #ifndef MDBX_HAVE_CXX20_CONCEPTS
-#if defined(__cpp_lib_concepts) && __cpp_lib_concepts >= 202002L
+#if defined(__cpp_concepts) && __cpp_concepts >= 202002L && defined(__cpp_lib_concepts) && __cpp_lib_concepts >= 202002L
 #include <concepts>
 #define MDBX_HAVE_CXX20_CONCEPTS 1
 #elif defined(DOXYGEN)
@@ -388,8 +394,7 @@ namespace filesystem = ::std::experimental::filesystem;
 namespace filesystem = ::std::filesystem;
 /// \brief Defined if `mdbx::filesystem::path` is available.
 /// \details If defined, it is always `mdbx::filesystem::path`,
-/// which in turn can be refs to `std::filesystem::path`
-/// or `std::experimental::filesystem::path`.
+/// which in turn can be refs to `std::filesystem::path` or `std::experimental::filesystem::path`.
 /// Nonetheless `MDBX_STD_FILESYSTEM_PATH` not defined if the `::mdbx::path`
 /// is fallbacked to c `std::string` or `std::wstring`.
 #define MDBX_STD_FILESYSTEM_PATH ::mdbx::filesystem::path
@@ -489,9 +494,7 @@ public:
   static inline void success_or_panic(int error_code, const char *context_where, const char *func_who) noexcept;
 };
 
-/// \brief Base class for all libmdbx's exceptions that are corresponds
-/// to libmdbx errors.
-///
+/// \brief Base class for all libmdbx's exceptions that are corresponds to libmdbx errors.
 /// \see MDBX_error_t
 class LIBMDBX_API_TYPE exception : public ::std::runtime_error {
   using base = ::std::runtime_error;
@@ -507,8 +510,7 @@ public:
   const ::mdbx::error error() const noexcept { return error_; }
 };
 
-/// \brief Fatal exception that lead termination anyway
-/// in dangerous unrecoverable cases.
+/// \brief Fatal exception that lead termination anyway in dangerous unrecoverable cases.
 class LIBMDBX_API_TYPE fatal : public exception {
   using base = exception;
 
@@ -644,8 +646,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \brief Create an empty slice.
   MDBX_CXX11_CONSTEXPR slice() noexcept;
 
-  /// \brief Create a slice that refers to [0,bytes-1] of memory bytes pointed
-  /// by ptr.
+  /// \brief Create a slice that refers to [0,bytes-1] of memory bytes pointed by ptr.
   MDBX_CXX14_CONSTEXPR slice(const void *ptr, size_t bytes);
 
   /// \brief Create a slice that refers to [begin,end] of memory bytes.
@@ -1000,8 +1001,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \brief Checks the slice is not refers to null address or has zero length.
   MDBX_CXX11_CONSTEXPR bool is_valid() const noexcept { return !(iov_base == nullptr && iov_len != 0); }
 
-  /// \brief Build an invalid slice which non-zero length and refers to null
-  /// address.
+  /// \brief Build an invalid slice which non-zero length and refers to null address.
   MDBX_CXX14_CONSTEXPR static slice invalid() noexcept { return slice(size_t(-1)); }
 
   template <typename POD> MDBX_CXX14_CONSTEXPR POD as_pod() const {
@@ -1162,7 +1162,12 @@ template <typename T, typename A> struct swap_alloc<T, A, true> {
 } // namespace allocation_aware_details
 
 struct default_capacity_policy {
-  enum : size_t { extra_inplace_storage = 0, pettiness_threshold = 64, max_reserve = 65536 };
+  enum : size_t {
+    extra_inplace_storage = 0,
+    inplace_storage_size_rounding = 16,
+    pettiness_threshold = 64,
+    max_reserve = 65536
+  };
 
   static MDBX_CXX11_CONSTEXPR size_t round(const size_t value) {
     static_assert((pettiness_threshold & (pettiness_threshold - 1)) == 0, "pettiness_threshold must be a power of 2");
@@ -1224,8 +1229,7 @@ struct LIBMDBX_API to_hex {
   char *write_bytes(char *dest, size_t dest_size) const;
 
   /// \brief Output hexadecimal dump of passed slice to the std::ostream.
-  /// \throws std::ios_base::failure corresponding to std::ostream::write()
-  /// behaviour.
+  /// \throws std::ios_base::failure corresponding to std::ostream::write() behaviour.
   ::std::ostream &output(::std::ostream &out) const;
 
   /// \brief Checks whether a passed slice is empty,
@@ -1268,23 +1272,18 @@ struct LIBMDBX_API to_base58 {
     return wrap_width ? bytes + bytes / wrap_width : bytes;
   }
 
-  /// \brief Fills the buffer by [Base58](https://en.wikipedia.org/wiki/Base58)
-  /// dump of passed slice.
+  /// \brief Fills the buffer by [Base58](https://en.wikipedia.org/wiki/Base58) dump of passed slice.
   /// \throws std::length_error if given buffer is too small.
   char *write_bytes(char *dest, size_t dest_size) const;
 
-  /// \brief Output [Base58](https://en.wikipedia.org/wiki/Base58)
-  /// dump of passed slice to the std::ostream.
-  /// \throws std::ios_base::failure corresponding to std::ostream::write()
-  /// behaviour.
+  /// \brief Output [Base58](https://en.wikipedia.org/wiki/Base58) dump of passed slice to the std::ostream.
+  /// \throws std::ios_base::failure corresponding to std::ostream::write() behaviour.
   ::std::ostream &output(::std::ostream &out) const;
 
-  /// \brief Checks whether a passed slice is empty,
-  /// and therefore there will be no output bytes.
+  /// \brief Checks whether a passed slice is empty, and therefore there will be no output bytes.
   bool is_empty() const noexcept { return source.empty(); }
 
-  /// \brief Checks whether the content of a passed slice is a valid data
-  /// and could be encoded or unexpectedly not.
+  /// \brief Checks whether the content of a passed slice is a valid data and could be encoded or unexpectedly not.
   bool is_erroneous() const noexcept { return false; }
 };
 
@@ -1326,8 +1325,7 @@ struct LIBMDBX_API to_base64 {
 
   /// \brief Output [Base64](https://en.wikipedia.org/wiki/Base64)
   /// dump of passed slice to the std::ostream.
-  /// \throws std::ios_base::failure corresponding to std::ostream::write()
-  /// behaviour.
+  /// \throws std::ios_base::failure corresponding to std::ostream::write() behaviour.
   ::std::ostream &output(::std::ostream &out) const;
 
   /// \brief Checks whether a passed slice is empty,
@@ -1368,13 +1366,11 @@ struct LIBMDBX_API from_hex {
   /// hexadecimal dump from a passed slice to decoded data.
   MDBX_CXX11_CONSTEXPR size_t envisage_result_length() const noexcept { return source.length() >> 1; }
 
-  /// \brief Fills the destination with data decoded from hexadecimal dump
-  /// from a passed slice.
+  /// \brief Fills the destination with data decoded from hexadecimal dump from a passed slice.
   /// \throws std::length_error if given buffer is too small.
   char *write_bytes(char *dest, size_t dest_size) const;
 
-  /// \brief Checks whether a passed slice is empty,
-  /// and therefore there will be no output bytes.
+  /// \brief Checks whether a passed slice is empty, and therefore there will be no output bytes.
   bool is_empty() const noexcept { return source.empty(); }
 
   /// \brief Checks whether the content of a passed slice is a valid hexadecimal
@@ -1407,8 +1403,7 @@ struct LIBMDBX_API from_base58 {
   }
 
   /// \brief Returns the number of bytes needed for conversion
-  /// [Base58](https://en.wikipedia.org/wiki/Base58) dump from a passed slice to
-  /// decoded data.
+  /// [Base58](https://en.wikipedia.org/wiki/Base58) dump from a passed slice to decoded data.
   MDBX_CXX11_CONSTEXPR size_t envisage_result_length() const noexcept {
     return source.length() /* могут быть все нули кодируемые один-к-одному */;
   }
@@ -1418,13 +1413,11 @@ struct LIBMDBX_API from_base58 {
   /// \throws std::length_error if given buffer is too small.
   char *write_bytes(char *dest, size_t dest_size) const;
 
-  /// \brief Checks whether a passed slice is empty,
-  /// and therefore there will be no output bytes.
+  /// \brief Checks whether a passed slice is empty, and therefore there will be no output bytes.
   bool is_empty() const noexcept { return source.empty(); }
 
   /// \brief Checks whether the content of a passed slice is a valid
-  /// [Base58](https://en.wikipedia.org/wiki/Base58) dump, and therefore there
-  /// could be decoded or not.
+  /// [Base58](https://en.wikipedia.org/wiki/Base58) dump, and therefore there could be decoded or not.
   bool is_erroneous() const noexcept;
 };
 
@@ -1453,8 +1446,7 @@ struct LIBMDBX_API from_base64 {
   }
 
   /// \brief Returns the number of bytes needed for conversion
-  /// [Base64](https://en.wikipedia.org/wiki/Base64) dump from a passed slice to
-  /// decoded data.
+  /// [Base64](https://en.wikipedia.org/wiki/Base64) dump from a passed slice to decoded data.
   MDBX_CXX11_CONSTEXPR size_t envisage_result_length() const noexcept { return (source.length() + 3) / 4 * 3; }
 
   /// \brief Fills the destination with data decoded from
@@ -1486,13 +1478,16 @@ public:
     max_length = MDBX_MAXDATASIZE,
     max_capacity = (max_length / 3u * 4u + 1023u) & ~size_t(1023),
     extra_inplace_storage = reservation_policy::extra_inplace_storage,
+    inplace_storage_size_rounding =
+        (alignof(max_align_t) * 2 > size_t(reservation_policy::inplace_storage_size_rounding))
+            ? alignof(max_align_t) * 2
+            : size_t(reservation_policy::inplace_storage_size_rounding),
     pettiness_threshold = reservation_policy::pettiness_threshold
   };
 
 private:
   friend class txn;
-  struct silo;
-  using swap_alloc = allocation_aware_details::swap_alloc<silo, allocator_type>;
+  using swap_alloc = allocation_aware_details::swap_alloc<struct silo, allocator_type>;
   struct silo /* Empty Base Class Optimization */ : public allocator_type {
     MDBX_CXX20_CONSTEXPR const allocator_type &get_allocator() const noexcept { return *this; }
     MDBX_CXX20_CONSTEXPR allocator_type &get_allocator() noexcept { return *this; }
@@ -1529,41 +1524,51 @@ private:
 #endif /* __cpp_lib_to_address */
     }
 
-    union bin {
-      struct allocated {
+    union alignas(max_align_t) bin {
+      struct stub_allocated_holder /* используется только для вычисления (минимального необходимого) размера,
+                                      с учетом выравнивания */
+      {
         allocator_pointer ptr_;
-        size_t capacity_bytes_;
-        constexpr allocated(allocator_pointer ptr, size_t bytes) noexcept : ptr_(ptr), capacity_bytes_(bytes) {}
-        constexpr allocated(const allocated &) noexcept = default;
-        constexpr allocated(allocated &&) noexcept = default;
-        MDBX_CXX17_CONSTEXPR allocated &operator=(const allocated &) noexcept = default;
-        MDBX_CXX17_CONSTEXPR allocated &operator=(allocated &&) noexcept = default;
+        size_t stub_capacity_bytes_;
       };
 
-      allocated allocated_;
-      uint64_t align_hint_;
-      byte inplace_[(sizeof(allocated) + extra_inplace_storage + 7u) & ~size_t(7)];
-
-      static constexpr bool is_suitable_for_inplace(size_t capacity_bytes) noexcept {
-        static_assert(sizeof(bin) == sizeof(inplace_), "WTF?");
-        return capacity_bytes < sizeof(bin);
-      }
-
-      enum : byte { lastbyte_inplace_signature = byte(~byte(0)) };
+      enum : byte { lastbyte_poison = 0, lastbyte_inplace_signature = byte(~byte(lastbyte_poison)) };
       enum : size_t {
         inplace_signature_limit = size_t(lastbyte_inplace_signature)
-                                  << (sizeof(size_t /* allocated::capacity_bytes_ */) - 1) * CHAR_BIT
+                                  << (sizeof(size_t /* allocated::capacity_bytes_ */) - 1) * CHAR_BIT,
+        inplace_size_rounding = size_t(inplace_storage_size_rounding) - 1,
+        inplace_size =
+            (sizeof(stub_allocated_holder) + extra_inplace_storage + inplace_size_rounding) & ~inplace_size_rounding
       };
 
-      constexpr byte inplace_lastbyte() const noexcept { return inplace_[sizeof(bin) - 1]; }
-      MDBX_CXX17_CONSTEXPR byte &inplace_lastbyte() noexcept { return inplace_[sizeof(bin) - 1]; }
+      struct capacity_holder {
+        byte pad_[inplace_size - sizeof(allocator_pointer)];
+        size_t bytes_;
+      };
+
+      struct inplace_flag_holder {
+        byte buffer_[inplace_size - sizeof(byte)];
+        byte lastbyte_;
+      };
+
+      allocator_pointer allocated_ptr_;
+      capacity_holder capacity_;
+      inplace_flag_holder inplace_;
+
+      static constexpr bool is_suitable_for_inplace(size_t capacity_bytes) noexcept {
+        static_assert((size_t(reservation_policy::inplace_storage_size_rounding) &
+                       (size_t(reservation_policy::inplace_storage_size_rounding) - 1)) == 0,
+                      "CAPACITY_POLICY::inplace_storage_size_rounding must be power of 2");
+        static_assert(sizeof(bin) == sizeof(inplace_) && sizeof(bin) == sizeof(capacity_), "WTF?");
+        return capacity_bytes < sizeof(bin);
+      }
 
       constexpr bool is_inplace() const noexcept {
         static_assert(size_t(inplace_signature_limit) > size_t(max_capacity), "WTF?");
         static_assert(std::numeric_limits<size_t>::max() - (std::numeric_limits<size_t>::max() >> CHAR_BIT) ==
                           inplace_signature_limit,
                       "WTF?");
-        return inplace_lastbyte() == lastbyte_inplace_signature;
+        return inplace_.lastbyte_ == lastbyte_inplace_signature;
       }
       constexpr bool is_allocated() const noexcept { return !is_inplace(); }
 
@@ -1571,26 +1576,27 @@ private:
         if (destroy_ptr) {
           MDBX_CONSTEXPR_ASSERT(is_allocated());
           /* properly destroy allocator::pointer */
-          allocated_.~allocated();
+          allocated_ptr_.~allocator_pointer();
         }
         if (::std::is_trivial<allocator_pointer>::value)
           /* workaround for "uninitialized" warning from some compilers */
-          memset(&allocated_.ptr_, 0, sizeof(allocated_.ptr_));
-        inplace_lastbyte() = lastbyte_inplace_signature;
-        MDBX_CONSTEXPR_ASSERT(is_inplace() && address() == inplace_ && is_suitable_for_inplace(capacity()));
+          memset(&allocated_ptr_, 0, sizeof(allocated_ptr_));
+        inplace_.lastbyte_ = lastbyte_inplace_signature;
+        MDBX_CONSTEXPR_ASSERT(is_inplace() && address() == inplace_.buffer_ && is_suitable_for_inplace(capacity()));
         return address();
       }
 
       template <bool construct_ptr>
       MDBX_CXX17_CONSTEXPR byte *make_allocated(allocator_pointer ptr, size_t capacity_bytes) noexcept {
         MDBX_CONSTEXPR_ASSERT(inplace_signature_limit > capacity_bytes);
-        if (construct_ptr)
+        if (construct_ptr) {
           /* properly construct allocator::pointer */
-          new (&allocated_) allocated(ptr, capacity_bytes);
-        else {
+          new (&allocated_ptr_) allocator_pointer(ptr);
+          capacity_.bytes_ = capacity_bytes;
+        } else {
           MDBX_CONSTEXPR_ASSERT(is_allocated());
-          allocated_.ptr_ = ptr;
-          allocated_.capacity_bytes_ = capacity_bytes;
+          allocated_ptr_ = ptr;
+          capacity_.bytes_ = capacity_bytes;
         }
         MDBX_CONSTEXPR_ASSERT(is_allocated() && address() == to_address(ptr) && capacity() == capacity_bytes);
         return address();
@@ -1608,16 +1614,17 @@ private:
       MDBX_CXX20_CONSTEXPR ~bin() {
         if (is_allocated())
           /* properly destroy allocator::pointer */
-          allocated_.~allocated();
+          allocated_ptr_.~allocator_pointer();
       }
       MDBX_CXX20_CONSTEXPR bin(bin &&ditto) noexcept {
         if (ditto.is_inplace()) {
           // micro-optimization: don't use make_inplace<> here
           //                     since memcpy() will copy the flag.
-          memcpy(inplace_, ditto.inplace_, sizeof(inplace_));
+          memcpy(&inplace_, &ditto.inplace_, sizeof(inplace_));
           MDBX_CONSTEXPR_ASSERT(is_inplace());
         } else {
-          new (&allocated_) allocated(::std::move(ditto.allocated_));
+          new (&allocated_ptr_) allocator_pointer(::std::move(ditto.allocated_ptr_));
+          capacity_.bytes_ = ditto.capacity_.bytes_;
           ditto.make_inplace<true>();
           MDBX_CONSTEXPR_ASSERT(is_allocated());
         }
@@ -1629,13 +1636,13 @@ private:
           //                     since memcpy() will copy the flag.
           if (is_allocated())
             /* properly destroy allocator::pointer */
-            allocated_.~allocated();
-          memcpy(inplace_, ditto.inplace_, sizeof(inplace_));
+            allocated_ptr_.~allocator_pointer();
+          memcpy(&inplace_, &ditto.inplace_, sizeof(inplace_));
           MDBX_CONSTEXPR_ASSERT(is_inplace());
         } else if (is_inplace())
-          make_allocated<true>(ditto.allocated_.ptr_, ditto.allocated_.capacity_bytes_);
+          make_allocated<true>(ditto.allocated_ptr_, ditto.capacity_.bytes_);
         else
-          make_allocated<false>(ditto.allocated_.ptr_, ditto.allocated_.capacity_bytes_);
+          make_allocated<false>(ditto.allocated_ptr_, ditto.capacity_.bytes_);
         return *this;
       }
 
@@ -1656,12 +1663,12 @@ private:
       }
 
       constexpr const byte *address() const noexcept {
-        return is_inplace() ? inplace_ : static_cast<const byte *>(to_address(allocated_.ptr_));
+        return is_inplace() ? inplace_.buffer_ : static_cast<const byte *>(to_address(allocated_ptr_));
       }
       MDBX_CXX17_CONSTEXPR byte *address() noexcept {
-        return is_inplace() ? inplace_ : static_cast<byte *>(to_address(allocated_.ptr_));
+        return is_inplace() ? inplace_.buffer_ : static_cast<byte *>(to_address(allocated_ptr_));
       }
-      constexpr size_t capacity() const noexcept { return is_inplace() ? sizeof(bin) - 1 : allocated_.capacity_bytes_; }
+      constexpr size_t capacity() const noexcept { return is_inplace() ? sizeof(bin) - 1 : capacity_.bytes_; }
     } bin_;
 
     MDBX_CXX20_CONSTEXPR void *init(size_t capacity) {
@@ -1678,7 +1685,7 @@ private:
 
     MDBX_CXX20_CONSTEXPR void release() noexcept {
       if (bin_.is_allocated()) {
-        deallocate_storage(bin_.allocated_.ptr_, bin_.allocated_.capacity_bytes_);
+        deallocate_storage(bin_.allocated_ptr_, bin_.capacity_.bytes_);
         bin_.template make_inplace<true>();
       }
     }
@@ -1709,7 +1716,7 @@ private:
 
       if (bin::is_suitable_for_inplace(new_capacity)) {
         assert(bin_.is_allocated());
-        const auto old_allocated = ::std::move(bin_.allocated_.ptr_);
+        const auto old_allocated = ::std::move(bin_.allocated_ptr_);
         byte *const new_place = bin_.template make_inplace<true>() + wanna_headroom;
         if (MDBX_LIKELY(length))
           MDBX_CXX20_LIKELY memcpy(new_place, content, length);
@@ -1727,7 +1734,7 @@ private:
         return new_place;
       }
 
-      const auto old_allocated = ::std::move(bin_.allocated_.ptr_);
+      const auto old_allocated = ::std::move(bin_.allocated_ptr_);
       if (external_content)
         deallocate_storage(old_allocated, old_capacity);
       const auto pair = allocate_storage(new_capacity);
@@ -1906,8 +1913,7 @@ public:
   /// the buffer, rather than stores it.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR bool is_reference() const noexcept { return !is_freestanding(); }
 
-  /// \brief Returns the number of bytes that can be held in currently allocated
-  /// storage.
+  /// \brief Returns the number of bytes that can be held in currently allocated storage.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR size_t capacity() const noexcept {
     return is_freestanding() ? silo_.capacity() : 0;
   }
@@ -1931,16 +1937,14 @@ public:
   MDBX_CXX11_CONSTEXPR const byte *end_byte_ptr() const noexcept { return slice_.end_byte_ptr(); }
 
   /// \brief Returns casted to pointer to byte an address of data.
-  /// \pre REQUIRES: The buffer should store data chunk, but not referenced to
-  /// an external one.
+  /// \pre REQUIRES: The buffer should store data chunk, but not referenced to an external one.
   MDBX_CXX11_CONSTEXPR byte *byte_ptr() noexcept {
     MDBX_CONSTEXPR_ASSERT(is_freestanding());
     return const_cast<byte *>(slice_.byte_ptr());
   }
 
   /// \brief Returns casted to pointer to byte an end of data.
-  /// \pre REQUIRES: The buffer should store data chunk, but not referenced to
-  /// an external one.
+  /// \pre REQUIRES: The buffer should store data chunk, but not referenced to an external one.
   MDBX_CXX11_CONSTEXPR byte *end_byte_ptr() noexcept {
     MDBX_CONSTEXPR_ASSERT(is_freestanding());
     return const_cast<byte *>(slice_.end_byte_ptr());
@@ -1953,16 +1957,14 @@ public:
   MDBX_CXX11_CONSTEXPR const char *end_char_ptr() const noexcept { return slice_.end_char_ptr(); }
 
   /// \brief Returns casted to pointer to char an address of data.
-  /// \pre REQUIRES: The buffer should store data chunk, but not referenced to
-  /// an external one.
+  /// \pre REQUIRES: The buffer should store data chunk, but not referenced to an external one.
   MDBX_CXX11_CONSTEXPR char *char_ptr() noexcept {
     MDBX_CONSTEXPR_ASSERT(is_freestanding());
     return const_cast<char *>(slice_.char_ptr());
   }
 
   /// \brief Returns casted to pointer to char an end of data.
-  /// \pre REQUIRES: The buffer should store data chunk, but not referenced to
-  /// an external one.
+  /// \pre REQUIRES: The buffer should store data chunk, but not referenced to an external one.
   MDBX_CXX11_CONSTEXPR char *end_char_ptr() noexcept {
     MDBX_CONSTEXPR_ASSERT(is_freestanding());
     return const_cast<char *>(slice_.end_char_ptr());
@@ -1975,16 +1977,14 @@ public:
   MDBX_CXX11_CONSTEXPR const void *end() const noexcept { return slice_.end(); }
 
   /// \brief Return a pointer to the beginning of the referenced data.
-  /// \pre REQUIRES: The buffer should store data chunk, but not referenced to
-  /// an external one.
+  /// \pre REQUIRES: The buffer should store data chunk, but not referenced to an external one.
   MDBX_CXX11_CONSTEXPR void *data() noexcept {
     MDBX_CONSTEXPR_ASSERT(is_freestanding());
     return const_cast<void *>(slice_.data());
   }
 
   /// \brief Return a pointer to the end of the referenced data.
-  /// \pre REQUIRES: The buffer should store data chunk, but not referenced to
-  /// an external one.
+  /// \pre REQUIRES: The buffer should store data chunk, but not referenced to an external one.
   MDBX_CXX11_CONSTEXPR void *end() noexcept {
     MDBX_CONSTEXPR_ASSERT(is_freestanding());
     return const_cast<void *>(slice_.end());
@@ -2708,8 +2708,13 @@ inline string<ALLOCATOR> make_string(const PRODUCER &producer, const ALLOCATOR &
   return result;
 }
 
-/// \brief Combines data slice with boolean flag to represent result of certain
-/// operations.
+MDBX_EXTERN_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<legacy_allocator>);
+
+#if defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L && _GLIBCXX_USE_CXX11_ABI
+MDBX_EXTERN_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<polymorphic_allocator>);
+#endif /* __cpp_lib_memory_resource >= 201603L */
+
+/// \brief Combines data slice with boolean flag to represent result of certain operations.
 struct value_result {
   slice value;
   bool done;
@@ -2722,8 +2727,7 @@ struct value_result {
   }
 };
 
-/// \brief Combines pair of slices for key and value to represent result of
-/// certain operations.
+/// \brief Combines pair of slices for key and value to represent result of certain operations.
 struct pair {
   using stl_pair = std::pair<slice, slice>;
   slice key, value;
@@ -2833,8 +2837,12 @@ template <typename ALLOCATOR, typename CAPACITY_POLICY> struct buffer_pair_spec 
   operator pair() const noexcept { return pair(key, value); }
 };
 
+/// \brief Combines pair of buffers for key and value to hold an operands for certain operations.
 template <typename BUFFER>
 using buffer_pair = buffer_pair_spec<typename BUFFER::allocator_type, typename BUFFER::reservation_policy>;
+
+/// \brief Default pair of buffers.
+using default_buffer_pair = buffer_pair<default_buffer>;
 
 /// end of cxx_data @}
 
@@ -2879,8 +2887,7 @@ MDBX_CXX01_CONSTEXPR_ENUM bool is_reverse(key_mode mode) noexcept {
 
 MDBX_CXX01_CONSTEXPR_ENUM bool is_msgpack(key_mode mode) noexcept { return mode == key_mode::msgpack; }
 
-/// \brief Kind of the values and sorted multi-values with corresponding
-/// comparison.
+/// \brief Kind of the values and sorted multi-values with corresponding comparison.
 enum class value_mode {
   single = MDBX_DB_DEFAULTS, ///< Usual single value for each key. In terms of
                              ///< keys, they are unique.
@@ -2960,8 +2967,7 @@ MDBX_CXX01_CONSTEXPR_ENUM bool is_reverse(value_mode mode) noexcept {
 
 MDBX_CXX01_CONSTEXPR_ENUM bool is_msgpack(value_mode mode) noexcept { return mode == value_mode::msgpack; }
 
-/// \brief A handle for an individual table (aka key-value space, maps or
-/// sub-database) in the environment.
+/// \brief A handle for an individual table (aka key-value space, maps or sub-database) in the environment.
 /// \see txn::open_map() \see txn::create_map()
 /// \see txn::clear_map() \see txn::drop_map()
 /// \see txn::get_handle_info() \see txn::get_map_stat()
@@ -3090,12 +3096,10 @@ public:
     /// environment).
     intptr_t size_upper{default_value};
 
-    /// \brief The growth step in bytes, must be greater than zero to allow the
-    /// database to grow.
+    /// \brief The growth step in bytes, must be greater than zero to allow the database to grow.
     intptr_t growth_step{default_value};
 
-    /// \brief The shrink threshold in bytes, must be greater than zero to allow
-    /// the database to shrink.
+    /// \brief The shrink threshold in bytes, must be greater than zero to allow the database to shrink.
     intptr_t shrink_threshold{default_value};
 
     /// \brief The database page size for new database creation
@@ -3230,47 +3234,34 @@ public:
     static inline size_t pagesize_min() noexcept;
     /// \brief Returns the maximal database page size in bytes.
     static inline size_t pagesize_max() noexcept;
-    /// \brief Returns the minimal database size in bytes for specified page
-    /// size.
+    /// \brief Returns the minimal database size in bytes for specified page size.
     static inline size_t dbsize_min(intptr_t pagesize);
-    /// \brief Returns the maximal database size in bytes for specified page
-    /// size.
+    /// \brief Returns the maximal database size in bytes for specified page size.
     static inline size_t dbsize_max(intptr_t pagesize);
-    /// \brief Returns the minimal key size in bytes for specified table
-    /// flags.
+    /// \brief Returns the minimal key size in bytes for specified table flags.
     static inline size_t key_min(MDBX_db_flags_t flags) noexcept;
     /// \brief Returns the minimal key size in bytes for specified keys mode.
     static inline size_t key_min(key_mode mode) noexcept;
-    /// \brief Returns the maximal key size in bytes for specified page size and
-    /// table flags.
+    /// \brief Returns the maximal key size in bytes for specified page size and table flags.
     static inline size_t key_max(intptr_t pagesize, MDBX_db_flags_t flags);
-    /// \brief Returns the maximal key size in bytes for specified page size and
-    /// keys mode.
+    /// \brief Returns the maximal key size in bytes for specified page size and keys mode.
     static inline size_t key_max(intptr_t pagesize, key_mode mode);
-    /// \brief Returns the maximal key size in bytes for given environment and
-    /// table flags.
+    /// \brief Returns the maximal key size in bytes for given environment and table flags.
     static inline size_t key_max(const env &, MDBX_db_flags_t flags);
-    /// \brief Returns the maximal key size in bytes for given environment and
-    /// keys mode.
+    /// \brief Returns the maximal key size in bytes for given environment and keys mode.
     static inline size_t key_max(const env &, key_mode mode);
-    /// \brief Returns the minimal values size in bytes for specified table
-    /// flags.
+    /// \brief Returns the minimal values size in bytes for specified table flags.
     static inline size_t value_min(MDBX_db_flags_t flags) noexcept;
-    /// \brief Returns the minimal values size in bytes for specified values
-    /// mode.
+    /// \brief Returns the minimal values size in bytes for specified values mode.
     static inline size_t value_min(value_mode) noexcept;
 
-    /// \brief Returns the maximal value size in bytes for specified page size
-    /// and table flags.
+    /// \brief Returns the maximal value size in bytes for specified page size and table flags.
     static inline size_t value_max(intptr_t pagesize, MDBX_db_flags_t flags);
-    /// \brief Returns the maximal value size in bytes for specified page size
-    /// and values mode.
+    /// \brief Returns the maximal value size in bytes for specified page size and values mode.
     static inline size_t value_max(intptr_t pagesize, value_mode);
-    /// \brief Returns the maximal value size in bytes for given environment and
-    /// table flags.
+    /// \brief Returns the maximal value size in bytes for given environment and table flags.
     static inline size_t value_max(const env &, MDBX_db_flags_t flags);
-    /// \brief Returns the maximal value size in bytes for specified page size
-    /// and values mode.
+    /// \brief Returns the maximal value size in bytes for specified page size and values mode.
     static inline size_t value_max(const env &, value_mode);
 
     /// \brief Returns maximal size of key-value pair to fit in a single page
@@ -3350,13 +3341,11 @@ public:
     /// \brief Make sure that the environment is not being used by other
     /// processes, or return an error otherwise.
     ensure_unused = MDBX_ENV_ENSURE_UNUSED,
-    /// \brief Wait until other processes closes the environment before
-    /// deletion.
+    /// \brief Wait until other processes closes the environment before deletion.
     wait_for_unused = MDBX_ENV_WAIT_FOR_UNUSED
   };
 
-  /// \brief Removes the environment's files in a proper and multiprocess-safe
-  /// way.
+  /// \brief Removes the environment's files in a proper and multiprocess-safe way.
 #ifdef MDBX_STD_FILESYSTEM_PATH
   static bool remove(const MDBX_STD_FILESYSTEM_PATH &pathname, const remove_mode mode = just_remove);
 #endif /* MDBX_STD_FILESYSTEM_PATH */
@@ -3382,12 +3371,10 @@ public:
   /// \brief Return snapshot information about the MDBX environment.
   inline info get_info() const;
 
-  /// \brief Return statistics about the MDBX environment accordingly to the
-  /// specified transaction.
+  /// \brief Return statistics about the MDBX environment accordingly to the specified transaction.
   inline stat get_stat(const txn &) const;
 
-  /// \brief Return information about the MDBX environment accordingly to the
-  /// specified transaction.
+  /// \brief Return information about the MDBX environment accordingly to the specified transaction.
   inline info get_info(const txn &) const;
 
   /// \brief Returns the file descriptor for the DXB file of MDBX environment.
@@ -3399,8 +3386,7 @@ public:
   /// Returns environment flags.
   inline MDBX_env_flags_t get_flags() const;
 
-  /// \brief Returns the maximum number of threads/reader slots for the
-  /// environment.
+  /// \brief Returns the maximum number of threads/reader slots for the environment.
   /// \see extra_runtime_option::max_readers
   inline unsigned max_readers() const;
 
@@ -3784,8 +3770,7 @@ public:
   /// volume of dirty pages) in bytes.
   size_t size_max() const { return env().transaction_size_max(); }
 
-  /// \brief Returns current write transaction size (i.e.summary volume of dirty
-  /// pages) in bytes.
+  /// \brief Returns current write transaction size (i.e.summary volume of dirty pages) in bytes.
   size_t size_current() const {
     assert(is_readwrite());
     return size_t(get_info().txn_space_dirty);
@@ -3944,42 +3929,32 @@ public:
   inline map_handle::info get_handle_info(map_handle map) const;
 
   using canary = ::MDBX_canary;
-  /// \brief Set integers markers (aka "canary") associated with the
-  /// environment.
+  /// \brief Set integers markers (aka "canary") associated with the environment.
   inline txn &put_canary(const canary &);
-  /// \brief Returns fours integers markers (aka "canary") associated with the
-  /// environment.
+  /// \brief Returns fours integers markers (aka "canary") associated with the environment.
   inline canary get_canary() const;
 
-  /// Reads sequence generator associated with a key-value map (aka
-  /// table).
+  /// Reads sequence generator associated with a key-value map (aka table).
   inline uint64_t sequence(map_handle map) const;
-  /// \brief Reads and increment sequence generator associated with a key-value
-  /// map (aka table).
+  /// \brief Reads and increment sequence generator associated with a key-value map (aka table).
   inline uint64_t sequence(map_handle map, uint64_t increment);
 
-  /// \brief Compare two keys according to a particular key-value map (aka
-  /// table).
+  /// \brief Compare two keys according to a particular key-value map (aka table).
   inline int compare_keys(map_handle map, const slice &a, const slice &b) const noexcept;
-  /// \brief Compare two values according to a particular key-value map (aka
-  /// table).
+  /// \brief Compare two values according to a particular key-value map (aka table).
   inline int compare_values(map_handle map, const slice &a, const slice &b) const noexcept;
-  /// \brief Compare keys of two pairs according to a particular key-value map
-  /// (aka table).
+  /// \brief Compare keys of two pairs according to a particular key-value map (aka table).
   inline int compare_keys(map_handle map, const pair &a, const pair &b) const noexcept;
-  /// \brief Compare values of two pairs according to a particular key-value map
-  /// (aka table).
+  /// \brief Compare values of two pairs according to a particular key-value map(aka table).
   inline int compare_values(map_handle map, const pair &a, const pair &b) const noexcept;
 
   /// \brief Get value by key from a key-value map (aka table).
   inline slice get(map_handle map, const slice &key) const;
-  /// \brief Get first of multi-value and values count by key from a key-value
-  /// multimap (aka table).
+  /// \brief Get first of multi-value and values count by key from a key-value multimap (aka table).
   inline slice get(map_handle map, slice key, size_t &values_count) const;
   /// \brief Get value by key from a key-value map (aka table).
   inline slice get(map_handle map, const slice &key, const slice &value_at_absence) const;
-  /// \brief Get first of multi-value and values count by key from a key-value
-  /// multimap (aka table).
+  /// \brief Get first of multi-value and values count by key from a key-value multimap (aka table).
   inline slice get(map_handle map, slice key, size_t &values_count, const slice &value_at_absence) const;
   /// \brief Get value for equal or great key from a table.
   /// \return Bundle of key-value pair and boolean flag,
@@ -4060,8 +4035,9 @@ public:
     return append(map, kv.key, kv.value, multivalue_order_preserved);
   }
 
-  size_t put_multiple_samelength(map_handle map, const slice &key, const size_t value_length, const void *values_array,
-                                 size_t values_count, put_mode mode, bool allow_partial = false);
+  inline size_t put_multiple_samelength(map_handle map, const slice &key, const size_t value_length,
+                                        const void *values_array, size_t values_count, put_mode mode,
+                                        bool allow_partial = false);
   template <typename VALUE>
   size_t put_multiple_samelength(map_handle map, const slice &key, const VALUE *values_array, size_t values_count,
                                  put_mode mode, bool allow_partial = false) {
@@ -4155,9 +4131,9 @@ public:
 class LIBMDBX_API_TYPE cursor {
 protected:
   MDBX_cursor *handle_{nullptr};
-  MDBX_CXX11_CONSTEXPR cursor(MDBX_cursor *ptr) noexcept;
 
 public:
+  MDBX_CXX11_CONSTEXPR cursor(MDBX_cursor *ptr) noexcept;
   MDBX_CXX11_CONSTEXPR cursor() noexcept = default;
   cursor(const cursor &) noexcept = default;
   inline cursor &operator=(cursor &&other) noexcept;
@@ -4244,8 +4220,13 @@ public:
 
     batch_samelength = MDBX_GET_MULTIPLE,
     batch_samelength_next = MDBX_NEXT_MULTIPLE,
-    batch_samelength_previous = MDBX_PREV_MULTIPLE
+    batch_samelength_previous = MDBX_PREV_MULTIPLE,
+    seek_and_batch_samelength = MDBX_SEEK_AND_GET_MULTIPLE
   };
+
+  // TODO: добавить легковесный proxy-класс для замещения параметра throw_notfound более сложным набором опций,
+  //       в том числе с explicit-конструктором из bool, чтобы защититься от неявной конвертации ключей поиска
+  //       и других параметров в bool-throw_notfound.
 
   struct move_result : public pair_result {
     inline move_result(const cursor &cursor, bool throw_notfound);
@@ -4444,8 +4425,8 @@ public:
   inline move_result lower_bound_multivalue(const slice &key, const slice &value, bool throw_notfound = false);
   inline move_result upper_bound_multivalue(const slice &key, const slice &value, bool throw_notfound = false);
 
-  inline move_result get_multiple_samelength(const slice &key, bool throw_notfound = true) {
-    return move(batch_samelength, key, throw_notfound);
+  inline move_result seek_multiple_samelength(const slice &key, bool throw_notfound = true) {
+    return move(seek_and_batch_samelength, key, throw_notfound);
   }
 
   inline move_result get_multiple_samelength(bool throw_notfound = false) {
@@ -4472,13 +4453,11 @@ public:
 
   //----------------------------------------------------------------------------
 
-  /// \brief Renew/bind a cursor with a new transaction and previously used
-  /// key-value map handle.
-  inline void renew(const ::mdbx::txn &txn);
+  /// \brief Renew/bind a cursor with a new transaction and previously used key-value map handle.
+  inline void renew(::mdbx::txn &txn);
 
-  /// \brief Bind/renew a cursor with a new transaction and specified key-value
-  /// map handle.
-  inline void bind(const ::mdbx::txn &txn, ::mdbx::map_handle map_handle);
+  /// \brief Bind/renew a cursor with a new transaction and specified key-value map handle.
+  inline void bind(::mdbx::txn &txn, ::mdbx::map_handle map_handle);
 
   /// \brief Unbind cursor from a transaction.
   inline void unbind();
@@ -4510,18 +4489,31 @@ public:
   value_result try_insert(const pair &kv) { return try_insert(kv.key, kv.value); }
   void upsert(const pair &kv) { return upsert(kv.key, kv.value); }
 
-  /// \brief Removes single key-value pair or all multi-values at the current
-  /// cursor position.
+  /// \brief Removes single key-value pair or all multi-values at the current cursor position.
   inline bool erase(bool whole_multivalue = false);
 
-  /// \brief Seeks and removes first value or whole multi-value of the given
-  /// key.
+  /// \brief Seeks and removes first value or whole multi-value of the given key.
   /// \return `True` if the key is found and a value(s) is removed.
   inline bool erase(const slice &key, bool whole_multivalue = true);
 
   /// \brief Seeks and removes the particular multi-value entry of the key.
   /// \return `True` if the given key-value pair is found and removed.
   inline bool erase(const slice &key, const slice &value);
+
+  inline size_t put_multiple_samelength(const slice &key, const size_t value_length, const void *values_array,
+                                        size_t values_count, put_mode mode, bool allow_partial = false);
+  template <typename VALUE>
+  size_t put_multiple_samelength(const slice &key, const VALUE *values_array, size_t values_count, put_mode mode,
+                                 bool allow_partial = false) {
+    static_assert(::std::is_standard_layout<VALUE>::value && !::std::is_pointer<VALUE>::value &&
+                      !::std::is_array<VALUE>::value,
+                  "Must be a standard layout type!");
+    return put_multiple_samelength(key, sizeof(VALUE), values_array, values_count, mode, allow_partial);
+  }
+  template <typename VALUE>
+  void put_multiple_samelength(const slice &key, const ::std::vector<VALUE> &vector, put_mode mode) {
+    put_multiple_samelength(key, vector.data(), vector.size(), mode);
+  }
 };
 
 /// \brief Managed cursor.
@@ -4545,7 +4537,10 @@ public:
   }
 
   /// \brief Explicitly closes the cursor.
-  void close();
+  inline void close() {
+    error::success_or_throw(::mdbx_cursor_close2(handle_));
+    handle_ = nullptr;
+  }
 
   cursor_managed(cursor_managed &&) = default;
   cursor_managed &operator=(cursor_managed &&other) noexcept {
@@ -4556,6 +4551,12 @@ public:
       }
     inherited::operator=(std::move(other));
     return *this;
+  }
+
+  inline MDBX_cursor *withdraw_handle() noexcept {
+    MDBX_cursor *handle = handle_;
+    handle_ = nullptr;
+    return handle;
   }
 
   cursor_managed(const cursor_managed &) = delete;
@@ -5604,10 +5605,9 @@ inline cursor_managed txn::open_cursor(map_handle map) const {
 }
 
 inline size_t txn::release_all_cursors(bool unbind) const {
-  int err = ::mdbx_txn_release_all_cursors(handle_, unbind);
-  if (MDBX_UNLIKELY(err < 0))
-    MDBX_CXX20_UNLIKELY error::throw_exception(err);
-  return size_t(err);
+  size_t count;
+  error::success_or_throw(::mdbx_txn_release_all_cursors_ex(handle_, unbind, &count));
+  return count;
 }
 
 inline ::mdbx::map_handle txn::open_map(const ::mdbx::slice &name, const ::mdbx::key_mode key_mode,
@@ -6167,9 +6167,9 @@ inline cursor::estimate_result cursor::estimate(move_operation operation) const 
   return estimate_result(*this, operation);
 }
 
-inline void cursor::renew(const ::mdbx::txn &txn) { error::success_or_throw(::mdbx_cursor_renew(txn, handle_)); }
+inline void cursor::renew(::mdbx::txn &txn) { error::success_or_throw(::mdbx_cursor_renew(txn, handle_)); }
 
-inline void cursor::bind(const ::mdbx::txn &txn, ::mdbx::map_handle map_handle) {
+inline void cursor::bind(::mdbx::txn &txn, ::mdbx::map_handle map_handle) {
   error::success_or_throw(::mdbx_cursor_bind(txn, handle_, map_handle.dbi));
 }
 
@@ -6177,7 +6177,6 @@ inline void cursor::unbind() { error::success_or_throw(::mdbx_cursor_unbind(hand
 
 inline txn cursor::txn() const {
   MDBX_txn *txn = ::mdbx_cursor_txn(handle_);
-  error::throw_on_nullptr(txn, MDBX_EINVAL);
   return ::mdbx::txn(txn);
 }
 
@@ -6300,6 +6299,24 @@ inline bool cursor::erase(const slice &key, bool whole_multivalue) {
 inline bool cursor::erase(const slice &key, const slice &value) {
   move_result data = find_multivalue(key, value, false);
   return data.done && erase();
+}
+
+inline size_t cursor::put_multiple_samelength(const slice &key, const size_t value_length, const void *values_array,
+                                              size_t values_count, put_mode mode, bool allow_partial) {
+  MDBX_val args[2] = {{const_cast<void *>(values_array), value_length}, {nullptr, values_count}};
+  const int err = ::mdbx_cursor_put(handle_, const_cast<slice *>(&key), args, MDBX_put_flags_t(mode) | MDBX_MULTIPLE);
+  switch (err) {
+  case MDBX_SUCCESS:
+    MDBX_CXX20_LIKELY break;
+  case MDBX_KEYEXIST:
+    if (allow_partial)
+      break;
+    mdbx_txn_break(txn());
+    MDBX_CXX17_FALLTHROUGH /* fallthrough */;
+  default:
+    MDBX_CXX20_UNLIKELY error::throw_exception(err);
+  }
+  return args[1].iov_len /* done item count */;
 }
 
 /// end cxx_api @}

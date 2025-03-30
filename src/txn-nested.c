@@ -480,18 +480,26 @@ int txn_nested_join(MDBX_txn *txn, struct commit_timestamp *ts) {
   eASSERT(env, dpl_check(txn));
 
   if (txn->wr.dirtylist->length == 0 && !(txn->flags & MDBX_TXN_DIRTY) && parent->n_dbi == txn->n_dbi) {
-    TXN_FOREACH_DBI_ALL(txn, i) {
-      tASSERT(txn, (txn->dbi_state[i] & DBI_DIRTY) == 0);
-      if ((txn->dbi_state[i] & DBI_STALE) && !(parent->dbi_state[i] & DBI_STALE))
-        tASSERT(txn, memcmp(&parent->dbs[i], &txn->dbs[i], sizeof(tree_t)) == 0);
-    }
+    VERBOSE("fast-complete pure nested txn %" PRIaTXN, txn->txnid);
 
     tASSERT(txn, memcmp(&parent->geo, &txn->geo, sizeof(parent->geo)) == 0);
     tASSERT(txn, memcmp(&parent->canary, &txn->canary, sizeof(parent->canary)) == 0);
     tASSERT(txn, !txn->wr.spilled.list || MDBX_PNL_GETSIZE(txn->wr.spilled.list) == 0);
     tASSERT(txn, txn->wr.loose_count == 0);
 
-    VERBOSE("fast-complete pure nested txn %" PRIaTXN, txn->txnid);
+    /* Update parent's DBs array */
+    eASSERT(env, parent->n_dbi == txn->n_dbi);
+    TXN_FOREACH_DBI_ALL(txn, dbi) {
+      tASSERT(txn, (txn->dbi_state[dbi] & (DBI_CREAT | DBI_DIRTY)) == 0);
+      if (txn->dbi_state[dbi] & DBI_FRESH) {
+        parent->dbs[dbi] = txn->dbs[dbi];
+        /* preserve parent's status */
+        const uint8_t state = txn->dbi_state[dbi] | DBI_FRESH;
+        DEBUG("dbi %zu dbi-state %s 0x%02x -> 0x%02x", dbi, (parent->dbi_state[dbi] != state) ? "update" : "still",
+              parent->dbi_state[dbi], state);
+        parent->dbi_state[dbi] = state;
+      }
+    }
     return txn_end(txn, TXN_END_PURE_COMMIT | TXN_END_SLOT | TXN_END_FREE);
   }
 

@@ -228,7 +228,7 @@ class libmdbx(ConanFile):
         if os.path.exists(version_json_pathname):
             self.version = json.load(
                 open(version_json_pathname, encoding='utf-8'))['semver']
-            version_from = "'" + version_jsonpath_name + "'"
+            version_from = "'" + version_json_pathname + "'"
         else:
             self.version = self.fetch_versioninfo_from_git()['semver']
             version_from = 'Git'

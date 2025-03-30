@@ -180,7 +180,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option, uint64
   if (unlikely(err != MDBX_SUCCESS))
     return LOG_IFERR(err);
 
-  const bool lock_needed = ((env->flags & ENV_ACTIVE) && env->basal_txn && !env_txn0_owned(env));
+  const bool lock_needed = ((env->flags & ENV_ACTIVE) && env->basal_txn && !env_owned_wrtxn(env));
   bool should_unlock = false;
   switch (option) {
   case MDBX_opt_sync_bytes:

@@ -248,7 +248,7 @@ __cold void mdbx_panic(const char *fmt, ...) {
       unlikely(num < 1 || !message) ? "<troubles with panic-message preparation>" : message;
 
   if (globals.logger.ptr)
-    debug_log(MDBX_LOG_FATAL, "panic", 0, "%s", const_message);
+    debug_log(MDBX_LOG_FATAL, "mdbx-panic", 0, "%s", const_message);
 
   while (1) {
 #if defined(_WIN32) || defined(_WIN64)
@@ -262,7 +262,7 @@ __cold void mdbx_panic(const char *fmt, ...) {
 #endif
     FatalExit(ERROR_UNHANDLED_ERROR);
 #else
-    __assert_fail(const_message, "mdbx", 0, "panic");
+    __assert_fail(const_message, "mdbx-panic", 0, const_message);
     abort();
 #endif
   }

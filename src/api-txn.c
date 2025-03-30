@@ -9,7 +9,7 @@ __attribute__((__no_sanitize_thread__, __noinline__))
 #endif
 int mdbx_txn_straggler(const MDBX_txn *txn, int *percent)
 {
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_PARKED);
   if (likely(rc == MDBX_SUCCESS))
     rc = check_env(txn->env, true);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -104,11 +104,13 @@ int mdbx_txn_abort(MDBX_txn *txn) {
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
+#if MDBX_TXN_CHECKOWNER
   if ((txn->flags & (MDBX_TXN_RDONLY | MDBX_NOSTICKYTHREADS)) == MDBX_NOSTICKYTHREADS &&
       unlikely(txn->owner != osal_thread_self())) {
     mdbx_txn_break(txn);
     return LOG_IFERR(MDBX_THREAD_MISMATCH);
   }
+#endif /* MDBX_TXN_CHECKOWNER */
 
   return LOG_IFERR(txn_abort(txn));
 }
@@ -215,9 +217,13 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
   MDBX_txn *txn = nullptr;
   if (parent) {
     /* Nested transactions: Max 1 child, write txns only, no writemap */
-    rc = check_txn_rw(parent, MDBX_TXN_RDONLY | MDBX_WRITEMAP | MDBX_TXN_BLOCKED);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      if (rc == MDBX_BAD_TXN && (parent->flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)) == 0) {
+    rc = check_txn(parent, MDBX_TXN_BLOCKED - MDBX_TXN_PARKED);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
+
+    if (unlikely(parent->flags & (MDBX_TXN_RDONLY | MDBX_WRITEMAP))) {
+      rc = MDBX_BAD_TXN;
+      if ((parent->flags & MDBX_TXN_RDONLY) == 0) {
         ERROR("%s mode is incompatible with nested transactions", "MDBX_WRITEMAP");
         rc = MDBX_INCOMPATIBLE;
       }
@@ -363,11 +369,13 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     goto done;
   }
 
+#if MDBX_TXN_CHECKOWNER
   if ((txn->flags & MDBX_NOSTICKYTHREADS) && txn == env->basal_txn && unlikely(txn->owner != osal_thread_self())) {
     txn->flags |= MDBX_TXN_ERROR;
     rc = MDBX_THREAD_MISMATCH;
     return LOG_IFERR(rc);
   }
+#endif /* MDBX_TXN_CHECKOWNER */
 
   if (unlikely(txn->flags & MDBX_TXN_ERROR)) {
     rc = MDBX_RESULT_TRUE;

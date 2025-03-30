@@ -1,13 +1,11 @@
 #include "mdbx.h++"
 #include <cstring>
+#include <iostream>
 
 static const char *const testkey = "testkey";
 static uint64_t testval = 11;
 
-int main(int argc, char *argv[]) {
-  (void)argc;
-  (void)argv;
-
+int doit() {
   mdbx::path db_filename = "test-early_close_dbi";
   mdbx::env_managed::remove(db_filename);
 
@@ -67,13 +65,13 @@ int main(int argc, char *argv[]) {
   assert(err == MDBX_SUCCESS);
   err = mdbx_get(transaction, textindex, &mdbxkey, &mdbxval);
   assert(err == MDBX_SUCCESS);
-  assert(testval == *reinterpret_cast<uint64_t *>(mdbxval.iov_base));
+  assert(testval == mdbx::slice(mdbxval).as_uint64());
 
   err = mdbx_put(transaction, textindex, &mdbxkey, &mdbxput, MDBX_NOOVERWRITE);
   assert(err == MDBX_KEYEXIST);
   err = mdbx_get(transaction, textindex, &mdbxkey, &mdbxval);
   assert(err == MDBX_SUCCESS);
-  assert(testval == *reinterpret_cast<uint64_t *>(mdbxval.iov_base));
+  assert(testval == mdbx::slice(mdbxval).as_uint64());
 
   err = mdbx_dbi_flags_ex(transaction, textindex, &dbi_flags, &dbi_state);
   assert(err == MDBX_SUCCESS);
@@ -89,7 +87,7 @@ int main(int argc, char *argv[]) {
   assert(err == MDBX_SUCCESS);
   err = mdbx_get(transaction, textindex, &mdbxkey, &mdbxval);
   assert(err == MDBX_SUCCESS);
-  assert(testval == *reinterpret_cast<uint64_t *>(mdbxval.iov_base));
+  assert(testval == mdbx::slice(mdbxval).as_uint64());
 
   err = mdbx_dbi_close(environment, textindex);
   assert(err == MDBX_SUCCESS);
@@ -125,4 +123,15 @@ int main(int argc, char *argv[]) {
     return 2;
 
   return 0;
+}
+
+int main(int argc, char *argv[]) {
+  (void)argc;
+  (void)argv;
+  try {
+    return doit();
+  } catch (const std::exception &ex) {
+    std::cerr << "Exception: " << ex.what() << "\n";
+    return EXIT_FAILURE;
+  }
 }

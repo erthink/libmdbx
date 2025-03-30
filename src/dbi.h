@@ -101,7 +101,7 @@ static inline bool dbi_changed(const MDBX_txn *txn, const size_t dbi) {
   const MDBX_env *const env = txn->env;
   eASSERT(env, dbi_state(txn, dbi) & DBI_LINDO);
   const uint32_t snap_seq = atomic_load32(&env->dbi_seqs[dbi], mo_AcquireRelease);
-  return snap_seq != txn->dbi_seqs[dbi];
+  return unlikely(snap_seq != txn->dbi_seqs[dbi]);
 }
 
 static inline int dbi_check(const MDBX_txn *txn, const size_t dbi) {

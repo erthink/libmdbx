@@ -211,10 +211,7 @@ static bool test(mdbx::txn txn, mdbx::map_handle dbi) {
   return ok;
 }
 
-int main(int argc, const char *argv[]) {
-  (void)argc;
-  (void)argv;
-
+int doit() {
   mdbx::path db_filename = "test-posi";
   mdbx::env_managed::remove(db_filename);
   mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(), mdbx::env::operate_parameters(3));
@@ -242,4 +239,15 @@ int main(int argc, const char *argv[]) {
   }
   std::cout << "OK\n";
   return EXIT_SUCCESS;
+}
+
+int main(int argc, char *argv[]) {
+  (void)argc;
+  (void)argv;
+  try {
+    return doit();
+  } catch (const std::exception &ex) {
+    std::cerr << "Exception: " << ex.what() << "\n";
+    return EXIT_FAILURE;
+  }
 }

@@ -11,6 +11,12 @@ __cold static intptr_t reasonable_db_maxsize(void) {
       /* the 32-bit limit is good enough for fallback */
       return cached_result = MAX_MAPSIZE32;
 
+#if defined(__SANITIZE_ADDRESS__)
+    total_ram_pages >>= 4;
+#endif /* __SANITIZE_ADDRESS__ */
+    if (RUNNING_ON_VALGRIND)
+      total_ram_pages >>= 4;
+
     if (unlikely((size_t)total_ram_pages * 2 > MAX_MAPSIZE / (size_t)pagesize))
       return cached_result = MAX_MAPSIZE;
     assert(MAX_MAPSIZE >= (size_t)(total_ram_pages * pagesize * 2));
@@ -615,7 +621,7 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
 #endif /* Windows */
   }
 
-  if (env->basal_txn && env->basal_txn->owner == osal_thread_self())
+  if (env->basal_txn && (MDBX_TXN_CHECKOWNER ? env->basal_txn->owner == osal_thread_self() : !!env->basal_txn->owner))
     lck_txn_unlock(env);
 
   eASSERT(env, env->signature.weak == 0);
@@ -925,8 +931,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
-  const bool txn0_owned = env->basal_txn && env_txn0_owned(env);
-  const bool inside_txn = txn0_owned && env->txn;
+  MDBX_txn *const txn_owned = env_owned_wrtxn(env);
   bool should_unlock = false;
 
 #if MDBX_DEBUG && 0 /* минимальные шаги для проверки/отладки уже не нужны */
@@ -942,7 +947,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
     if (unlikely(env->flags & MDBX_RDONLY))
       return LOG_IFERR(MDBX_EACCESS);
 
-    if (!txn0_owned) {
+    if (!txn_owned) {
       int err = lck_txn_lock(env, false);
       if (unlikely(err != MDBX_SUCCESS))
         return LOG_IFERR(err);
@@ -956,8 +961,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
     /* get untouched params from current TXN or DB */
     if (pagesize <= 0 || pagesize >= INT_MAX)
       pagesize = env->ps;
-    const geo_t *const geo =
-        inside_txn ? &env->txn->geo : &meta_recent(env, &env->basal_txn->wr.troika).ptr_c->geometry;
+    const geo_t *const geo = env->txn ? &env->txn->geo : &meta_recent(env, &env->basal_txn->wr.troika).ptr_c->geometry;
     if (size_lower < 0)
       size_lower = pgno2bytes(env, geo->lower);
     if (size_now < 0)
@@ -982,7 +986,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
       size_now = usedbytes;
   } else {
     /* env NOT yet mapped */
-    if (unlikely(inside_txn))
+    if (unlikely(env->txn))
       return LOG_IFERR(MDBX_PANIC);
 
     /* is requested some auto-value for pagesize ? */
@@ -1171,8 +1175,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
     ENSURE(env, pagesize == (intptr_t)env->ps);
     meta_t meta;
     memset(&meta, 0, sizeof(meta));
-    if (!inside_txn) {
-      eASSERT(env, should_unlock);
+    if (!env->txn) {
       const meta_ptr_t head = meta_recent(env, &env->basal_txn->wr.troika);
 
       uint64_t timestamp = 0;
@@ -1262,7 +1265,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
       }
-      if (inside_txn) {
+      if (env->txn) {
         env->txn->geo = new_geo;
         env->txn->flags |= MDBX_TXN_DIRTY;
       } else {
@@ -1387,17 +1390,17 @@ __cold int mdbx_env_stat_ex(const MDBX_env *env, const MDBX_txn *txn, MDBX_stat 
   if (unlikely(err != MDBX_SUCCESS))
     return LOG_IFERR(err);
 
-  if (env->txn && env_txn0_owned(env))
+  MDBX_txn *txn_owned = env_owned_wrtxn(env);
+  if (txn_owned)
     /* inside write-txn */
-    return LOG_IFERR(stat_acc(env->txn, dest, bytes));
+    return LOG_IFERR(stat_acc(txn_owned, dest, bytes));
 
-  MDBX_txn *tmp_txn;
-  err = mdbx_txn_begin((MDBX_env *)env, nullptr, MDBX_TXN_RDONLY, &tmp_txn);
+  err = mdbx_txn_begin((MDBX_env *)env, nullptr, MDBX_TXN_RDONLY, &txn_owned);
   if (unlikely(err != MDBX_SUCCESS))
     return LOG_IFERR(err);
 
-  const int rc = stat_acc(tmp_txn, dest, bytes);
-  err = mdbx_txn_abort(tmp_txn);
+  const int rc = stat_acc(txn_owned, dest, bytes);
+  err = mdbx_txn_abort(txn_owned);
   if (unlikely(err != MDBX_SUCCESS))
     return LOG_IFERR(err);
   return LOG_IFERR(rc);

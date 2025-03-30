@@ -20,6 +20,7 @@
 
 #define PRINT 1
 #define GLOBAL 2
+#define CONCISE 4
 static int mode = GLOBAL;
 
 typedef struct flagbit {
@@ -55,39 +56,20 @@ static void signal_handler(int sig) {
 
 #endif /* !WINDOWS */
 
-static const char hexc[] = "0123456789abcdef";
-
-static void dumpbyte(unsigned char c) {
-  putchar(hexc[c >> 4]);
-  putchar(hexc[c & 15]);
-}
-
-static void text(MDBX_val *v) {
-  unsigned char *c, *end;
-
+static void dumpval(const MDBX_val *v) {
+  static const char digits[] = "0123456789abcdef";
   putchar(' ');
-  c = v->iov_base;
-  end = c + v->iov_len;
-  while (c < end) {
-    if (isprint(*c) && *c != '\\') {
-      putchar(*c);
-    } else {
-      putchar('\\');
-      dumpbyte(*c);
+  for (const unsigned char *c = v->iov_base, *end = c + v->iov_len; c < end; ++c) {
+    if (mode & PRINT) {
+      if (isprint(*c) && *c != '\\') {
+        putchar(*c);
+        continue;
+      } else
+        putchar('\\');
     }
-    c++;
+    putchar(digits[*c >> 4]);
+    putchar(digits[*c & 15]);
   }
-  putchar('\n');
-}
-
-static void dumpval(MDBX_val *v) {
-  unsigned char *c, *end;
-
-  putchar(' ');
-  c = v->iov_base;
-  end = c + v->iov_len;
-  while (c < end)
-    dumpbyte(*c++);
   putchar('\n');
 }
 
@@ -185,12 +167,19 @@ static int dump_tbl(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
       rc = MDBX_EINTR;
       break;
     }
-    if (mode & PRINT) {
-      text(&key);
-      text(&data);
-    } else {
-      dumpval(&key);
-      dumpval(&data);
+    dumpval(&key);
+    dumpval(&data);
+    if ((flags & MDBX_DUPSORT) && (mode & CONCISE)) {
+      while ((rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT_DUP)) == MDBX_SUCCESS) {
+        if (user_break) {
+          rc = MDBX_EINTR;
+          break;
+        }
+        putchar(' ');
+        dumpval(&data);
+      }
+      if (rc != MDBX_NOTFOUND)
+        break;
     }
   }
   printf("DATA=END\n");
@@ -206,10 +195,12 @@ static int dump_tbl(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
 static void usage(void) {
   fprintf(stderr,
           "usage: %s "
-          "[-V] [-q] [-f file] [-l] [-p] [-r] [-a|-s table] [-u|U] "
+          "[-V] [-q] [-c] [-f file] [-l] [-p] [-r] [-a|-s table] [-u|U] "
           "dbpath\n"
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"
+          "  -c\t\tconcise mode without repeating keys,\n"
+          "  \t\tbut incompatible with Berkeley DB and LMDB\n"
           "  -f\t\twrite to file instead of stdout\n"
           "  -l\t\tlist tables and exit\n"
           "  -p\t\tuse printable characters\n"
@@ -268,6 +259,7 @@ int main(int argc, char *argv[]) {
                      "s:"
                      "V"
                      "r"
+                     "c"
                      "q")) != EOF) {
     switch (i) {
     case 'V':
@@ -297,6 +289,9 @@ int main(int argc, char *argv[]) {
       }
       break;
     case 'n':
+      break;
+    case 'c':
+      mode |= CONCISE;
       break;
     case 'p':
       mode |= PRINT;
