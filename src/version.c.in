@@ -3,11 +3,16 @@
 
 #include "internals.h"
 
-#if MDBX_VERSION_MAJOR != ${MDBX_VERSION_MAJOR} || MDBX_VERSION_MINOR != ${MDBX_VERSION_MINOR}
+#if !defined(MDBX_VERSION_UNSTABLE) &&                                                                                 \
+    (MDBX_VERSION_MAJOR != ${MDBX_VERSION_MAJOR} || MDBX_VERSION_MINOR != ${MDBX_VERSION_MINOR})
 #error "API version mismatch! Had `git fetch --tags` done?"
 #endif
 
-static const char sourcery[] = MDBX_STRINGIFY(MDBX_BUILD_SOURCERY);
+static const char sourcery[] =
+#ifdef MDBX_VERSION_UNSTABLE
+    "UNSTABLE@"
+#endif
+    MDBX_STRINGIFY(MDBX_BUILD_SOURCERY);
 
 __dll_export
 #ifdef __attribute_used__
