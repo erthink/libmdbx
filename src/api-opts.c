@@ -147,6 +147,9 @@ void env_options_adjust_dp_limit(MDBX_env *env) {
     if (env->options.dp_limit < CURSOR_STACK_SIZE * 4)
       env->options.dp_limit = CURSOR_STACK_SIZE * 4;
   }
+#ifdef MDBX_DEBUG_DPL_LIMIT
+  env->options.dp_limit = MDBX_DEBUG_DPL_LIMIT;
+#endif /* MDBX_DEBUG_DPL_LIMIT */
   if (env->options.dp_initial > env->options.dp_limit && env->options.dp_initial > default_dp_initial(env))
     env->options.dp_initial = env->options.dp_limit;
   env->options.need_dp_limit_adjust = false;
