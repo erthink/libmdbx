@@ -50,6 +50,7 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline txnid_t rkl_edge(cons
 MDBX_MAYBE_UNUSED MDBX_INTERNAL __must_check_result int rkl_push(rkl_t *rkl, const txnid_t id,
                                                                  const bool known_continuous);
 MDBX_MAYBE_UNUSED MDBX_INTERNAL txnid_t rkl_pop(rkl_t *rkl, const bool highest_not_lowest);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL __must_check_result int rkl_merge(rkl_t *dst, const rkl_t *src, bool ignore_duplicates);
 
 /* Итератор для rkl.
  * Обеспечивает изоляцию внутреннего устройства rkl от остального кода, чем существенно его упрощает.
@@ -63,11 +64,9 @@ typedef struct MDBX_rkl_iter {
 MDBX_MAYBE_UNUSED MDBX_INTERNAL __must_check_result rkl_iter_t rkl_iterator(const rkl_t *rkl, const bool reverse);
 MDBX_MAYBE_UNUSED MDBX_INTERNAL __must_check_result txnid_t rkl_turn(rkl_iter_t *iter, const bool reverse);
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t rkl_left(rkl_iter_t *iter, const bool reverse);
-MDBX_MAYBE_UNUSED MDBX_INTERNAL __must_check_result bool rkl_find(const rkl_t *rkl, const txnid_t id, rkl_iter_t *iter);
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __must_check_result static inline bool rkl_contain(const rkl_t *rkl,
-                                                                                                txnid_t id) {
-  return rkl_find(rkl, id, nullptr);
-}
+MDBX_MAYBE_UNUSED MDBX_INTERNAL bool rkl_find(const rkl_t *rkl, const txnid_t id, rkl_iter_t *iter);
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __must_check_result MDBX_INTERNAL bool rkl_contain(const rkl_t *rkl,
+                                                                                                txnid_t id);
 
 typedef struct MDBX_rkl_hole {
   txnid_t begin;

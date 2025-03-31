@@ -118,17 +118,11 @@ int rkl_copy(const rkl_t *src, rkl_t *dst) {
 
 size_t rkl_len(const rkl_t *rkl) { return rkl_empty(rkl) ? 0 : rkl->solid_end - rkl->solid_begin + rkl->list_length; }
 
-__hot bool rkl_find(const rkl_t *rkl, txnid_t id, rkl_iter_t *iter) {
+__hot bool rkl_contain(const rkl_t *rkl, txnid_t id) {
   assert(rkl_check(rkl));
-  if (!rkl_empty(rkl)) {
-    if (id >= rkl->solid_begin && id < rkl->solid_end) {
-      if (iter) {
-        *iter = rkl_iterator(rkl, false);
-        iter->pos = iter->solid_offset + id - rkl->solid_begin;
-      }
-      return true;
-    }
-
+  if (id >= rkl->solid_begin && id < rkl->solid_end)
+    return true;
+  if (rkl->list_length) {
     const txnid_t *it = rkl_bsearch(rkl->list, rkl->list_length, id);
     const txnid_t *const end = rkl->list + rkl->list_length;
     assert(it >= rkl->list && it <= end);
@@ -136,13 +130,32 @@ __hot bool rkl_find(const rkl_t *rkl, txnid_t id, rkl_iter_t *iter) {
       assert(RKL_ORDERED(it[-1], id));
     if (it != end) {
       assert(!RKL_ORDERED(it[0], id));
-      if (*it == id) {
-        if (iter) {
-          *iter = rkl_iterator(rkl, false);
-          iter->pos = it - rkl->list;
-        }
-        return true;
-      }
+      return *it == id;
+    }
+  }
+  return false;
+}
+
+__hot bool rkl_find(const rkl_t *rkl, txnid_t id, rkl_iter_t *iter) {
+  assert(rkl_check(rkl));
+  *iter = rkl_iterator(rkl, false);
+  if (id >= rkl->solid_begin) {
+    if (id < rkl->solid_end) {
+      iter->pos = iter->solid_offset + (unsigned)(id - rkl->solid_begin);
+      return true;
+    }
+    iter->pos = (unsigned)(rkl->solid_end - rkl->solid_begin);
+  }
+  if (rkl->list_length) {
+    const txnid_t *it = rkl_bsearch(rkl->list, rkl->list_length, id);
+    const txnid_t *const end = rkl->list + rkl->list_length;
+    assert(it >= rkl->list && it <= end);
+    if (it != rkl->list)
+      assert(RKL_ORDERED(it[-1], id));
+    iter->pos += (unsigned)(it - rkl->list);
+    if (it != end) {
+      assert(!RKL_ORDERED(it[0], id));
+      return *it == id;
     }
   }
   return false;
@@ -366,7 +379,6 @@ txnid_t rkl_pop(rkl_t *rkl, const bool highest_not_lowest) {
 txnid_t rkl_lowest(const rkl_t *rkl) {
   if (rkl->list_length)
     return (solid_empty(rkl) || rkl->list[0] < rkl->solid_begin) ? rkl->list[0] : rkl->solid_begin;
-
   return !solid_empty(rkl) ? rkl->solid_begin : INVALID_TXNID;
 }
 
@@ -374,8 +386,27 @@ txnid_t rkl_highest(const rkl_t *rkl) {
   if (rkl->list_length)
     return (solid_empty(rkl) || rkl->list[rkl->list_length - 1] >= rkl->solid_end) ? rkl->list[rkl->list_length - 1]
                                                                                    : rkl->solid_end - 1;
-
   return !solid_empty(rkl) ? rkl->solid_end - 1 : 0;
+}
+
+int rkl_merge(rkl_t *dst, const rkl_t *src, bool ignore_duplicates) {
+  if (src->list_length) {
+    size_t i = src->list_length;
+    do {
+      int err = rkl_push(dst, src->list[i - 1], false);
+      if (unlikely(err != MDBX_SUCCESS) && (!ignore_duplicates || err != MDBX_RESULT_TRUE))
+        return err;
+    } while (--i);
+  }
+
+  txnid_t id = src->solid_begin;
+  while (id < src->solid_end) {
+    int err = rkl_push(dst, id, false);
+    if (unlikely(err != MDBX_SUCCESS) && (!ignore_duplicates || err != MDBX_RESULT_TRUE))
+      return err;
+    ++id;
+  }
+  return MDBX_SUCCESS;
 }
 
 rkl_iter_t rkl_iterator(const rkl_t *rkl, const bool reverse) {
