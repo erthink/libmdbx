@@ -1,18 +1,5 @@
 <!-- Required extensions: pymdownx.betterem, pymdownx.tilde, pymdownx.emoji, pymdownx.tasklist, pymdownx.superfences -->
 
-> Please refer to the online [documentation](https://libmdbx.dqdkfa.ru)
-> with [`C` API description](https://libmdbx.dqdkfa.ru/group__c__api.html)
-> and pay attention to the [`C++` API](https://gitflic.ru/project/erthink/libmdbx/blob?file=mdbx.h%2B%2B#line-num-1).
-
-> Questions, feedback and suggestions are welcome to the [Telegram' group](https://t.me/libmdbx) (archive [1](https://libmdbx.dqdkfa.ru/tg-archive/messages1.html),
-> [2](https://libmdbx.dqdkfa.ru/tg-archive/messages2.html), [3](https://libmdbx.dqdkfa.ru/tg-archive/messages3.html), [4](https://libmdbx.dqdkfa.ru/tg-archive/messages4.html),
-> [5](https://libmdbx.dqdkfa.ru/tg-archive/messages5.html), [6](https://libmdbx.dqdkfa.ru/tg-archive/messages6.html), [7](https://libmdbx.dqdkfa.ru/tg-archive/messages7.html)).
-> See the [ChangeLog](https://gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md) for `NEWS` and latest updates.
-
-> Donations are welcome to the Ethereum/ERC-20 `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`.
-> Всё будет хорошо!
-
-
 libmdbx
 ========
 
@@ -39,31 +26,43 @@ tree](https://en.wikipedia.org/wiki/B%2B_tree).
 [WAL](https://en.wikipedia.org/wiki/Write-ahead_logging), but that might
 be a caveat for write-intensive workloads with durability requirements.
 
-4. **Compact and friendly for fully embedding**. Only ≈25KLOC of `C11`,
-≈64K x86 binary code of core, no internal threads neither server process(es),
-but implements a simplified variant of the [Berkeley
-DB](https://en.wikipedia.org/wiki/Berkeley_DB) and
-[dbm](https://en.wikipedia.org/wiki/DBM_(computing)) API.
-
-5. Enforces [serializability](https://en.wikipedia.org/wiki/Serializability) for
+4. Enforces [serializability](https://en.wikipedia.org/wiki/Serializability) for
 writers just by single
 [mutex](https://en.wikipedia.org/wiki/Mutual_exclusion) and affords
 [wait-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Wait-freedom)
 for parallel readers without atomic/interlocked operations, while
 **writing and reading transactions do not block each other**.
 
-6. **Guarantee data integrity** after crash unless this was explicitly
+5. **Guarantee data integrity** after crash unless this was explicitly
 neglected in favour of write performance.
 
-7. Supports Linux, Windows, MacOS, Android, iOS, FreeBSD, DragonFly, Solaris,
+6. Supports Linux, Windows, MacOS, Android, iOS, FreeBSD, DragonFly, Solaris,
 OpenSolaris, OpenIndiana, NetBSD, OpenBSD and other systems compliant with
 **POSIX.1-2008**.
 
+7. **Compact and friendly for fully embedding**. Only ≈25KLOC of `C11`,
+≈64K x86 binary code of core, no internal threads neither server process(es),
+but implements a simplified variant of the [Berkeley
+DB](https://en.wikipedia.org/wiki/Berkeley_DB) and
+[dbm](https://en.wikipedia.org/wiki/DBM_(computing)) API.
+
 <!-- section-end -->
 
-Historically, _libmdbx_ is a deeply revised and extended descendant of the amazing
+Historically, _libmdbx_ is a deeply revised and extended descendant of the legendary
 [Lightning Memory-Mapped Database](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database).
 _libmdbx_ inherits all benefits from _LMDB_, but resolves some issues and adds [a set of improvements](#improvements-beyond-lmdb).
+
+[![Telergam: Support | Discussions | News](https://img.shields.io/endpoint?color=scarlet&logo=telegram&label=Support%20%7C%20Discussions%20%7C%20News&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Flibmdbx)](https://t.me/libmdbx)
+
+> Please refer to the online [documentation](https://libmdbx.dqdkfa.ru)
+> with [`C` API description](https://libmdbx.dqdkfa.ru/group__c__api.html)
+> and pay attention to the [`C++` API](https://gitflic.ru/project/erthink/libmdbx/blob?file=mdbx.h%2B%2B#line-num-1).
+> Donations are welcome to the Ethereum/ERC-20 `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`.
+> Всё будет хорошо!
+
+Telegram Group archive: [1](https://libmdbx.dqdkfa.ru/tg-archive/messages1.html),
+[2](https://libmdbx.dqdkfa.ru/tg-archive/messages2.html), [3](https://libmdbx.dqdkfa.ru/tg-archive/messages3.html), [4](https://libmdbx.dqdkfa.ru/tg-archive/messages4.html),
+[5](https://libmdbx.dqdkfa.ru/tg-archive/messages5.html), [6](https://libmdbx.dqdkfa.ru/tg-archive/messages6.html), [7](https://libmdbx.dqdkfa.ru/tg-archive/messages7.html).
 
 ## Github
 
