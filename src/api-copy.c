@@ -571,11 +571,17 @@ retry_snap_meta:
   uint8_t *const data_buffer = buffer + ceil_powerof2(meta_bytes, globals.sys_pagesize);
 #if MDBX_USE_COPYFILERANGE
   static bool copyfilerange_unavailable;
+#if (defined(__linux__) || defined(__gnu_linux__))
+  if (globals.linux_kernel_version >= 0x05030000 && globals.linux_kernel_version < 0x05130000)
+    copyfilerange_unavailable = true;
+#endif /* linux */
   bool not_the_same_filesystem = false;
-  struct statfs statfs_info;
-  if (fstatfs(fd, &statfs_info) || statfs_info.f_type == /* ECRYPTFS_SUPER_MAGIC */ 0xf15f)
-    /* avoid use copyfilerange_unavailable() to ecryptfs due bugs */
-    not_the_same_filesystem = true;
+  if (!copyfilerange_unavailable) {
+    struct statfs statfs_info;
+    if (fstatfs(fd, &statfs_info) || statfs_info.f_type == /* ECRYPTFS_SUPER_MAGIC */ 0xf15f)
+      /* avoid use copyfilerange_unavailable() to ecryptfs due bugs */
+      not_the_same_filesystem = true;
+  }
 #endif /* MDBX_USE_COPYFILERANGE */
 
   for (size_t offset = meta_bytes; rc == MDBX_SUCCESS && offset < used_size;) {
