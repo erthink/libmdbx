@@ -766,14 +766,24 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
     lock_op.l_whence = SEEK_SET;
     lock_op.l_start = 0;
     lock_op.l_len = OFF_T_MAX;
-    if (MDBX_FCNTL(newfd, MDBX_F_SETLK, &lock_op)
-#if (defined(__linux__) || defined(__gnu_linux__)) && defined(LOCK_EX) &&                                              \
-    (!defined(__ANDROID_API__) || __ANDROID_API__ >= 24)
-        || flock(newfd, LOCK_EX | LOCK_NB)
-#endif /* Linux */
-    )
+    if (MDBX_FCNTL(newfd, MDBX_F_SETLK, &lock_op))
       rc = errno;
   }
+
+#if defined(LOCK_EX) && (!defined(__ANDROID_API__) || __ANDROID_API__ >= 24)
+  if (rc == MDBX_SUCCESS && flock(newfd, LOCK_EX | LOCK_NB)) {
+    const int err_flock = errno, err_fs = osal_check_fs_local(newfd, 0);
+    if (err_flock != EAGAIN || err_fs != MDBX_EREMOTE) {
+      ERROR("%s flock(%" MDBX_PRIsPATH ") error %d, remote-fs check status %d", "unexpected", dest_path, err_flock,
+            err_fs);
+      rc = err_flock;
+    } else {
+      WARNING("%s flock(%" MDBX_PRIsPATH ") error %d, remote-fs check status %d", "ignore", dest_path, err_flock,
+              err_fs);
+    }
+  }
+#endif /* LOCK_EX && ANDROID_API >= 24 */
+
 #endif /* Windows / POSIX */
 
   if (rc == MDBX_SUCCESS)
