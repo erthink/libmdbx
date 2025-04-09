@@ -11,7 +11,7 @@ For the same reason ~~Github~~ is blacklisted forever.
 
 So currently most of the links are broken due to noted malicious ~~Github~~ sabotage.
 
- - SWING.
+ - [SWIG](https://www.swig.org/).
  - Параллельная lto-сборка с устранением предупреждений.
  - Интеграция c DTrace и аналогами.
  - Новый стиль обработки ошибок с записью "трассы" и причин.
