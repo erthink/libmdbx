@@ -53,6 +53,7 @@ static inline size_t dbi_bitmap_ctz(const MDBX_txn *txn, intptr_t bmi) {
       I = (I - 1) | (bitmap_chunk - 1);                                                                                \
       bitmap_item = TXN->dbi_sparse[(1 + I) / bitmap_chunk];                                                           \
       if (!bitmap_item)                                                                                                \
+        /* coverity[const_overflow] */                                                                                 \
         I += bitmap_chunk;                                                                                             \
       continue;                                                                                                        \
     } else if ((bitmap_item & 1) == 0) {                                                                               \
