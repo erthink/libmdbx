@@ -245,9 +245,8 @@ int mdbx_txn_release_all_cursors_ex(const MDBX_txn *txn, bool unbind, size_t *co
             MDBX_cursor *bk = mc->backup;
             mc->next = bk->next;
             mc->backup = bk->backup;
-            mc->backup = nullptr;
+            bk->backup = nullptr;
             bk->signature = 0;
-            bk = bk->next;
             osal_free(bk);
           } else {
             mc->signature = cur_signature_ready4dispose;
