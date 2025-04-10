@@ -560,15 +560,16 @@ int txn_nested_join(MDBX_txn *txn, struct commit_timestamp *ts) {
   /* Update parent's DBs array */
   eASSERT(env, parent->n_dbi == txn->n_dbi);
   TXN_FOREACH_DBI_ALL(txn, dbi) {
-    if (txn->dbi_state[dbi] & (DBI_CREAT | DBI_FRESH | DBI_DIRTY)) {
+    if (txn->dbi_state[dbi] != (parent->dbi_state[dbi] & ~(DBI_FRESH | DBI_CREAT | DBI_DIRTY))) {
+      eASSERT(env, (txn->dbi_state[dbi] & (DBI_CREAT | DBI_FRESH | DBI_DIRTY)) != 0 ||
+                       (txn->dbi_state[dbi] | DBI_STALE) ==
+                           (parent->dbi_state[dbi] & ~(DBI_FRESH | DBI_CREAT | DBI_DIRTY)));
       parent->dbs[dbi] = txn->dbs[dbi];
       /* preserve parent's status */
       const uint8_t state = txn->dbi_state[dbi] | (parent->dbi_state[dbi] & (DBI_CREAT | DBI_FRESH | DBI_DIRTY));
       DEBUG("dbi %zu dbi-state %s 0x%02x -> 0x%02x", dbi, (parent->dbi_state[dbi] != state) ? "update" : "still",
             parent->dbi_state[dbi], state);
       parent->dbi_state[dbi] = state;
-    } else {
-      eASSERT(env, txn->dbi_state[dbi] == (parent->dbi_state[dbi] & ~(DBI_FRESH | DBI_CREAT | DBI_DIRTY)));
     }
   }
 
