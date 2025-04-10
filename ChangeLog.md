@@ -4,7 +4,7 @@ ChangeLog
 English version [by liar Google](https://libmdbx-dqdkfa-ru.translate.goog/md__change_log.html?_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx.dqdkfa.ru/md__change_log.html).
 
-## v0.13.6 в процессе накопления изменений
+## v0.13.6 в процессе накопления изменений, выпуск запланирован на вторую половину апреля.
 
 Поддерживающий выпуск стабильной ветки с исправлением обнаруженных ошибок и устранением недочётов.
 
@@ -39,6 +39,17 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx
    опций монтирования, это могло приводить к возврату POSIX-ошибки `EAGAIN`
    (`11` на большинстве платформ, включая Linux).
 
+ - Устранена ошибка merge/rebase внутри `mdbx_txn_release_all_cursors_ex()`,
+   что могло приводить к последующим неожиданным ошибкам `MDBX_EBADSIGN` и утечкам памяти.
+   Для проверки сценария дополнен соответствующий тест.
+
+ - Исправлена assert-проверка в пути завершения вложенных транзакций.
+   Для проверки сценария дополнен соответствующий тест.
+
+Изменение поведения:
+
+ - При невозможности отвязки курсора от его текущей транзакции функция `mdbx_cursor_bind()`
+   теперь возвращает `MDBX_EINVAL` вместо `MDBX_BAD_TXN`.
 
 Прочие доработки:
 
