@@ -172,9 +172,21 @@ mdbx::map_handle case1_cycle_dbi(std::deque<mdbx::map_handle> &dbi) {
 
 void case1_read_cycle(mdbx::txn txn, std::deque<mdbx::map_handle> &dbi, std::vector<MDBX_cursor *> &pool,
                       mdbx::cursor pre, bool nested = false) {
-  for (auto c : pool)
-    mdbx::cursor(c).bind(txn, case1_cycle_dbi(dbi));
-  pre.bind(txn, case1_cycle_dbi(dbi));
+  if (nested) {
+    for (auto c : pool)
+      try {
+        mdbx::cursor(c).bind(txn, case1_cycle_dbi(dbi));
+      } catch (const std::invalid_argument &) {
+      }
+    try {
+      pre.bind(txn, case1_cycle_dbi(dbi));
+    } catch (const std::invalid_argument &) {
+    }
+  } else {
+    for (auto c : pool)
+      mdbx::cursor(c).bind(txn, case1_cycle_dbi(dbi));
+    pre.bind(txn, case1_cycle_dbi(dbi));
+  }
 
   for (auto n = prng(3 + dbi.size()); n > 0; --n) {
     auto c = txn.open_cursor(dbi[prng(dbi.size())]);
@@ -215,6 +227,16 @@ void case1_read_cycle(mdbx::txn txn, std::deque<mdbx::map_handle> &dbi, std::vec
 
   switch (prng(nested ? 7 : 3)) {
   case 0:
+    if (pre.txn()) {
+      if (nested)
+        try {
+          pre.unbind();
+        } catch (const std::invalid_argument &) {
+          return;
+        }
+      else
+        pre.unbind();
+    }
     for (auto i = pool.begin(); i != pool.end();)
       if (mdbx_cursor_txn(*i))
         i = pool.erase(i);
@@ -252,6 +274,8 @@ void case1_write_cycle(mdbx::txn_managed txn, std::deque<mdbx::map_handle> &dbi,
 
   if (prng(16) > 8)
     case1_write_cycle(txn.start_nested(), dbi, pool, pre, true);
+
+  case1_read_cycle(txn, dbi, pool, pre, nested);
 
   if (flipcoin())
     txn.commit();
