@@ -63,7 +63,7 @@ int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
       return MDBX_SUCCESS;
     rc = mdbx_cursor_unbind(mc);
     if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
+      return (rc == MDBX_BAD_TXN) ? MDBX_EINVAL : rc;
   }
   cASSERT(mc, mc->next == mc);
 
