@@ -395,7 +395,7 @@ __cold bool dpl_check(MDBX_txn *txn) {
 /*----------------------------------------------------------------------------*/
 
 __noinline void dpl_lru_reduce(MDBX_txn *txn) {
-  NOTICE("lru-reduce %u -> %u", txn->wr.dirtylru, txn->wr.dirtylru >> 1);
+  VERBOSE("lru-reduce %u -> %u", txn->wr.dirtylru, txn->wr.dirtylru >> 1);
   tASSERT(txn, (txn->flags & (MDBX_TXN_RDONLY | MDBX_WRITEMAP)) == 0);
   do {
     txn->wr.dirtylru >>= 1;
