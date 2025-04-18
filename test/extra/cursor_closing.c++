@@ -107,6 +107,7 @@ bool case0(mdbx::env env) {
  * 4. Ждем завершения фоновых потоков.
  * 5. Закрываем оставшиеся курсоры и закрываем БД. */
 
+size_t global_seed = size_t(std::chrono::high_resolution_clock::now().time_since_epoch().count());
 thread_local size_t salt;
 
 static size_t prng() {
@@ -284,7 +285,12 @@ void case1_write_cycle(mdbx::txn_managed txn, std::deque<mdbx::map_handle> &dbi,
 }
 
 bool case1_thread(mdbx::env env, std::deque<mdbx::map_handle> dbi, mdbx::cursor pre) {
-  salt = size_t(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+  mdbx::error::success_or_throw(mdbx_txn_lock(env, false));
+  std::hash<std::thread::id> hasher;
+  salt = global_seed ^ hasher(std::this_thread::get_id());
+  std::cout << "thread " << std::this_thread::get_id() << ", salt " << salt << std::endl << std::flush;
+  mdbx_txn_unlock(env);
+
   std::vector<MDBX_cursor *> pool;
   for (auto loop = 0; loop < 333 / RELIEF_FACTOR; ++loop) {
     for (auto read = 0; read < 333 / RELIEF_FACTOR; ++read) {
