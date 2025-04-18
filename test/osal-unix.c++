@@ -510,6 +510,7 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
   options |= WCONTINUED;
 #endif
 
+  pid = 0;
   while (sigalarm_tail == sigalarm_head) {
     int status;
     pid = waitpid(0, &status, options);
