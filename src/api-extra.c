@@ -140,7 +140,7 @@ int mdbx_txn_lock(MDBX_env *env, bool dont_wait) {
 
   if (unlikely(env->flags & MDBX_RDONLY))
     return LOG_IFERR(MDBX_EACCESS);
-  if (unlikely(env->basal_txn->owner || (env->basal_txn->flags & MDBX_TXN_FINISHED) == 0))
+  if (dont_wait && unlikely(env->basal_txn->owner || (env->basal_txn->flags & MDBX_TXN_FINISHED) == 0))
     return LOG_IFERR(MDBX_BUSY);
 
   return LOG_IFERR(lck_txn_lock(env, dont_wait));
