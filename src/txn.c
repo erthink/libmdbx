@@ -352,7 +352,10 @@ int txn_end(MDBX_txn *txn, unsigned mode) {
   tASSERT(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
   tASSERT(txn, memcmp(&txn->wr.troika, &parent->wr.troika, sizeof(troika_t)) == 0);
   tASSERT(txn, mode & TXN_END_FREE);
+  tASSERT(parent, parent->flags & MDBX_TXN_HAS_CHILD);
   env->txn = parent;
+  parent->nested = nullptr;
+  parent->flags -= MDBX_TXN_HAS_CHILD;
   const pgno_t nested_now = txn->geo.now, nested_upper = txn->geo.upper;
   txn_nested_abort(txn);
 
