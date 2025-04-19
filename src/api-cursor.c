@@ -88,8 +88,16 @@ int mdbx_cursor_unbind(MDBX_cursor *mc) {
     return LOG_IFERR(MDBX_EINVAL);
 
   int rc = check_txn(mc->txn, MDBX_TXN_FINISHED | MDBX_TXN_HAS_CHILD);
-  if (unlikely(rc != MDBX_SUCCESS))
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    for (const MDBX_txn *txn = mc->txn; rc == MDBX_BAD_TXN && check_txn(txn, MDBX_TXN_FINISHED) == MDBX_SUCCESS;
+         txn = txn->nested)
+      if (dbi_state(txn, cursor_dbi(mc)) == 0)
+        /* специальный случай: курсор прикреплён к родительской транзакции, но соответствующий dbi-дескриптор ещё
+         * не использовался во вложенной транзакции, т.е. курсор ещё не импортирован в дочернюю транзакцию и не имеет
+         * связанного сохранённого состояния (поэтому mc→backup равен nullptr). */
+        rc = MDBX_EINVAL;
     return LOG_IFERR(rc);
+  }
 
   if (unlikely(!mc->txn || mc->txn->signature != txn_signature)) {
     ERROR("Wrong cursor's transaction %p 0x%x", __Wpedantic_format_voidptr(mc->txn), mc->txn ? mc->txn->signature : 0);
