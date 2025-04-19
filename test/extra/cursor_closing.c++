@@ -318,11 +318,11 @@ bool case1(mdbx::env env) {
   std::deque<mdbx::map_handle> dbi;
   std::vector<mdbx::cursor_managed> cursors;
 #if defined(__cpp_lib_latch) && __cpp_lib_latch >= 201907L
-  static const auto N = 10;
+  static const auto N = std::thread::hardware_concurrency();
 #else
-  static const auto N = 3;
+  static const auto N = 3u;
 #endif
-  for (auto t = 0; t < N; ++t) {
+  for (auto t = 0u; t < N; ++t) {
     auto txn = env.start_write();
     auto table = txn.create_map(std::to_string(t), mdbx::key_mode::ordinal, mdbx::value_mode::multi_samelength);
     auto cursor = txn.open_cursor(table);
@@ -337,7 +337,7 @@ bool case1(mdbx::env env) {
 #if defined(__cpp_lib_latch) && __cpp_lib_latch >= 201907L
   std::latch s(1);
   std::vector<std::thread> threads;
-  for (auto t = 1; t < N; ++t) {
+  for (auto t = 1u; t < cursors.size(); ++t) {
     case1_cycle_dbi(dbi);
     threads.push_back(std::thread([&, t]() {
       s.wait();
