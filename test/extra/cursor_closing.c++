@@ -285,11 +285,15 @@ void case1_write_cycle(mdbx::txn_managed txn, std::deque<mdbx::map_handle> &dbi,
 }
 
 bool case1_thread(mdbx::env env, std::deque<mdbx::map_handle> dbi, mdbx::cursor pre) {
+#if defined(__cpp_lib_latch) && __cpp_lib_latch >= 201907L
   mdbx::error::success_or_throw(mdbx_txn_lock(env, false));
   std::hash<std::thread::id> hasher;
   salt = global_seed ^ hasher(std::this_thread::get_id());
   std::cout << "thread " << std::this_thread::get_id() << ", salt " << salt << std::endl << std::flush;
   mdbx_txn_unlock(env);
+#else
+  salt = global_seed;
+#endif
 
   std::vector<MDBX_cursor *> pool;
   for (auto loop = 0; loop < 333 / RELIEF_FACTOR; ++loop) {
