@@ -48,44 +48,46 @@ void rkl_destructive_move(rkl_t *src, rkl_t *dst) {
   dst->list_length = src->list_length;
   if (dst->list != dst->inplace)
     osal_free(dst->list);
-  if (src->list_length > ARRAY_LENGTH(dst->inplace)) {
-    assert(src->list != src->inplace);
+  if (src->list != src->inplace) {
     dst->list = src->list;
     dst->list_limit = src->list_limit;
   } else {
     dst->list = dst->inplace;
     dst->list_limit = ARRAY_LENGTH(src->inplace);
     memcpy(dst->inplace, src->list, sizeof(dst->inplace));
-    if (src->list != src->inplace)
-      osal_free(src->list);
   }
   rkl_init(src);
 }
 
-static int rkl_resize(rkl_t *rkl, size_t size) {
-  assert(size > rkl->list_length);
+static int rkl_resize(rkl_t *rkl, size_t wanna_size) {
+  assert(wanna_size > rkl->list_length);
   assert(rkl_check(rkl));
   STATIC_ASSERT(txl_max < INT_MAX / sizeof(txnid_t));
-  if (unlikely(size > txl_max)) {
-    ERROR("rkl too long (%zu >= %zu)", size, (size_t)txl_max);
+  if (unlikely(wanna_size > txl_max)) {
+    ERROR("rkl too long (%zu >= %zu)", wanna_size, (size_t)txl_max);
     return MDBX_TXN_FULL;
   }
-  if (unlikely(size < rkl->list_length)) {
-    ERROR("unable shrink rkl to %zu since length is %u", size, rkl->list_length);
-    return MDBX_TXN_FULL;
+  if (unlikely(wanna_size < rkl->list_length)) {
+    ERROR("unable shrink rkl to %zu since length is %u", wanna_size, rkl->list_length);
+    return MDBX_PROBLEM;
   }
-  if (unlikely(size <= ARRAY_LENGTH(rkl->inplace))) {
+
+  if (unlikely(wanna_size <= ARRAY_LENGTH(rkl->inplace))) {
     if (rkl->list != rkl->inplace) {
-      memcpy(rkl->inplace, rkl->list, sizeof(txnid_t) * rkl->list_length);
+      assert(rkl->list_limit > ARRAY_LENGTH(rkl->inplace) && rkl->list_length <= ARRAY_LENGTH(rkl->inplace));
+      memcpy(rkl->inplace, rkl->list, sizeof(rkl->inplace));
       rkl->list_limit = ARRAY_LENGTH(rkl->inplace);
       osal_free(rkl->list);
       rkl->list = rkl->inplace;
     } else {
       assert(rkl->list_limit == ARRAY_LENGTH(rkl->inplace));
     }
-  } else if (size != rkl->list_limit) {
-    size_t bytes = rkl_size2bytes(size);
-    void *const ptr = (rkl->list == rkl->inplace) ? osal_malloc(bytes) : osal_realloc(rkl->list, bytes);
+    return MDBX_SUCCESS;
+  }
+
+  if (wanna_size != rkl->list_limit) {
+    size_t bytes = rkl_size2bytes(wanna_size);
+    void *ptr = (rkl->list == rkl->inplace) ? osal_malloc(bytes) : osal_realloc(rkl->list, bytes);
     if (unlikely(!ptr))
       return MDBX_ENOMEM;
 #ifdef osal_malloc_usable_size
