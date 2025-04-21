@@ -32,7 +32,7 @@ void rkl_destroy(rkl_t *rkl) {
   void *ptr = rkl->list;
   rkl->list = nullptr;
   if (ptr != rkl->inplace)
-    osal_free(rkl->list);
+    osal_free(ptr);
 }
 
 static inline bool solid_empty(const rkl_t *rkl) { return !(rkl->solid_begin < rkl->solid_end); }
