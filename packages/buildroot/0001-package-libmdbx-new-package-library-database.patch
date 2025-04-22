@@ -1,7 +1,7 @@
-From 49256dcd050fd0ee67860b7bc544dabe088d08e9 Mon Sep 17 00:00:00 2001
+From 349c08cf21b66ecea851340133a1b845c25675f7 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?=D0=9B=D0=B5=D0=BE=D0=BD=D0=B8=D0=B4=20=D0=AE=D1=80=D1=8C?=
  =?UTF-8?q?=D0=B5=D0=B2=20=28Leonid=20Yuriev=29?= <leo@yuriev.ru>
-Date: Fri, 14 Feb 2025 21:34:25 +0300
+Date: Tue, 22 Apr 2025 14:38:49 +0300
 Subject: [PATCH] package/libmdbx: new package (library/database).
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -15,7 +15,7 @@ This patch adds libmdbx:
    in terms of reliability, features and performance.
  - more information at https://libmdbx.dqdkfa.ru
 
-The 0.13.4 "Sigma Boy" is stable release of _libmdbx_ branch with new superior features.
+The 0.13.6 "Бузина" (Elderberry) is stable release of _libmdbx_ branch with new superior features.
 
 The complete ChangeLog: https://gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md
 
@@ -110,19 +110,19 @@ index 0000000000..a9a4ac45c5
 +		!BR2_TOOLCHAIN_GCC_AT_LEAST_4_4
 diff --git a/package/libmdbx/libmdbx.hash b/package/libmdbx/libmdbx.hash
 new file mode 100644
-index 0000000000..202937e7be
+index 0000000000..ae5266716b
 --- /dev/null
 +++ b/package/libmdbx/libmdbx.hash
 @@ -0,0 +1,6 @@
 +# Hashes from: https://libmdbx.dqdkfa.ru/release/SHA256SUMS
-+sha256  86df30ca2231c9b3ad71424bb829dca9041947f5539d4295030c653d4982c1be  libmdbx-amalgamated-0.13.4.tar.xz
++sha256  57db987de6f7ccc66a66ae28a7bda9f9fbb48ac5fb9279bcca92fd5de13075d1  libmdbx-amalgamated-0.13.6.tar.xz
 +
 +# Locally calculated
 +sha256  0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594  LICENSE
-+sha256  699a62986b6c8d31124646dffd4b15872c7d3bc5eecea5994edb1f5195df49d1  NOTICE
++sha256  651f71b46c6bb0046d2122df7f9def9cb24f4dc28c5b11cef059f66565cda30f  NOTICE
 diff --git a/package/libmdbx/libmdbx.mk b/package/libmdbx/libmdbx.mk
 new file mode 100644
-index 0000000000..a8a6f3dbdf
+index 0000000000..571757262e
 --- /dev/null
 +++ b/package/libmdbx/libmdbx.mk
 @@ -0,0 +1,42 @@
@@ -132,7 +132,7 @@ index 0000000000..a8a6f3dbdf
 +#
 +################################################################################
 +
-+LIBMDBX_VERSION = 0.13.4
++LIBMDBX_VERSION = 0.13.6
 +LIBMDBX_SOURCE = libmdbx-amalgamated-$(LIBMDBX_VERSION).tar.xz
 +LIBMDBX_SITE = https://libmdbx.dqdkfa.ru/release
 +LIBMDBX_SUPPORTS_IN_SOURCE_BUILD = NO
@@ -169,5 +169,5 @@ index 0000000000..a8a6f3dbdf
 +
 +$(eval $(cmake-package))
 -- 
-2.48.1
+2.49.0
 
