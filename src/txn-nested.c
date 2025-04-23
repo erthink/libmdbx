@@ -348,25 +348,30 @@ int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
     return LOG_IFERR(MDBX_ENOMEM);
 
   tASSERT(parent, dpl_check(parent));
+  txn->txnid = parent->txnid;
+  txn->front_txnid = parent->front_txnid + 1;
+  txn->canary = parent->canary;
+  parent->flags |= MDBX_TXN_HAS_CHILD;
+  parent->nested = txn;
+  txn->parent = parent;
+  txn->env->txn = txn;
+  txn->owner = parent->owner;
+  txn->wr.troika = parent->wr.troika;
+
 #if MDBX_ENABLE_DBI_SPARSE
   txn->dbi_sparse = parent->dbi_sparse;
 #endif /* MDBX_ENABLE_DBI_SPARSE */
   txn->dbi_seqs = parent->dbi_seqs;
   txn->geo = parent->geo;
+
   int err = dpl_alloc(txn);
-  if (likely(err == MDBX_SUCCESS)) {
-    const size_t len = MDBX_PNL_GETSIZE(parent->wr.repnl) + parent->wr.loose_count;
-    txn->wr.repnl = pnl_alloc((len > MDBX_PNL_INITIAL) ? len : MDBX_PNL_INITIAL);
-    if (unlikely(!txn->wr.repnl))
-      err = MDBX_ENOMEM;
-  }
-  if (unlikely(err != MDBX_SUCCESS)) {
-  failed:
-    pnl_free(txn->wr.repnl);
-    dpl_free(txn);
-    osal_free(txn);
+  if (unlikely(err != MDBX_SUCCESS))
     return LOG_IFERR(err);
-  }
+
+  const size_t len = MDBX_PNL_GETSIZE(parent->wr.repnl) + parent->wr.loose_count;
+  txn->wr.repnl = pnl_alloc((len > MDBX_PNL_INITIAL) ? len : MDBX_PNL_INITIAL);
+  if (unlikely(!txn->wr.repnl))
+    return LOG_IFERR(MDBX_ENOMEM);
 
   /* Move loose pages to reclaimed list */
   if (parent->wr.loose_count) {
@@ -375,7 +380,7 @@ int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
       tASSERT(parent, lp->flags == P_LOOSE);
       err = pnl_insert_span(&parent->wr.repnl, lp->pgno, 1);
       if (unlikely(err != MDBX_SUCCESS))
-        goto failed;
+        return LOG_IFERR(err);
       MDBX_ASAN_UNPOISON_MEMORY_REGION(&page_next(lp), sizeof(page_t *));
       VALGRIND_MAKE_MEM_DEFINED(&page_next(lp), sizeof(page_t *));
       parent->wr.loose_pages = page_next(lp);
@@ -388,6 +393,9 @@ int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
 #endif /* MDBX_ENABLE_REFUND */
     tASSERT(parent, dpl_check(parent));
   }
+#if MDBX_ENABLE_REFUND
+  txn->wr.loose_refund_wl = 0;
+#endif /* MDBX_ENABLE_REFUND */
   txn->wr.dirtyroom = parent->wr.dirtyroom;
   txn->wr.dirtylru = parent->wr.dirtylru;
 
@@ -412,18 +420,6 @@ int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
   txn->wr.retired_pages = parent->wr.retired_pages;
   parent->wr.retired_pages = (void *)(intptr_t)MDBX_PNL_GETSIZE(parent->wr.retired_pages);
 
-  txn->txnid = parent->txnid;
-  txn->front_txnid = parent->front_txnid + 1;
-#if MDBX_ENABLE_REFUND
-  txn->wr.loose_refund_wl = 0;
-#endif /* MDBX_ENABLE_REFUND */
-  txn->canary = parent->canary;
-  parent->flags |= MDBX_TXN_HAS_CHILD;
-  parent->nested = txn;
-  txn->parent = parent;
-  txn->owner = parent->owner;
-  txn->wr.troika = parent->wr.troika;
-
   txn->cursors[FREE_DBI] = nullptr;
   txn->cursors[MAIN_DBI] = nullptr;
   txn->dbi_state[FREE_DBI] = parent->dbi_state[FREE_DBI] & ~(DBI_FRESH | DBI_CREAT | DBI_DIRTY);
@@ -435,7 +431,6 @@ int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
                       (parent->parent ? parent->parent->wr.dirtyroom : parent->env->options.dp_limit));
   tASSERT(txn, txn->wr.dirtyroom + txn->wr.dirtylist->length ==
                    (txn->parent ? txn->parent->wr.dirtyroom : txn->env->options.dp_limit));
-  parent->env->txn = txn;
   tASSERT(parent, parent->cursors[FREE_DBI] == nullptr);
   return txn_shadow_cursors(parent, MAIN_DBI);
 }
