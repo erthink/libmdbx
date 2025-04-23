@@ -23,7 +23,13 @@
 #define RELIEF_FACTOR 1
 #endif
 
-#define NN (1000 / RELIEF_FACTOR)
+static const auto NN = 1000u / RELIEF_FACTOR;
+
+#if defined(__cpp_lib_latch) && __cpp_lib_latch >= 201907L
+static const auto N = std::min(17u, std::thread::hardware_concurrency());
+#else
+static const auto N = 3u;
+#endif
 
 static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int line, const char *msg,
                          unsigned length) noexcept {
@@ -263,7 +269,7 @@ void case1_write_cycle(mdbx::txn_managed txn, std::deque<mdbx::map_handle> &dbi,
       pre.unbind();
     if (!pre.txn())
       pre.bind(txn, dbi[prng(dbi.size())]);
-    for (auto i = 0; i < NN; ++i) {
+    for (auto i = 0u; i < NN; ++i) {
       auto k = mdbx::default_buffer::wrap(prng(NN));
       auto v = mdbx::default_buffer::wrap(prng(NN));
       if (pre.find_multivalue(k, v, false))
@@ -321,11 +327,6 @@ bool case1(mdbx::env env) {
   bool ok = true;
   std::deque<mdbx::map_handle> dbi;
   std::vector<mdbx::cursor_managed> cursors;
-#if defined(__cpp_lib_latch) && __cpp_lib_latch >= 201907L
-  static const auto N = std::thread::hardware_concurrency();
-#else
-  static const auto N = 3u;
-#endif
   for (auto t = 0u; t < N; ++t) {
     auto txn = env.start_write();
     auto table = txn.create_map(std::to_string(t), mdbx::key_mode::ordinal, mdbx::value_mode::multi_samelength);
@@ -392,7 +393,7 @@ int doit() {
   mdbx::env::remove(db_filename);
 
   mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(),
-                        mdbx::env::operate_parameters(42, 0, mdbx::env::nested_transactions));
+                        mdbx::env::operate_parameters(N + 2, 0, mdbx::env::nested_transactions));
 
   bool ok = case0(env);
   ok = case1(env) && ok;
