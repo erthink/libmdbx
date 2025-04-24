@@ -65,6 +65,8 @@ int dpl_alloc(MDBX_txn *txn) {
       unlikely(!dpl_reserve(txn, wanna)))
     return MDBX_ENOMEM;
 
+  /* LY: wr.dirtylist не может быть nullptr, так как либо уже выделен, либо будет выделен в dpl_reserve(). */
+  /* coverity[var_deref_model] */
   dpl_clear(txn->wr.dirtylist);
   return MDBX_SUCCESS;
 }

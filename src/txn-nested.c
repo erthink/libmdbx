@@ -405,6 +405,7 @@ int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
 
   tASSERT(txn, MDBX_PNL_ALLOCLEN(txn->wr.repnl) >= MDBX_PNL_GETSIZE(parent->wr.repnl));
   memcpy(txn->wr.repnl, parent->wr.repnl, MDBX_PNL_SIZEOF(parent->wr.repnl));
+  /* coverity[assignment_where_comparison_intended] */
   tASSERT(txn, pnl_check_allocated(txn->wr.repnl, (txn->geo.first_unallocated /* LY: intentional assignment
                                                                              here, only for assertion */
                                                    = parent->geo.first_unallocated) -
