@@ -1246,6 +1246,7 @@ static int gc_fill_returned(MDBX_txn *txn, gcu_t *ctx) {
                MDBX_PNL_SIZEOF(txn->wr.repnl));
         return MDBX_RESULT_TRUE;
       }
+      /* coverity[var_deref_model] */
       memcpy(data.iov_base, txn->wr.repnl, MDBX_PNL_SIZEOF(txn->wr.repnl));
       pgno_t *const from = MDBX_PNL_BEGIN(txn->wr.repnl), *const to = MDBX_PNL_END(txn->wr.repnl);
       TRACE("%s: fill %zu [ %zu:%" PRIaPGNO "...%zu:%" PRIaPGNO "] @%" PRIaTXN " (%s)", dbg_prefix(ctx),
@@ -1309,6 +1310,7 @@ static int gc_fill_returned(MDBX_txn *txn, gcu_t *ctx) {
 
     pgno_t *const dst = data.iov_base;
     pgno_t *const src = MDBX_PNL_BEGIN(txn->wr.repnl) + left - chunk;
+    /* coverity[var_deref_op] */
     *dst = (pgno_t)chunk;
     memcpy(dst + 1, src, chunk * sizeof(pgno_t));
     stored += chunk;

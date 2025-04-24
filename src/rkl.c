@@ -317,6 +317,7 @@ int rkl_push(rkl_t *rkl, const txnid_t id, const bool known_continuous) {
             + old_solid_len;
         /* количество элементов списка, которые нужно переместить для вставки еще-одного/следующего элемента */
         const size_t new_insert_cost = rkl->list_length - i;
+        /* coverity[logical_vs_bitwise] */
         if (unlikely(swap_cost < new_insert_cost) || MDBX_DEBUG) {
           /* Изымаемая последовательность длиннее добавляемой, поэтому:
            *  - список станет короче;
