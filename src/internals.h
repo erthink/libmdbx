@@ -214,10 +214,9 @@ struct MDBX_txn {
       troika_t troika;
       pnl_t __restrict repnl; /* Reclaimed GC pages */
       struct {
-        /* The list of reclaimed txn-ids from GC */
-        txl_t __restrict retxl;
-        txnid_t last_reclaimed; /* ID of last used record */
-        uint64_t time_acc;
+        rkl_t reclaimed; /* The list of reclaimed txn-ids from GC */
+        uint64_t spent;  /* Time spent reading and searching GC */
+        rkl_t comeback;  /* The list of ids of records returned into GC during commit, etc */
       } gc;
       bool prefault_write_activated;
 #if MDBX_ENABLE_REFUND
@@ -287,13 +286,14 @@ struct MDBX_cursor {
   };
   /* флаги проверки, в том числе биты для проверки типа листовых страниц. */
   uint8_t checking;
+  uint8_t pad;
 
   /* Указывает на txn->dbi_state[] для DBI этого курсора.
    * Модификатор __restrict тут полезен и безопасен в текущем понимании,
    * так как пересечение возможно только с dbi_state транзакции,
    * и происходит по-чтению до последующего изменения/записи. */
   uint8_t *__restrict dbi_state;
-  /* Связь списка отслеживания курсоров в транзакции */
+  /* Связь списка отслеживания курсоров в транзакции. */
   MDBX_txn *txn;
   /* Указывает на tree->dbs[] для DBI этого курсора. */
   tree_t *tree;
@@ -362,15 +362,14 @@ struct MDBX_env {
   uint16_t subpage_reserve_prereq;
   uint16_t subpage_reserve_limit;
   atomic_pgno_t mlocked_pgno;
-  uint8_t ps2ln;                                /* log2 of DB page size */
-  int8_t stuck_meta;                            /* recovery-only: target meta page or less that zero */
-  uint16_t merge_threshold, merge_threshold_gc; /* pages emptier than this are
-                                                   candidates for merging */
-  unsigned max_readers;                         /* size of the reader table */
-  MDBX_dbi max_dbi;                             /* size of the DB table */
-  uint32_t pid;                                 /* process ID of this env */
-  osal_thread_key_t me_txkey;                   /* thread-key for readers */
-  struct {                                      /* path to the DB files */
+  uint8_t ps2ln;              /* log2 of DB page size */
+  int8_t stuck_meta;          /* recovery-only: target meta page or less that zero */
+  uint16_t merge_threshold;   /* pages emptier than this are candidates for merging */
+  unsigned max_readers;       /* size of the reader table */
+  MDBX_dbi max_dbi;           /* size of the DB table */
+  uint32_t pid;               /* process ID of this env */
+  osal_thread_key_t me_txkey; /* thread-key for readers */
+  struct {                    /* path to the DB files */
     pathchar_t *lck, *dxb, *specified;
     void *buffer;
   } pathname;
@@ -467,6 +466,9 @@ struct MDBX_env {
   /* --------------------------------------------------- mostly volatile part */
 
   MDBX_txn *txn; /* current write transaction */
+  struct {
+    txnid_t detent;
+  } gc;
   osal_fastmutex_t dbi_lock;
   unsigned n_dbi; /* number of DBs opened */
 
@@ -549,11 +551,7 @@ MDBX_MAYBE_UNUSED static void static_checks(void) {
   STATIC_ASSERT(sizeof(clc_t) == 3 * sizeof(void *));
   STATIC_ASSERT(sizeof(kvx_t) == 8 * sizeof(void *));
 
-#if MDBX_WORDBITS == 64
-#define KVX_SIZE_LN2 6
-#else
-#define KVX_SIZE_LN2 5
-#endif
+#define KVX_SIZE_LN2 MDBX_WORDBITS_LN2
   STATIC_ASSERT(sizeof(kvx_t) == (1u << KVX_SIZE_LN2));
 }
 #endif /* Disabled for MSVC 19.0 (VisualStudio 2015) */

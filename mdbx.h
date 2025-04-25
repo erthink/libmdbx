@@ -2775,10 +2775,10 @@ typedef struct MDBX_stat MDBX_stat;
  * Legacy mdbx_env_stat() correspond to calling \ref mdbx_env_stat_ex() with the
  * null `txn` argument.
  *
- * \param [in] env     An environment handle returned by \ref mdbx_env_create()
- * \param [in] txn     A transaction handle returned by \ref mdbx_txn_begin()
+ * \param [in] env     An environment handle returned by \ref mdbx_env_create().
+ * \param [in] txn     A transaction handle returned by \ref mdbx_txn_begin().
  * \param [out] stat   The address of an \ref MDBX_stat structure where
- *                     the statistics will be copied
+ *                     the statistics will be copied.
  * \param [in] bytes   The size of \ref MDBX_stat.
  *
  * \returns A non-zero error value on failure and 0 on success. */

@@ -56,7 +56,7 @@ typedef const pgno_t *const_pnl_t;
 #define MDBX_PNL_SIZEOF(pl) ((MDBX_PNL_GETSIZE(pl) + 1) * sizeof(pgno_t))
 #define MDBX_PNL_IS_EMPTY(pl) (MDBX_PNL_GETSIZE(pl) == 0)
 
-MDBX_MAYBE_UNUSED static inline size_t pnl_size2bytes(size_t size) {
+MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline size_t pnl_size2bytes(size_t size) {
   assert(size > 0 && size <= PAGELIST_LIMIT);
 #if MDBX_PNL_PREALLOC_FOR_RADIXSORT
 
@@ -71,7 +71,7 @@ MDBX_MAYBE_UNUSED static inline size_t pnl_size2bytes(size_t size) {
   return bytes;
 }
 
-MDBX_MAYBE_UNUSED static inline pgno_t pnl_bytes2size(const size_t bytes) {
+MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline pgno_t pnl_bytes2size(const size_t bytes) {
   size_t size = bytes / sizeof(pgno_t);
   assert(size > 3 && size <= PAGELIST_LIMIT + /* alignment gap */ 65536);
   size -= 3;
@@ -114,7 +114,7 @@ MDBX_INTERNAL int __must_check_result pnl_append_span(__restrict pnl_t *ppnl, pg
 
 MDBX_INTERNAL int __must_check_result pnl_insert_span(__restrict pnl_t *ppnl, pgno_t pgno, size_t n);
 
-MDBX_INTERNAL size_t pnl_search_nochk(const pnl_t pnl, pgno_t pgno);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pnl_search_nochk(const pnl_t pnl, pgno_t pgno);
 
 MDBX_INTERNAL void pnl_sort_nochk(pnl_t pnl);
 
@@ -130,7 +130,8 @@ MDBX_MAYBE_UNUSED static inline void pnl_sort(pnl_t pnl, size_t limit4check) {
   (void)limit4check;
 }
 
-MDBX_MAYBE_UNUSED static inline size_t pnl_search(const pnl_t pnl, pgno_t pgno, size_t limit) {
+MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline size_t pnl_search(const pnl_t pnl, pgno_t pgno,
+                                                                             size_t limit) {
   assert(pnl_check_allocated(pnl, limit));
   if (MDBX_HAVE_CMOV) {
     /* cmov-ускоренный бинарный поиск может читать (но не использовать) один

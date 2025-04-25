@@ -513,23 +513,25 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
     info->txn_reader_lag = INT64_MAX;
     lck_t *const lck = env->lck_mmap.lck;
     if (scan_rlt && lck) {
-      txnid_t oldest_snapshot = txn->txnid;
+      txnid_t oldest_reading = txn->txnid;
       const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
       if (snap_nreaders) {
-        oldest_snapshot = txn_snapshot_oldest(txn);
-        if (oldest_snapshot == txn->txnid - 1) {
-          /* check if there is at least one reader */
-          bool exists = false;
+        txn_gc_detent(txn);
+        oldest_reading = txn->env->gc.detent;
+        if (oldest_reading == txn->wr.troika.txnid[txn->wr.troika.recent]) {
+          /* Если самый старый используемый снимок является предыдущим, т. е. непосредственно предшествующим текущей
+           * транзакции, то просматриваем таблицу читателей чтобы выяснить действительно ли снимок используется
+           * читателями. */
+          oldest_reading = txn->txnid;
           for (size_t i = 0; i < snap_nreaders; ++i) {
-            if (atomic_load32(&lck->rdt[i].pid, mo_Relaxed) && txn->txnid > safe64_read(&lck->rdt[i].txnid)) {
-              exists = true;
+            if (atomic_load32(&lck->rdt[i].pid, mo_Relaxed) && txn->env->gc.detent == safe64_read(&lck->rdt[i].txnid)) {
+              oldest_reading = txn->env->gc.detent;
               break;
             }
           }
-          oldest_snapshot += !exists;
         }
       }
-      info->txn_reader_lag = txn->txnid - oldest_snapshot;
+      info->txn_reader_lag = txn->txnid - oldest_reading;
     }
   }
 

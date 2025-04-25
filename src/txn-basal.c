@@ -62,6 +62,8 @@ __cold MDBX_txn *txn_basal_create(const size_t max_dbi) {
   if (unlikely(!txn))
     return txn;
 
+  rkl_init(&txn->wr.gc.reclaimed);
+  rkl_init(&txn->wr.gc.comeback);
   txn->dbs = ptr_disp(txn, base);
   txn->cursors = ptr_disp(txn->dbs, max_dbi * sizeof(txn->dbs[0]));
   txn->dbi_seqs = ptr_disp(txn->cursors, max_dbi * sizeof(txn->cursors[0]));
@@ -82,7 +84,8 @@ __cold MDBX_txn *txn_basal_create(const size_t max_dbi) {
 
 __cold void txn_basal_destroy(MDBX_txn *txn) {
   dpl_free(txn);
-  txl_free(txn->wr.gc.retxl);
+  rkl_destroy(&txn->wr.gc.reclaimed);
+  rkl_destroy(&txn->wr.gc.comeback);
   pnl_free(txn->wr.retired_pages);
   pnl_free(txn->wr.spilled.list);
   pnl_free(txn->wr.repnl);
@@ -121,10 +124,9 @@ int txn_basal_start(MDBX_txn *txn, unsigned flags) {
   MDBX_PNL_SETSIZE(txn->wr.retired_pages, 0);
   txn->wr.spilled.list = nullptr;
   txn->wr.spilled.least_removed = 0;
-  txn->wr.gc.time_acc = 0;
-  txn->wr.gc.last_reclaimed = 0;
-  if (txn->wr.gc.retxl)
-    MDBX_PNL_SETSIZE(txn->wr.gc.retxl, 0);
+  txn->wr.gc.spent = 0;
+  tASSERT(txn, rkl_empty(&txn->wr.gc.reclaimed));
+  txn->env->gc.detent = 0;
   env->txn = txn;
 
   return MDBX_SUCCESS;
@@ -140,6 +142,8 @@ int txn_basal_end(MDBX_txn *txn, unsigned mode) {
   env->txn = nullptr;
   pnl_free(txn->wr.spilled.list);
   txn->wr.spilled.list = nullptr;
+  rkl_clear_and_shrink(&txn->wr.gc.reclaimed);
+  rkl_clear_and_shrink(&txn->wr.gc.comeback);
 
   eASSERT(env, txn->parent == nullptr);
   pnl_shrink(&txn->wr.retired_pages);
@@ -258,9 +262,19 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
   }
 
   gcu_t gcu_ctx;
-  int rc = gc_update_init(txn, &gcu_ctx);
+  int rc = gc_put_init(txn, &gcu_ctx);
   if (likely(rc == MDBX_SUCCESS))
     rc = gc_update(txn, &gcu_ctx);
+
+#if MDBX_ENABLE_BIGFOOT
+  const txnid_t commit_txnid = gcu_ctx.bigfoot;
+  if (commit_txnid > txn->txnid)
+    TRACE("use @%" PRIaTXN " (+%zu) for commit bigfoot-txn", commit_txnid, (size_t)(commit_txnid - txn->txnid));
+#else
+  const txnid_t commit_txnid = txn->txnid;
+#endif
+  gc_put_destroy(&gcu_ctx);
+
   if (ts)
     ts->gc_cpu = osal_cputime(nullptr) - ts->gc_cpu;
   if (unlikely(rc != MDBX_SUCCESS))
@@ -334,13 +348,6 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
   meta.canary = txn->canary;
   memcpy(&meta.dxbid, &head.ptr_c->dxbid, sizeof(meta.dxbid));
 
-  txnid_t commit_txnid = txn->txnid;
-#if MDBX_ENABLE_BIGFOOT
-  if (gcu_ctx.bigfoot > txn->txnid) {
-    commit_txnid = gcu_ctx.bigfoot;
-    TRACE("use @%" PRIaTXN " (+%zu) for commit bigfoot-txn", commit_txnid, (size_t)(commit_txnid - txn->txnid));
-  }
-#endif
   meta.unsafe_sign = DATASIGN_NONE;
   meta_set_txnid(env, &meta, commit_txnid);
 

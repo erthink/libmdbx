@@ -24,12 +24,11 @@ static size_t audit_db_used(const tree_t *db) {
   return db ? (size_t)db->branch_pages + (size_t)db->leaf_pages + (size_t)db->large_pages : 0;
 }
 
-__cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored, bool dont_filter_gc) {
+__cold static int audit_ex_locked(MDBX_txn *txn, const size_t retired_stored, const bool dont_filter_gc) {
   const MDBX_env *const env = txn->env;
-  size_t pending = 0;
-  if ((txn->flags & MDBX_TXN_RDONLY) == 0)
-    pending = txn->wr.loose_count + MDBX_PNL_GETSIZE(txn->wr.repnl) +
-              (MDBX_PNL_GETSIZE(txn->wr.retired_pages) - retired_stored);
+  tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
+  const size_t pending = txn->wr.loose_count + MDBX_PNL_GETSIZE(txn->wr.repnl) +
+                         (MDBX_PNL_GETSIZE(txn->wr.retired_pages) - retired_stored);
 
   cursor_couple_t cx;
   int rc = cursor_init(&cx.outer, txn, FREE_DBI);
@@ -40,17 +39,16 @@ __cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored, bool don
   MDBX_val key, data;
   rc = outer_first(&cx.outer, &key, &data);
   while (rc == MDBX_SUCCESS) {
-    if (!dont_filter_gc) {
-      if (unlikely(key.iov_len != sizeof(txnid_t))) {
-        ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid GC-key size", (unsigned)key.iov_len);
-        return MDBX_CORRUPTED;
-      }
-      txnid_t id = unaligned_peek_u64(4, key.iov_base);
-      if (txn->wr.gc.retxl ? txl_contain(txn->wr.gc.retxl, id) : (id <= txn->wr.gc.last_reclaimed))
-        goto skip;
+    if (unlikely(key.iov_len != sizeof(txnid_t))) {
+      ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid GC-key size", (unsigned)key.iov_len);
+      return MDBX_CORRUPTED;
     }
-    gc += *(pgno_t *)data.iov_base;
-  skip:
+    const txnid_t id = unaligned_peek_u64(4, key.iov_base);
+    const size_t len = *(pgno_t *)data.iov_base;
+    const bool acc = dont_filter_gc || !gc_is_reclaimed(txn, id);
+    TRACE("%s id %" PRIaTXN " len %zu", acc ? "acc" : "skip", id, len);
+    if (acc)
+      gc += len;
     rc = outer_next(&cx.outer, &key, &data, MDBX_NEXT);
   }
   tASSERT(txn, rc == MDBX_NOTFOUND);

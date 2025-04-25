@@ -3,6 +3,17 @@
 
 #include "internals.h"
 
+MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED MDBX_INTERNAL unsigned ceil_log2n(size_t value_uintptr) {
+  assert(value_uintptr > 0 && value_uintptr < INT32_MAX);
+  value_uintptr -= 1;
+  value_uintptr |= value_uintptr >> 1;
+  value_uintptr |= value_uintptr >> 2;
+  value_uintptr |= value_uintptr >> 4;
+  value_uintptr |= value_uintptr >> 8;
+  value_uintptr |= value_uintptr >> 16;
+  return log2n_powerof2(value_uintptr + 1);
+}
+
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION MDBX_INTERNAL unsigned log2n_powerof2(size_t value_uintptr) {
   assert(value_uintptr > 0 && value_uintptr < INT32_MAX && is_powerof2(value_uintptr));
   assert((value_uintptr & -(intptr_t)value_uintptr) == value_uintptr);

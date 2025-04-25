@@ -1780,8 +1780,7 @@ __hot csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cur
     }
     int cmp = mc->clc->k.cmp(&aligned_key, &nodekey);
     if (unlikely(cmp == 0)) {
-      /* Probably happens rarely, but first node on the page
-       * was the one we wanted. */
+      /* Probably happens rarely, but first node on the page was the one we wanted. */
       mc->ki[mc->top] = 0;
       ret.exact = true;
       goto got_node;
