@@ -54,7 +54,7 @@ cleans readers, as an a process aborting (especially with core dump) can
 take a long time, and checking readers cannot be performed too often due
 to performance degradation.
 
-This issue will be addressed in MithrlDB and one of libmdbx releases,
+This issue will be addressed in MithrilDB and one of libmdbx releases,
 presumably in 2025. To do this, nonlinear GC recycling will be
 implemented, without stopping garbage recycling on the old MVCC snapshot
 used by a long read transaction.
@@ -92,7 +92,7 @@ free consecutive/adjacent pages through GC has been significantly
 speeded, including acceleration using NOEN/SSE2/AVX2/AVX512
 instructions.
 
-This issue will be addressed in MithrlDB and refined within one of
+This issue will be addressed in MithrilDB and refined within one of
 0.15.x libmdbx releases, presumably at end of 2025.
 
 

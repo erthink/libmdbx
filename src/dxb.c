@@ -1158,7 +1158,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
     if (!head.is_steady && meta_is_steady(pending))
       target = (meta_t *)head.ptr_c;
     else {
-      NOTICE("skip update meta%" PRIaPGNO " for txn#%" PRIaTXN "since it is already steady",
+      NOTICE("skip update meta%" PRIaPGNO " for txn#%" PRIaTXN ", since it is already steady",
              data_page(head.ptr_c)->pgno, head.txnid);
       return MDBX_SUCCESS;
     }
@@ -1291,6 +1291,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
   }
 
   uint64_t timestamp = 0;
+  /* coverity[array_null] */
   while ("workaround for https://libmdbx.dqdkfa.ru/dead-github/issues/269") {
     rc = coherency_check_written(env, pending->unsafe_txnid, target,
                                  bytes2pgno(env, ptr_dist(target, env->dxb_mmap.base)), &timestamp);

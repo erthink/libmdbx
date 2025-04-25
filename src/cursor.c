@@ -1726,6 +1726,7 @@ __hot csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cur
 
   csr_t ret;
   ret.exact = false;
+  /* coverity[logical_vs_bitwise] */
   if (unlikely(key->iov_len < mc->clc->k.lmin ||
                (key->iov_len > mc->clc->k.lmax &&
                 (mc->clc->k.lmin == mc->clc->k.lmax || MDBX_DEBUG || MDBX_FORCE_ASSERTIONS)))) {

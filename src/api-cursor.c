@@ -63,7 +63,7 @@ int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
       return MDBX_SUCCESS;
     rc = mdbx_cursor_unbind(mc);
     if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
+      return (rc == MDBX_BAD_TXN) ? MDBX_EINVAL : rc;
   }
   cASSERT(mc, mc->next == mc);
 
@@ -89,8 +89,16 @@ int mdbx_cursor_unbind(MDBX_cursor *mc) {
     return LOG_IFERR(MDBX_EINVAL);
 
   int rc = check_txn(mc->txn, MDBX_TXN_FINISHED | MDBX_TXN_HAS_CHILD);
-  if (unlikely(rc != MDBX_SUCCESS))
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    for (const MDBX_txn *txn = mc->txn; rc == MDBX_BAD_TXN && check_txn(txn, MDBX_TXN_FINISHED) == MDBX_SUCCESS;
+         txn = txn->nested)
+      if (dbi_state(txn, cursor_dbi(mc)) == 0)
+        /* специальный случай: курсор прикреплён к родительской транзакции, но соответствующий dbi-дескриптор ещё
+         * не использовался во вложенной транзакции, т.е. курсор ещё не импортирован в дочернюю транзакцию и не имеет
+         * связанного сохранённого состояния (поэтому mc→backup равен nullptr). */
+        rc = MDBX_EINVAL;
     return LOG_IFERR(rc);
+  }
 
   if (unlikely(!mc->txn || mc->txn->signature != txn_signature)) {
     ERROR("Wrong cursor's transaction %p 0x%x", __Wpedantic_format_voidptr(mc->txn), mc->txn ? mc->txn->signature : 0);
@@ -245,9 +253,8 @@ int mdbx_txn_release_all_cursors_ex(const MDBX_txn *txn, bool unbind, size_t *co
             MDBX_cursor *bk = mc->backup;
             mc->next = bk->next;
             mc->backup = bk->backup;
-            mc->backup = nullptr;
+            bk->backup = nullptr;
             bk->signature = 0;
-            bk = bk->next;
             osal_free(bk);
           } else {
             mc->signature = cur_signature_ready4dispose;

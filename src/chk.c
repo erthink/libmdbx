@@ -159,12 +159,12 @@ __cold static MDBX_chk_line_t *MDBX_PRINTF_ARGS(2, 3) chk_print(MDBX_chk_line_t 
   return line;
 }
 
-__cold MDBX_MAYBE_UNUSED static void chk_println_va(MDBX_chk_scope_t *const scope, enum MDBX_chk_severity severity,
+MDBX_MAYBE_UNUSED __cold static void chk_println_va(MDBX_chk_scope_t *const scope, enum MDBX_chk_severity severity,
                                                     const char *fmt, va_list args) {
   chk_line_end(chk_print_va(chk_line_begin(scope, severity), fmt, args));
 }
 
-__cold MDBX_MAYBE_UNUSED static void chk_println(MDBX_chk_scope_t *const scope, enum MDBX_chk_severity severity,
+MDBX_MAYBE_UNUSED __cold static void chk_println(MDBX_chk_scope_t *const scope, enum MDBX_chk_severity severity,
                                                  const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
