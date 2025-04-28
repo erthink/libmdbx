@@ -555,9 +555,9 @@ Of course, in addition to this, your toolchain must ensure the reproducibility o
 For more information please refer to [reproducible-builds.org](https://reproducible-builds.org/).
 
 #### Containers
-There are no special traits nor quirks if you use libmdbx ONLY inside the single container.
-But in a cross-container cases or with a host-container(s) mix the two major things MUST be
-guaranteed:
+There are no special traits nor quirks if you use _libmdbx_ ONLY inside
+the single container. But in a cross-container(s) or with a host-container(s)
+interoperability cases the three major things MUST be guaranteed:
 
 1. Coherence of memory mapping content and unified page cache inside OS
 kernel for host and all container(s) operated with a DB. Basically this
@@ -572,6 +572,12 @@ in the system memory.
       I.e. the `OpenProcess(SYNCHRONIZE, ..., PID)` must return reasonable error,
       including `ERROR_ACCESS_DENIED`,
       but not the `ERROR_INVALID_PARAMETER` as for an invalid/non-existent PID.
+
+3. The versions/builds of _libmdbx_ and `libc`/`pthreads` (`glibc`, `musl`, etc) must be be compatible.
+   - Basically, the `options:` string in the output of `mdbx_chk -V` must be the same for host and container(s).
+     See `MDBX_LOCKING`, `MDBX_USE_OFDLOCKS` and other build options for details.
+   - Avoid using different versions of `libc`, especially mixing different implementations, i.e. `glibc` with `musl`, etc.
+     Prefer to use the same LTS version, or switch to full virtualization/isolation if in doubt.
 
 #### DSO/DLL unloading and destructors of Thread-Local-Storage objects
 When building _libmdbx_ as a shared library or use static _libmdbx_ as a
