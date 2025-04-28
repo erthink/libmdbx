@@ -716,8 +716,8 @@ __hot static pgno_t repnl_get_sequence(MDBX_txn *txn, const size_t num, uint8_t 
   return 0;
 }
 
-bool gc_repnl_has_span(MDBX_txn *txn, const size_t num) {
-  return (num > 1) ? repnl_get_sequence(txn, num, ALLOC_RESERVE) != 0 : !MDBX_PNL_IS_EMPTY(txn->wr.repnl);
+bool gc_repnl_has_span(const MDBX_txn *txn, const size_t num) {
+  return (num > 1) ? repnl_get_sequence((MDBX_txn *)txn, num, ALLOC_RESERVE) != 0 : !MDBX_PNL_IS_EMPTY(txn->wr.repnl);
 }
 
 static inline pgr_t page_alloc_finalize(MDBX_env *const env, MDBX_txn *const txn, const MDBX_cursor *const mc,

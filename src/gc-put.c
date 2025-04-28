@@ -20,6 +20,10 @@ void gc_put_destroy(gcu_t *ctx) {
   rkl_destroy(&ctx->sequel);
 }
 
+static size_t gc_chunk_pages(const MDBX_txn *txn, const size_t chunk) {
+  return largechunk_npages(txn->env, gc_chunk_bytes(chunk));
+}
+
 static int gc_peekid(const MDBX_val *key, txnid_t *id) {
   if (likely(key->iov_len == sizeof(txnid_t))) {
     *id = unaligned_peek_u64(4, key->iov_base);
@@ -397,7 +401,7 @@ static int gc_store_retired(MDBX_txn *txn, gcu_t *ctx) {
       const size_t chunk_hi = ((left_before | 3) > ctx->goodchunk && ctx->bigfoot < (MAX_TXNID - UINT32_MAX))
                                   ? ctx->goodchunk
                                   : (left_before | 3);
-      data.iov_len = (chunk_hi + 1) * sizeof(pgno_t);
+      data.iov_len = gc_chunk_bytes(chunk_hi);
       err = cursor_put(&ctx->cursor, &key, &data, MDBX_RESERVE);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
@@ -630,11 +634,13 @@ typedef struct sr_context {
  * двигаясь по гистограмме от больших элементов к меньшим. */
 static bool consume_remaining(const sr_context_t *const ct, sr_state_t *const st, size_t len) {
   pgno_t *const solution = ct->solution->array;
-  size_t per_chunk = ct->first_page + ct->other_pages * (len - 1);
+  while (len > ct->factor)
+    solution[--len] = 0;
   solution[len - 1] = 0;
   if (unlikely(0 >= (int)st->left_volume))
     goto done;
 
+  size_t per_chunk = ct->first_page + ct->other_pages * (len - 1);
   while (st->hist.end > 0 && st->left_slots > 0) {
     if (st->hist.array[st->hist.end - 1]) {
       solution[len - 1] += 1;
@@ -678,8 +684,7 @@ static bool solve_recursive(const sr_context_t *const ct, sr_state_t *const st, 
         }
         assert(local.left_slots > n);
         local.left_slots -= n;
-        assert(local.left_volume >= n * per_chunk);
-        local.left_volume -= n * per_chunk;
+        local.left_volume = (local.left_volume > n * per_chunk) ? local.left_volume - n * per_chunk : 0;
       }
       if (!solve_recursive(ct, &local, len - 1)) {
         lo = n + 1;
@@ -707,8 +712,7 @@ static int gc_dense_solve(MDBX_txn *txn, gcu_t *ctx, gc_dense_histogram_t *const
     return MDBX_PROBLEM;
   }
 
-  const sr_context_t ct = {.factor = largechunk_npages(
-                               txn->env, ((st.left_volume + st.left_slots - 1) / st.left_slots + 1) * sizeof(pgno_t)),
+  const sr_context_t ct = {.factor = gc_chunk_pages(txn, (st.left_volume + st.left_slots - 1) / st.left_slots),
                            .first_page = /* на первой странице */ txn->env->maxgc_large1page +
                                          /* сама страница также будет израсходована */ 1,
                            .other_pages = /* на второй и последующих страницах */ txn->env->ps / sizeof(pgno_t) +
@@ -745,7 +749,7 @@ static int gc_dense_solve(MDBX_txn *txn, gcu_t *ctx, gc_dense_histogram_t *const
 // int gc_solve_test(MDBX_txn *txn, gcu_t *ctx) {
 //   gc_dense_histogram_t r;
 //   gc_dense_histogram_t *const solution = &r;
-
+//
 //   sr_state_t st = {.left_slots = 5,
 //                    .left_volume = 8463,
 //                    .hist = {.end = 31, .array = {6493, 705, 120, 14, 2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
@@ -755,23 +759,21 @@ static int gc_dense_solve(MDBX_txn *txn, gcu_t *ctx, gc_dense_histogram_t *const
 //     ERROR("%s/%d: %s", "MDBX_PROBLEM", MDBX_PROBLEM, "recursive-solving preconditions violated");
 //     return MDBX_PROBLEM;
 //   }
-
-//   const sr_context_t ct = {.factor = largechunk_npages(
-//                                txn->env, ((st.left_volume + st.left_slots - 1) / st.left_slots + 1) *
-//                                sizeof(pgno_t)),
+//
+//   const sr_context_t ct = {.factor = gc_chunk_pages(txn, (st.left_volume + st.left_slots - 1) / st.left_slots),
 //                            .first_page = /* на первой странице */ txn->env->maxgc_large1page +
 //                                          /* сама страница также будет израсходована */ 1,
 //                            .other_pages = /* на второй и последующих страницах */ txn->env->ps / sizeof(pgno_t) +
 //                                           /* каждая страница также будет израсходована */ 1,
 //                            .solution = solution};
-
+//
 //   memset(solution, 0, sizeof(*solution));
 //   if (solve_recursive(&ct, &st, st.hist.end)) {
 //     const pgno_t *end = ARRAY_END(solution->array);
 //     while (end > solution->array && end[-1] == 0)
 //       --end;
 //     solution->end = (unsigned)(end - solution->array);
-
+//
 //     /* проверяем решение */
 //     size_t items = 0, volume = 0;
 //     for (size_t i = 0, chunk = ct.first_page; i < solution->end; ++i) {
@@ -779,7 +781,7 @@ static int gc_dense_solve(MDBX_txn *txn, gcu_t *ctx, gc_dense_histogram_t *const
 //       volume += solution->array[i] * chunk;
 //       chunk += ct.other_pages;
 //     }
-
+//
 //     if (unlikely(volume < (size_t)ctx->return_left || items > rkl_len(&ctx->ready4reuse))) {
 //       assert(!"recursive-solving failure");
 //       ERROR("%s/%d: %s", "MDBX_PROBLEM", MDBX_PROBLEM, "recursive-solving failure");
@@ -787,7 +789,7 @@ static int gc_dense_solve(MDBX_txn *txn, gcu_t *ctx, gc_dense_histogram_t *const
 //     }
 //     return MDBX_RESULT_TRUE;
 //   }
-
+//
 //   /* решение НЕ найдено */
 //   return MDBX_RESULT_FALSE;
 // }
@@ -962,7 +964,7 @@ static inline int gc_reserve4return(MDBX_txn *txn, gcu_t *ctx, const size_t chun
     return err;
 
   MDBX_val key = {.iov_base = &reservation_id, .iov_len = sizeof(reservation_id)};
-  MDBX_val data = {.iov_base = nullptr, .iov_len = (chunk_hi + 1) * sizeof(pgno_t)};
+  MDBX_val data = {.iov_base = nullptr, .iov_len = gc_chunk_bytes(chunk_hi)};
   TRACE("%s: reserved +%zu...+%zu [%zu...%zu), err %d", dbg_prefix(ctx), chunk_lo, chunk_hi,
         ctx->return_reserved_lo + 1, ctx->return_reserved_hi + chunk_hi + 1, err);
   gc_prepare_stockpile4update(txn, ctx);
@@ -974,23 +976,43 @@ static inline int gc_reserve4return(MDBX_txn *txn, gcu_t *ctx, const size_t chun
   memset(data.iov_base, 0, data.iov_len);
   ctx->return_reserved_lo += chunk_lo;
   ctx->return_reserved_hi += chunk_hi;
+  if (unlikely(!rkl_empty(&txn->wr.gc.reclaimed))) {
+    NOTICE("%s: restart since %zu slot(s) reclaimed (reserved %zu...%zu of %zu)", dbg_prefix(ctx),
+           rkl_len(&txn->wr.gc.reclaimed), ctx->return_reserved_lo, ctx->return_reserved_hi,
+           MDBX_PNL_GETSIZE(txn->wr.repnl));
+    return MDBX_RESULT_TRUE;
+  }
+
   return MDBX_SUCCESS;
 }
 
-static size_t adjust_chunk(const gcu_t *const ctx, const size_t chunk) {
-  const MDBX_env *const env = ctx->cursor.txn->env;
-  size_t hi = chunk, lo = chunk - largechunk_npages(env, (chunk + 1) * sizeof(pgno_t)), adjusted = lo;
-  while (lo < hi) {
-    adjusted = (hi + lo) / 2;
-    size_t probe = chunk - largechunk_npages(env, (adjusted + 1) * sizeof(pgno_t));
-    if (probe > adjusted)
-      lo = adjusted + 1;
-    else if (probe < adjusted)
-      hi = adjusted - 1;
-    else
-      break;
+static size_t dense_chunk_outlay(const MDBX_txn *txn, const size_t chunk) {
+  size_t need_span = gc_chunk_pages(txn, chunk);
+  return gc_repnl_has_span(txn, need_span) ? need_span : 0;
+}
+
+static size_t dense_adjust_chunk(const MDBX_txn *txn, const size_t chunk) {
+  size_t adjusted = chunk;
+  if (chunk > txn->env->maxgc_large1page) {
+    size_t hi = chunk + 1, lo = chunk - gc_chunk_pages(txn, chunk) - 1;
+    while (lo < hi) {
+      adjusted = (hi + lo) / 2;
+      size_t probe = chunk - dense_chunk_outlay(txn, adjusted);
+      if (probe > adjusted)
+        lo = adjusted + 1;
+      else if (probe < adjusted)
+        hi = adjusted - 1;
+      else
+        break;
+    }
   }
   return adjusted;
+}
+
+static size_t dense_adjust_amount(const MDBX_txn *const txn, size_t amount) {
+  const size_t gap = 2 + txn->dbs[FREE_DBI].height;
+  const size_t snubber = txn->env->ps / sizeof(pgno_t) / 2;
+  return ((amount + gap < txn->env->maxgc_large1page) ? txn->env->maxgc_large1page : amount + snubber);
 }
 
 static int gc_handle_dense(MDBX_txn *txn, gcu_t *ctx, size_t left_min, size_t left_max) {
@@ -1027,76 +1049,92 @@ static int gc_handle_dense(MDBX_txn *txn, gcu_t *ctx, size_t left_min, size_t le
   if (!rkl_empty(&ctx->ready4reuse)) {
     gc_dense_hist(txn, ctx);
     gc_dense_histogram_t solution;
+    if (ctx->loop == 1 || ctx->loop % 3 == 0)
+      left_max = dense_adjust_amount(txn, left_max);
     ctx->return_left = left_max;
     err = gc_dense_solve(txn, ctx, &solution);
     if (err == MDBX_RESULT_FALSE /* решение НЕ найдено */ && left_max != left_min) {
-      ctx->return_left = left_min;
-      err = gc_dense_solve(txn, ctx, &solution);
+      if (ctx->loop == 1 || ctx->loop % 3 == 0)
+        left_min = dense_adjust_amount(txn, left_min);
+      if (left_max != left_min) {
+        ctx->return_left = left_min;
+        err = gc_dense_solve(txn, ctx, &solution);
+      }
     }
     if (err == MDBX_RESULT_TRUE /* решение найдено */) {
       for (size_t i = solution.end; i > 0; --i)
         for (pgno_t n = 0; n < solution.array[i - 1]; ++n) {
-          size_t chunk_hi = txn->env->maxgc_large1page + txn->env->ps / sizeof(pgno_t) * (i - 1);
-          size_t chunk_lo = chunk_hi - txn->env->maxgc_large1page + ctx->goodchunk;
-          if (chunk_hi > left_max)
+          size_t span = i;
+          size_t chunk_hi = txn->env->maxgc_large1page + txn->env->ps / sizeof(pgno_t) * (span - 1);
+          if (chunk_hi > left_max) {
             chunk_hi = left_max;
-          if (chunk_lo > left_min)
-            chunk_lo = left_min;
+            span = gc_chunk_pages(txn, chunk_hi);
+          }
+          size_t chunk_lo = chunk_hi - txn->env->maxgc_large1page + ctx->goodchunk;
           TRACE("%s: dense-chunk (seq-len %zu, %d of %d) %zu...%zu, gc-per-ovpage %u", dbg_prefix(ctx), i, n + 1,
                 solution.array[i - 1], chunk_lo, chunk_hi, txn->env->maxgc_large1page);
+          size_t amount = MDBX_PNL_GETSIZE(txn->wr.repnl);
           err = gc_reserve4return(txn, ctx, chunk_lo, chunk_hi);
           if (unlikely(err != MDBX_SUCCESS))
             return err;
-          const size_t amount = MDBX_PNL_GETSIZE(txn->wr.repnl);
+
+          const size_t now = MDBX_PNL_GETSIZE(txn->wr.repnl);
+          if (span < amount - now - txn->dbs[FREE_DBI].height || span > amount - now + txn->dbs[FREE_DBI].height)
+            TRACE("dense-%s-reservation: miss %zu (expected) != %zi (got)", "solve", span, amount - now);
+          amount = now;
           if (ctx->return_reserved_hi >= amount)
-            return rkl_empty(&txn->wr.gc.reclaimed) ? MDBX_SUCCESS
-                                                    : MDBX_RESULT_TRUE /* нужно чистить переработанные записи */;
-          left_min = amount - ctx->return_reserved_hi;
-          left_max = amount - ctx->return_reserved_lo;
+            return MDBX_SUCCESS;
+          left_max = dense_adjust_amount(txn, amount) - ctx->return_reserved_lo;
         }
     }
-  } else if (rkl_len(&txn->wr.gc.comeback))
+  } else if (rkl_len(&txn->wr.gc.comeback)) {
+    NOTICE("%s: restart since %zu slot(s) comemack non-dense (reserved %zu...%zu of %zu)", dbg_prefix(ctx),
+           rkl_len(&txn->wr.gc.comeback), ctx->return_reserved_lo, ctx->return_reserved_hi,
+           MDBX_PNL_GETSIZE(txn->wr.repnl));
     return /* повтор цикла */ MDBX_RESULT_TRUE;
+  }
 
   if (err == MDBX_RESULT_FALSE /* решение НЕ найдено, либо нет идентификаторов */) {
     if (ctx->return_left > txn->env->maxgc_large1page) {
       err = gc_reclaim_slot(txn, ctx);
       if (err == MDBX_NOTFOUND)
-        err = gc_reserve4retired(txn, ctx,
-                                 1 + (ctx->return_left - txn->env->maxgc_large1page) / (txn->env->ps / sizeof(pgno_t)));
-      if (err != MDBX_NOTFOUND) {
-        if (err != MDBX_SUCCESS)
-          return err;
-      }
+        err = gc_reserve4retired(txn, ctx, gc_chunk_pages(txn, dense_adjust_chunk(txn, ctx->return_left)));
+      if (err != MDBX_NOTFOUND && err != MDBX_SUCCESS)
+        return err;
     }
-    if (ctx->loop == 1 && !rkl_empty(&txn->wr.gc.comeback))
-      return MDBX_RESULT_TRUE;
 
     const size_t per_page = txn->env->ps / sizeof(pgno_t);
+    size_t amount = MDBX_PNL_GETSIZE(txn->wr.repnl);
     do {
-      if (!rkl_empty(&txn->wr.gc.reclaimed) || rkl_empty(&ctx->ready4reuse))
+      if (rkl_empty(&ctx->ready4reuse)) {
+        NOTICE("%s: restart since no slot(s) available (reserved %zu...%zu of %zu)", dbg_prefix(ctx),
+               ctx->return_reserved_lo, ctx->return_reserved_hi, amount);
         return MDBX_RESULT_TRUE;
-      const size_t amount = MDBX_PNL_GETSIZE(txn->wr.repnl);
-      const size_t reserved = (ctx->return_reserved_hi - ctx->return_reserved_lo > per_page) ? ctx->return_reserved_hi
-                                                                                             : ctx->return_reserved_lo;
+      }
+      const size_t left = dense_adjust_amount(txn, amount) - ctx->return_reserved_hi;
       const size_t slots = rkl_len(&ctx->ready4reuse);
-      const size_t left = amount - reserved;
       const size_t base = (left + slots - 1) / slots;
-      const size_t adjusted = adjust_chunk(ctx, base);
-      const size_t predicted = (adjusted > txn->env->maxgc_large1page &&
-                                !gc_repnl_has_span(txn, largechunk_npages(txn->env, (adjusted + 1) * sizeof(pgno_t))))
-                                   ? base
-                                   : adjusted;
+      const size_t adjusted = dense_adjust_chunk(txn, base);
+      TRACE("dense-reservation: reserved %zu...%zu of %zu, left %zu slot(s) and %zu pnl, step: %zu base,"
+            " %zu adjusted",
+            ctx->return_reserved_lo, ctx->return_reserved_hi, amount, slots, left, base, adjusted);
       const size_t chunk_hi =
-          (predicted > txn->env->maxgc_large1page)
-              ? txn->env->maxgc_large1page + ceil_powerof2(base - txn->env->maxgc_large1page, per_page)
+          (adjusted > txn->env->maxgc_large1page)
+              ? txn->env->maxgc_large1page + ceil_powerof2(adjusted - txn->env->maxgc_large1page, per_page)
               : txn->env->maxgc_large1page;
       const size_t chunk_lo =
           (adjusted > txn->env->maxgc_large1page)
               ? txn->env->maxgc_large1page + floor_powerof2(adjusted - txn->env->maxgc_large1page, per_page)
               : adjusted;
       err = gc_reserve4return(txn, ctx, chunk_lo, chunk_hi);
-    } while (err == MDBX_SUCCESS && ctx->return_reserved_hi < MDBX_PNL_GETSIZE(txn->wr.repnl));
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+      const size_t now = MDBX_PNL_GETSIZE(txn->wr.repnl);
+      if (base - adjusted + txn->dbs[FREE_DBI].height < amount - now ||
+          base - adjusted > amount - now + txn->dbs[FREE_DBI].height)
+        TRACE("dense-%s-reservation: miss %zu (expected) != %zi (got)", "unsolve", base - adjusted, amount - now);
+      amount = now;
+    } while (ctx->return_reserved_hi < amount);
   }
 
   if (unlikely(err != MDBX_SUCCESS))
@@ -1240,17 +1278,17 @@ static int gc_fill_returned(MDBX_txn *txn, gcu_t *ctx) {
     MDBX_val data = {.iov_base = nullptr, .iov_len = 0};
     int err = cursor_seek(&ctx->cursor, &key, &data, MDBX_SET_KEY).err;
     if (likely(err == MDBX_SUCCESS)) {
-      tASSERT(txn, data.iov_len >= MDBX_PNL_SIZEOF(txn->wr.repnl));
-      if (unlikely(data.iov_len - MDBX_PNL_SIZEOF(txn->wr.repnl) >= txn->env->ps)) {
-        NOTICE("too long comeback-reserve @%" PRIaTXN ", have %zu bytes, need %zu bytes", id, data.iov_len,
-               MDBX_PNL_SIZEOF(txn->wr.repnl));
-        return MDBX_RESULT_TRUE;
-      }
-      /* coverity[var_deref_model] */
-      memcpy(data.iov_base, txn->wr.repnl, MDBX_PNL_SIZEOF(txn->wr.repnl));
       pgno_t *const from = MDBX_PNL_BEGIN(txn->wr.repnl), *const to = MDBX_PNL_END(txn->wr.repnl);
       TRACE("%s: fill %zu [ %zu:%" PRIaPGNO "...%zu:%" PRIaPGNO "] @%" PRIaTXN " (%s)", dbg_prefix(ctx),
             MDBX_PNL_GETSIZE(txn->wr.repnl), from - txn->wr.repnl, from[0], to - txn->wr.repnl, to[-1], id, "at-once");
+      tASSERT(txn, data.iov_len >= gc_chunk_bytes(MDBX_PNL_GETSIZE(txn->wr.repnl)));
+      if (unlikely(data.iov_len - gc_chunk_bytes(MDBX_PNL_GETSIZE(txn->wr.repnl)) >= txn->env->ps * 2)) {
+        NOTICE("too long %s-comeback-reserve @%" PRIaTXN ", have %zu bytes, need %zu bytes", "single", id, data.iov_len,
+               gc_chunk_bytes(MDBX_PNL_GETSIZE(txn->wr.repnl)));
+        return MDBX_RESULT_TRUE;
+      }
+      /* coverity[var_deref_model] */
+      memcpy(data.iov_base, txn->wr.repnl, gc_chunk_bytes(MDBX_PNL_GETSIZE(txn->wr.repnl)));
     }
     return err;
   }
@@ -1301,25 +1339,24 @@ static int gc_fill_returned(MDBX_txn *txn, gcu_t *ctx) {
       surplus -= chunk_hi - chunk;
     }
 
+    pgno_t *const dst = data.iov_base;
+    pgno_t *const src = MDBX_PNL_BEGIN(txn->wr.repnl) + left - chunk;
+    pgno_t *const from = src, *const to = src + chunk;
+    TRACE("%s: fill +%zu (surplus %zu) [ %zu:%" PRIaPGNO "...%zu:%" PRIaPGNO "] @%" PRIaTXN " (%s)", dbg_prefix(ctx),
+          chunk, chunk_hi - chunk, from - txn->wr.repnl, from[0], to - txn->wr.repnl, to[-1], id, "series");
+    TRACE("%s: left %zu, surplus %zu, slots %zu", dbg_prefix(ctx), amount - (stored + chunk), surplus,
+          rkl_left(&iter, is_lifo(txn)));
     tASSERT(txn, chunk > 0 && chunk <= chunk_hi && chunk <= left);
-    if (unlikely(data.iov_len - (chunk + 1) * sizeof(pgno_t) >= txn->env->ps)) {
-      NOTICE("too long comeback-reserve @%" PRIaTXN ", have %zu bytes, need %zu bytes", id, data.iov_len,
-             (chunk + 1) * sizeof(pgno_t));
+    if (unlikely(data.iov_len - gc_chunk_bytes(chunk) >= txn->env->ps)) {
+      NOTICE("too long %s-comeback-reserve @%" PRIaTXN ", have %zu bytes, need %zu bytes", "multi", id, data.iov_len,
+             gc_chunk_bytes(chunk));
       return MDBX_RESULT_TRUE;
     }
 
-    pgno_t *const dst = data.iov_base;
-    pgno_t *const src = MDBX_PNL_BEGIN(txn->wr.repnl) + left - chunk;
     /* coverity[var_deref_op] */
     *dst = (pgno_t)chunk;
     memcpy(dst + 1, src, chunk * sizeof(pgno_t));
     stored += chunk;
-
-    pgno_t *const from = src, *const to = src + chunk;
-    TRACE("%s: fill +%zu (surplus %zu) [ %zu:%" PRIaPGNO "...%zu:%" PRIaPGNO "] @%" PRIaTXN " (%s)", dbg_prefix(ctx),
-          chunk, chunk_hi - chunk, from - txn->wr.repnl, from[0], to - txn->wr.repnl, to[-1], id, "series");
-    TRACE("%s: left %zu, surplus %zu, slots %zu", dbg_prefix(ctx), amount - stored, surplus,
-          rkl_left(&iter, is_lifo(txn)));
   } while (stored < amount);
   return MDBX_SUCCESS;
 }

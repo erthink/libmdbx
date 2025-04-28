@@ -65,7 +65,11 @@ MDBX_NOTHROW_PURE_FUNCTION static inline size_t gc_stockpile(const MDBX_txn *txn
   return MDBX_PNL_GETSIZE(txn->wr.repnl) + txn->wr.loose_count;
 }
 
-MDBX_INTERNAL bool gc_repnl_has_span(MDBX_txn *txn, const size_t num);
+MDBX_NOTHROW_PURE_FUNCTION static inline size_t gc_chunk_bytes(const size_t chunk) {
+  return (chunk + 1) * sizeof(pgno_t);
+}
+
+MDBX_INTERNAL bool gc_repnl_has_span(const MDBX_txn *txn, const size_t num);
 
 static inline bool gc_is_reclaimed(const MDBX_txn *txn, const txnid_t id) {
   return rkl_contain(&txn->wr.gc.reclaimed, id) || rkl_contain(&txn->wr.gc.comeback, id);
