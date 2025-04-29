@@ -1330,9 +1330,9 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t 
                          (number + 1) * sizeof(pgno_t), data->iov_len);
         number = data->iov_len / sizeof(pgno_t) - 1;
       } else if (data->iov_len - (number + 1) * sizeof(pgno_t) >=
-                 /* LY: allow gap up to one page. it is ok
+                 /* LY: allow gap up to two page. it is ok
                   * and better than shink-and-retry inside gc_update() */
-                 usr->env->ps)
+                 usr->env->ps * 2)
         chk_object_issue(scope, "entry", txnid, "extra idl space",
                          "%" PRIuSIZE " < %" PRIuSIZE " (minor, not a trouble)", (number + 1) * sizeof(pgno_t),
                          data->iov_len);

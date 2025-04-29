@@ -164,7 +164,7 @@ retry:;
     }
     eASSERT(env, head.txnid == recent_committed_txnid(env));
     env->basal_txn->txnid = head.txnid;
-    txn_snapshot_oldest(env->basal_txn);
+    txn_gc_detent(env->basal_txn);
     flags |= txn_shrink_allowed;
   }
 
@@ -524,7 +524,7 @@ __cold int env_close(MDBX_env *env, bool resurrect_after_fork) {
   env->defer_free = nullptr;
 #endif /* MDBX_ENABLE_DBI_LOCKFREE */
 
-  if (!(env->flags & MDBX_RDONLY))
+  if ((env->flags & MDBX_RDONLY) == 0)
     osal_ioring_destroy(&env->ioring);
 
   env->lck = nullptr;

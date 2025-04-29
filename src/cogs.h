@@ -250,9 +250,15 @@ MDBX_NOTHROW_PURE_FUNCTION static inline const page_t *data_page(const void *dat
 
 MDBX_NOTHROW_PURE_FUNCTION static inline meta_t *page_meta(page_t *mp) { return (meta_t *)page_data(mp); }
 
-MDBX_NOTHROW_PURE_FUNCTION static inline size_t page_numkeys(const page_t *mp) { return mp->lower >> 1; }
+MDBX_NOTHROW_PURE_FUNCTION static inline size_t page_numkeys(const page_t *mp) {
+  assert(mp->lower <= mp->upper);
+  return mp->lower >> 1;
+}
 
-MDBX_NOTHROW_PURE_FUNCTION static inline size_t page_room(const page_t *mp) { return mp->upper - mp->lower; }
+MDBX_NOTHROW_PURE_FUNCTION static inline size_t page_room(const page_t *mp) {
+  assert(mp->lower <= mp->upper);
+  return mp->upper - mp->lower;
+}
 
 MDBX_NOTHROW_PURE_FUNCTION static inline size_t page_space(const MDBX_env *env) {
   STATIC_ASSERT(PAGEHDRSZ % 2 == 0);

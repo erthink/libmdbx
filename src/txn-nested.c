@@ -357,6 +357,7 @@ int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
   txn->env->txn = txn;
   txn->owner = parent->owner;
   txn->wr.troika = parent->wr.troika;
+  rkl_init(&txn->wr.gc.reclaimed);
 
 #if MDBX_ENABLE_DBI_SPARSE
   txn->dbi_sparse = parent->dbi_sparse;
@@ -411,12 +412,11 @@ int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
                                                    = parent->geo.first_unallocated) -
                                                       MDBX_ENABLE_REFUND));
 
-  txn->wr.gc.time_acc = parent->wr.gc.time_acc;
-  txn->wr.gc.last_reclaimed = parent->wr.gc.last_reclaimed;
-  if (parent->wr.gc.retxl) {
-    txn->wr.gc.retxl = parent->wr.gc.retxl;
-    parent->wr.gc.retxl = (void *)(intptr_t)MDBX_PNL_GETSIZE(parent->wr.gc.retxl);
-  }
+  txn->wr.gc.spent = parent->wr.gc.spent;
+  rkl_init(&txn->wr.gc.comeback);
+  err = rkl_copy(&parent->wr.gc.reclaimed, &txn->wr.gc.reclaimed);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
 
   txn->wr.retired_pages = parent->wr.retired_pages;
   parent->wr.retired_pages = (void *)(intptr_t)MDBX_PNL_GETSIZE(parent->wr.retired_pages);
@@ -433,6 +433,7 @@ int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
   tASSERT(txn, txn->wr.dirtyroom + txn->wr.dirtylist->length ==
                    (txn->parent ? txn->parent->wr.dirtyroom : txn->env->options.dp_limit));
   tASSERT(parent, parent->cursors[FREE_DBI] == nullptr);
+  // TODO: shadow GC' cursor
   return txn_shadow_cursors(parent, MAIN_DBI);
 }
 
@@ -442,11 +443,7 @@ void txn_nested_abort(MDBX_txn *nested) {
   nested->signature = 0;
   nested->owner = 0;
 
-  if (nested->wr.gc.retxl) {
-    tASSERT(parent, MDBX_PNL_GETSIZE(nested->wr.gc.retxl) >= (uintptr_t)parent->wr.gc.retxl);
-    MDBX_PNL_SETSIZE(nested->wr.gc.retxl, (uintptr_t)parent->wr.gc.retxl);
-    parent->wr.gc.retxl = nested->wr.gc.retxl;
-  }
+  rkl_destroy(&nested->wr.gc.reclaimed);
 
   if (nested->wr.retired_pages) {
     tASSERT(parent, MDBX_PNL_GETSIZE(nested->wr.retired_pages) >= (uintptr_t)parent->wr.retired_pages);
@@ -522,17 +519,14 @@ int txn_nested_join(MDBX_txn *txn, struct commit_timestamp *ts) {
 
   //-------------------------------------------------------------------------
 
-  parent->wr.gc.retxl = txn->wr.gc.retxl;
-  txn->wr.gc.retxl = nullptr;
-
   parent->wr.retired_pages = txn->wr.retired_pages;
   txn->wr.retired_pages = nullptr;
 
   pnl_free(parent->wr.repnl);
   parent->wr.repnl = txn->wr.repnl;
   txn->wr.repnl = nullptr;
-  parent->wr.gc.time_acc = txn->wr.gc.time_acc;
-  parent->wr.gc.last_reclaimed = txn->wr.gc.last_reclaimed;
+  parent->wr.gc.spent = txn->wr.gc.spent;
+  rkl_destructive_move(&txn->wr.gc.reclaimed, &parent->wr.gc.reclaimed);
 
   parent->geo = txn->geo;
   parent->canary = txn->canary;

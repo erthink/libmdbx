@@ -53,7 +53,7 @@ static inline dpl_t *dpl_sort(const MDBX_txn *txn) {
   return likely(dl->sorted == dl->length) ? dl : dpl_sort_slowpath(txn);
 }
 
-MDBX_INTERNAL __noinline size_t dpl_search(const MDBX_txn *txn, pgno_t pgno);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL __noinline size_t dpl_search(const MDBX_txn *txn, pgno_t pgno);
 
 MDBX_MAYBE_UNUSED MDBX_INTERNAL const page_t *debug_dpl_find(const MDBX_txn *txn, const pgno_t pgno);
 
@@ -68,7 +68,7 @@ MDBX_NOTHROW_PURE_FUNCTION static inline pgno_t dpl_endpgno(const dpl_t *dl, siz
   return dpl_npages(dl, i) + dl->items[i].pgno;
 }
 
-static inline bool dpl_intersect(const MDBX_txn *txn, pgno_t pgno, size_t npages) {
+MDBX_NOTHROW_PURE_FUNCTION static inline bool dpl_intersect(const MDBX_txn *txn, pgno_t pgno, size_t npages) {
   tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 

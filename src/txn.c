@@ -3,8 +3,18 @@
 
 #include "internals.h"
 
-__hot txnid_t txn_snapshot_oldest(const MDBX_txn *const txn) {
-  return mvcc_shapshot_oldest(txn->env, txn->wr.troika.txnid[txn->wr.troika.prefer_steady]);
+MDBX_cursor *txn_gc_cursor(MDBX_txn *txn) {
+  tASSERT(txn, (txn->flags & (MDBX_TXN_BLOCKED | MDBX_TXN_RDONLY)) == 0);
+  return ptr_disp(txn->env->basal_txn, sizeof(MDBX_txn));
+}
+
+__hot bool txn_gc_detent(const MDBX_txn *const txn) {
+  const txnid_t detent = mvcc_shapshot_oldest(txn->env, txn->wr.troika.txnid[txn->wr.troika.prefer_steady]);
+  if (likely(detent == txn->env->gc.detent))
+    return false;
+
+  txn->env->gc.detent = detent;
+  return true;
 }
 
 void txn_done_cursors(MDBX_txn *txn) {
@@ -420,12 +430,9 @@ MDBX_txn *txn_alloc(const MDBX_txn_flags_t flags, MDBX_env *env) {
   txn = osal_malloc(size);
   if (unlikely(!txn))
     return txn;
-#if MDBX_DEBUG
-  memset(txn, 0xCD, size);
-  VALGRIND_MAKE_MEM_UNDEFINED(txn, size);
-#endif /* MDBX_DEBUG */
   MDBX_ANALYSIS_ASSUME(size > base);
   memset(txn, 0, (MDBX_GOOFY_MSVC_STATIC_ANALYZER && base > size) ? size : base);
+
   txn->dbs = ptr_disp(txn, base);
   txn->cursors = ptr_disp(txn->dbs, env->max_dbi * sizeof(txn->dbs[0]));
 #if MDBX_DEBUG

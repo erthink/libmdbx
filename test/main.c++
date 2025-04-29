@@ -460,9 +460,9 @@ int main(int argc, char *const argv[]) {
       params.datalen_max = params.datalen_min;
       continue;
     }
-    if (config::parse_option(argc, argv, narg, "batch.read", params.batch_read, config::no_scale, 1))
+    if (config::parse_option(argc, argv, narg, "batch.read", params.batch_read, config::decimal, 1))
       continue;
-    if (config::parse_option(argc, argv, narg, "batch.write", params.batch_write, config::no_scale, 1))
+    if (config::parse_option(argc, argv, narg, "batch.write", params.batch_write, config::decimal, 1))
       continue;
     if (config::parse_option(argc, argv, narg, "delay", params.delaystart, config::duration))
       continue;

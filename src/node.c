@@ -53,12 +53,6 @@ int __must_check_result node_add_branch(MDBX_cursor *mc, size_t indx, const MDBX
   cASSERT(mc, mp->txnid >= mc->txn->front_txnid);
   STATIC_ASSERT(NODESIZE % 2 == 0);
 
-  /* Move higher pointers up one slot. */
-  const size_t nkeys = page_numkeys(mp);
-  cASSERT(mc, nkeys >= indx);
-  for (size_t i = nkeys; i > indx; --i)
-    mp->entries[i] = mp->entries[i - 1];
-
   /* Adjust free space offsets. */
   const size_t branch_bytes = branch_size(mc->txn->env, key);
   const intptr_t lower = mp->lower + sizeof(indx_t);
@@ -67,6 +61,13 @@ int __must_check_result node_add_branch(MDBX_cursor *mc, size_t indx, const MDBX
     mc->txn->flags |= MDBX_TXN_ERROR;
     return MDBX_PAGE_FULL;
   }
+
+  /* Move higher pointers up one slot. */
+  const size_t nkeys = page_numkeys(mp);
+  cASSERT(mc, nkeys >= indx);
+  for (size_t i = nkeys; i > indx; --i)
+    mp->entries[i] = mp->entries[i - 1];
+
   mp->lower = (indx_t)lower;
   mp->entries[indx] = mp->upper = (indx_t)upper;
 

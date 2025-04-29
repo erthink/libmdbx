@@ -300,7 +300,7 @@ __cold MDBX_INTERNAL int mvcc_cleanup_dead(MDBX_env *env, int rdt_locked, int *d
   return rc;
 }
 
-__cold txnid_t mvcc_kick_laggards(MDBX_env *env, const txnid_t straggler) {
+__cold bool mvcc_kick_laggards(MDBX_env *env, const txnid_t straggler) {
   DEBUG("DB size maxed out by reading #%" PRIaTXN, straggler);
   osal_memory_fence(mo_AcquireRelease, false);
   MDBX_hsr_func *const callback = env->hsr_callback;
@@ -410,5 +410,5 @@ __cold txnid_t mvcc_kick_laggards(MDBX_env *env, const txnid_t straggler) {
       NOTICE("hsr-kick: done turn %" PRIaTXN " -> %" PRIaTXN " +%" PRIaTXN, straggler, oldest, turn);
     callback(env, env->txn, 0, 0, straggler, (turn < UINT_MAX) ? (unsigned)turn : UINT_MAX, 0, -retry);
   }
-  return oldest;
+  return oldest > straggler;
 }

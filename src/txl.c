@@ -63,14 +63,14 @@ static int txl_reserve(txl_t __restrict *__restrict ptxl, const size_t wanna) {
   return MDBX_ENOMEM;
 }
 
-static __always_inline int __must_check_result txl_need(txl_t __restrict *__restrict ptxl, size_t num) {
+static inline int __must_check_result txl_need(txl_t __restrict *__restrict ptxl, size_t num) {
   assert(MDBX_PNL_GETSIZE(*ptxl) <= txl_max && MDBX_PNL_ALLOCLEN(*ptxl) >= MDBX_PNL_GETSIZE(*ptxl));
   assert(num <= PAGELIST_LIMIT);
   const size_t wanna = (size_t)MDBX_PNL_GETSIZE(*ptxl) + num;
   return likely(MDBX_PNL_ALLOCLEN(*ptxl) >= wanna) ? MDBX_SUCCESS : txl_reserve(ptxl, wanna);
 }
 
-static __always_inline void txl_xappend(txl_t __restrict txl, txnid_t id) {
+static inline void txl_xappend(txl_t __restrict txl, txnid_t id) {
   assert(MDBX_PNL_GETSIZE(txl) < MDBX_PNL_ALLOCLEN(txl));
   txl[0] += 1;
   MDBX_PNL_LAST(txl) = id;
