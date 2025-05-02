@@ -1295,12 +1295,10 @@ static int gc_fill_returned(MDBX_txn *txn, gcu_t *ctx) {
 
   rkl_iter_t iter = rkl_iterator(&txn->wr.gc.comeback, is_lifo(txn));
   size_t surplus = ctx->return_reserved_hi - amount, stored = 0;
-  const size_t scale = 32 - ceil_log2n(ctx->return_reserved_hi), half4rounding = (1 << scale) / 2 - 1;
-  tASSERT(txn, scale > 3 && scale < 32);
-  const size_t factor = (surplus << scale) / ctx->return_reserved_hi;
-  TRACE("%s: amount %zu, slots %zu, surplus %zu (%zu..%zu), factor %.5f (sharp %.7f)", dbg_prefix(ctx), amount, slots,
-        surplus, ctx->return_reserved_lo, ctx->return_reserved_hi, factor / (double)(1 << scale),
-        surplus / (double)ctx->return_reserved_lo);
+  const uint64_t factor = ((uint64_t)surplus << 32) / ctx->return_reserved_hi;
+  TRACE("%s: amount %zu, slots %zu, surplus %zu (%zu..%zu), factor %.6f (%" PRIu64 " >> 32, sharp %.12f)",
+        dbg_prefix(ctx), amount, slots, surplus, ctx->return_reserved_lo, ctx->return_reserved_hi,
+        factor / (double)UINT32_MAX, factor, surplus / (double)ctx->return_reserved_hi);
   do {
     const size_t left = amount - stored;
     tASSERT(txn, left > 0 && left <= amount);
@@ -1324,20 +1322,17 @@ static int gc_fill_returned(MDBX_txn *txn, gcu_t *ctx) {
       const size_t left_slots = rkl_left(&iter, is_lifo(txn));
       if (surplus && left_slots) {
         /* Единственный путь выполнения (набор условий) когда нужно распределять избыток резерва. */
-        size_t hole = (chunk_hi * factor + half4rounding) >> scale;
+        const size_t hole = (size_t)((chunk_hi * factor) >> 32);
         tASSERT(txn, hole < chunk_hi && hole <= surplus);
         chunk = chunk_hi - hole;
-        tASSERT(txn, chunk > 0 && chunk <= chunk_hi);
-        const intptr_t estimate_balance =
-            (((left + surplus - chunk_hi) * factor + half4rounding) >> scale) - (surplus - hole);
-        if (MDBX_HAVE_CMOV || estimate_balance) {
-          chunk -= estimate_balance < 0 && chunk > 1;
-          chunk += estimate_balance > 0 && hole > 0 && surplus > hole;
-        }
+        tASSERT(txn, chunk > 0 && chunk <= chunk_hi && surplus >= hole);
+        tASSERT(txn, surplus - hole >= (left + surplus - chunk_hi) * factor >> 32);
+        if (chunk > 1 && surplus - hole > (left + surplus - chunk_hi) * factor >> 32)
+          chunk -= 1;
       }
       tASSERT(txn, chunk <= chunk_hi && surplus >= chunk_hi - chunk && chunk <= left);
-      surplus -= chunk_hi - chunk;
     }
+    surplus -= chunk_hi - chunk;
 
     pgno_t *const dst = data.iov_base;
     pgno_t *const src = MDBX_PNL_BEGIN(txn->wr.repnl) + left - chunk;
