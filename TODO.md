@@ -1,23 +1,12 @@
 TODO
 ----
 
-Unfortunately, on 2022-04-15 the Github administration, without any
-warning nor explanation, deleted _libmdbx_ along with a lot of other
-projects, simultaneously blocking access for many developers. Therefore
-on 2022-04-21 we have migrated to a reliable trusted infrastructure.
-The origin for now is at[GitFlic](https://gitflic.ru/project/erthink/libmdbx)
-with backup at [ABF by ROSA Лаб](https://abf.rosalinux.ru/erthink/libmdbx).
-For the same reason ~~Github~~ is blacklisted forever.
-
-So currently most of the links are broken due to noted malicious ~~Github~~ sabotage.
-
  - [SWIG](https://www.swig.org/).
  - Параллельная lto-сборка с устранением предупреждений.
  - Интеграция c DTrace и аналогами.
  - Новый стиль обработки ошибок с записью "трассы" и причин.
  - Формирование отладочной информации посредством gdb.
  - Поддержка WASM.
- - Рефакторинг gc-get/gc-put c переходом на "интервальные" списки.
  - Ранняя/не-отложенная очистка GC.
  - Явная и автоматические уплотнение/дефрагментация.
  - Нелинейная обработка GC.
@@ -31,6 +20,7 @@ So currently most of the links are broken due to noted malicious ~~Github~~ sabo
 Done
 ----
 
+ - Рефакторинг gc-get/gc-put c переходом на "интервальные" списки.
  - [Engage new terminology](https://libmdbx.dqdkfa.ru/dead-github/issues/137).
  - [More flexible support of asynchronous runtime/framework(s)](https://libmdbx.dqdkfa.ru/dead-github/issues/200).
  - [Move most of `mdbx_chk` functional to the library API](https://libmdbx.dqdkfa.ru/dead-github/issues/204).

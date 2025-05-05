@@ -125,8 +125,7 @@ of the database. All fundamental architectural problems of libmdbx/LMDB
 have been solved there, but now the active development has been
 suspended for top-three reasons:
 
-1. For now _libmdbx_ «mostly» enough for all [our products](https://www.ptsecurity.com/ww-en/products/),
-and I’m busy in development of replication for scalability.
+1. For now _libmdbx_ mostly enough and I’m busy for scalability.
 2. Waiting for fresh [Elbrus CPU](https://wiki.elbrus.ru/) of [e2k architecture](https://en.wikipedia.org/wiki/Elbrus_2000),
 especially with hardware acceleration of [Streebog](https://en.wikipedia.org/wiki/Streebog) and
 [Kuznyechik](https://en.wikipedia.org/wiki/Kuznyechik), which are required for Merkle tree, etc.

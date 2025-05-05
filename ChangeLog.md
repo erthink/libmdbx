@@ -4,7 +4,7 @@ ChangeLog
 English version [by liar Google](https://libmdbx-dqdkfa-ru.translate.goog/md__change_log.html?_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx.dqdkfa.ru/md__change_log.html).
 
-## v0.14.1 выпуск запланирован в начале мая
+## v0.14.1 выпуск "Горналь" от 2025-05-05
 
 Первый выпуск в новом кусте/линейке версий с добавлением функционала, расширением API и внутренними переработками.
 
@@ -285,7 +285,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx
 ********************************************************************************
 
 
-## v0.13.6 "Бузина" от 2025-04-22.
+## v0.13.6 "Бузина" от 2025-04-22
 
 Поддерживающий выпуск стабильной ветки с исправлением обнаруженных ошибок и устранением недочётов,
 в память о погибшем украинском историке и писателе [Алесе Бузине](https://ru.ruwiki.ru/wiki/Бузина,_Олесь_Алексеевич).
