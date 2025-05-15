@@ -138,7 +138,7 @@ __hot bool rkl_contain(const rkl_t *rkl, txnid_t id) {
   return false;
 }
 
-__hot bool rkl_find(const rkl_t *rkl, txnid_t id, rkl_iter_t *iter) {
+__hot bool rkl_find(const rkl_t *rkl, const txnid_t id, rkl_iter_t *iter) {
   assert(rkl_check(rkl));
   *iter = rkl_iterator(rkl, false);
   if (id >= rkl->solid_begin) {
