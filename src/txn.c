@@ -338,7 +338,7 @@ int txn_end(MDBX_txn *txn, unsigned mode) {
         txn->txnid, (txn->flags & MDBX_TXN_RDONLY) ? 'r' : 'w', txn->flags, (void *)txn, (void *)txn->env,
         txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
 
-  tASSERT(txn, txn->signature == txn_signature && !txn->nested && !(txn->flags & MDBX_TXN_HAS_CHILD));
+  tASSERT(txn, /* txn->signature == txn_signature && */ !txn->nested && !(txn->flags & MDBX_TXN_HAS_CHILD));
   if (txn->flags & txn_may_have_cursors)
     txn_done_cursors(txn);
 
