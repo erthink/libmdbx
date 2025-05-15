@@ -86,11 +86,11 @@ void trivia(void) {
   CHECK_EQ(hole.begin, 1);
   CHECK_EQ(hole.end, MAX_TXNID);
 
-  CHECK_EQ(rkl_push(&x, 42, false), MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&x, 42, false), (uint64_t)MDBX_SUCCESS);
   CHECK_TRUE(rkl_check(&x));
   CHECK_FALSE(rkl_empty(&x));
   CHECK_EQ(rkl_len(&x), 1);
-  CHECK_EQ(rkl_push(&x, 42, true), MDBX_RESULT_TRUE);
+  CHECK_EQ((uint64_t)rkl_push(&x, 42, true), (uint64_t)MDBX_RESULT_TRUE);
   CHECK_TRUE(rkl_check(&x));
 
   f = rkl_iterator(&x, false);
@@ -188,7 +188,7 @@ static bool stochastic_pass(const unsigned start, const unsigned width, const un
     if (id < MIN_TXNID || id >= INVALID_TXNID)
       continue;
     if (txl_contain(l, id)) {
-      if (CHECK_TRUE(rkl_contain(&k, id)) && CHECK_EQ(rkl_push(&k, id, false), MDBX_RESULT_TRUE))
+      if (CHECK_TRUE(rkl_contain(&k, id)) && CHECK_EQ((uint64_t)rkl_push(&k, id, false), (uint64_t)MDBX_RESULT_TRUE))
         continue;
       break;
     }
