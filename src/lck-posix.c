@@ -109,17 +109,12 @@ static int lck_op(const mdbx_filehandle_t fd, int cmd, const int lck, const off_
 
   jitter4testing(true);
   for (;;) {
-    MDBX_STRUCT_FLOCK lock_op;
+    MDBX_STRUCT_FLOCK lock_op = {.l_type = lck, .l_whence = SEEK_SET, .l_start = offset, .l_len = len};
     STATIC_ASSERT_MSG(sizeof(off_t) <= sizeof(lock_op.l_start) && sizeof(off_t) <= sizeof(lock_op.l_len) &&
                           OFF_T_MAX == (off_t)OFF_T_MAX,
                       "Support for large/64-bit-sized files is misconfigured "
                       "for the target system and/or toolchain. "
                       "Please fix it or at least disable it completely.");
-    memset(&lock_op, 0, sizeof(lock_op));
-    lock_op.l_type = lck;
-    lock_op.l_whence = SEEK_SET;
-    lock_op.l_start = offset;
-    lock_op.l_len = len;
     int rc = MDBX_FCNTL(fd, cmd, &lock_op);
     jitter4testing(true);
     if (rc != -1) {
