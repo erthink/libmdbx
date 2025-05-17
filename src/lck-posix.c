@@ -128,7 +128,8 @@ static int lck_op(const mdbx_filehandle_t fd, int cmd, const int lck, const off_
     }
     rc = errno;
 #if MDBX_USE_OFDLOCKS
-    if (rc == EINVAL && (cmd == MDBX_F_OFD_SETLK || cmd == MDBX_F_OFD_SETLKW || cmd == MDBX_F_OFD_GETLK)) {
+    if (ignore_enosys_and_einval(rc) == MDBX_RESULT_TRUE &&
+        (cmd == MDBX_F_OFD_SETLK || cmd == MDBX_F_OFD_SETLKW || cmd == MDBX_F_OFD_GETLK)) {
       /* fallback to non-OFD locks */
       if (cmd == MDBX_F_OFD_SETLK)
         cmd = MDBX_F_SETLK;

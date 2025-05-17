@@ -385,6 +385,10 @@ MDBX_CONST_FUNCTION static inline int ignore_enosys(int err) {
 MDBX_MAYBE_UNUSED MDBX_CONST_FUNCTION static inline int ignore_enosys_and_eagain(int err) {
   return (err == EAGAIN) ? MDBX_RESULT_TRUE : ignore_enosys(err);
 }
+
+MDBX_MAYBE_UNUSED MDBX_CONST_FUNCTION static inline int ignore_enosys_and_einval(int err) {
+  return (err == EINVAL) ? MDBX_RESULT_TRUE : ignore_enosys(err);
+}
 #endif /* defined(_WIN32) || defined(_WIN64) */
 
 static inline int check_env(const MDBX_env *env, const bool wanna_active) {
