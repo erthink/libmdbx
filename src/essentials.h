@@ -28,14 +28,6 @@
 typedef struct iov_ctx iov_ctx_t;
 #include "osal.h"
 
-#if UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul || defined(_WIN64)
-#define MDBX_WORDBITS 64
-#define MDBX_WORDBITS_LN2 6
-#else
-#define MDBX_WORDBITS 32
-#define MDBX_WORDBITS_LN2 5
-#endif /* MDBX_WORDBITS */
-
 #include "options.h"
 
 #include "atomics-types.h"
