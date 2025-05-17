@@ -358,7 +358,7 @@ MDBX_CONST_FUNCTION static inline lck_t *lckless_stub(const MDBX_env *env) {
 }
 
 #if !(defined(_WIN32) || defined(_WIN64))
-MDBX_MAYBE_UNUSED static inline int ignore_enosys(int err) {
+MDBX_CONST_FUNCTION static inline int ignore_enosys(int err) {
 #ifdef ENOSYS
   if (err == ENOSYS)
     return MDBX_RESULT_TRUE;
@@ -379,9 +379,11 @@ MDBX_MAYBE_UNUSED static inline int ignore_enosys(int err) {
   if (err == EOPNOTSUPP)
     return MDBX_RESULT_TRUE;
 #endif /* EOPNOTSUPP */
-  if (err == EAGAIN)
-    return MDBX_RESULT_TRUE;
   return err;
+}
+
+MDBX_MAYBE_UNUSED MDBX_CONST_FUNCTION static inline int ignore_enosys_and_eagain(int err) {
+  return (err == EAGAIN) ? MDBX_RESULT_TRUE : ignore_enosys(err);
 }
 #endif /* defined(_WIN32) || defined(_WIN64) */
 

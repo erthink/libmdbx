@@ -603,7 +603,7 @@ retry_snap_meta:
         continue;
       }
       rc = MDBX_ENODATA;
-      if (written == 0 || ignore_enosys(rc = errno) != MDBX_RESULT_TRUE)
+      if (written == 0 || ignore_enosys_and_eagain(rc = errno) != MDBX_RESULT_TRUE)
         break;
       sendfile_unavailable = true;
     }
@@ -627,7 +627,7 @@ retry_snap_meta:
                                   maybe useful for others FS */
                              EINVAL)
         not_the_same_filesystem = true;
-      else if (ignore_enosys(rc) == MDBX_RESULT_TRUE)
+      else if (ignore_enosys_and_eagain(rc) == MDBX_RESULT_TRUE)
         copyfilerange_unavailable = true;
       else
         break;
