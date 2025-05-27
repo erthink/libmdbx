@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>. */
 
 #define xMDBX_ALLOY 1
-#define MDBX_BUILD_SOURCERY e156c1a97c017ce89d6541cd9464ae5a9761d76b3fd2f1696521f5f3792904fc_v0_12_13_0_g1fff1f67
+#define MDBX_BUILD_SOURCERY d20401eb35b92bb0fe980eac6a6339fee4cf6d97d3ffbc946bda6618393985a0_v0_12_13_5_gf5279769
 #ifdef MDBX_CONFIG_H
 #include MDBX_CONFIG_H
 #endif
@@ -3147,7 +3147,7 @@ typedef struct MDBX_reader {
 /* The header for the reader table (a memory-mapped lock file). */
 typedef struct MDBX_lockinfo {
   /* Stamp identifying this as an MDBX file.
-   * It must be set to MDBX_MAGIC with with MDBX_LOCK_VERSION. */
+   * It must be set to MDBX_MAGIC with MDBX_LOCK_VERSION. */
   uint64_t mti_magic_and_version;
 
   /* Format of this lock file. Must be set to MDBX_LOCK_FORMAT. */
@@ -3560,7 +3560,7 @@ struct MDBX_cursor {
 #define C_DEL 0x08         /* last op was a cursor_del */
 #define C_UNTRACK 0x10     /* Un-track cursor when closing */
 #define C_GCU                                                                  \
-  0x20 /* Происходит подготовка к обновлению GC, поэтому                     \
+  0x20 /* Происходит подготовка к обновлению GC, поэтому \
         * можно брать страницы из GC даже для FREE_DBI */
   uint8_t mc_flags;
 
@@ -7277,10 +7277,8 @@ static int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key,
                         const MDBX_val *data);
 
 #define MDBX_END_NAMES                                                         \
-  {                                                                            \
-    "committed", "empty-commit", "abort", "reset", "reset-tmp", "fail-begin",  \
-        "fail-beginchild"                                                      \
-  }
+  {"committed", "empty-commit", "abort",          "reset",                     \
+   "reset-tmp", "fail-begin",   "fail-beginchild"}
 enum {
   /* txn_end operation number, for logging */
   MDBX_END_COMMITTED,
@@ -10997,8 +10995,8 @@ __hot static pgno_t relist_get_single(MDBX_txn *txn) {
    * может ускорить. Однако, последовательности в среднем достаточно редки.
    * Поэтому для эффективности требуется аккумулировать и поддерживать в ОЗУ
    * огромные списки страниц, а затем сохранять их обратно в БД. Текущий формат
-   * БД (без сжатых битовых карт) для этого крайне не удачен. Поэтому эта тактика не
-   * имеет шансов быть успешной без смены формата БД (Mithril).
+   * БД (без сжатых битовых карт) для этого крайне не удачен. Поэтому эта
+   * тактика не имеет шансов быть успешной без смены формата БД (Mithril).
    *
    * 3. Стараться экономить последовательности страниц. Это позволяет избегать
    * лишнего чтения/поиска в GC при более-менее постоянном размещении и/или
@@ -13348,8 +13346,10 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
     rc = check_txn_rw(parent,
                       MDBX_TXN_RDONLY | MDBX_WRITEMAP | MDBX_TXN_BLOCKED);
     if (unlikely(rc != MDBX_SUCCESS)) {
-      if (rc == MDBX_BAD_TXN && (parent->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)) == 0) {
-        ERROR("%s mode is incompatible with nested transactions", "MDBX_WRITEMAP");
+      if (rc == MDBX_BAD_TXN &&
+          (parent->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)) == 0) {
+        ERROR("%s mode is incompatible with nested transactions",
+              "MDBX_WRITEMAP");
         rc = MDBX_INCOMPATIBLE;
       }
       return rc;
@@ -20571,7 +20571,8 @@ cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cursor_op op) {
   ret.exact = false;
   if (unlikely(key->iov_len < mc->mc_dbx->md_klen_min ||
                (key->iov_len > mc->mc_dbx->md_klen_max &&
-                (mc->mc_dbx->md_klen_min == mc->mc_dbx->md_klen_max || MDBX_DEBUG || MDBX_FORCE_ASSERTIONS)))) {
+                (mc->mc_dbx->md_klen_min == mc->mc_dbx->md_klen_max ||
+                 MDBX_DEBUG || MDBX_FORCE_ASSERTIONS)))) {
     cASSERT(mc, !"Invalid key-size");
     ret.err = MDBX_BAD_VALSIZE;
     return ret;
@@ -30234,13 +30235,14 @@ __extern_C void __assert2(const char *file, int line, const char *function,
   __assert2(file, line, function, assertion)
 
 #elif defined(__UCLIBC__)
-__extern_C void __assert(const char *, const char *, unsigned int, const char *)
+MDBX_NORETURN __extern_C void __assert(const char *, const char *, unsigned int,
+                                       const char *)
 #ifdef __THROW
     __THROW
 #else
     __nothrow
 #endif /* __THROW */
-    MDBX_NORETURN;
+    ;
 #define __assert_fail(assertion, file, line, function)                         \
   __assert(assertion, file, line, function)
 
@@ -30248,14 +30250,15 @@ __extern_C void __assert(const char *, const char *, unsigned int, const char *)
     /* workaround for avoid musl libc wrong prototype */ (                     \
         defined(__GLIBC__) || defined(__GNU_LIBRARY__))
 /* Prototype should match libc runtime. ISO POSIX (2003) & LSB 1.x-3.x */
-__extern_C void __assert_fail(const char *assertion, const char *file,
-                              unsigned line, const char *function)
+MDBX_NORETURN __extern_C void __assert_fail(const char *assertion,
+                                            const char *file, unsigned line,
+                                            const char *function)
 #ifdef __THROW
     __THROW
 #else
     __nothrow
 #endif /* __THROW */
-    MDBX_NORETURN;
+    ;
 
 #elif defined(__APPLE__) || defined(__MACH__)
 __extern_C void __assert_rtn(const char *function, const char *file, int line,
@@ -30291,12 +30294,12 @@ __extern_C __dead void __assert13(const char *file, int line,
   __assert13(file, line, function, assertion)
 #elif defined(__FreeBSD__) || defined(__BSD__) || defined(__bsdi__) ||         \
     defined(__DragonFly__)
-__extern_C void __assert(const char *function, const char *file, int line,
-                         const char *assertion) /* __nothrow */
+MDBX_NORETURN __extern_C void __assert(const char *function, const char *file,
+                                       int line,
+                                       const char *assertion) /* __nothrow */
 #ifdef __dead2
     __dead2
 #else
-    MDBX_NORETURN
 #endif /* __dead2 */
 #ifdef __disable_tail_calls
     __disable_tail_calls
@@ -33111,7 +33114,7 @@ static bool check_uuid(bin128_t uuid) {
   return (hw >> 6) == 1;
 }
 
-__cold MDBX_MAYBE_UNUSED static bool
+MDBX_MAYBE_UNUSED __cold static bool
 bootid_parse_uuid(bin128_t *s, const void *p, const size_t n) {
   if (n > 31) {
     unsigned bits = 0;
@@ -33688,9 +33691,9 @@ __dll_export
         0,
         12,
         13,
-        0,
-        {"2025-02-28T23:34:52+03:00", "240ba36a2661369aae042378919f1a185aac9705", "1fff1f67d5862b4f5c129b0d735913ac3ee1aaec",
-         "v0.12.13-0-g1fff1f67"},
+        5,
+        {"2025-05-27T14:44:11+03:00", "5b9aa49dc6073cc2fe08d05e5780fab3f5cbf4cb", "f5279769f138d421edffbdc26d4d8680dbce5d84",
+         "v0.12.13-5-gf5279769"},
         sourcery};
 
 __dll_export

@@ -4,9 +4,13 @@ ChangeLog
 English version [by Google](https://gitflic-ru.translate.goog/project/erthink/libmdbx/blob?file=ChangeLog.md&_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
+Поддержка куста 0.12 завершена, ветка переведена в архив. Каких-либо исправлений и тем более выпусков больше не будет.
+
+The 0.12 hive is end-of-life, support has been terminated and the branch has been archived. There will be no more fixes, much less releases.
+
 ## v0.12.13 от 2025-02-28
 
-Поддерживающий выпуск с исправлением обнаруженных ошибок и устранением недочетов.
+Завершающий выпуск с исправлением обнаруженных ошибок и устранением недочетов.
 
 Это последний/консервирующий выпуск куста стабильных версий 0.12.x, спустя более двух
 лет после выпуска 0.12.1.

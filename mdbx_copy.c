@@ -34,7 +34,7 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>. */
 
-#define MDBX_BUILD_SOURCERY e156c1a97c017ce89d6541cd9464ae5a9761d76b3fd2f1696521f5f3792904fc_v0_12_13_0_g1fff1f67
+#define MDBX_BUILD_SOURCERY d20401eb35b92bb0fe980eac6a6339fee4cf6d97d3ffbc946bda6618393985a0_v0_12_13_5_gf5279769
 #ifdef MDBX_CONFIG_H
 #include MDBX_CONFIG_H
 #endif
@@ -3169,7 +3169,7 @@ typedef struct MDBX_reader {
 /* The header for the reader table (a memory-mapped lock file). */
 typedef struct MDBX_lockinfo {
   /* Stamp identifying this as an MDBX file.
-   * It must be set to MDBX_MAGIC with with MDBX_LOCK_VERSION. */
+   * It must be set to MDBX_MAGIC with MDBX_LOCK_VERSION. */
   uint64_t mti_magic_and_version;
 
   /* Format of this lock file. Must be set to MDBX_LOCK_FORMAT. */
@@ -3582,7 +3582,7 @@ struct MDBX_cursor {
 #define C_DEL 0x08         /* last op was a cursor_del */
 #define C_UNTRACK 0x10     /* Un-track cursor when closing */
 #define C_GCU                                                                  \
-  0x20 /* Происходит подготовка к обновлению GC, поэтому                     \
+  0x20 /* Происходит подготовка к обновлению GC, поэтому \
         * можно брать страницы из GC даже для FREE_DBI */
   uint8_t mc_flags;
 
