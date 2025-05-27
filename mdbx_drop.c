@@ -36,7 +36,7 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>. */
 
-#define MDBX_BUILD_SOURCERY 4e4e19f764de197342cc6e740a20ce8b37f1fed642b600f4acf2df7db950f28b_v0_11_14_0_gb415265d
+#define MDBX_BUILD_SOURCERY edf59c2ef6d50551e8ae2e48733e7ae7b66c2d70738211a1a60149a8bfca9af9_v0_11_14_5_gf53ab49e
 #ifdef MDBX_CONFIG_H
 #include MDBX_CONFIG_H
 #endif
@@ -2580,7 +2580,7 @@ typedef struct MDBX_reader {
 /* The header for the reader table (a memory-mapped lock file). */
 typedef struct MDBX_lockinfo {
   /* Stamp identifying this as an MDBX file.
-   * It must be set to MDBX_MAGIC with with MDBX_LOCK_VERSION. */
+   * It must be set to MDBX_MAGIC with MDBX_LOCK_VERSION. */
   uint64_t mti_magic_and_version;
 
   /* Format of this lock file. Must be set to MDBX_LOCK_FORMAT. */

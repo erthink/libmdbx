@@ -1,6 +1,10 @@
 ChangeLog
 ---------
 
+Поддержка куста 0.11 завершена, ветка переведена в архив. Каких-либо исправлений и тем более выпусков больше не будет.
+
+The 0.11 hive is end-of-life, support has been terminated and the branch has been archived. There will be no more fixes, much less releases.
+
 ## v0.11.14 (Sergey Kapitsa) at 2023-02-14
 
 The stable bugfix release in memory of [Sergey Kapitsa](https://en.wikipedia.org/wiki/Sergey_Kapitsa) on his 95th birthday.
