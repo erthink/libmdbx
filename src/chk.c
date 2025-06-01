@@ -226,7 +226,7 @@ __cold static void MDBX_PRINTF_ARGS(5, 6)
       issue->next = chk->usr->scope->issues;
       chk->usr->scope->issues = issue;
     } else
-      chk_error_rc(scope, ENOMEM, "adding issue");
+      chk_error_rc(scope, MDBX_ENOMEM, "adding issue");
   }
 
   va_list args;
