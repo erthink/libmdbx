@@ -35,7 +35,7 @@ typedef struct gc_update_context {
     unsigned n;
   } dbg;
 #endif /* MDBX_DEBUG_GCU */
-  rkl_t ready4reuse, sequel;
+  rkl_t sequel;
 #if MDBX_ENABLE_BIGFOOT
   txnid_t bigfoot;
 #endif /* MDBX_ENABLE_BIGFOOT */
@@ -78,3 +78,5 @@ static inline bool gc_is_reclaimed(const MDBX_txn *txn, const txnid_t id) {
 static inline txnid_t txnid_min(txnid_t a, txnid_t b) { return (a < b) ? a : b; }
 
 static inline txnid_t txnid_max(txnid_t a, txnid_t b) { return (a > b) ? a : b; }
+
+static inline MDBX_cursor *gc_cursor(MDBX_env *env) { return ptr_disp(env->basal_txn, sizeof(MDBX_txn)); }

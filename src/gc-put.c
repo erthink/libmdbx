@@ -4,10 +4,9 @@
 #include "internals.h"
 
 int gc_put_init(MDBX_txn *txn, gcu_t *ctx) {
-  memset(ctx, 0, offsetof(gcu_t, ready4reuse));
+  memset(ctx, 0, offsetof(gcu_t, sequel));
   /* Размер куска помещающийся на одну отдельную "overflow" страницу, но с небольшим запасом сводобного места. */
   ctx->goodchunk = txn->env->maxgc_large1page - (txn->env->maxgc_large1page >> 4);
-  rkl_init(&ctx->ready4reuse);
   rkl_init(&ctx->sequel);
 #if MDBX_ENABLE_BIGFOOT
   ctx->bigfoot = txn->txnid;
@@ -15,10 +14,7 @@ int gc_put_init(MDBX_txn *txn, gcu_t *ctx) {
   return cursor_init(&ctx->cursor, txn, FREE_DBI);
 }
 
-void gc_put_destroy(gcu_t *ctx) {
-  rkl_destroy(&ctx->ready4reuse);
-  rkl_destroy(&ctx->sequel);
-}
+void gc_put_destroy(gcu_t *ctx) { rkl_destroy(&ctx->sequel); }
 
 static size_t gc_chunk_pages(const MDBX_txn *txn, const size_t chunk) {
   return largechunk_npages(txn->env, gc_chunk_bytes(chunk));
@@ -100,10 +96,10 @@ MDBX_MAYBE_UNUSED static void dbg_dump_ids(gcu_t *ctx) {
       DEBUG_EXTRA_PRINT("%s\n", " empty");
 
     DEBUG_EXTRA("%s", "ready4reuse:");
-    if (rkl_empty(&ctx->ready4reuse))
+    if (rkl_empty(&txn->wr.gc.ready4reuse))
       DEBUG_EXTRA_PRINT("%s\n", " empty");
     else {
-      rkl_iter_t i = rkl_iterator(&ctx->ready4reuse, false);
+      rkl_iter_t i = rkl_iterator(&txn->wr.gc.ready4reuse, false);
       txnid_t id = rkl_turn(&i, false);
       while (id) {
         dbg_id(ctx, id);
@@ -485,7 +481,7 @@ static int gc_remove_rkl(MDBX_txn *txn, gcu_t *ctx, rkl_t *rkl) {
     int err = cursor_seek(&ctx->cursor, &key, nullptr, MDBX_SET).err;
     tASSERT(txn, id == rkl_edge(rkl, is_lifo(txn)));
     if (err == MDBX_NOTFOUND) {
-      err = rkl_push(&ctx->ready4reuse, rkl_pop(rkl, is_lifo(txn)));
+      err = rkl_push(&txn->wr.gc.ready4reuse, rkl_pop(rkl, is_lifo(txn)));
       WARNING("unexpected %s for gc-id %" PRIaTXN ", ignore and continue, push-err %d", "MDBX_NOTFOUND", id, err);
       if (unlikely(MDBX_IS_ERROR(err)))
         return err;
@@ -506,7 +502,7 @@ static int gc_remove_rkl(MDBX_txn *txn, gcu_t *ctx, rkl_t *rkl) {
       return err;
     ENSURE(txn->env, id == rkl_pop(rkl, is_lifo(txn)));
     tASSERT(txn, id <= txn->env->lck->cached_oldest.weak);
-    err = rkl_push(&ctx->ready4reuse, id);
+    err = rkl_push(&txn->wr.gc.ready4reuse, id);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
     TRACE("id %" PRIaTXN " cleared and moved to ready4reuse", id);
@@ -526,7 +522,7 @@ static inline int gc_clear_returned(MDBX_txn *txn, gcu_t *ctx) {
 
 static int gc_push_sequel(MDBX_txn *txn, gcu_t *ctx, txnid_t id) {
   tASSERT(txn, id > 0 && id < txn->env->gc.detent);
-  tASSERT(txn, !rkl_contain(&txn->wr.gc.comeback, id) && !rkl_contain(&ctx->ready4reuse, id));
+  tASSERT(txn, !rkl_contain(&txn->wr.gc.comeback, id) && !rkl_contain(&txn->wr.gc.ready4reuse, id));
   TRACE("id %" PRIaTXN ", return-left %zi", id, ctx->return_left);
   int err = rkl_push(&ctx->sequel, id);
   if (unlikely(err != MDBX_SUCCESS)) {
@@ -705,7 +701,7 @@ static bool solve_recursive(const sr_context_t *const ct, sr_state_t *const st, 
 
 static int gc_dense_solve(MDBX_txn *txn, gcu_t *ctx, gc_dense_histogram_t *const solution) {
   sr_state_t st = {
-      .left_slots = rkl_len(&ctx->ready4reuse), .left_volume = ctx->return_left, .hist = ctx->dense_histogram};
+      .left_slots = rkl_len(&txn->wr.gc.ready4reuse), .left_volume = ctx->return_left, .hist = ctx->dense_histogram};
   assert(st.left_slots > 0 && st.left_volume > 0 && MDBX_PNL_GETSIZE(txn->wr.repnl) > 0);
   if (unlikely(!st.left_slots || !st.left_volume)) {
     ERROR("%s/%d: %s", "MDBX_PROBLEM", MDBX_PROBLEM, "recursive-solving preconditions violated");
@@ -734,7 +730,7 @@ static int gc_dense_solve(MDBX_txn *txn, gcu_t *ctx, gc_dense_histogram_t *const
       chunk += ct.other_pages;
     }
 
-    if (unlikely(volume < (size_t)ctx->return_left || items > rkl_len(&ctx->ready4reuse))) {
+    if (unlikely(volume < (size_t)ctx->return_left || items > rkl_len(&txn->wr.gc.ready4reuse))) {
       assert(!"recursive-solving failure");
       ERROR("%s/%d: %s", "MDBX_PROBLEM", MDBX_PROBLEM, "recursive-solving failure");
       return MDBX_PROBLEM;
@@ -782,7 +778,7 @@ static int gc_dense_solve(MDBX_txn *txn, gcu_t *ctx, gc_dense_histogram_t *const
 //       chunk += ct.other_pages;
 //     }
 //
-//     if (unlikely(volume < (size_t)ctx->return_left || items > rkl_len(&ctx->ready4reuse))) {
+//     if (unlikely(volume < (size_t)ctx->return_left || items > rkl_len(&txn->wr.gc.ready4reuse))) {
 //       assert(!"recursive-solving failure");
 //       ERROR("%s/%d: %s", "MDBX_PROBLEM", MDBX_PROBLEM, "recursive-solving failure");
 //       return MDBX_PROBLEM;
@@ -848,7 +844,7 @@ static int gc_search_holes(MDBX_txn *txn, gcu_t *ctx) {
       ((ctx->gc_first > UINT16_MAX) ? UINT16_MAX : (unsigned)ctx->gc_first - 1) * ctx->goodchunk;
   const txnid_t reasonable_deep =
       txn->env->maxgc_per_branch +
-      2 * (txn->env->gc.detent - txnid_min(rkl_lowest(&ctx->ready4reuse), rkl_lowest(&txn->wr.gc.comeback)));
+      2 * (txn->env->gc.detent - txnid_min(rkl_lowest(&txn->wr.gc.ready4reuse), rkl_lowest(&txn->wr.gc.comeback)));
   const txnid_t scan_threshold = (txn->env->gc.detent > reasonable_deep) ? txn->env->gc.detent - reasonable_deep : 0;
 
   txnid_t scan_hi = txn->env->gc.detent, scan_lo = INVALID_TXNID;
@@ -859,7 +855,7 @@ static int gc_search_holes(MDBX_txn *txn, gcu_t *ctx) {
   }
 
   rkl_iter_t iter_ready4reuse, iter_comeback;
-  rkl_find(&ctx->ready4reuse, scan_hi, &iter_ready4reuse);
+  rkl_find(&txn->wr.gc.ready4reuse, scan_hi, &iter_ready4reuse);
   rkl_find(&txn->wr.gc.comeback, scan_hi, &iter_comeback);
   rkl_hole_t hole_ready4reuse = rkl_hole(&iter_ready4reuse, true);
   rkl_hole_t hole_comeback = rkl_hole(&iter_comeback, true);
@@ -948,8 +944,8 @@ static int gc_search_holes(MDBX_txn *txn, gcu_t *ctx) {
 }
 
 static inline int gc_reserve4return(MDBX_txn *txn, gcu_t *ctx, const size_t chunk_lo, const size_t chunk_hi) {
-  txnid_t reservation_id = rkl_pop(&ctx->ready4reuse, true);
-  TRACE("%s: slots-ready4reuse-left %zu, reservation-id %" PRIaTXN, dbg_prefix(ctx), rkl_len(&ctx->ready4reuse),
+  txnid_t reservation_id = rkl_pop(&txn->wr.gc.ready4reuse, true);
+  TRACE("%s: slots-ready4reuse-left %zu, reservation-id %" PRIaTXN, dbg_prefix(ctx), rkl_len(&txn->wr.gc.ready4reuse),
         reservation_id);
   tASSERT(txn, reservation_id >= MIN_TXNID && reservation_id < txn->txnid);
   tASSERT(txn, reservation_id <= txn->env->lck->cached_oldest.weak);
@@ -1046,7 +1042,7 @@ static int gc_handle_dense(MDBX_txn *txn, gcu_t *ctx, size_t left_min, size_t le
    *    размещения всех возвращаемых страниц. */
 
   int err = MDBX_RESULT_FALSE;
-  if (!rkl_empty(&ctx->ready4reuse)) {
+  if (!rkl_empty(&txn->wr.gc.ready4reuse)) {
     gc_dense_hist(txn, ctx);
     gc_dense_histogram_t solution;
     if (ctx->loop == 1 || ctx->loop % 3 == 0)
@@ -1106,13 +1102,13 @@ static int gc_handle_dense(MDBX_txn *txn, gcu_t *ctx, size_t left_min, size_t le
     const size_t per_page = txn->env->ps / sizeof(pgno_t);
     size_t amount = MDBX_PNL_GETSIZE(txn->wr.repnl);
     do {
-      if (rkl_empty(&ctx->ready4reuse)) {
+      if (rkl_empty(&txn->wr.gc.ready4reuse)) {
         NOTICE("%s: restart since no slot(s) available (reserved %zu...%zu of %zu)", dbg_prefix(ctx),
                ctx->return_reserved_lo, ctx->return_reserved_hi, amount);
         return MDBX_RESULT_TRUE;
       }
       const size_t left = dense_adjust_amount(txn, amount) - ctx->return_reserved_hi;
-      const size_t slots = rkl_len(&ctx->ready4reuse);
+      const size_t slots = rkl_len(&txn->wr.gc.ready4reuse);
       const size_t base = (left + slots - 1) / slots;
       const size_t adjusted = dense_adjust_chunk(txn, base);
       TRACE("dense-reservation: reserved %zu...%zu of %zu, left %zu slot(s) and %zu pnl, step: %zu base,"
@@ -1139,7 +1135,7 @@ static int gc_handle_dense(MDBX_txn *txn, gcu_t *ctx, size_t left_min, size_t le
 
   if (unlikely(err != MDBX_SUCCESS))
     ERROR("unable provide IDs and/or to fit returned PNL (%zd+%zd pages, %zd+%zd slots), err %d", ctx->retired_stored,
-          MDBX_PNL_GETSIZE(txn->wr.repnl), rkl_len(&txn->wr.gc.comeback), rkl_len(&ctx->ready4reuse), err);
+          MDBX_PNL_GETSIZE(txn->wr.repnl), rkl_len(&txn->wr.gc.comeback), rkl_len(&txn->wr.gc.ready4reuse), err);
   return err;
 }
 
@@ -1178,11 +1174,11 @@ static int gc_rerere(MDBX_txn *txn, gcu_t *ctx) {
 
   const size_t left_min = amount - ctx->return_reserved_hi;
   const size_t left_max = amount - ctx->return_reserved_lo;
-  if (likely(left_min < txn->env->maxgc_large1page && !rkl_empty(&ctx->ready4reuse))) {
+  if (likely(left_min < txn->env->maxgc_large1page && !rkl_empty(&txn->wr.gc.ready4reuse))) {
     /* Есть хотя-бы один слот и весь остаток списка номеров страниц помещается в один кусок.
      * Это самая частая ситуация, просто продолжаем. */
   } else {
-    if (likely(rkl_len(&ctx->ready4reuse) * ctx->goodchunk >= left_max)) {
+    if (likely(rkl_len(&txn->wr.gc.ready4reuse) * ctx->goodchunk >= left_max)) {
       /* Слотов хватает, основная задача делить на куски так, чтобы изменение (уменьшение) кол-ва возвращаемых страниц в
        * процессе резервирования записей в GC не потребовало менять резервирование, т.е. удалять и повторять всё снова.
        */
@@ -1195,7 +1191,7 @@ static int gc_rerere(MDBX_txn *txn, gcu_t *ctx) {
         return err;
 
       if (!rkl_empty(&ctx->sequel)) {
-        err = rkl_merge(&ctx->sequel, &ctx->ready4reuse, false);
+        err = rkl_merge(&ctx->sequel, &txn->wr.gc.ready4reuse, false);
         if (unlikely(err != MDBX_SUCCESS)) {
           if (err == MDBX_RESULT_TRUE) {
             ERROR("%s/%d: %s", "MDBX_PROBLEM", MDBX_PROBLEM, "unexpected duplicate(s) during rkl-merge");
@@ -1208,14 +1204,14 @@ static int gc_rerere(MDBX_txn *txn, gcu_t *ctx) {
 
       if (unlikely(ctx->return_left > 0)) {
         /* Делаем переоценку баланса для кусков предельного размера (по maxgc_large1page, вместо goodchunk). */
-        const intptr_t dense_unfit = left_min - rkl_len(&ctx->ready4reuse) * txn->env->maxgc_large1page;
+        const intptr_t dense_unfit = left_min - rkl_len(&txn->wr.gc.ready4reuse) * txn->env->maxgc_large1page;
         if (dense_unfit > 0) {
           /* Имеющихся идентификаторов НЕ хватит,
            * даже если если их использовать для кусков размером maxgc_large1page вместо goodchunk. */
           if (!ctx->dense) {
             NOTICE("%s: enter to dense-mode (amount %zu, reserved %zu..%zu, slots/ids %zu, left %zu..%zu, unfit %zu)",
                    dbg_prefix(ctx), amount, ctx->return_reserved_lo, ctx->return_reserved_hi,
-                   rkl_len(&ctx->ready4reuse), left_min, left_max, dense_unfit);
+                   rkl_len(&txn->wr.gc.ready4reuse), left_min, left_max, dense_unfit);
             ctx->dense = true;
           }
           return gc_handle_dense(txn, ctx, left_min, left_max);
@@ -1373,7 +1369,7 @@ int gc_update(MDBX_txn *txn, gcu_t *ctx) {
   }
 
   /* The txn->wr.repnl[] can grow and shrink during this call.
-   * The txn->wr.gc.reclaimed[] can grow, then migrate into ctx->ready4reuse and later to txn->wr.gc.comeback[].
+   * The txn->wr.gc.reclaimed[] can grow, then migrate into txn->wr.gc.ready4reuse and later to txn->wr.gc.comeback[].
    * But page numbers cannot disappear from txn->wr.retired_pages[]. */
 retry:
   ctx->loop += !(ctx->prev_first_unallocated > txn->geo.first_unallocated);

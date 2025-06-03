@@ -357,7 +357,6 @@ int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
   txn->env->txn = txn;
   txn->owner = parent->owner;
   txn->wr.troika = parent->wr.troika;
-  rkl_init(&txn->wr.gc.reclaimed);
 
 #if MDBX_ENABLE_DBI_SPARSE
   txn->dbi_sparse = parent->dbi_sparse;
@@ -417,6 +416,9 @@ int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
   err = rkl_copy(&parent->wr.gc.reclaimed, &txn->wr.gc.reclaimed);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
+  err = rkl_copy(&parent->wr.gc.ready4reuse, &txn->wr.gc.ready4reuse);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
 
   txn->wr.retired_pages = parent->wr.retired_pages;
   parent->wr.retired_pages = (void *)(intptr_t)MDBX_PNL_GETSIZE(parent->wr.retired_pages);
@@ -432,8 +434,6 @@ int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
                       (parent->parent ? parent->parent->wr.dirtyroom : parent->env->options.dp_limit));
   tASSERT(txn, txn->wr.dirtyroom + txn->wr.dirtylist->length ==
                    (txn->parent ? txn->parent->wr.dirtyroom : txn->env->options.dp_limit));
-  tASSERT(parent, parent->cursors[FREE_DBI] == nullptr);
-  // TODO: shadow GC' cursor
   return txn_shadow_cursors(parent, MAIN_DBI);
 }
 
@@ -443,7 +443,9 @@ void txn_nested_abort(MDBX_txn *nested) {
   nested->signature = 0;
   nested->owner = 0;
 
+  tASSERT(nested, rkl_empty(&nested->wr.gc.comeback));
   rkl_destroy(&nested->wr.gc.reclaimed);
+  rkl_destroy(&nested->wr.gc.ready4reuse);
 
   if (nested->wr.retired_pages) {
     tASSERT(parent, MDBX_PNL_GETSIZE(nested->wr.retired_pages) >= (uintptr_t)parent->wr.retired_pages);
@@ -527,6 +529,8 @@ int txn_nested_join(MDBX_txn *txn, struct commit_timestamp *ts) {
   txn->wr.repnl = nullptr;
   parent->wr.gc.spent = txn->wr.gc.spent;
   rkl_destructive_move(&txn->wr.gc.reclaimed, &parent->wr.gc.reclaimed);
+  rkl_destructive_move(&txn->wr.gc.ready4reuse, &parent->wr.gc.ready4reuse);
+  tASSERT(txn, rkl_empty(&txn->wr.gc.comeback));
 
   parent->geo = txn->geo;
   parent->canary = txn->canary;

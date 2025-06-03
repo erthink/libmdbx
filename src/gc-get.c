@@ -890,12 +890,6 @@ pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) 
   if (num > 0 && txn->dbs[FREE_DBI].branch_pages && MDBX_PNL_GETSIZE(txn->wr.repnl) < env->maxgc_large1page / 2)
     flags += ALLOC_COALESCE;
 
-  MDBX_cursor *const gc = txn_gc_cursor(txn);
-  eASSERT(env, mc != gc && gc->next == gc);
-  gc->txn = txn;
-  gc->dbi_state = txn->dbi_state;
-  gc->top_and_flags = z_fresh_mark;
-
   txn->wr.prefault_write_activated = !env->incore && env->options.prefault_write;
   if (txn->wr.prefault_write_activated) {
     /* Проверка посредством minicore() существенно снижает затраты, но в
@@ -912,6 +906,12 @@ pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) 
         (readahead_enabled && pgno + num < readahead_edge))
       txn->wr.prefault_write_activated = false;
   }
+
+  MDBX_cursor *const gc = gc_cursor(env);
+  gc->txn = txn;
+  gc->tree = txn->dbs;
+  gc->dbi_state = txn->dbi_state;
+  gc->top_and_flags = z_fresh_mark;
 
 retry_gc_refresh_detent:
   txn_gc_detent(txn);
@@ -1046,20 +1046,6 @@ next_gc:
     }
   }
 
-  /* Remember ID of readed GC record */
-  ret.err = rkl_push(
-      &txn->wr.gc.reclaimed, id
-      /* Вместо known_continuous=false, тут можно передавать/использовать (flags & ALLOC_LIFO) == 0, тогда дыры/пропуски
-       * в идентификаторах GC будут образовывать непрерывные интервалы в wr.gc.reclaimed, что обеспечит больше свободных
-       * идентификаторов/слотов для возврата страниц. Однако, это также приведёт к пустым попыткам удаления
-       * отсутствующих записей в gc_clear_reclaimed(), а далее к перекладыванию этих сплошных интервалов поэлементно в
-       * ready4reuse. Поэтому смысла в этом решительно нет. Следует либо формировать сплошные интервалы при работе
-       * gc_clear_reclaimed(), особенно в FIFO-режиме, либо искать их только в gc_provide_ids() */
-  );
-  TRACE("%" PRIaTXN " len %zu pushed to txn-rkl, err %d", id, gc_len, ret.err);
-  if (unlikely(ret.err != MDBX_SUCCESS))
-    goto fail;
-
   /* Append PNL from GC record to wr.repnl */
   ret.err = pnl_need(&txn->wr.repnl, gc_len);
   if (unlikely(ret.err != MDBX_SUCCESS))
@@ -1102,7 +1088,23 @@ next_gc:
   }
   eASSERT(env, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
 
-  /* TODO: удаление загруженных из GC записей */
+  rkl_t *rkl = &txn->wr.gc.reclaimed;
+  const char *rkl_name = "reclaimed";
+  if (mc->dbi_state != txn->dbi_state &&
+      (MDBX_DEBUG || MDBX_PNL_GETSIZE(txn->wr.repnl) > (size_t)gc->tree->height + gc->tree->height + 3)) {
+    gc->next = txn->cursors[FREE_DBI];
+    txn->cursors[FREE_DBI] = gc;
+    ret.err = cursor_del(gc, 0);
+    txn->cursors[FREE_DBI] = gc->next;
+    if (unlikely(ret.err != MDBX_SUCCESS))
+      goto fail;
+    rkl = &txn->wr.gc.ready4reuse;
+    rkl_name = "ready4reuse";
+  }
+  ret.err = rkl_push(rkl, id);
+  TRACE("%" PRIaTXN " len %zu pushed to rkl-%s, err %d", id, gc_len, rkl_name, ret.err);
+  if (unlikely(ret.err != MDBX_SUCCESS))
+    goto fail;
 
   eASSERT(env, op == MDBX_PREV || op == MDBX_NEXT);
   if (flags & ALLOC_COALESCE) {

@@ -3,11 +3,6 @@
 
 #include "internals.h"
 
-MDBX_cursor *txn_gc_cursor(MDBX_txn *txn) {
-  tASSERT(txn, (txn->flags & (MDBX_TXN_BLOCKED | MDBX_TXN_RDONLY)) == 0);
-  return ptr_disp(txn->env->basal_txn, sizeof(MDBX_txn));
-}
-
 __hot bool txn_gc_detent(const MDBX_txn *const txn) {
   const txnid_t detent = mvcc_shapshot_oldest(txn->env, txn->wr.troika.txnid[txn->wr.troika.prefer_steady]);
   if (likely(detent == txn->env->gc.detent))
@@ -33,7 +28,7 @@ void txn_done_cursors(MDBX_txn *txn) {
 }
 
 int txn_shadow_cursors(const MDBX_txn *parent, const size_t dbi) {
-  tASSERT(parent, dbi > FREE_DBI && dbi < parent->n_dbi);
+  tASSERT(parent, dbi < parent->n_dbi);
   MDBX_cursor *cursor = parent->cursors[dbi];
   if (!cursor)
     return MDBX_SUCCESS;
@@ -322,6 +317,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
       rc = cursor_init(gc, txn, FREE_DBI);
       if (rc != MDBX_SUCCESS)
         goto bailout;
+      tASSERT(txn, txn->cursors[FREE_DBI] == nullptr);
     }
     dxb_sanitize_tail(env, txn);
     return MDBX_SUCCESS;

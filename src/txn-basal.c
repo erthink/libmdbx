@@ -63,6 +63,7 @@ __cold MDBX_txn *txn_basal_create(const size_t max_dbi) {
     return txn;
 
   rkl_init(&txn->wr.gc.reclaimed);
+  rkl_init(&txn->wr.gc.ready4reuse);
   rkl_init(&txn->wr.gc.comeback);
   txn->dbs = ptr_disp(txn, base);
   txn->cursors = ptr_disp(txn->dbs, max_dbi * sizeof(txn->dbs[0]));
@@ -85,6 +86,7 @@ __cold MDBX_txn *txn_basal_create(const size_t max_dbi) {
 __cold void txn_basal_destroy(MDBX_txn *txn) {
   dpl_free(txn);
   rkl_destroy(&txn->wr.gc.reclaimed);
+  rkl_destroy(&txn->wr.gc.ready4reuse);
   rkl_destroy(&txn->wr.gc.comeback);
   pnl_free(txn->wr.retired_pages);
   pnl_free(txn->wr.spilled.list);
@@ -127,6 +129,8 @@ int txn_basal_start(MDBX_txn *txn, unsigned flags) {
   txn->wr.spilled.least_removed = 0;
   txn->wr.gc.spent = 0;
   tASSERT(txn, rkl_empty(&txn->wr.gc.reclaimed));
+  tASSERT(txn, rkl_empty(&txn->wr.gc.ready4reuse));
+  tASSERT(txn, rkl_empty(&txn->wr.gc.comeback));
   txn->env->gc.detent = 0;
   env->txn = txn;
 
@@ -144,6 +148,7 @@ int txn_basal_end(MDBX_txn *txn, unsigned mode) {
   pnl_free(txn->wr.spilled.list);
   txn->wr.spilled.list = nullptr;
   rkl_clear_and_shrink(&txn->wr.gc.reclaimed);
+  rkl_clear_and_shrink(&txn->wr.gc.ready4reuse);
   rkl_clear_and_shrink(&txn->wr.gc.comeback);
 
   eASSERT(env, txn->parent == nullptr);

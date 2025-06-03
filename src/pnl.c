@@ -52,7 +52,7 @@ void pnl_shrink(pnl_t __restrict *__restrict ppnl) {
 int pnl_reserve(pnl_t __restrict *__restrict ppnl, const size_t wanna) {
   const size_t allocated = MDBX_PNL_ALLOCLEN(*ppnl);
   assert(MDBX_PNL_GETSIZE(*ppnl) <= PAGELIST_LIMIT && MDBX_PNL_ALLOCLEN(*ppnl) >= MDBX_PNL_GETSIZE(*ppnl));
-  if (likely(allocated >= wanna))
+  if (unlikely(allocated >= wanna))
     return MDBX_SUCCESS;
 
   if (unlikely(wanna > /* paranoia */ PAGELIST_LIMIT)) {

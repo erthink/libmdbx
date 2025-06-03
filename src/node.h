@@ -17,7 +17,6 @@ MDBX_NOTHROW_PURE_FUNCTION static inline pgno_t node_pgno(const node_t *const __
 /* Set the page number in a branch node */
 static inline void node_set_pgno(node_t *const __restrict node, pgno_t pgno) {
   assert(pgno >= MIN_PAGENO && pgno <= MAX_PAGENO);
-
   UNALIGNED_POKE_32(node, node_t, child_pgno, (uint32_t)pgno);
 }
 

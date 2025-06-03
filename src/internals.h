@@ -214,9 +214,10 @@ struct MDBX_txn {
       troika_t troika;
       pnl_t __restrict repnl; /* Reclaimed GC pages */
       struct {
-        rkl_t reclaimed; /* The list of reclaimed txn-ids from GC */
-        uint64_t spent;  /* Time spent reading and searching GC */
-        rkl_t comeback;  /* The list of ids of records returned into GC during commit, etc */
+        rkl_t reclaimed;   /* The list of reclaimed txn-ids from GC, but not cleared/deleted */
+        rkl_t ready4reuse; /* The list of reclaimed txn-ids from GC, and cleared/deleted */
+        uint64_t spent;    /* Time spent reading and searching GC */
+        rkl_t comeback;    /* The list of ids of records returned into GC during commit, etc */
       } gc;
       bool prefault_write_activated;
 #if MDBX_ENABLE_REFUND

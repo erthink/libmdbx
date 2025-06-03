@@ -65,7 +65,6 @@ MDBX_INTERNAL bool txn_gc_detent(const MDBX_txn *const txn);
 MDBX_INTERNAL int txn_check_badbits_parked(const MDBX_txn *txn, int bad_bits);
 MDBX_INTERNAL void txn_done_cursors(MDBX_txn *txn);
 MDBX_INTERNAL int txn_shadow_cursors(const MDBX_txn *parent, const size_t dbi);
-MDBX_INTERNAL MDBX_cursor *txn_gc_cursor(MDBX_txn *txn);
 
 MDBX_INTERNAL MDBX_txn *txn_alloc(const MDBX_txn_flags_t flags, MDBX_env *env);
 MDBX_INTERNAL int txn_abort(MDBX_txn *txn);

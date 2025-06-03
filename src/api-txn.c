@@ -520,7 +520,7 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
         txn_gc_detent(txn);
         oldest_reading = txn->env->gc.detent;
         if (oldest_reading == txn->wr.troika.txnid[txn->wr.troika.recent]) {
-          /* Если самый старый используемый снимок является предыдущим, т. е. непосредственно предшествующим текущей
+          /* Если самый старый используемый снимок является предыдущим, т.е. непосредственно предшествующим текущей
            * транзакции, то просматриваем таблицу читателей чтобы выяснить действительно ли снимок используется
            * читателями. */
           oldest_reading = txn->txnid;

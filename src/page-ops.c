@@ -179,19 +179,19 @@ __hot int page_touch_unmodifable(MDBX_txn *txn, MDBX_cursor *mc, const page_t *c
   page_t *np;
   if (is_frozen(txn, mp)) {
     /* CoW the page */
-    rc = pnl_need(&txn->wr.retired_pages, 1);
-    if (unlikely(rc != MDBX_SUCCESS))
-      goto fail;
     const pgr_t par = gc_alloc_single(mc);
     rc = par.err;
     np = par.page;
     if (unlikely(rc != MDBX_SUCCESS))
       goto fail;
 
+    rc = pnl_append(&txn->wr.retired_pages, mp->pgno);
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto fail;
+
     const pgno_t pgno = np->pgno;
     DEBUG("touched db %d page %" PRIaPGNO " -> %" PRIaPGNO, cursor_dbi_dbg(mc), mp->pgno, pgno);
     tASSERT(txn, mp->pgno != pgno);
-    pnl_append_prereserved(txn->wr.retired_pages, mp->pgno);
     /* Update the parent page, if any, to point to the new page */
     if (likely(mc->top)) {
       page_t *parent = mc->pg[mc->top - 1];
