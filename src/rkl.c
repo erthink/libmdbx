@@ -218,9 +218,10 @@ static int extend_solid(rkl_t *rkl, txnid_t solid_begin, txnid_t solid_end, cons
   return MDBX_SUCCESS;
 }
 
-int rkl_push(rkl_t *rkl, const txnid_t id, const bool known_continuous) {
+int rkl_push(rkl_t *rkl, const txnid_t id) {
   assert(id >= MIN_TXNID && id < INVALID_TXNID);
   assert(rkl_check(rkl));
+  const bool known_continuous = false;
 
   if (rkl->solid_begin >= rkl->solid_end) {
     /* непрерывный интервал пуст */
@@ -396,7 +397,7 @@ int rkl_merge(rkl_t *dst, const rkl_t *src, bool ignore_duplicates) {
   if (src->list_length) {
     size_t i = src->list_length;
     do {
-      int err = rkl_push(dst, src->list[i - 1], false);
+      int err = rkl_push(dst, src->list[i - 1]);
       if (unlikely(err != MDBX_SUCCESS) && (!ignore_duplicates || err != MDBX_RESULT_TRUE))
         return err;
     } while (--i);
@@ -404,7 +405,7 @@ int rkl_merge(rkl_t *dst, const rkl_t *src, bool ignore_duplicates) {
 
   txnid_t id = src->solid_begin;
   while (id < src->solid_end) {
-    int err = rkl_push(dst, id, false);
+    int err = rkl_push(dst, id);
     if (unlikely(err != MDBX_SUCCESS) && (!ignore_duplicates || err != MDBX_RESULT_TRUE))
       return err;
     ++id;

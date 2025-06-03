@@ -48,8 +48,7 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline txnid_t rkl_edge(cons
                                                                             const bool highest_not_lowest) {
   return highest_not_lowest ? rkl_highest(rkl) : rkl_lowest(rkl);
 }
-MDBX_MAYBE_UNUSED MDBX_INTERNAL __must_check_result int rkl_push(rkl_t *rkl, const txnid_t id,
-                                                                 const bool known_continuous);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL __must_check_result int rkl_push(rkl_t *rkl, const txnid_t id);
 MDBX_MAYBE_UNUSED MDBX_INTERNAL txnid_t rkl_pop(rkl_t *rkl, const bool highest_not_lowest);
 MDBX_MAYBE_UNUSED MDBX_INTERNAL __must_check_result int rkl_merge(rkl_t *dst, const rkl_t *src, bool ignore_duplicates);
 

@@ -485,7 +485,7 @@ static int gc_remove_rkl(MDBX_txn *txn, gcu_t *ctx, rkl_t *rkl) {
     int err = cursor_seek(&ctx->cursor, &key, nullptr, MDBX_SET).err;
     tASSERT(txn, id == rkl_edge(rkl, is_lifo(txn)));
     if (err == MDBX_NOTFOUND) {
-      err = rkl_push(&ctx->ready4reuse, rkl_pop(rkl, is_lifo(txn)), false);
+      err = rkl_push(&ctx->ready4reuse, rkl_pop(rkl, is_lifo(txn)));
       WARNING("unexpected %s for gc-id %" PRIaTXN ", ignore and continue, push-err %d", "MDBX_NOTFOUND", id, err);
       if (unlikely(MDBX_IS_ERROR(err)))
         return err;
@@ -506,7 +506,7 @@ static int gc_remove_rkl(MDBX_txn *txn, gcu_t *ctx, rkl_t *rkl) {
       return err;
     ENSURE(txn->env, id == rkl_pop(rkl, is_lifo(txn)));
     tASSERT(txn, id <= txn->env->lck->cached_oldest.weak);
-    err = rkl_push(&ctx->ready4reuse, id, false);
+    err = rkl_push(&ctx->ready4reuse, id);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
     TRACE("id %" PRIaTXN " cleared and moved to ready4reuse", id);
@@ -528,7 +528,7 @@ static int gc_push_sequel(MDBX_txn *txn, gcu_t *ctx, txnid_t id) {
   tASSERT(txn, id > 0 && id < txn->env->gc.detent);
   tASSERT(txn, !rkl_contain(&txn->wr.gc.comeback, id) && !rkl_contain(&ctx->ready4reuse, id));
   TRACE("id %" PRIaTXN ", return-left %zi", id, ctx->return_left);
-  int err = rkl_push(&ctx->sequel, id, false);
+  int err = rkl_push(&ctx->sequel, id);
   if (unlikely(err != MDBX_SUCCESS)) {
     if (err == MDBX_RESULT_TRUE) {
       ERROR("%s/%d: %s", "MDBX_PROBLEM", MDBX_PROBLEM, "unexpected duplicate(s) during rkl-push");
@@ -959,7 +959,7 @@ static inline int gc_reserve4return(MDBX_txn *txn, gcu_t *ctx, const size_t chun
     return MDBX_PROBLEM;
   }
 
-  int err = rkl_push(&txn->wr.gc.comeback, reservation_id, false);
+  int err = rkl_push(&txn->wr.gc.comeback, reservation_id);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
