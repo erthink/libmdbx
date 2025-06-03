@@ -393,7 +393,7 @@ txnid_t rkl_highest(const rkl_t *rkl) {
   return !solid_empty(rkl) ? rkl->solid_end - 1 : 0;
 }
 
-int rkl_merge(rkl_t *dst, const rkl_t *src, bool ignore_duplicates) {
+int rkl_merge(const rkl_t *src, rkl_t *dst, bool ignore_duplicates) {
   if (src->list_length) {
     size_t i = src->list_length;
     do {
@@ -411,6 +411,12 @@ int rkl_merge(rkl_t *dst, const rkl_t *src, bool ignore_duplicates) {
     ++id;
   }
   return MDBX_SUCCESS;
+}
+
+int rkl_destructive_merge(rkl_t *src, rkl_t *dst, bool ignore_duplicates) {
+  int err = rkl_merge(src, dst, ignore_duplicates);
+  rkl_destroy(src);
+  return err;
 }
 
 rkl_iter_t rkl_iterator(const rkl_t *rkl, const bool reverse) {

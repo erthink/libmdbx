@@ -1195,7 +1195,7 @@ static int gc_rerere(MDBX_txn *txn, gcu_t *ctx) {
         return err;
 
       if (!rkl_empty(&ctx->sequel)) {
-        err = rkl_merge(&ctx->ready4reuse, &ctx->sequel, false);
+        err = rkl_merge(&ctx->sequel, &ctx->ready4reuse, false);
         if (unlikely(err != MDBX_SUCCESS)) {
           if (err == MDBX_RESULT_TRUE) {
             ERROR("%s/%d: %s", "MDBX_PROBLEM", MDBX_PROBLEM, "unexpected duplicate(s) during rkl-merge");
