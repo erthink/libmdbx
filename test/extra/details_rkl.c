@@ -183,7 +183,7 @@ static bool stochastic_pass(const unsigned start, const unsigned width, const un
 
   txnid_t lowest = UINT_MAX;
   txnid_t highest = 0;
-  while (MDBX_PNL_GETSIZE(l) < n) {
+  while (txl_size(l) < n) {
     txnid_t id = (txnid_t)(prng() % width + start);
     if (id < MIN_TXNID || id >= INVALID_TXNID)
       continue;
@@ -227,7 +227,7 @@ static bool stochastic_pass(const unsigned start, const unsigned width, const un
 
   txl_sort(l);
   CHECK_EQ(rkl_len(&k), n);
-  CHECK_EQ(MDBX_PNL_GETSIZE(l), n);
+  CHECK_EQ(txl_size(l), n);
 
   f = rkl_iterator(&k, false);
   r = rkl_iterator(&k, true);
