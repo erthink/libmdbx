@@ -381,7 +381,28 @@ int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
 
 actor_status osal_actor_info(const mdbx_pid_t pid) { return children.at(pid); }
 
+static void wait_actors(unsigned timeout) {
+  for (auto &pair : children)
+    if (pair.second <= as_running) {
+      osal_yield();
+      mdbx_pid_t pid = 0;
+      osal_actor_poll(pid, timeout);
+      if (!pid)
+        return;
+    }
+}
+
 void osal_killall_actors(void) {
+  for (auto &pair : children)
+    kill(pair.first, SIGINT);
+
+  wait_actors(0);
+  for (auto &pair : children) {
+    osal_yield();
+    kill(pair.first, SIGTERM);
+  }
+
+  wait_actors(1);
   for (auto &pair : children) {
     kill(pair.first, SIGKILL);
     pair.second = as_killed;
