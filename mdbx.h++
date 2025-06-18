@@ -1766,8 +1766,8 @@ private:
     silo() noexcept : allocator_type() { init(0); }
     MDBX_CXX20_CONSTEXPR
     silo(const allocator_type &alloc) noexcept : allocator_type(alloc) { init(0); }
-    MDBX_CXX20_CONSTEXPR silo(size_t capacity) { init(capacity); }
-    MDBX_CXX20_CONSTEXPR silo(size_t capacity, const allocator_type &alloc) : silo(alloc) { init(capacity); }
+    MDBX_CXX20_CONSTEXPR silo(size_t capacity) : allocator_type() { init(capacity); }
+    MDBX_CXX20_CONSTEXPR silo(size_t capacity, const allocator_type &alloc) : allocator_type(alloc) { init(capacity); }
 
     MDBX_CXX20_CONSTEXPR silo(silo &&ditto) noexcept(::std::is_nothrow_move_constructible<allocator_type>::value)
         : allocator_type(::std::move(ditto.get_allocator())), bin_(::std::move(ditto.bin_)) {}
@@ -1778,7 +1778,6 @@ private:
         put(headroom, ptr, length);
     }
 
-    // select_on_container_copy_construction()
     MDBX_CXX20_CONSTEXPR silo(size_t capacity, size_t headroom, const void *ptr, size_t length,
                               const allocator_type &alloc)
         : silo(capacity, alloc) {
