@@ -506,7 +506,7 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
     info->txn_space_limit_soft = pgno2bytes(env, txn->geo.now);
     info->txn_space_limit_hard = pgno2bytes(env, txn->geo.upper);
     info->txn_space_retired =
-        pgno2bytes(env, txn->nested ? (size_t)txn->wr.retired_pages : MDBX_PNL_GETSIZE(txn->wr.retired_pages));
+        pgno2bytes(env, txn->nested ? (size_t)txn->wr.retired_pages : pnl_size(txn->wr.retired_pages));
     info->txn_space_leftover = pgno2bytes(env, txn->wr.dirtyroom);
     info->txn_space_dirty =
         pgno2bytes(env, txn->wr.dirtylist ? txn->wr.dirtylist->pages_including_loose

@@ -124,7 +124,7 @@ int txn_basal_start(MDBX_txn *txn, unsigned flags) {
 #if MDBX_ENABLE_REFUND
   txn->wr.loose_refund_wl = 0;
 #endif /* MDBX_ENABLE_REFUND */
-  MDBX_PNL_SETSIZE(txn->wr.retired_pages, 0);
+  pnl_setsize(txn->wr.retired_pages, 0);
   txn->wr.spilled.list = nullptr;
   txn->wr.spilled.least_removed = 0;
   txn->wr.gc.spent = 0;
@@ -295,7 +295,7 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
     ts->audit = ts->gc;
   }
   if (AUDIT_ENABLED()) {
-    rc = audit_ex(txn, MDBX_PNL_GETSIZE(txn->wr.retired_pages), true);
+    rc = audit_ex(txn, pnl_size(txn->wr.retired_pages), true);
     if (ts)
       ts->audit = osal_monotime();
     if (unlikely(rc != MDBX_SUCCESS))
@@ -347,7 +347,7 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
   meta.validator_id = head.ptr_c->validator_id;
   meta.extra_pagehdr = head.ptr_c->extra_pagehdr;
   unaligned_poke_u64(4, meta.pages_retired,
-                     unaligned_peek_u64(4, head.ptr_c->pages_retired) + MDBX_PNL_GETSIZE(txn->wr.retired_pages));
+                     unaligned_peek_u64(4, head.ptr_c->pages_retired) + pnl_size(txn->wr.retired_pages));
   meta.geometry = txn->geo;
   meta.trees.gc = txn->dbs[FREE_DBI];
   meta.trees.main = txn->dbs[MAIN_DBI];

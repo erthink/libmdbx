@@ -29,7 +29,7 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
 
   /* Move retired pages from parent's dirty & spilled list to reclaimed */
   size_t r, w, d, s, l;
-  for (r = w = parent_retired_len; ++r <= MDBX_PNL_GETSIZE(parent->wr.retired_pages);) {
+  for (r = w = parent_retired_len; ++r <= pnl_size(parent->wr.retired_pages);) {
     const pgno_t pgno = parent->wr.retired_pages[r];
     const size_t di = dpl_exist(parent, pgno);
     const size_t si = !di ? spill_search(parent, pgno) : 0;
@@ -54,7 +54,7 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
         /* Список retired страниц не сортирован, но для ускорения сортировки
          * дополняется в соответствии с MDBX_PNL_ASCENDING */
 #if MDBX_PNL_ASCENDING
-        const size_t len = MDBX_PNL_GETSIZE(parent->wr.retired_pages);
+        const size_t len = pnl_size(parent->wr.retired_pages);
         while (r < len && parent->wr.retired_pages[r + 1] == pgno + l) {
           ++r;
           if (++l == npages)
@@ -81,24 +81,24 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
     int err = pnl_insert_span(&parent->wr.repnl, pgno, l);
     ENSURE(txn->env, err == MDBX_SUCCESS);
   }
-  MDBX_PNL_SETSIZE(parent->wr.retired_pages, w);
+  pnl_setsize(parent->wr.retired_pages, w);
 
   /* Filter-out parent spill list */
-  if (parent->wr.spilled.list && MDBX_PNL_GETSIZE(parent->wr.spilled.list) > 0) {
+  if (parent->wr.spilled.list && pnl_size(parent->wr.spilled.list) > 0) {
     const pnl_t sl = spill_purge(parent);
-    size_t len = MDBX_PNL_GETSIZE(sl);
+    size_t len = pnl_size(sl);
     if (len) {
       /* Remove refunded pages from parent's spill list */
       if (MDBX_ENABLE_REFUND && MDBX_PNL_MOST(sl) >= (parent->geo.first_unallocated << 1)) {
 #if MDBX_PNL_ASCENDING
-        size_t i = MDBX_PNL_GETSIZE(sl);
+        size_t i = pnl_size(sl);
         assert(MDBX_PNL_MOST(sl) == MDBX_PNL_LAST(sl));
         do {
           if ((sl[i] & 1) == 0)
             DEBUG("refund parent's spilled page %" PRIaPGNO, sl[i] >> 1);
           i -= 1;
         } while (i && sl[i] >= (parent->geo.first_unallocated << 1));
-        MDBX_PNL_SETSIZE(sl, i);
+        pnl_setsize(sl, i);
 #else
         assert(MDBX_PNL_MOST(sl) == MDBX_PNL_FIRST(sl));
         size_t i = 0;
@@ -107,14 +107,14 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
           if ((sl[i] & 1) == 0)
             DEBUG("refund parent's spilled page %" PRIaPGNO, sl[i] >> 1);
         } while (i < len && sl[i + 1] >= (parent->geo.first_unallocated << 1));
-        MDBX_PNL_SETSIZE(sl, len -= i);
+        pnl_setsize(sl, len -= i);
         memmove(sl + 1, sl + 1 + i, len * sizeof(sl[0]));
 #endif
       }
       tASSERT(txn, pnl_check_allocated(sl, (size_t)parent->geo.first_unallocated << 1));
 
       /* Remove reclaimed pages from parent's spill list */
-      s = MDBX_PNL_GETSIZE(sl), r = MDBX_PNL_GETSIZE(reclaimed_list);
+      s = pnl_size(sl), r = pnl_size(reclaimed_list);
       /* Scanning from end to begin */
       while (s && r) {
         if (sl[s] & 1) {
@@ -138,9 +138,9 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
       /* Remove anything in our dirty list from parent's spill list */
       /* Scanning spill list in descend order */
       const intptr_t step = MDBX_PNL_ASCENDING ? -1 : 1;
-      s = MDBX_PNL_ASCENDING ? MDBX_PNL_GETSIZE(sl) : 1;
+      s = MDBX_PNL_ASCENDING ? pnl_size(sl) : 1;
       d = src->length;
-      while (d && (MDBX_PNL_ASCENDING ? s > 0 : s <= MDBX_PNL_GETSIZE(sl))) {
+      while (d && (MDBX_PNL_ASCENDING ? s > 0 : s <= pnl_size(sl))) {
         if (sl[s] & 1) {
           s += step;
           continue;
@@ -328,7 +328,7 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
 
   if (parent->wr.spilled.list) {
     assert(pnl_check_allocated(parent->wr.spilled.list, (size_t)parent->geo.first_unallocated << 1));
-    if (MDBX_PNL_GETSIZE(parent->wr.spilled.list))
+    if (pnl_size(parent->wr.spilled.list))
       parent->flags |= MDBX_TXN_SPILLS;
   }
 }
@@ -368,7 +368,7 @@ int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
   if (unlikely(err != MDBX_SUCCESS))
     return LOG_IFERR(err);
 
-  const size_t len = MDBX_PNL_GETSIZE(parent->wr.repnl) + parent->wr.loose_count;
+  const size_t len = pnl_size(parent->wr.repnl) + parent->wr.loose_count;
   txn->wr.repnl = pnl_alloc((len > MDBX_PNL_INITIAL) ? len : MDBX_PNL_INITIAL);
   if (unlikely(!txn->wr.repnl))
     return LOG_IFERR(MDBX_ENOMEM);
@@ -403,7 +403,7 @@ int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
   if (parent->wr.spilled.list)
     spill_purge(parent);
 
-  tASSERT(txn, MDBX_PNL_ALLOCLEN(txn->wr.repnl) >= MDBX_PNL_GETSIZE(parent->wr.repnl));
+  tASSERT(txn, pnl_alloclen(txn->wr.repnl) >= pnl_size(parent->wr.repnl));
   memcpy(txn->wr.repnl, parent->wr.repnl, MDBX_PNL_SIZEOF(parent->wr.repnl));
   /* coverity[assignment_where_comparison_intended] */
   tASSERT(txn, pnl_check_allocated(txn->wr.repnl, (txn->geo.first_unallocated /* LY: intentional assignment
@@ -421,7 +421,7 @@ int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
     return err;
 
   txn->wr.retired_pages = parent->wr.retired_pages;
-  parent->wr.retired_pages = (void *)(intptr_t)MDBX_PNL_GETSIZE(parent->wr.retired_pages);
+  parent->wr.retired_pages = (void *)(intptr_t)pnl_size(parent->wr.retired_pages);
 
   txn->cursors[FREE_DBI] = nullptr;
   txn->cursors[MAIN_DBI] = nullptr;
@@ -448,8 +448,8 @@ void txn_nested_abort(MDBX_txn *nested) {
   rkl_destroy(&nested->wr.gc.ready4reuse);
 
   if (nested->wr.retired_pages) {
-    tASSERT(parent, MDBX_PNL_GETSIZE(nested->wr.retired_pages) >= (uintptr_t)parent->wr.retired_pages);
-    MDBX_PNL_SETSIZE(nested->wr.retired_pages, (uintptr_t)parent->wr.retired_pages);
+    tASSERT(parent, pnl_size(nested->wr.retired_pages) >= (uintptr_t)parent->wr.retired_pages);
+    pnl_setsize(nested->wr.retired_pages, (uintptr_t)parent->wr.retired_pages);
     parent->wr.retired_pages = nested->wr.retired_pages;
   }
 
@@ -475,7 +475,7 @@ int txn_nested_join(MDBX_txn *txn, struct commit_timestamp *ts) {
 
     tASSERT(txn, memcmp(&parent->geo, &txn->geo, sizeof(parent->geo)) == 0);
     tASSERT(txn, memcmp(&parent->canary, &txn->canary, sizeof(parent->canary)) == 0);
-    tASSERT(txn, !txn->wr.spilled.list || MDBX_PNL_GETSIZE(txn->wr.spilled.list) == 0);
+    tASSERT(txn, !txn->wr.spilled.list || pnl_size(txn->wr.spilled.list) == 0);
     tASSERT(txn, txn->wr.loose_count == 0);
 
     /* Update parent's DBs array */
@@ -497,8 +497,8 @@ int txn_nested_join(MDBX_txn *txn, struct commit_timestamp *ts) {
   /* Preserve space for spill list to avoid parent's state corruption
    * if allocation fails. */
   const size_t parent_retired_len = (uintptr_t)parent->wr.retired_pages;
-  tASSERT(txn, parent_retired_len <= MDBX_PNL_GETSIZE(txn->wr.retired_pages));
-  const size_t retired_delta = MDBX_PNL_GETSIZE(txn->wr.retired_pages) - parent_retired_len;
+  tASSERT(txn, parent_retired_len <= pnl_size(txn->wr.retired_pages));
+  const size_t retired_delta = pnl_size(txn->wr.retired_pages) - parent_retired_len;
   if (retired_delta) {
     int err = pnl_need(&txn->wr.repnl, retired_delta);
     if (unlikely(err != MDBX_SUCCESS))
@@ -507,7 +507,7 @@ int txn_nested_join(MDBX_txn *txn, struct commit_timestamp *ts) {
 
   if (txn->wr.spilled.list) {
     if (parent->wr.spilled.list) {
-      int err = pnl_need(&parent->wr.spilled.list, MDBX_PNL_GETSIZE(txn->wr.spilled.list));
+      int err = pnl_need(&parent->wr.spilled.list, pnl_size(txn->wr.spilled.list));
       if (unlikely(err != MDBX_SUCCESS))
         return err;
     }
@@ -587,7 +587,7 @@ int txn_nested_join(MDBX_txn *txn, struct commit_timestamp *ts) {
       VALGRIND_MAKE_MEM_DEFINED(&page_next(lp), sizeof(page_t *));
     }
     /* Check parent's reclaimed pages not suitable for refund */
-    if (MDBX_PNL_GETSIZE(parent->wr.repnl))
+    if (pnl_size(parent->wr.repnl))
       tASSERT(parent, MDBX_PNL_MOST(parent->wr.repnl) + 1 < parent->geo.first_unallocated);
   }
 #endif /* MDBX_ENABLE_REFUND */

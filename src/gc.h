@@ -62,7 +62,7 @@ MDBX_INTERNAL pgr_t gc_alloc_single(const MDBX_cursor *const mc);
 MDBX_INTERNAL int gc_update(MDBX_txn *txn, gcu_t *ctx);
 
 MDBX_NOTHROW_PURE_FUNCTION static inline size_t gc_stockpile(const MDBX_txn *txn) {
-  return MDBX_PNL_GETSIZE(txn->wr.repnl) + txn->wr.loose_count;
+  return pnl_size(txn->wr.repnl) + txn->wr.loose_count;
 }
 
 MDBX_NOTHROW_PURE_FUNCTION static inline size_t gc_chunk_bytes(const size_t chunk) {

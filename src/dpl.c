@@ -365,8 +365,8 @@ __cold bool dpl_check(MDBX_txn *txn) {
     }
 
     const size_t rpa = pnl_search(txn->wr.repnl, dp->pgno, txn->geo.first_unallocated);
-    tASSERT(txn, rpa > MDBX_PNL_GETSIZE(txn->wr.repnl) || txn->wr.repnl[rpa] != dp->pgno);
-    if (rpa <= MDBX_PNL_GETSIZE(txn->wr.repnl) && unlikely(txn->wr.repnl[rpa] == dp->pgno))
+    tASSERT(txn, rpa > pnl_size(txn->wr.repnl) || txn->wr.repnl[rpa] != dp->pgno);
+    if (rpa <= pnl_size(txn->wr.repnl) && unlikely(txn->wr.repnl[rpa] == dp->pgno))
       return false;
     if (num > 1) {
       const size_t rpb = pnl_search(txn->wr.repnl, dp->pgno + num - 1, txn->geo.first_unallocated);
@@ -384,7 +384,7 @@ __cold bool dpl_check(MDBX_txn *txn) {
   if (unlikely(pages != dl->pages_including_loose))
     return false;
 
-  for (size_t i = 1; i <= MDBX_PNL_GETSIZE(txn->wr.retired_pages); ++i) {
+  for (size_t i = 1; i <= pnl_size(txn->wr.retired_pages); ++i) {
     const page_t *const dp = debug_dpl_find(txn, txn->wr.retired_pages[i]);
     tASSERT(txn, !dp);
     if (unlikely(dp))
@@ -413,14 +413,14 @@ __noinline void dpl_lru_reduce(MDBX_txn *txn) {
 void dpl_sift(MDBX_txn *const txn, pnl_t pl, const bool spilled) {
   tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
-  if (MDBX_PNL_GETSIZE(pl) && txn->wr.dirtylist->length) {
+  if (pnl_size(pl) && txn->wr.dirtylist->length) {
     tASSERT(txn, pnl_check_allocated(pl, (size_t)txn->geo.first_unallocated << spilled));
     dpl_t *dl = dpl_sort(txn);
 
     /* Scanning in ascend order */
     const intptr_t step = MDBX_PNL_ASCENDING ? 1 : -1;
-    const intptr_t begin = MDBX_PNL_ASCENDING ? 1 : MDBX_PNL_GETSIZE(pl);
-    const intptr_t end = MDBX_PNL_ASCENDING ? MDBX_PNL_GETSIZE(pl) + 1 : 0;
+    const intptr_t begin = MDBX_PNL_ASCENDING ? 1 : pnl_size(pl);
+    const intptr_t end = MDBX_PNL_ASCENDING ? pnl_size(pl) + 1 : 0;
     tASSERT(txn, pl[begin] <= pl[end - step]);
 
     size_t w, r = dpl_search(txn, pl[begin] >> spilled);

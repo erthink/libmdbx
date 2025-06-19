@@ -394,7 +394,7 @@ __cold static int copy_with_compacting(MDBX_env *env, MDBX_txn *txn, mdbx_fileha
         ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid GC-record content");
         return MDBX_CORRUPTED;
       }
-      gc_npages += MDBX_PNL_GETSIZE(pnl);
+      gc_npages += pnl_size(pnl);
       rc = outer_next(&couple.outer, &key, &data, MDBX_NEXT);
     }
     if (unlikely(rc != MDBX_NOTFOUND))

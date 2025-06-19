@@ -162,9 +162,9 @@ MDBX_MAYBE_UNUSED __hot static pgno_t *scan4seq_fallback(pgno_t *range, const si
 }
 
 MDBX_MAYBE_UNUSED static const pgno_t *scan4range_checker(const pnl_t pnl, const size_t seq) {
-  size_t begin = MDBX_PNL_ASCENDING ? 1 : MDBX_PNL_GETSIZE(pnl);
+  size_t begin = MDBX_PNL_ASCENDING ? 1 : pnl_size(pnl);
 #if MDBX_PNL_ASCENDING
-  while (seq <= MDBX_PNL_GETSIZE(pnl) - begin) {
+  while (seq <= pnl_size(pnl) - begin) {
     if (pnl[begin + seq] - pnl[begin] == seq)
       return pnl + begin;
     ++begin;
@@ -588,7 +588,7 @@ static inline bool is_reclaimable(MDBX_txn *txn, const MDBX_cursor *mc, const ui
 }
 
 __hot static pgno_t repnl_get_single(MDBX_txn *txn) {
-  const size_t len = MDBX_PNL_GETSIZE(txn->wr.repnl);
+  const size_t len = pnl_size(txn->wr.repnl);
   assert(len > 0);
   pgno_t *target = MDBX_PNL_EDGE(txn->wr.repnl);
   const ptrdiff_t dir = MDBX_PNL_ASCENDING ? 1 : -1;
@@ -658,7 +658,7 @@ __hot static pgno_t repnl_get_single(MDBX_txn *txn) {
 #else
         /* вырезаем элемент с перемещением хвоста */
         const pgno_t pgno = *scan;
-        MDBX_PNL_SETSIZE(txn->wr.repnl, len - 1);
+        pnl_setsize(txn->wr.repnl, len - 1);
         while (++scan <= target)
           scan[-1] = *scan;
         return pgno;
@@ -671,18 +671,18 @@ __hot static pgno_t repnl_get_single(MDBX_txn *txn) {
   const pgno_t pgno = *target;
 #if MDBX_PNL_ASCENDING
   /* вырезаем элемент с перемещением хвоста */
-  MDBX_PNL_SETSIZE(txn->wr.repnl, len - 1);
+  pnl_setsize(txn->wr.repnl, len - 1);
   for (const pgno_t *const end = txn->wr.repnl + len - 1; target <= end; ++target)
     *target = target[1];
 #else
   /* перемещать хвост не нужно, просто усекам список */
-  MDBX_PNL_SETSIZE(txn->wr.repnl, len - 1);
+  pnl_setsize(txn->wr.repnl, len - 1);
 #endif
   return pgno;
 }
 
 __hot static pgno_t repnl_get_sequence(MDBX_txn *txn, const size_t num, uint8_t flags) {
-  const size_t len = MDBX_PNL_GETSIZE(txn->wr.repnl);
+  const size_t len = pnl_size(txn->wr.repnl);
   pgno_t *edge = MDBX_PNL_EDGE(txn->wr.repnl);
   assert(len >= num && num > 1);
   const size_t seq = num - 1;
@@ -692,7 +692,7 @@ __hot static pgno_t repnl_get_sequence(MDBX_txn *txn, const size_t num, uint8_t 
       return P_INVALID;
     assert(edge == scan4range_checker(txn->wr.repnl, seq));
     /* перемещать хвост не нужно, просто усекам список */
-    MDBX_PNL_SETSIZE(txn->wr.repnl, len - num);
+    pnl_setsize(txn->wr.repnl, len - num);
     return *edge;
   }
 #endif
@@ -703,7 +703,7 @@ __hot static pgno_t repnl_get_sequence(MDBX_txn *txn, const size_t num, uint8_t 
       return P_INVALID;
     const pgno_t pgno = *target;
     /* вырезаем найденную последовательность с перемещением хвоста */
-    MDBX_PNL_SETSIZE(txn->wr.repnl, len - num);
+    pnl_setsize(txn->wr.repnl, len - num);
 #if MDBX_PNL_ASCENDING
     for (const pgno_t *const end = txn->wr.repnl + len - num; target <= end; ++target)
       *target = target[num];
@@ -864,7 +864,7 @@ pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) 
 #if MDBX_ENABLE_PROFGC
     prof->xpages += 1;
 #endif /* MDBX_ENABLE_PROFGC */
-    if (MDBX_PNL_GETSIZE(txn->wr.repnl) >= num) {
+    if (pnl_size(txn->wr.repnl) >= num) {
       eASSERT(env, MDBX_PNL_LAST(txn->wr.repnl) < txn->geo.first_unallocated &&
                        MDBX_PNL_FIRST(txn->wr.repnl) < txn->geo.first_unallocated);
       pgno = repnl_get_sequence(txn, num, flags);
@@ -872,7 +872,7 @@ pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) 
         goto done;
     }
   } else {
-    eASSERT(env, num == 0 || MDBX_PNL_GETSIZE(txn->wr.repnl) == 0 || (flags & ALLOC_RESERVE));
+    eASSERT(env, num == 0 || pnl_size(txn->wr.repnl) == 0 || (flags & ALLOC_RESERVE));
   }
 
   //---------------------------------------------------------------------------
@@ -887,7 +887,7 @@ pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) 
 
   /* Не коагулируем записи в случае запроса слота для возврата страниц в GC. Иначе попытка увеличить резерв
    * может приводить к необходимости ещё большего резерва из-за увеличения списка переработанных страниц. */
-  if (num > 0 && txn->dbs[FREE_DBI].branch_pages && MDBX_PNL_GETSIZE(txn->wr.repnl) < env->maxgc_large1page / 2)
+  if (num > 0 && txn->dbs[FREE_DBI].branch_pages && pnl_size(txn->wr.repnl) < env->maxgc_large1page / 2)
     flags += ALLOC_COALESCE;
 
   txn->wr.prefault_write_activated = !env->incore && env->options.prefault_write;
@@ -991,8 +991,8 @@ next_gc:
     goto fail;
   }
 
-  const size_t gc_len = MDBX_PNL_GETSIZE(gc_pnl);
-  TRACE("gc-read: id #%" PRIaTXN " len %zu, re-list will %zu ", id, gc_len, gc_len + MDBX_PNL_GETSIZE(txn->wr.repnl));
+  const size_t gc_len = pnl_size(gc_pnl);
+  TRACE("gc-read: id #%" PRIaTXN " len %zu, re-list will %zu ", id, gc_len, gc_len + pnl_size(txn->wr.repnl));
 
   if (unlikely(!num)) {
     /* TODO: Проверка критериев пункта 2 сформулированного в gc_provide_slots().
@@ -1000,22 +1000,21 @@ next_gc:
      * слотов и их дефиците для возврата wr.repl. */
     if (gc_len > env->maxgc_large1page / 4 * 3
         /* если запись достаточно длинная, то переработка слота не особо увеличит место для возврата wr.repl, и т.п. */
-        && MDBX_PNL_GETSIZE(txn->wr.repnl) + gc_len > env->maxgc_large1page /* не помещается в хвост */) {
+        && pnl_size(txn->wr.repnl) + gc_len > env->maxgc_large1page /* не помещается в хвост */) {
       DEBUG("avoid reclaiming %" PRIaTXN " slot, since it is too long (%zu)", id, gc_len);
       ret.err = MDBX_NOTFOUND;
       goto reserve_done;
     }
   }
 
-  if (unlikely(gc_len + MDBX_PNL_GETSIZE(txn->wr.repnl) /* Don't try to coalesce too much. */ >=
-               env->maxgc_large1page)) {
+  if (unlikely(gc_len + pnl_size(txn->wr.repnl) /* Don't try to coalesce too much. */ >= env->maxgc_large1page)) {
     if (flags & ALLOC_SHOULD_SCAN) {
       eASSERT(env, (flags & ALLOC_COALESCE) /* && !(flags & ALLOC_RESERVE) */ && num > 0);
 #if MDBX_ENABLE_PROFGC
       env->lck->pgops.gc_prof.coalescences += 1;
 #endif /* MDBX_ENABLE_PROFGC */
       TRACE("clear %s %s", "ALLOC_COALESCE", "since got threshold");
-      if (MDBX_PNL_GETSIZE(txn->wr.repnl) >= num) {
+      if (pnl_size(txn->wr.repnl) >= num) {
         eASSERT(env, MDBX_PNL_LAST(txn->wr.repnl) < txn->geo.first_unallocated &&
                          MDBX_PNL_FIRST(txn->wr.repnl) < txn->geo.first_unallocated);
         if (likely(num == 1)) {
@@ -1028,20 +1027,19 @@ next_gc:
       }
     }
     flags &= ~(ALLOC_COALESCE | ALLOC_SHOULD_SCAN);
-    if (unlikely(/* list is too long already */ MDBX_PNL_GETSIZE(txn->wr.repnl) >= env->options.rp_augment_limit) &&
+    if (unlikely(/* list is too long already */ pnl_size(txn->wr.repnl) >= env->options.rp_augment_limit) &&
         ((/* not a slot-request from gc-update */ num &&
           /* have enough unallocated space */ txn->geo.upper >= txn->geo.first_unallocated + num &&
           monotime_since_cached(monotime_begin, &now_cache) + txn->wr.gc.spent >= env->options.gc_time_limit) ||
-         gc_len + MDBX_PNL_GETSIZE(txn->wr.repnl) >= PAGELIST_LIMIT)) {
+         gc_len + pnl_size(txn->wr.repnl) >= PAGELIST_LIMIT)) {
       /* Stop reclaiming to avoid large/overflow the page list. This is a rare
        * case while search for a continuously multi-page region in a large database,
        * see https://libmdbx.dqdkfa.ru/dead-github/issues/123 */
       NOTICE("stop reclaiming %s: %zu (current) + %zu "
              "(chunk) >= %zu, rp_augment_limit %u",
-             likely(gc_len + MDBX_PNL_GETSIZE(txn->wr.repnl) < PAGELIST_LIMIT) ? "since rp_augment_limit was reached"
-                                                                               : "to avoid PNL overflow",
-             MDBX_PNL_GETSIZE(txn->wr.repnl), gc_len, gc_len + MDBX_PNL_GETSIZE(txn->wr.repnl),
-             env->options.rp_augment_limit);
+             likely(gc_len + pnl_size(txn->wr.repnl) < PAGELIST_LIMIT) ? "since rp_augment_limit was reached"
+                                                                       : "to avoid PNL overflow",
+             pnl_size(txn->wr.repnl), gc_len, gc_len + pnl_size(txn->wr.repnl), env->options.rp_augment_limit);
       goto depleted_gc;
     }
   }
@@ -1065,7 +1063,7 @@ next_gc:
   pnl_merge(txn->wr.repnl, gc_pnl);
 #if MDBX_ENABLE_PROFGC
   prof->pnl_merge.calls += 1;
-  prof->pnl_merge.volume += MDBX_PNL_GETSIZE(txn->wr.repnl);
+  prof->pnl_merge.volume += pnl_size(txn->wr.repnl);
   prof->pnl_merge.time += osal_monotime() - merge_begin;
 #endif /* MDBX_ENABLE_PROFGC */
   flags |= ALLOC_SHOULD_SCAN;
@@ -1080,8 +1078,8 @@ next_gc:
   }
   eASSERT(env, dpl_check(txn));
 
-  eASSERT(env, MDBX_PNL_GETSIZE(txn->wr.repnl) == 0 || MDBX_PNL_MOST(txn->wr.repnl) < txn->geo.first_unallocated);
-  if (MDBX_ENABLE_REFUND && MDBX_PNL_GETSIZE(txn->wr.repnl) &&
+  eASSERT(env, pnl_size(txn->wr.repnl) == 0 || MDBX_PNL_MOST(txn->wr.repnl) < txn->geo.first_unallocated);
+  if (MDBX_ENABLE_REFUND && pnl_size(txn->wr.repnl) &&
       unlikely(MDBX_PNL_MOST(txn->wr.repnl) == txn->geo.first_unallocated - 1)) {
     /* Refund suitable pages into "unallocated" space */
     txn_refund(txn);
@@ -1091,7 +1089,7 @@ next_gc:
   rkl_t *rkl = &txn->wr.gc.reclaimed;
   const char *rkl_name = "reclaimed";
   if (mc->dbi_state != txn->dbi_state &&
-      (MDBX_DEBUG || MDBX_PNL_GETSIZE(txn->wr.repnl) > (size_t)gc->tree->height + gc->tree->height + 3)) {
+      (MDBX_DEBUG || pnl_size(txn->wr.repnl) > (size_t)gc->tree->height + gc->tree->height + 3)) {
     gc->next = txn->cursors[FREE_DBI];
     txn->cursors[FREE_DBI] = gc;
     ret.err = cursor_del(gc, 0);
@@ -1100,8 +1098,8 @@ next_gc:
       rkl = &txn->wr.gc.ready4reuse;
       rkl_name = "ready4reuse";
     } else {
-      VERBOSE("gc-early-clean: err %d, repnl %zu, gc-height %u (%u branch, %u leafs)", ret.err,
-              MDBX_PNL_GETSIZE(txn->wr.repnl), gc->tree->height, gc->tree->branch_pages, gc->tree->leaf_pages);
+      VERBOSE("gc-early-clean: err %d, repnl %zu, gc-height %u (%u branch, %u leafs)", ret.err, pnl_size(txn->wr.repnl),
+              gc->tree->height, gc->tree->branch_pages, gc->tree->leaf_pages);
       if (unlikely(txn->flags & MDBX_TXN_ERROR))
         goto fail;
     }
@@ -1113,8 +1111,8 @@ next_gc:
 
   eASSERT(env, op == MDBX_PREV || op == MDBX_NEXT);
   if (flags & ALLOC_COALESCE) {
-    if (MDBX_PNL_GETSIZE(txn->wr.repnl) < env->maxgc_large1page / 2) {
-      TRACE("%s: last id #%" PRIaTXN ", re-len %zu", "coalesce-continue", id, MDBX_PNL_GETSIZE(txn->wr.repnl));
+    if (pnl_size(txn->wr.repnl) < env->maxgc_large1page / 2) {
+      TRACE("%s: last id #%" PRIaTXN ", re-len %zu", "coalesce-continue", id, pnl_size(txn->wr.repnl));
       goto next_gc;
     }
     flags -= ALLOC_COALESCE;
@@ -1123,14 +1121,14 @@ next_gc:
 scan:
   if ((flags & ALLOC_RESERVE) && num < 2) {
     /* Если был нужен только slot/id для gc_reclaim_slot() или gc_reserve4stockpile() */
-    TRACE("%s: last id #%" PRIaTXN ", re-len %zu", "reserve-done", id, MDBX_PNL_GETSIZE(txn->wr.repnl));
+    TRACE("%s: last id #%" PRIaTXN ", re-len %zu", "reserve-done", id, pnl_size(txn->wr.repnl));
     ret.err = MDBX_SUCCESS;
     goto reserve_done;
   }
 
   eASSERT(env, flags & ALLOC_SHOULD_SCAN);
   eASSERT(env, num > 0);
-  if (MDBX_PNL_GETSIZE(txn->wr.repnl) >= num) {
+  if (pnl_size(txn->wr.repnl) >= num) {
     eASSERT(env, MDBX_PNL_LAST(txn->wr.repnl) < txn->geo.first_unallocated &&
                      MDBX_PNL_FIRST(txn->wr.repnl) < txn->geo.first_unallocated);
     if (likely(num == 1)) {
@@ -1144,12 +1142,12 @@ scan:
   }
   flags -= ALLOC_SHOULD_SCAN;
   if ((txn->flags & txn_gc_drained) == 0) {
-    TRACE("%s: last id #%" PRIaTXN ", re-len %zu", "continue-search", id, MDBX_PNL_GETSIZE(txn->wr.repnl));
+    TRACE("%s: last id #%" PRIaTXN ", re-len %zu", "continue-search", id, pnl_size(txn->wr.repnl));
     goto next_gc;
   }
 
 depleted_gc:
-  TRACE("%s: last id #%" PRIaTXN ", re-len %zu", "gc-depleted", id, MDBX_PNL_GETSIZE(txn->wr.repnl));
+  TRACE("%s: last id #%" PRIaTXN ", re-len %zu", "gc-depleted", id, pnl_size(txn->wr.repnl));
   txn->flags |= txn_gc_drained;
   if (flags & ALLOC_SHOULD_SCAN)
     goto scan;
@@ -1310,7 +1308,7 @@ done:
                     "0x%x, re-list-len %zu, loose-count %zu, gc: height %u, "
                     "branch %zu, leaf %zu, large %zu, entries %zu\n",
                     (flags & ALLOC_RESERVE) ? "reserve" : "alloc", num, flags, ret.err, txn->flags,
-                    MDBX_PNL_GETSIZE(txn->wr.repnl), txn->wr.loose_count, txn->dbs[FREE_DBI].height,
+                    pnl_size(txn->wr.repnl), txn->wr.loose_count, txn->dbs[FREE_DBI].height,
                     (size_t)txn->dbs[FREE_DBI].branch_pages, (size_t)txn->dbs[FREE_DBI].leaf_pages,
                     (size_t)txn->dbs[FREE_DBI].large_pages, (size_t)txn->dbs[FREE_DBI].items);
         else
@@ -1318,10 +1316,9 @@ done:
                     "unable fetch-slot, alloc-flags 0x%x, err %d, txn-flags "
                     "0x%x, re-list-len %zu, loose-count %zu, gc: height %u, "
                     "branch %zu, leaf %zu, large %zu, entries %zu\n",
-                    flags, ret.err, txn->flags, MDBX_PNL_GETSIZE(txn->wr.repnl), txn->wr.loose_count,
-                    txn->dbs[FREE_DBI].height, (size_t)txn->dbs[FREE_DBI].branch_pages,
-                    (size_t)txn->dbs[FREE_DBI].leaf_pages, (size_t)txn->dbs[FREE_DBI].large_pages,
-                    (size_t)txn->dbs[FREE_DBI].items);
+                    flags, ret.err, txn->flags, pnl_size(txn->wr.repnl), txn->wr.loose_count, txn->dbs[FREE_DBI].height,
+                    (size_t)txn->dbs[FREE_DBI].branch_pages, (size_t)txn->dbs[FREE_DBI].leaf_pages,
+                    (size_t)txn->dbs[FREE_DBI].large_pages, (size_t)txn->dbs[FREE_DBI].items);
       }
       ret.page = nullptr;
     }
@@ -1368,7 +1365,7 @@ __hot pgr_t gc_alloc_single(const MDBX_cursor *const mc) {
     return ret;
   }
 
-  if (likely(MDBX_PNL_GETSIZE(txn->wr.repnl) > 0))
+  if (likely(pnl_size(txn->wr.repnl) > 0))
     return page_alloc_finalize(txn->env, txn, mc, repnl_get_single(txn), 1);
 
   return gc_alloc_ex(mc, 1, ALLOC_DEFAULT);

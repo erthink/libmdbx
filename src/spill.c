@@ -4,16 +4,15 @@
 #include "internals.h"
 
 void spill_remove(MDBX_txn *txn, size_t idx, size_t npages) {
-  tASSERT(txn, idx > 0 && idx <= MDBX_PNL_GETSIZE(txn->wr.spilled.list) && txn->wr.spilled.least_removed > 0);
+  tASSERT(txn, idx > 0 && idx <= pnl_size(txn->wr.spilled.list) && txn->wr.spilled.least_removed > 0);
   txn->wr.spilled.least_removed = (idx < txn->wr.spilled.least_removed) ? idx : txn->wr.spilled.least_removed;
   txn->wr.spilled.list[idx] |= 1;
-  MDBX_PNL_SETSIZE(txn->wr.spilled.list,
-                   MDBX_PNL_GETSIZE(txn->wr.spilled.list) - (idx == MDBX_PNL_GETSIZE(txn->wr.spilled.list)));
+  pnl_setsize(txn->wr.spilled.list, pnl_size(txn->wr.spilled.list) - (idx == pnl_size(txn->wr.spilled.list)));
 
   while (unlikely(npages > 1)) {
     const pgno_t pgno = (txn->wr.spilled.list[idx] >> 1) + 1;
     if (MDBX_PNL_ASCENDING) {
-      if (++idx > MDBX_PNL_GETSIZE(txn->wr.spilled.list) || (txn->wr.spilled.list[idx] >> 1) != pgno)
+      if (++idx > pnl_size(txn->wr.spilled.list) || (txn->wr.spilled.list[idx] >> 1) != pgno)
         return;
     } else {
       if (--idx < 1 || (txn->wr.spilled.list[idx] >> 1) != pgno)
@@ -21,8 +20,7 @@ void spill_remove(MDBX_txn *txn, size_t idx, size_t npages) {
       txn->wr.spilled.least_removed = (idx < txn->wr.spilled.least_removed) ? idx : txn->wr.spilled.least_removed;
     }
     txn->wr.spilled.list[idx] |= 1;
-    MDBX_PNL_SETSIZE(txn->wr.spilled.list,
-                     MDBX_PNL_GETSIZE(txn->wr.spilled.list) - (idx == MDBX_PNL_GETSIZE(txn->wr.spilled.list)));
+    pnl_setsize(txn->wr.spilled.list, pnl_size(txn->wr.spilled.list) - (idx == pnl_size(txn->wr.spilled.list)));
     --npages;
   }
 }
@@ -31,17 +29,17 @@ pnl_t spill_purge(MDBX_txn *txn) {
   tASSERT(txn, txn->wr.spilled.least_removed > 0);
   const pnl_t sl = txn->wr.spilled.list;
   if (txn->wr.spilled.least_removed != INT_MAX) {
-    size_t len = MDBX_PNL_GETSIZE(sl), r, w;
+    size_t len = pnl_size(sl), r, w;
     for (w = r = txn->wr.spilled.least_removed; r <= len; ++r) {
       sl[w] = sl[r];
       w += 1 - (sl[r] & 1);
     }
     for (size_t i = 1; i < w; ++i)
       tASSERT(txn, (sl[i] & 1) == 0);
-    MDBX_PNL_SETSIZE(sl, w - 1);
+    pnl_setsize(sl, w - 1);
     txn->wr.spilled.least_removed = INT_MAX;
   } else {
-    for (size_t i = 1; i <= MDBX_PNL_GETSIZE(sl); ++i)
+    for (size_t i = 1; i <= pnl_size(sl); ++i)
       tASSERT(txn, (sl[i] & 1) == 0);
   }
   return sl;

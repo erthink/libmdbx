@@ -27,8 +27,8 @@ static size_t audit_db_used(const tree_t *db) {
 __cold static int audit_ex_locked(MDBX_txn *txn, const size_t retired_stored, const bool dont_filter_gc) {
   const MDBX_env *const env = txn->env;
   tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
-  const size_t pending = txn->wr.loose_count + MDBX_PNL_GETSIZE(txn->wr.repnl) +
-                         (MDBX_PNL_GETSIZE(txn->wr.retired_pages) - retired_stored);
+  const size_t pending =
+      txn->wr.loose_count + pnl_size(txn->wr.repnl) + (pnl_size(txn->wr.retired_pages) - retired_stored);
 
   cursor_couple_t cx;
   int rc = cursor_init(&cx.outer, txn, FREE_DBI);
@@ -87,8 +87,8 @@ __cold static int audit_ex_locked(MDBX_txn *txn, const size_t retired_stored, co
   if ((txn->flags & MDBX_TXN_RDONLY) == 0)
     ERROR("audit @%" PRIaTXN ": %zu(pending) = %zu(loose) + "
           "%zu(reclaimed) + %zu(retired-pending) - %zu(retired-stored)",
-          txn->txnid, pending, txn->wr.loose_count, MDBX_PNL_GETSIZE(txn->wr.repnl),
-          txn->wr.retired_pages ? MDBX_PNL_GETSIZE(txn->wr.retired_pages) : 0, retired_stored);
+          txn->txnid, pending, txn->wr.loose_count, pnl_size(txn->wr.repnl),
+          txn->wr.retired_pages ? pnl_size(txn->wr.retired_pages) : 0, retired_stored);
   ERROR("audit @%" PRIaTXN ": %zu(pending) + %zu"
         "(gc) + %zu(count) = %zu(total) <> %zu"
         "(allocated)",

@@ -8,20 +8,20 @@ static void refund_reclaimed(MDBX_txn *txn) {
   /* Scanning in descend order */
   pgno_t first_unallocated = txn->geo.first_unallocated;
   const pnl_t pnl = txn->wr.repnl;
-  tASSERT(txn, MDBX_PNL_GETSIZE(pnl) && MDBX_PNL_MOST(pnl) == first_unallocated - 1);
+  tASSERT(txn, pnl_size(pnl) && MDBX_PNL_MOST(pnl) == first_unallocated - 1);
 #if MDBX_PNL_ASCENDING
-  size_t i = MDBX_PNL_GETSIZE(pnl);
+  size_t i = pnl_size(pnl);
   tASSERT(txn, pnl[i] == first_unallocated - 1);
   while (--first_unallocated, --i > 0 && pnl[i] == first_unallocated - 1)
     ;
-  MDBX_PNL_SETSIZE(pnl, i);
+  pnl_setsize(pnl, i);
 #else
   size_t i = 1;
   tASSERT(txn, pnl[i] == first_unallocated - 1);
-  size_t len = MDBX_PNL_GETSIZE(pnl);
+  size_t len = pnl_size(pnl);
   while (--first_unallocated, ++i <= len && pnl[i] == first_unallocated - 1)
     ;
-  MDBX_PNL_SETSIZE(pnl, len -= i - 1);
+  pnl_setsize(pnl, len -= i - 1);
   for (size_t move = 0; move < len; ++move)
     pnl[1 + move] = pnl[i + move];
 #endif
@@ -62,7 +62,7 @@ static void refund_loose(MDBX_txn *txn) {
       tASSERT(txn, lp->flags == P_LOOSE);
       tASSERT(txn, txn->geo.first_unallocated > lp->pgno);
       if (likely(txn->geo.first_unallocated - txn->wr.loose_count <= lp->pgno)) {
-        tASSERT(txn, w < ((suitable == onstack) ? pnl_bytes2size(sizeof(onstack)) : MDBX_PNL_ALLOCLEN(suitable)));
+        tASSERT(txn, w < ((suitable == onstack) ? pnl_bytes2size(sizeof(onstack)) : pnl_alloclen(suitable)));
         suitable[++w] = lp->pgno;
         most = (lp->pgno > most) ? lp->pgno : most;
       }
@@ -72,13 +72,13 @@ static void refund_loose(MDBX_txn *txn) {
 
     if (most + 1 == txn->geo.first_unallocated) {
       /* Sort suitable list and refund pages at the tail. */
-      MDBX_PNL_SETSIZE(suitable, w);
+      pnl_setsize(suitable, w);
       pnl_sort(suitable, MAX_PAGENO + 1);
 
       /* Scanning in descend order */
       const intptr_t step = MDBX_PNL_ASCENDING ? -1 : 1;
-      const intptr_t begin = MDBX_PNL_ASCENDING ? MDBX_PNL_GETSIZE(suitable) : 1;
-      const intptr_t end = MDBX_PNL_ASCENDING ? 0 : MDBX_PNL_GETSIZE(suitable) + 1;
+      const intptr_t begin = MDBX_PNL_ASCENDING ? pnl_size(suitable) : 1;
+      const intptr_t end = MDBX_PNL_ASCENDING ? 0 : pnl_size(suitable) + 1;
       tASSERT(txn, suitable[begin] >= suitable[end - step]);
       tASSERT(txn, most == suitable[begin]);
 
@@ -178,7 +178,7 @@ bool txn_refund(MDBX_txn *txn) {
     refund_loose(txn);
 
   while (true) {
-    if (MDBX_PNL_GETSIZE(txn->wr.repnl) == 0 || MDBX_PNL_MOST(txn->wr.repnl) != txn->geo.first_unallocated - 1)
+    if (pnl_size(txn->wr.repnl) == 0 || MDBX_PNL_MOST(txn->wr.repnl) != txn->geo.first_unallocated - 1)
       break;
 
     refund_reclaimed(txn);

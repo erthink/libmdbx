@@ -18,14 +18,14 @@ static inline size_t spill_search(const MDBX_txn *txn, pgno_t pgno) {
     return 0;
   pgno <<= 1;
   size_t n = pnl_search(pnl, pgno, (size_t)MAX_PAGENO + MAX_PAGENO + 1);
-  return (n <= MDBX_PNL_GETSIZE(pnl) && pnl[n] == pgno) ? n : 0;
+  return (n <= pnl_size(pnl) && pnl[n] == pgno) ? n : 0;
 }
 
 static inline bool spill_intersect(const MDBX_txn *txn, pgno_t pgno, size_t npages) {
   const pnl_t pnl = txn->wr.spilled.list;
   if (likely(!pnl))
     return false;
-  const size_t len = MDBX_PNL_GETSIZE(pnl);
+  const size_t len = pnl_size(pnl);
   if (LOG_ENABLED(MDBX_LOG_EXTRA)) {
     DEBUG_EXTRA("PNL len %zu [", len);
     for (size_t i = 1; i <= len; ++i)
@@ -36,12 +36,12 @@ static inline bool spill_intersect(const MDBX_txn *txn, pgno_t pgno, size_t npag
   const pgno_t spilled_range_last = ((pgno + (pgno_t)npages) << 1) - 1;
 #if MDBX_PNL_ASCENDING
   const size_t n = pnl_search(pnl, spilled_range_begin, (size_t)(MAX_PAGENO + 1) << 1);
-  tASSERT(txn, n && (n == MDBX_PNL_GETSIZE(pnl) + 1 || spilled_range_begin <= pnl[n]));
-  const bool rc = n <= MDBX_PNL_GETSIZE(pnl) && pnl[n] <= spilled_range_last;
+  tASSERT(txn, n && (n == pnl_size(pnl) + 1 || spilled_range_begin <= pnl[n]));
+  const bool rc = n <= pnl_size(pnl) && pnl[n] <= spilled_range_last;
 #else
   const size_t n = pnl_search(pnl, spilled_range_last, (size_t)MAX_PAGENO + MAX_PAGENO + 1);
-  tASSERT(txn, n && (n == MDBX_PNL_GETSIZE(pnl) + 1 || spilled_range_last >= pnl[n]));
-  const bool rc = n <= MDBX_PNL_GETSIZE(pnl) && pnl[n] >= spilled_range_begin;
+  tASSERT(txn, n && (n == pnl_size(pnl) + 1 || spilled_range_last >= pnl[n]));
+  const bool rc = n <= pnl_size(pnl) && pnl[n] >= spilled_range_begin;
 #endif
   if (ASSERT_ENABLED()) {
     bool check = false;
