@@ -28,6 +28,7 @@ REPORT_DEPTH=no
 REPEAT=11
 ROUNDS=1
 SMALL=no
+NUMABIND=
 
 while [ -n "$1" ]
 do
@@ -51,6 +52,7 @@ do
     echo "--db-upto-gb NN        --''--''--''--''--''--''--''--''--  NN gigabytes"
     echo "--no-geometry-jitter   Disable jitter for geometry upper-size"
     echo "--pagesize NN          Use specified page size (256 is minimal and used by default)"
+    echo "--numa NODE            Bind to the specified NUMA node"
     echo "--dont-check-ram-size  Don't check available RAM"
     echo "--extra                Iterate extra modes/flags"
     echo "--taillog              Dump tail of test log on failure"
@@ -208,6 +210,15 @@ do
   ;;
   --small)
     SMALL=yes
+  ;;
+  --numa)
+    NUMANODE=$2
+    if [[ ! $NUMANODE =~ ^[0-9]+$ ]]; then
+      echo "Invalid value '$NUMANODE' for --numa option, expect an integer of NUMA-node"
+      exit -2
+    fi
+    NUMABIND="numactl --membind ${NUMANODE} --cpunodebind ${NUMANODE}"
+    shift
   ;;
   *)
     echo "Unknown option '$1'"
@@ -504,9 +515,9 @@ function probe {
     else
       exec {LFD}> >(logger)
     fi
-    ${MONITOR} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=${REPEAT} --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} "$@" $case >&${LFD} \
-      && ${MONITOR} ./mdbx_chk -q ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
-      && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${MONITOR} ./mdbx_chk -q ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
+    ${NUMABIND} ${MONITOR} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=${REPEAT} --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} "$@" $case >&${LFD} \
+      && ${NUMABIND} ${MONITOR} ./mdbx_chk -q ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
+      && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${NUMABIND} ${MONITOR} ./mdbx_chk -q ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
       || failed
     if [ ${LFD} -ne 0 ]; then
       echo "@@@ END-OF-LOG/ITERATION" >&${LFD}
