@@ -3,36 +3,62 @@
 # Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 # SPDX-License-Identifier: Apache-2.0
 
-TEST="./test/stochastic.sh --skip-make --db-upto-gb 32"
+TMUX=tmux
+DIR="$(dirname ${BASH_SOURCE[0]})"
+TEST="${DIR}/stochastic.sh --skip-make --db-upto-gb 32"
 PREFIX="/dev/shm/mdbxtest-"
 
-tmux kill-session -t mdbx
+NUMACTL="$(which numactl 2>-)"
+NUMALIST=()
+NUMAIDX=0
+if [ -n "${NUMACTL}" -a $(${NUMACTL} --hardware | grep 'node [0-9]\+ cpus' | wc -l) -gt 1 ]; then
+	NUMALIST=($(${NUMACTL} --hardware | grep 'node [0-9]\+ cpus' | cut -d ' ' -f 2))
+fi
+
+function test_numacycle {
+	NUMAIDX=$((NUMAIDX + 1))
+	if [ ${NUMAIDX} -ge ${#NUMALIST[@]} ]; then
+		NUMAIDX=0
+	fi
+}
+
+function test_numanode {
+	if [[ ${#NUMALIST[@]} > 1 ]]; then
+		echo "${TEST} --numa ${NUMALIST[$NUMAIDX]}"
+	else
+		echo "${TEST}"
+	fi
+}
+
+${TMUX} kill-session -t mdbx
 rm -rf ${PREFIX}*
 # git clean -x -f -d && make test-assertions
-tmux -f ./test/tmux.conf new-session -d -s mdbx htop
+${TMUX} -f "${DIR}/tmux.conf" new-session -d -s mdbx htop
 
 W=0
 for ps in min 4k max; do
 	for from in 1 30000; do
 		for n in 0 1 2 3; do
-			CMD="${TEST} --delay $((n * 7)) --page-size ${ps} --from ${from} --dir ${PREFIX}page-${ps}.from-${from}.${n}"
+			CMD="$(test_numanode) --delay $((n * 7)) --page-size ${ps} --from ${from} --dir ${PREFIX}page-${ps}.from-${from}.${n}"
 			if [ $n -eq 0 ]; then
-				tmux new-window -t mdbx:$((++W)) -n "page-${ps}.from-${from}" -k -d "$CMD"
-				tmux select-layout -E tiled
+				${TMUX} new-window -t mdbx:$((++W)) -n "page-${ps}.from-${from}" -k -d "$CMD"
+				${TMUX} select-layout -E tiled
 			else
-				tmux split-window -t mdbx:$W -l 20% -d $CMD
+				${TMUX} split-window -t mdbx:$W -l 20% -d $CMD
 			fi
+			test_numacycle
 		done
 		for n in 0 1 2 3; do
-			CMD="${TEST} --delay $((3 + n * 7)) --extra --page-size ${ps} --from ${from} --dir ${PREFIX}page-${ps}.from-${from}.${n}-extra"
+			CMD="$(test_numanode) --delay $((3 + n * 7)) --extra --page-size ${ps} --from ${from} --dir ${PREFIX}page-${ps}.from-${from}.${n}-extra"
 			if [ $n -eq 0 ]; then
-				tmux new-window -t mdbx:$((++W)) -n "page-${ps}.from-${from}-extra" -k -d "$CMD"
-				tmux select-layout -E tiled
+				${TMUX} new-window -t mdbx:$((++W)) -n "page-${ps}.from-${from}-extra" -k -d "$CMD"
+				${TMUX} select-layout -E tiled
 			else
-				tmux split-window -t mdbx:$W -l 20% -d $CMD
+				${TMUX} split-window -t mdbx:$W -l 20% -d $CMD
 			fi
+			test_numacycle
 		done
 	done
 done
 
-tmux attach -t mdbx
+${TMUX} attach -t mdbx
