@@ -182,8 +182,11 @@ __hot int page_touch_unmodifable(MDBX_txn *txn, MDBX_cursor *mc, const page_t *c
     const pgr_t par = gc_alloc_single(mc);
     rc = par.err;
     np = par.page;
-    if (unlikely(rc != MDBX_SUCCESS))
-      goto fail;
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      if (likely(mc->dbi_state != txn->dbi_state) || (rc != MDBX_MAP_FULL && rc != MDBX_BACKLOG_DEPLETED))
+        goto fail;
+      return rc;
+    }
 
     rc = pnl_append(&txn->wr.retired_pages, mp->pgno);
     if (unlikely(rc != MDBX_SUCCESS))

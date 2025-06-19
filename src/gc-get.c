@@ -1096,10 +1096,15 @@ next_gc:
     txn->cursors[FREE_DBI] = gc;
     ret.err = cursor_del(gc, 0);
     txn->cursors[FREE_DBI] = gc->next;
-    if (unlikely(ret.err != MDBX_SUCCESS))
-      goto fail;
-    rkl = &txn->wr.gc.ready4reuse;
-    rkl_name = "ready4reuse";
+    if (likely(ret.err == MDBX_SUCCESS)) {
+      rkl = &txn->wr.gc.ready4reuse;
+      rkl_name = "ready4reuse";
+    } else {
+      VERBOSE("gc-early-clean: err %d, repnl %zu, gc-height %u (%u branch, %u leafs)", ret.err,
+              MDBX_PNL_GETSIZE(txn->wr.repnl), gc->tree->height, gc->tree->branch_pages, gc->tree->leaf_pages);
+      if (unlikely(txn->flags & MDBX_TXN_ERROR))
+        goto fail;
+    }
   }
   ret.err = rkl_push(rkl, id);
   TRACE("%" PRIaTXN " len %zu pushed to rkl-%s, err %d", id, gc_len, rkl_name, ret.err);
