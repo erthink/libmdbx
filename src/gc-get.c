@@ -1086,6 +1086,7 @@ next_gc:
   }
   eASSERT(env, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
 
+  eASSERT(env, op == MDBX_PREV || op == MDBX_NEXT);
   rkl_t *rkl = &txn->wr.gc.reclaimed;
   const char *rkl_name = "reclaimed";
   if (mc->dbi_state != txn->dbi_state &&
@@ -1095,6 +1096,11 @@ next_gc:
     ret.err = cursor_del(gc, 0);
     txn->cursors[FREE_DBI] = gc->next;
     if (likely(ret.err == MDBX_SUCCESS)) {
+      if (unlikely(txn->dbs[FREE_DBI].items == 0)) {
+        flags &= ~ALLOC_COALESCE;
+        txn->flags |= txn_gc_drained;
+        op = MDBX_FIRST; /* для предотвращения ошибок из-за относительного перемещения курсора */
+      }
       rkl = &txn->wr.gc.ready4reuse;
       rkl_name = "ready4reuse";
     } else {
@@ -1109,8 +1115,8 @@ next_gc:
   if (unlikely(ret.err != MDBX_SUCCESS))
     goto fail;
 
-  eASSERT(env, op == MDBX_PREV || op == MDBX_NEXT);
   if (flags & ALLOC_COALESCE) {
+    eASSERT(env, op == MDBX_PREV || op == MDBX_NEXT);
     if (pnl_size(txn->wr.repnl) < env->maxgc_large1page / 2) {
       TRACE("%s: last id #%" PRIaTXN ", re-len %zu", "coalesce-continue", id, pnl_size(txn->wr.repnl));
       goto next_gc;
