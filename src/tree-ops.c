@@ -688,7 +688,7 @@ int tree_rebalance(MDBX_cursor *mc) {
      * ибо добавление/удаление/обновление запиcей происходит почти всегда только по краям. */
     minimize_waf = true;
     room_threshold = page_space(mc->txn->env);
-    if (gc_stockpile(mc->txn) > mc->tree->height + mc->tree->height)
+    if (gc_stockpile(mc->txn) > (size_t)mc->tree->height + mc->tree->height)
       room_threshold >>= 1;
   }
 
