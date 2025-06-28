@@ -7,7 +7,6 @@ TODO
  - Новый стиль обработки ошибок с записью "трассы" и причин.
  - Формирование отладочной информации посредством gdb.
  - Поддержка WASM.
- - Ранняя/не-отложенная очистка GC.
  - Явная и автоматические уплотнение/дефрагментация.
  - Нелинейная обработка GC.
  - Перевести курсоры на двусвязный список вместо односвязного.
@@ -20,6 +19,7 @@ TODO
 Done
 ----
 
+ - Ранняя/не-отложенная очистка GC.
  - Рефакторинг gc-get/gc-put c переходом на "интервальные" списки.
  - [Engage new terminology](https://libmdbx.dqdkfa.ru/dead-github/issues/137).
  - [More flexible support of asynchronous runtime/framework(s)](https://libmdbx.dqdkfa.ru/dead-github/issues/200).
