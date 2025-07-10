@@ -15,12 +15,18 @@ public:
 REGISTER_TESTCASE(copy);
 
 void testcase_copy::copy_db(const bool with_compaction) {
-  int err = mdbx_env_delete(copy_pathname.c_str(), MDBX_ENV_JUST_DELETE);
-  if (err != MDBX_SUCCESS && err != MDBX_RESULT_TRUE)
-    failure_perror("osal_removefile()", err);
+  int err;
+  const bool overwrite = flipcoin();
+  if (!overwrite) {
+    err = mdbx_env_delete(copy_pathname.c_str(), MDBX_ENV_JUST_DELETE);
+    if (err != MDBX_SUCCESS && err != MDBX_RESULT_TRUE)
+      failure_perror("osal_removefile()", err);
+  }
 
   if (flipcoin()) {
-    err = mdbx_env_copy(db_guard.get(), copy_pathname.c_str(), with_compaction ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS);
+    err = mdbx_env_copy(db_guard.get(), copy_pathname.c_str(),
+                        (with_compaction ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
+                            (overwrite ? MDBX_CP_OVERWRITE : MDBX_CP_DEFAULTS));
     log_verbose("mdbx_env_copy(%s), err %d", with_compaction ? "true" : "false", err);
     if (unlikely(err != MDBX_SUCCESS))
       failure_perror(with_compaction ? "mdbx_env_copy(MDBX_CP_COMPACT)" : "mdbx_env_copy(MDBX_CP_ASIS)", err);
@@ -31,11 +37,11 @@ void testcase_copy::copy_db(const bool with_compaction) {
       const bool dynsize = flipcoin();
       const bool flush = flipcoin();
       const bool enable_renew = flipcoin();
-      const MDBX_copy_flags_t flags = (with_compaction ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
-                                      (dynsize ? MDBX_CP_FORCE_DYNAMIC_SIZE : MDBX_CP_DEFAULTS) |
-                                      (throttle ? MDBX_CP_THROTTLE_MVCC : MDBX_CP_DEFAULTS) |
-                                      (flush ? MDBX_CP_DEFAULTS : MDBX_CP_DONT_FLUSH) |
-                                      (enable_renew ? MDBX_CP_RENEW_TXN : MDBX_CP_DEFAULTS);
+      const MDBX_copy_flags_t flags =
+          (with_compaction ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
+          (dynsize ? MDBX_CP_FORCE_DYNAMIC_SIZE : MDBX_CP_DEFAULTS) |
+          (throttle ? MDBX_CP_THROTTLE_MVCC : MDBX_CP_DEFAULTS) | (flush ? MDBX_CP_DEFAULTS : MDBX_CP_DONT_FLUSH) |
+          (enable_renew ? MDBX_CP_RENEW_TXN : MDBX_CP_DEFAULTS) | (overwrite ? MDBX_CP_OVERWRITE : MDBX_CP_DEFAULTS);
       txn_begin(ro);
       err = mdbx_txn_copy2pathname(txn_guard.get(), copy_pathname.c_str(), flags);
       log_verbose("mdbx_txn_copy2pathname(flags=0x%X), err %d", flags, err);
