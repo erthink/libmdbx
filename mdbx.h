@@ -1666,7 +1666,7 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_put_flags)
 
 /** \brief Environment copy flags
  * \ingroup c_extra
- * \see mdbx_env_copy() \see mdbx_env_copy2fd() */
+ * \see mdbx_env_copy() \see mdbx_env_copy2fd() \see mdbx_txn_copy2pathname() */
 typedef enum MDBX_copy_flags {
   MDBX_CP_DEFAULTS = 0,
 
@@ -1691,7 +1691,11 @@ typedef enum MDBX_copy_flags {
   /** Enable renew/restart read transaction in case it use outdated
    * MVCC shapshot, otherwise the \ref MDBX_MVCC_RETARDED will be returned
    * \see mdbx_txn_copy2fd() \see mdbx_txn_copy2pathname() */
-  MDBX_CP_RENEW_TXN = 32u
+  MDBX_CP_RENEW_TXN = 32u,
+
+  /** Silently overwrite the target file, if it exists, instead of returning an error
+   * \see mdbx_txn_copy2pathname() \see mdbx_env_copy() */
+  MDBX_CP_OVERWRITE = 64u
 
 } MDBX_copy_flags_t;
 DEFINE_ENUM_FLAG_OPERATORS(MDBX_copy_flags)

@@ -748,7 +748,8 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
    * We don't want the OS to cache the writes, since the source data is
    * already in the OS cache. */
   mdbx_filehandle_t newfd = INVALID_HANDLE_VALUE;
-  int rc = osal_openfile(MDBX_OPEN_COPY, txn->env, dest_path, &newfd,
+  int rc = osal_openfile((flags & MDBX_CP_OVERWRITE) ? MDBX_OPEN_COPY_OVERWRITE : MDBX_OPEN_COPY_EXCL, txn->env,
+                         dest_path, &newfd,
 #if defined(_WIN32) || defined(_WIN64)
                          (mdbx_mode_t)-1
 #else

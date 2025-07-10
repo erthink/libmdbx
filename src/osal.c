@@ -1198,28 +1198,28 @@ MDBX_INTERNAL int osal_openfile(const enum osal_openfile_purpose purpose, const 
     break;
   case MDBX_OPEN_DXB_OVERLAPPED_DIRECT:
     FlagsAndAttributes |= FILE_FLAG_NO_BUFFERING;
-    /* fall through */
-    __fallthrough;
+    __fallthrough /* fall through */;
   case MDBX_OPEN_DXB_OVERLAPPED:
     FlagsAndAttributes |= FILE_FLAG_OVERLAPPED;
-    /* fall through */
-    __fallthrough;
+    __fallthrough /* fall through */;
   case MDBX_OPEN_DXB_DSYNC:
     CreationDisposition = OPEN_EXISTING;
     DesiredAccess |= GENERIC_WRITE | GENERIC_READ;
     FlagsAndAttributes |= FILE_FLAG_WRITE_THROUGH;
     break;
-  case MDBX_OPEN_COPY:
-    CreationDisposition = CREATE_NEW;
-    ShareMode = 0;
-    DesiredAccess |= GENERIC_WRITE;
-    if (env->ps >= globals.sys_pagesize)
-      FlagsAndAttributes |= FILE_FLAG_NO_BUFFERING;
-    break;
   case MDBX_OPEN_DELETE:
     CreationDisposition = OPEN_EXISTING;
     ShareMode |= FILE_SHARE_DELETE;
     DesiredAccess = FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES | DELETE | SYNCHRONIZE;
+    break;
+  case MDBX_OPEN_COPY_EXCL:
+    CreationDisposition = CREATE_NEW;
+    __fallthrough /* fall through */;
+  case MDBX_OPEN_COPY_OVERWRITE:
+    ShareMode = 0;
+    DesiredAccess |= GENERIC_WRITE;
+    if (env->ps >= globals.sys_pagesize)
+      FlagsAndAttributes |= FILE_FLAG_NO_BUFFERING;
     break;
   }
 
@@ -1260,9 +1260,6 @@ MDBX_INTERNAL int osal_openfile(const enum osal_openfile_purpose purpose, const 
   case MDBX_OPEN_DXB_LAZY:
     flags |= O_RDWR;
     break;
-  case MDBX_OPEN_COPY:
-    flags = O_CREAT | O_WRONLY | O_EXCL;
-    break;
   case MDBX_OPEN_DXB_DSYNC:
     flags |= O_WRONLY;
 #if defined(O_DSYNC)
@@ -1276,9 +1273,14 @@ MDBX_INTERNAL int osal_openfile(const enum osal_openfile_purpose purpose, const 
   case MDBX_OPEN_DELETE:
     flags = O_RDWR;
     break;
+  case MDBX_OPEN_COPY_EXCL:
+    flags |= O_EXCL;
+    __fallthrough /* fall through */;
+  case MDBX_OPEN_COPY_OVERWRITE:
+    flags |= O_WRONLY;
   }
 
-  const bool direct_nocache_for_copy = env->ps >= globals.sys_pagesize && purpose == MDBX_OPEN_COPY;
+  const bool direct_nocache_for_copy = env->ps >= globals.sys_pagesize && purpose >= MDBX_OPEN_COPY_EXCL;
   if (direct_nocache_for_copy) {
 #if defined(O_DIRECT)
     flags |= O_DIRECT;

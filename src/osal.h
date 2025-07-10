@@ -446,8 +446,9 @@ enum osal_openfile_purpose {
   MDBX_OPEN_DXB_OVERLAPPED_DIRECT,
 #endif /* Windows */
   MDBX_OPEN_LCK,
-  MDBX_OPEN_COPY,
-  MDBX_OPEN_DELETE
+  MDBX_OPEN_DELETE,
+  MDBX_OPEN_COPY_EXCL,
+  MDBX_OPEN_COPY_OVERWRITE,
 };
 
 MDBX_MAYBE_UNUSED static inline bool osal_isdirsep(pathchar_t c) {
