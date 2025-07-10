@@ -42,6 +42,7 @@ static void usage(const char *prog) {
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"
           "  -c\t\tenable compactification (skip unused pages)\n"
+          "  -f\t\tforce copying even the target file exists\n"
           "  -d\t\tenforce copy to be a dynamic size DB\n"
           "  -p\t\tusing transaction parking/ousting during copying MVCC-snapshot\n"
           "    \t\tto avoid stopping recycling and overflowing the DB\n"
@@ -87,6 +88,8 @@ int main(int argc, char *argv[]) {
       cpflags |= MDBX_CP_FORCE_DYNAMIC_SIZE;
     else if (argv[1][1] == 'p' && argv[1][2] == '\0')
       cpflags |= MDBX_CP_THROTTLE_MVCC;
+    else if (argv[1][1] == 'f' && argv[1][2] == '\0')
+      cpflags |= MDBX_CP_OVERWRITE;
     else if (argv[1][1] == 'q' && argv[1][2] == '\0')
       quiet = true;
     else if (argv[1][1] == 'u' && argv[1][2] == '\0')

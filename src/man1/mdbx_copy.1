@@ -14,6 +14,8 @@ mdbx_copy \- MDBX environment copy tool
 [\c
 .BR \-c ]
 [\c
+.BR \-f ]
+[\c
 .BR \-d ]
 [\c
 .BR \-p ]
@@ -48,6 +50,9 @@ Compact while copying. Only current data pages will be copied; freed
 or unused pages will be omitted from the copy. This option will
 slow down the backup process as it is more CPU-intensive.
 Currently it fails if the environment has suffered a page leak.
+.TP
+.BR \-f
+Silently overwrite the target file, if it exists, instead of reaching an error.
 .TP
 .BR \-d
 Alters geometry to enforce the copy to be a dynamic size DB,
