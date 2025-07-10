@@ -1089,7 +1089,7 @@ static int gc_handle_dense(MDBX_txn *txn, gcu_t *ctx, size_t left_min, size_t le
   }
 
   if (err == MDBX_RESULT_FALSE /* решение НЕ найдено, либо нет идентификаторов */) {
-    if (ctx->return_left > txn->env->maxgc_large1page) {
+    if (ctx->return_left > (intptr_t)txn->env->maxgc_large1page) {
       err = gc_reclaim_slot(txn, ctx);
       if (err == MDBX_NOTFOUND)
         err = gc_reserve4retired(txn, ctx, gc_chunk_pages(txn, dense_adjust_chunk(txn, ctx->return_left)));
