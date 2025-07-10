@@ -220,25 +220,32 @@ else()
     add_test(NAME smoke_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv smoke.db)
     set_tests_properties(
       smoke_chk
-      PROPERTIES DEPENDS
-                 smoke
-                 TIMEOUT
-                 60
-                 FAIL_REGULAR_EXPRESSION
-                 "cooperative mode"
-                 REQUIRED_FILES
-                 smoke.db)
+      PROPERTIES DEPENDS smoke
+                 TIMEOUT 60
+                 FAIL_REGULAR_EXPRESSION "cooperative mode"
+                 REQUIRED_FILES smoke.db)
+
     add_test(NAME smoke_chk_copy COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv smoke.db-copy)
     set_tests_properties(
       smoke_chk_copy
-      PROPERTIES DEPENDS
-                 smoke
-                 TIMEOUT
-                 60
-                 FAIL_REGULAR_EXPRESSION
-                 "cooperative mode"
-                 REQUIRED_FILES
-                 smoke.db-copy)
+      PROPERTIES DEPENDS smoke
+                 TIMEOUT 60
+                 FAIL_REGULAR_EXPRESSION "cooperative mode"
+                 REQUIRED_FILES smoke.db-copy)
+
+    add_test(NAME smoke_copy_asis COMMAND ${MDBX_OUTPUT_DIR}/mdbx_copy -f smoke.db copy_asis.db)
+    set_tests_properties(
+      smoke_copy_asis
+      PROPERTIES DEPENDS smoke
+                 TIMEOUT 60
+                 REQUIRED_FILES smoke.db)
+
+    add_test(NAME smoke_copy_compactify COMMAND ${MDBX_OUTPUT_DIR}/mdbx_copy -f -c smoke.db copy_compactify.db)
+    set_tests_properties(
+      smoke_copy_compactify
+      PROPERTIES DEPENDS smoke
+                 TIMEOUT 60
+                 REQUIRED_FILES smoke.db)
   endif()
 
   add_test(
