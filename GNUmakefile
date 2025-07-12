@@ -384,8 +384,9 @@ endef
 
 define uname2titer
   case "$(UNAME)" in
+    CYGWIN*|MINGW*|MSYS*|Windows*) echo 2;;
     Darwin*|Mach*) echo 2;;
-    *) echo 12;;
+    *) if [ -z "${CI}" ]; then echo 7; else echo 3; fi;;
   esac
 endef
 
