@@ -811,7 +811,6 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
       }
       if (unlikely(mc->flags & z_inner)) {
         /* nested subtree of DUPSORT-database with the same key, nothing to update */
-        cASSERT(mc, !"Should not happen since");
         return (flags & MDBX_NODUPDATA) ? MDBX_KEYEXIST : MDBX_SUCCESS;
       }
       if (inner_pointed(mc)) {
