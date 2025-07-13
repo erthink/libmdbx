@@ -1083,7 +1083,7 @@ static int gc_handle_dense(MDBX_txn *txn, gcu_t *ctx, size_t left_min, size_t le
         }
     }
   } else if (rkl_len(&txn->wr.gc.comeback)) {
-    NOTICE("%s: restart since %zu slot(s) comemack non-dense (reserved %zu...%zu of %zu)", dbg_prefix(ctx),
+    NOTICE("%s: restart since %zu slot(s) comeback non-dense (reserved %zu...%zu of %zu)", dbg_prefix(ctx),
            rkl_len(&txn->wr.gc.comeback), ctx->return_reserved_lo, ctx->return_reserved_hi, pnl_size(txn->wr.repnl));
     return /* повтор цикла */ MDBX_RESULT_TRUE;
   }
