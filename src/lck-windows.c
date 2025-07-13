@@ -87,7 +87,7 @@ int lck_txn_lock(MDBX_env *env, bool dontwait) {
     }
   }
 
-  eASSERT(env, !env->basal_txn->owner);
+  eASSERT(env, !env->basal_txn || !env->basal_txn->owner);
   if (env->flags & MDBX_EXCLUSIVE)
     goto done;
 
@@ -104,10 +104,11 @@ int lck_txn_lock(MDBX_env *env, bool dontwait) {
   }
   if (rc == MDBX_SUCCESS) {
   done:
+    if (env->basal_txn)
+      env->basal_txn->owner = osal_thread_self();
     /* Zap: Failing to release lock 'env->windowsbug_lock'
      *      in function 'mdbx_txn_lock' */
     MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(26115);
-    env->basal_txn->owner = osal_thread_self();
     return MDBX_SUCCESS;
   }
 
@@ -116,14 +117,15 @@ int lck_txn_lock(MDBX_env *env, bool dontwait) {
 }
 
 void lck_txn_unlock(MDBX_env *env) {
-  eASSERT(env, env->basal_txn->owner == osal_thread_self());
+  eASSERT(env, !env->basal_txn || env->basal_txn->owner == osal_thread_self());
   if ((env->flags & MDBX_EXCLUSIVE) == 0) {
     const HANDLE fd4data = env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
     int err = funlock(fd4data, DXB_BODY);
     if (err != MDBX_SUCCESS)
       mdbx_panic("%s failed: err %u", __func__, err);
   }
-  env->basal_txn->owner = 0;
+  if (env->basal_txn)
+    env->basal_txn->owner = 0;
   LeaveCriticalSection(&env->windowsbug_lock);
 }
 

@@ -837,7 +837,7 @@ int lck_txn_lock(MDBX_env *env, bool dont_wait) {
 void lck_txn_unlock(MDBX_env *env) {
   TRACE("%s", ">>");
   if (env->basal_txn) {
-    eASSERT(env, !env->basal_txn || env->basal_txn->owner == osal_thread_self());
+    eASSERT(env, env->basal_txn->owner == osal_thread_self());
     env->basal_txn->owner = 0;
   }
   int err = osal_ipclock_unlock(env, &env->lck->wrt_lock);
