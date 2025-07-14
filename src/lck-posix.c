@@ -457,6 +457,10 @@ __cold MDBX_INTERNAL int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor
     jitter4testing(false);
   }
 
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+  env->me_sysv_ipc.semid = -1;
+#endif /* MDBX_LOCKING */
+
   if (current_pid != env->pid) {
     eASSERT(env, !inprocess_neighbor);
     NOTICE("drown env %p after-fork pid %d -> %d", __Wpedantic_format_voidptr(env), env->pid, current_pid);
@@ -773,14 +777,14 @@ static int osal_ipclock_lock(MDBX_env *env, osal_ipclock_t *ipc, const bool dont
   return rc;
 }
 
-int osal_ipclock_unlock(MDBX_env *env, osal_ipclock_t *ipc) {
+static int osal_ipclock_unlock(MDBX_env *env, osal_ipclock_t *ipc) {
   int err = MDBX_ENOSYS;
 #if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 || MDBX_LOCKING == MDBX_LOCKING_POSIX2008
   err = pthread_mutex_unlock(ipc);
 #elif MDBX_LOCKING == MDBX_LOCKING_POSIX1988
   err = sem_post(ipc) ? errno : MDBX_SUCCESS;
 #elif MDBX_LOCKING == MDBX_LOCKING_SYSV
-  if (unlikely(*ipc != (pid_t)env->pid))
+  if (unlikely(*ipc != (pid_t)env->pid || env->me_sysv_ipc.key == -1))
     err = EPERM;
   else {
     *ipc = 0;
