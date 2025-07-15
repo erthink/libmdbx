@@ -214,114 +214,116 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
   if (unlikely(env->flags & ENV_FATAL_ERROR)) {
     WARNING("%s", "environment had fatal error, must shutdown!");
     rc = MDBX_PANIC;
-  } else {
-    const size_t size_bytes = pgno2bytes(env, txn->geo.end_pgno);
-    const size_t used_bytes = pgno2bytes(env, txn->geo.first_unallocated);
-    const size_t required_bytes = (txn->flags & MDBX_TXN_RDONLY) ? used_bytes : size_bytes;
-    eASSERT(env, env->dxb_mmap.limit >= env->dxb_mmap.current);
-    if (unlikely(required_bytes > env->dxb_mmap.current)) {
-      /* Размер БД (для пишущих транзакций) или используемых данных (для
-       * читающих транзакций) больше предыдущего/текущего размера внутри
-       * процесса, увеличиваем. Сюда также попадает случай увеличения верхней
-       * границы размера БД и отображения. В читающих транзакциях нельзя
-       * изменять размер файла, который может быть больше необходимого этой
-       * транзакции. */
-      if (txn->geo.upper > MAX_PAGENO + 1 || bytes2pgno(env, pgno2bytes(env, txn->geo.upper)) != txn->geo.upper) {
-        rc = MDBX_UNABLE_EXTEND_MAPSIZE;
-        goto bailout;
-      }
-      rc = dxb_resize(env, txn->geo.first_unallocated, txn->geo.end_pgno, txn->geo.upper, implicit_grow);
-      if (unlikely(rc != MDBX_SUCCESS))
-        goto bailout;
-      eASSERT(env, env->dxb_mmap.limit >= env->dxb_mmap.current);
-    } else if (unlikely(size_bytes < env->dxb_mmap.current)) {
-      /* Размер БД меньше предыдущего/текущего размера внутри процесса, можно
-       * уменьшить, но всё сложнее:
-       *  - размер файла согласован со всеми читаемыми снимками на момент
-       *    коммита последней транзакции;
-       *  - в читающей транзакции размер файла может быть больше и него нельзя
-       *    изменять, в том числе менять madvise (меньша размера файла нельзя,
-       *    а за размером нет смысла).
-       *  - в пишущей транзакции уменьшать размер файла можно только после
-       *    проверки размера читаемых снимков, но в этом нет смысла, так как
-       *    это будет сделано при фиксации транзакции.
-       *
-       *  В сухом остатке, можно только установить dxb_mmap.current равным
-       *  размеру файла, а это проще сделать без вызова dxb_resize() и усложения
-       *  внутренней логики.
-       *
-       *  В этой тактике есть недостаток: если пишущите транзакции не регулярны,
-       *  и при завершении такой транзакции файл БД остаётся не-уменьшеным из-за
-       *  читающих транзакций использующих предыдущие снимки. */
-#if defined(_WIN32) || defined(_WIN64)
-      imports.srwl_AcquireShared(&env->remap_guard);
-#else
-      rc = osal_fastmutex_acquire(&env->remap_guard);
-#endif
-      if (likely(rc == MDBX_SUCCESS)) {
-        eASSERT(env, env->dxb_mmap.limit >= env->dxb_mmap.current);
-        rc = osal_filesize(env->dxb_mmap.fd, &env->dxb_mmap.filesize);
-        if (likely(rc == MDBX_SUCCESS)) {
-          eASSERT(env, env->dxb_mmap.filesize >= required_bytes);
-          if (env->dxb_mmap.current > env->dxb_mmap.filesize)
-            env->dxb_mmap.current =
-                (env->dxb_mmap.limit < env->dxb_mmap.filesize) ? env->dxb_mmap.limit : (size_t)env->dxb_mmap.filesize;
-        }
-#if defined(_WIN32) || defined(_WIN64)
-        imports.srwl_ReleaseShared(&env->remap_guard);
-#else
-        int err = osal_fastmutex_release(&env->remap_guard);
-        if (unlikely(err) && likely(rc == MDBX_SUCCESS))
-          rc = err;
-#endif
-      }
-      if (unlikely(rc != MDBX_SUCCESS))
-        goto bailout;
-    }
-    eASSERT(env, pgno2bytes(env, txn->geo.first_unallocated) <= env->dxb_mmap.current);
-    eASSERT(env, env->dxb_mmap.limit >= env->dxb_mmap.current);
-    if (txn->flags & MDBX_TXN_RDONLY) {
-#if defined(_WIN32) || defined(_WIN64)
-      if (((used_bytes > env->geo_in_bytes.lower && env->geo_in_bytes.shrink) ||
-           (globals.running_under_Wine &&
-            /* under Wine acquisition of remap_guard is always required,
-             * since Wine don't support section extending,
-             * i.e. in both cases unmap+map are required. */
-            used_bytes < env->geo_in_bytes.upper && env->geo_in_bytes.grow)) &&
-          /* avoid recursive use SRW */ (txn->flags & MDBX_NOSTICKYTHREADS) == 0) {
-        txn->flags |= txn_shrink_allowed;
-        imports.srwl_AcquireShared(&env->remap_guard);
-      }
-#endif /* Windows */
-    } else {
-      tASSERT(txn, txn == env->basal_txn);
-
-      if (env->options.need_dp_limit_adjust)
-        env_options_adjust_dp_limit(env);
-      if ((txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC) {
-        rc = dpl_alloc(txn);
-        if (unlikely(rc != MDBX_SUCCESS))
-          goto bailout;
-        txn->wr.dirtyroom = txn->env->options.dp_limit;
-        txn->wr.dirtylru = MDBX_DEBUG ? UINT32_MAX / 3 - 42 : 0;
-      } else {
-        tASSERT(txn, txn->wr.dirtylist == nullptr);
-        txn->wr.dirtylist = nullptr;
-        txn->wr.dirtyroom = MAX_PAGENO;
-        txn->wr.dirtylru = 0;
-      }
-      eASSERT(env, txn->wr.writemap_dirty_npages == 0);
-      eASSERT(env, txn->wr.writemap_spilled_npages == 0);
-
-      MDBX_cursor *const gc = ptr_disp(txn, sizeof(MDBX_txn));
-      rc = cursor_init(gc, txn, FREE_DBI);
-      if (rc != MDBX_SUCCESS)
-        goto bailout;
-      tASSERT(txn, txn->cursors[FREE_DBI] == nullptr);
-    }
-    dxb_sanitize_tail(env, txn);
-    return MDBX_SUCCESS;
+    goto bailout;
   }
+
+  const size_t size_bytes = pgno2bytes(env, txn->geo.end_pgno);
+  const size_t used_bytes = pgno2bytes(env, txn->geo.first_unallocated);
+  const size_t required_bytes = (txn->flags & MDBX_TXN_RDONLY) ? used_bytes : size_bytes;
+  eASSERT(env, env->dxb_mmap.limit >= env->dxb_mmap.current);
+  if (unlikely(required_bytes > env->dxb_mmap.current)) {
+    /* Размер БД (для пишущих транзакций) или используемых данных (для
+     * читающих транзакций) больше предыдущего/текущего размера внутри
+     * процесса, увеличиваем. Сюда также попадает случай увеличения верхней
+     * границы размера БД и отображения. В читающих транзакциях нельзя
+     * изменять размер файла, который может быть больше необходимого этой
+     * транзакции. */
+    if (txn->geo.upper > MAX_PAGENO + 1 || bytes2pgno(env, pgno2bytes(env, txn->geo.upper)) != txn->geo.upper) {
+      rc = MDBX_UNABLE_EXTEND_MAPSIZE;
+      goto bailout;
+    }
+    rc = dxb_resize(env, txn->geo.first_unallocated, txn->geo.end_pgno, txn->geo.upper, implicit_grow);
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto bailout;
+    eASSERT(env, env->dxb_mmap.limit >= env->dxb_mmap.current);
+  } else if (unlikely(size_bytes < env->dxb_mmap.current)) {
+    /* Размер БД меньше предыдущего/текущего размера внутри процесса, можно
+     * уменьшить, но всё сложнее:
+     *  - размер файла согласован со всеми читаемыми снимками на момент
+     *    коммита последней транзакции;
+     *  - в читающей транзакции размер файла может быть больше и него нельзя
+     *    изменять, в том числе менять madvise (меньша размера файла нельзя,
+     *    а за размером нет смысла).
+     *  - в пишущей транзакции уменьшать размер файла можно только после
+     *    проверки размера читаемых снимков, но в этом нет смысла, так как
+     *    это будет сделано при фиксации транзакции.
+     *
+     *  В сухом остатке, можно только установить dxb_mmap.current равным
+     *  размеру файла, а это проще сделать без вызова dxb_resize() и усложения
+     *  внутренней логики.
+     *
+     *  В этой тактике есть недостаток: если пишущите транзакции не регулярны,
+     *  и при завершении такой транзакции файл БД остаётся не-уменьшеным из-за
+     *  читающих транзакций использующих предыдущие снимки. */
+#if defined(_WIN32) || defined(_WIN64)
+    imports.srwl_AcquireShared(&env->remap_guard);
+#else
+    rc = osal_fastmutex_acquire(&env->remap_guard);
+#endif
+    if (likely(rc == MDBX_SUCCESS)) {
+      eASSERT(env, env->dxb_mmap.limit >= env->dxb_mmap.current);
+      rc = osal_filesize(env->dxb_mmap.fd, &env->dxb_mmap.filesize);
+      if (likely(rc == MDBX_SUCCESS)) {
+        eASSERT(env, env->dxb_mmap.filesize >= required_bytes);
+        if (env->dxb_mmap.current > env->dxb_mmap.filesize)
+          env->dxb_mmap.current =
+              (env->dxb_mmap.limit < env->dxb_mmap.filesize) ? env->dxb_mmap.limit : (size_t)env->dxb_mmap.filesize;
+      }
+#if defined(_WIN32) || defined(_WIN64)
+      imports.srwl_ReleaseShared(&env->remap_guard);
+#else
+      int err = osal_fastmutex_release(&env->remap_guard);
+      if (unlikely(err) && likely(rc == MDBX_SUCCESS))
+        rc = err;
+#endif
+    }
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto bailout;
+  }
+  eASSERT(env, pgno2bytes(env, txn->geo.first_unallocated) <= env->dxb_mmap.current);
+  eASSERT(env, env->dxb_mmap.limit >= env->dxb_mmap.current);
+  if (txn->flags & MDBX_TXN_RDONLY) {
+#if defined(_WIN32) || defined(_WIN64)
+    if (((used_bytes > env->geo_in_bytes.lower && env->geo_in_bytes.shrink) ||
+         (globals.running_under_Wine &&
+          /* under Wine acquisition of remap_guard is always required,
+           * since Wine don't support section extending,
+           * i.e. in both cases unmap+map are required. */
+          used_bytes < env->geo_in_bytes.upper && env->geo_in_bytes.grow)) &&
+        /* avoid recursive use SRW */ (txn->flags & MDBX_NOSTICKYTHREADS) == 0) {
+      txn->flags |= txn_shrink_allowed;
+      imports.srwl_AcquireShared(&env->remap_guard);
+    }
+#endif /* Windows */
+  } else {
+    tASSERT(txn, txn == env->basal_txn);
+
+    if (env->options.need_dp_limit_adjust)
+      env_options_adjust_dp_limit(env);
+    if ((txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC) {
+      rc = dpl_alloc(txn);
+      if (unlikely(rc != MDBX_SUCCESS))
+        goto bailout;
+      txn->wr.dirtyroom = txn->env->options.dp_limit;
+      txn->wr.dirtylru = MDBX_DEBUG ? UINT32_MAX / 3 - 42 : 0;
+    } else {
+      tASSERT(txn, txn->wr.dirtylist == nullptr);
+      txn->wr.dirtylist = nullptr;
+      txn->wr.dirtyroom = MAX_PAGENO;
+      txn->wr.dirtylru = 0;
+    }
+    eASSERT(env, txn->wr.writemap_dirty_npages == 0);
+    eASSERT(env, txn->wr.writemap_spilled_npages == 0);
+
+    MDBX_cursor *const gc = ptr_disp(txn, sizeof(MDBX_txn));
+    rc = cursor_init(gc, txn, FREE_DBI);
+    if (rc != MDBX_SUCCESS)
+      goto bailout;
+    tASSERT(txn, txn->cursors[FREE_DBI] == nullptr);
+  }
+  dxb_sanitize_tail(env, txn);
+  return MDBX_SUCCESS;
+
 bailout:
   tASSERT(txn, rc != MDBX_SUCCESS);
   txn_end(txn, TXN_END_SLOT | TXN_END_FAIL_BEGIN);
