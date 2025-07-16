@@ -84,7 +84,7 @@ __noinline int dbi_import(MDBX_txn *txn, const size_t dbi) {
     /* dbi-слот еще не инициализирован в транзакции, а хендл не использовался */
     txn->cursors[dbi] = nullptr;
     MDBX_txn *const parent = txn->parent;
-    if (parent) {
+    if (unlikely(parent)) {
       /* вложенная пишущая транзакция */
       int rc = dbi_check(parent, dbi);
       /* копируем состояние dbi-хендла очищая new-флаги. */
@@ -100,26 +100,31 @@ __noinline int dbi_import(MDBX_txn *txn, const size_t dbi) {
     txn->dbi_state[dbi] = DBI_LINDO;
   } else {
     eASSERT(env, txn->dbi_seqs[dbi] != env->dbi_seqs[dbi].weak);
-    if (unlikely((txn->dbi_state[dbi] & (DBI_VALID | DBI_OLDEN)) || txn->cursors[dbi])) {
-      /* хендл уже использовался в транзакции, но был закрыт или переоткрыт,
-       * либо при явном пере-открытии хендла есть висячие курсоры */
-      eASSERT(env, (txn->dbi_state[dbi] & DBI_STALE) == 0);
+    if (unlikely(txn->cursors[dbi])) {
+      /* хендл уже использовался в транзакции и остались висячие курсоры */
       txn->dbi_seqs[dbi] = env->dbi_seqs[dbi].weak;
       txn->dbi_state[dbi] = DBI_OLDEN | DBI_LINDO;
-      return txn->cursors[dbi] ? MDBX_DANGLING_DBI : MDBX_BAD_DBI;
+      return MDBX_DANGLING_DBI;
+    }
+    if (unlikely(txn->dbi_state[dbi] & (DBI_OLDEN | DBI_VALID))) {
+      /* хендл уже использовался в транзакции, но был закрыт или переоткрыт,
+       * висячих курсоров нет */
+      txn->dbi_seqs[dbi] = env->dbi_seqs[dbi].weak;
+      txn->dbi_state[dbi] = DBI_OLDEN | DBI_LINDO;
+      return MDBX_BAD_DBI;
     }
   }
 
   /* хендл не использовался в транзакции, либо явно пере-отрывается при
    * отсутствии висячих курсоров */
-  eASSERT(env, (txn->dbi_state[dbi] & DBI_LINDO) && !txn->cursors[dbi]);
+  eASSERT(env, (txn->dbi_state[dbi] & (DBI_LINDO | DBI_VALID)) == DBI_LINDO && !txn->cursors[dbi]);
 
   /* читаем актуальные флаги и sequence */
   struct dbi_snap_result snap = dbi_snap(env, dbi);
   txn->dbi_seqs[dbi] = snap.sequence;
   if (snap.flags & DB_VALID) {
     txn->dbs[dbi].flags = snap.flags & DB_PERSISTENT_FLAGS;
-    txn->dbi_state[dbi] = DBI_LINDO | DBI_VALID | DBI_STALE;
+    txn->dbi_state[dbi] = (dbi >= CORE_DBS) ? DBI_LINDO | DBI_VALID | DBI_STALE : DBI_LINDO | DBI_VALID;
     return MDBX_SUCCESS;
   }
   return MDBX_BAD_DBI;

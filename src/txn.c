@@ -155,7 +155,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
   txn->dbi_seqs[FREE_DBI] = 0;
   txn->dbi_seqs[MAIN_DBI] = atomic_load32(&env->dbi_seqs[MAIN_DBI], mo_AcquireRelease);
 
-  if (unlikely(env->dbs_flags[MAIN_DBI] != (DB_VALID | txn->dbs[MAIN_DBI].flags))) {
+  if (unlikely(env->dbs_flags[MAIN_DBI] != (DB_VALID | txn->dbs[MAIN_DBI].flags) || !txn->dbi_seqs[MAIN_DBI])) {
     const bool need_txn_lock = env->basal_txn && env->basal_txn->owner != osal_thread_self();
     bool should_unlock = false;
     if (need_txn_lock) {
@@ -167,24 +167,24 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
     }
     rc = osal_fastmutex_acquire(&env->dbi_lock);
     if (likely(rc == MDBX_SUCCESS)) {
-      uint32_t seq = dbi_seq_next(env, MAIN_DBI);
       /* проверяем повторно после захвата блокировки */
+      uint32_t seq = atomic_load32(&env->dbi_seqs[MAIN_DBI], mo_AcquireRelease);
       if (env->dbs_flags[MAIN_DBI] != (DB_VALID | txn->dbs[MAIN_DBI].flags)) {
-        if (!need_txn_lock || should_unlock ||
-            /* если нет активной пишущей транзакции,
-             * то следующая будет ждать на dbi_lock */
-            !env->txn) {
-          if (env->dbs_flags[MAIN_DBI] != 0 || MDBX_DEBUG)
+        if (!(env->dbs_flags[MAIN_DBI] & DB_VALID) || !need_txn_lock || should_unlock ||
+            /* если нет активной пишущей транзакции, * то следующая будет ждать на dbi_lock */ !env->txn) {
+          if (env->dbs_flags[MAIN_DBI] & DB_VALID) {
             NOTICE("renew MainDB for %s-txn %" PRIaTXN " since db-flags changes 0x%x -> 0x%x",
                    (txn->flags & MDBX_TXN_RDONLY) ? "ro" : "rw", txn->txnid, env->dbs_flags[MAIN_DBI] & ~DB_VALID,
                    txn->dbs[MAIN_DBI].flags);
-          env->dbs_flags[MAIN_DBI] = DB_POISON;
-          atomic_store32(&env->dbi_seqs[MAIN_DBI], seq, mo_AcquireRelease);
+            seq = dbi_seq_next(env, MAIN_DBI);
+            env->dbs_flags[MAIN_DBI] = DB_POISON;
+            atomic_store32(&env->dbi_seqs[MAIN_DBI], seq, mo_AcquireRelease);
+          }
           rc = tbl_setup(env, &env->kvs[MAIN_DBI], &txn->dbs[MAIN_DBI]);
           if (likely(rc == MDBX_SUCCESS)) {
             seq = dbi_seq_next(env, MAIN_DBI);
             env->dbs_flags[MAIN_DBI] = DB_VALID | txn->dbs[MAIN_DBI].flags;
-            txn->dbi_seqs[MAIN_DBI] = atomic_store32(&env->dbi_seqs[MAIN_DBI], seq, mo_AcquireRelease);
+            atomic_store32(&env->dbi_seqs[MAIN_DBI], seq, mo_AcquireRelease);
           }
         } else {
           ERROR("MainDB db-flags changes 0x%x -> 0x%x ahead of read-txn "
@@ -193,6 +193,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
           rc = MDBX_INCOMPATIBLE;
         }
       }
+      txn->dbi_seqs[MAIN_DBI] = seq;
       ENSURE(env, osal_fastmutex_release(&env->dbi_lock) == MDBX_SUCCESS);
     } else {
       DEBUG("dbi_lock failed, err %d", rc);
