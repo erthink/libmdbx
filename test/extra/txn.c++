@@ -31,15 +31,6 @@ int main(int argc, const char *argv[]) {
 #include <latch>
 #include <thread>
 
-static char log_buffer[1024];
-
-static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int line, const char *msg,
-                         unsigned length) noexcept {
-  (void)length;
-  (void)loglevel;
-  fprintf(stdout, "%s:%u %s", function, line, msg);
-}
-
 bool case0(const mdbx::path &path) {
   mdbx::env_managed::create_parameters createParameters;
   createParameters.geometry.make_dynamic(21 * mdbx::env::geometry::MiB, 84 * mdbx::env::geometry::MiB);
@@ -322,17 +313,83 @@ bool case2(const mdbx::path &path, bool no_sticky_threads) {
   return true;
 }
 
+bool case3(const mdbx::path &path, bool no_sticky_threads) {
+  mdbx::env::remove(path);
+  mdbx::env_managed::create_parameters createParameters;
+  createParameters.geometry.make_dynamic(21 * mdbx::env::geometry::MiB, 84 * mdbx::env::geometry::MiB);
+  mdbx::env::operate_parameters operateParameters(100, 10);
+  operateParameters.options.no_sticky_threads = no_sticky_threads;
+  mdbx::env_managed env(path, createParameters, operateParameters);
+
+  mdbx::pair pair = {"key", "val"};
+  const auto N = std::thread::hardware_concurrency() * 2;
+  std::latch s0(N + 1), s1(N + 1), s2(N + 1);
+  std::vector<std::thread> l;
+
+  volatile bool ok = true;
+  for (size_t n = 0; n < N; ++n)
+    l.push_back(std::thread([&]() {
+      try {
+        s0.arrive_and_wait();
+        {
+          auto txn = env.start_read();
+          mdbx::slice value;
+          int err = mdbx_get(txn, 1, pair.key, &value);
+          if (err != MDBX_NOTFOUND) {
+            ok = false;
+            std::cerr << "Unexpected error " << err << "\n";
+          }
+        }
+
+        s1.arrive_and_wait();
+        s2.arrive_and_wait();
+        {
+          auto txn = env.start_read();
+          if (txn.get(1, pair.key) != pair.value)
+            ok = false;
+        }
+      } catch (const std::exception &ex) {
+        std::cerr << "Exception: " << ex.what() << "\n";
+        ok = false;
+      }
+    }));
+
+  s0.arrive_and_wait();
+  auto txn = env.start_write();
+  s1.arrive_and_wait();
+  txn.insert(1, pair);
+  txn.commit();
+  s2.arrive_and_wait();
+
+  for (auto &t : l)
+    t.join();
+
+  return ok;
+}
+
 int doit() {
   mdbx::path path = "test-txn";
   mdbx::env::remove(path);
 
-  bool ok = case0(path);
+  bool ok = true;
+  ok = case0(path) && ok;
   ok = case1(path) && ok;
   ok = case2(path, false) && ok;
   ok = case2(path, true) && ok;
+  ok = case3(path, false) && ok;
+  ok = case3(path, true) && ok;
 
   std::cout << (ok ? "OK\n" : "FAIL\n");
   return ok ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
+static char log_buffer[1024];
+
+static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int line, const char *msg,
+                         unsigned length) noexcept {
+  (void)length;
+  (void)loglevel;
+  fprintf(stdout, "%s:%u %s", function, line, msg);
 }
 
 int main(int argc, char *argv[]) {
