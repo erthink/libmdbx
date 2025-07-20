@@ -1997,7 +1997,7 @@ typedef enum MDBX_error {
   MDBX_EREMOTE = ERROR_REMOTE_STORAGE_MEDIA_ERROR,
   MDBX_EDEADLK = ERROR_POSSIBLE_DEADLOCK
 #else /* Windows */
-#ifdef ENODATA
+#if defined(ENODATA) || defined(DOXYGEN)
   MDBX_ENODATA = ENODATA,
 #else
   MDBX_ENODATA = 9919 /* for compatibility with LLVM's C++ libraries/headers */,
@@ -2006,7 +2006,11 @@ typedef enum MDBX_error {
   MDBX_EACCESS = EACCES,
   MDBX_ENOMEM = ENOMEM,
   MDBX_EROFS = EROFS,
+#if defined(ENOTSUP) || defined(DOXYGEN)
+  MDBX_ENOSYS = ENOTSUP,
+#else
   MDBX_ENOSYS = ENOSYS,
+#endif /* ENOTSUP */
   MDBX_EIO = EIO,
   MDBX_EPERM = EPERM,
   MDBX_EINTR = EINTR,
