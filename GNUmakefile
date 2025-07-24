@@ -855,7 +855,7 @@ cross-qemu:
 	$(QUIET)for CC in $(CROSS_LIST); do \
 		echo "===================== $$CC + qemu"; \
 		$(MAKE) IOARENA=false CXXSTD= clean && \
-			CC=$$CC CXX=$$(echo $$CC | $(SED) 's/-gcc/-g++/') EXE_LDFLAGS=-static MDBX_BUILD_OPTIONS="-DMDBX_SAFE4QEMU $(MDBX_BUILD_OPTIONS)" \
+			CC=$$CC CXX=$$(echo $$CC | $(SED) 's/-gcc/-g++/') EXE_LDFLAGS=-static MDBX_BUILD_OPTIONS="-DMDBX_LOCKING=5 -DMDBX_SAFE4QEMU $(MDBX_BUILD_OPTIONS)" \
 			$(MAKE) IOARENA=false smoke-singleprocess test-singleprocess || exit $$?; \
 	done
 
