@@ -823,17 +823,21 @@ endif
 # Cross-compilation simple test
 
 CROSS_LIST = \
-	mips64-linux-gnuabi64-gcc mips-linux-gnu-gcc \
-	hppa-linux-gnu-gcc s390x-linux-gnu-gcc \
-	powerpc64-linux-gnu-gcc powerpc-linux-gnu-gcc \
-	arm-linux-gnueabihf-gcc aarch64-linux-gnu-gcc
+	aarch64-linux-gnu-gcc \
+	arm-linux-gnueabihf-gcc \
+	hppa-linux-gnu-gcc \
+	mips64-linux-gnuabi64-gcc \
+	mips-linux-gnu-gcc \
+	powerpc64-linux-gnu-gcc\
+	riscv64-linux-gnu-gcc \
+	s390x-linux-gnu-gcc \
+	sh4-linux-gnu-gcc
 
-## On Ubuntu Focal (22.04) with QEMU 6.2 (1:6.2+dfsg-2ubuntu6.6) & GCC 11.3 (11.3.0-1ubuntu1~22.04)
-# sh4-linux-gnu-gcc           - coredump (qemu mmap-troubles)
-# sparc64-linux-gnu-gcc       - coredump (qemu mmap-troubles, previously: qemu fails fcntl for F_SETLK/F_GETLK)
-# alpha-linux-gnu-gcc         - coredump (qemu mmap-troubles)
-# risc64-linux-gnu-gcc        - coredump (qemu qemu fails fcntl for F_SETLK/F_GETLK)
-CROSS_LIST_NOQEMU = sh4-linux-gnu-gcc sparc64-linux-gnu-gcc alpha-linux-gnu-gcc riscv64-linux-gnu-gcc
+## On Ubuntu Noble (24.04.2) with QEMU 8.2 (8.2.2+ds-0ubuntu1.7) & GCC 13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04)
+# sparc64-linux-gnu-gcc       - fails mmap/BAD_ADDRESS (previously: qemu-coredump sice mmap-troubles, qemu fails fcntl for F_SETLK/F_GETLK)
+# alpha-linux-gnu-gcc         - qemu-coredump (qemu mmap-troubles)
+# powerpc-linux-gnu-gcc       - fails mmap/BAD_ADDRESS (previously: qemu-coredump sice mmap-troubles, qemu fails fcntl for F_SETLK/F_GETLK)
+CROSS_LIST_NOQEMU = sparc64-linux-gnu-gcc alpha-linux-gnu-gcc powerpc-linux-gnu-gcc
 
 cross-gcc:
 	@echo '  Re-building by cross-compiler for: $(CROSS_LIST_NOQEMU) $(CROSS_LIST)'
