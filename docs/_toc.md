@@ -1,4 +1,4 @@
-The source code is availale on [Gitflic](https://gitflic.ru/project/erthink/libmdbx).
+The source code is availale on [Gitflic](https://gitflic.ru/project/erthink/libmdbx) and mirrors on [abf.io](https://abf.io/erthink/libmdbx), [hub.mos.ru](https://hub.mos.ru/leo/libmdbx) and [Github](https://github.com/erthink/libmdbx).
 Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`.
 Всё будет хорошо!
 
