@@ -457,6 +457,12 @@ Currently, libmdbx is only available in a
 Packages support for common Linux distributions is planned in the future,
 since release the version 1.0.
 
+The source code is availale on
+[Gitflic](https://gitflic.ru/project/erthink/libmdbx) and mirrors on [abf.io](https://abf.io/erthink/libmdbx),
+[hub.mos.ru](https://hub.mos.ru/leo/libmdbx) and [Github](https://github.com/erthink/libmdbx).
+Please use the `stable` branch or the latest release for production environment through stagging
+and the `master` branch for development a derivative projects.
+
 ## Source code embedding
 
 _libmdbx_ provides three official ways for integration in source code form:

@@ -1,5 +1,6 @@
 The source code is availale on [Gitflic](https://gitflic.ru/project/erthink/libmdbx) and mirrors on [abf.io](https://abf.io/erthink/libmdbx), [hub.mos.ru](https://hub.mos.ru/leo/libmdbx) and [Github](https://github.com/erthink/libmdbx).
 Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`.
+Please use the `stable` branch or the latest release for production environment through stagging, but the `master` branch for development a derivative projects.
 Всё будет хорошо!
 
 > Questions, feedback and suggestions are welcome to the [Telegram' group](https://t.me/libmdbx) (archive [1](https://libmdbx.dqdkfa.ru/tg-archive/messages1.html),
