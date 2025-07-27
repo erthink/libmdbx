@@ -143,7 +143,7 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
   if (unlikely(dbi < CORE_DBS))
     return (dbi == MAIN_DBI) ? MDBX_SUCCESS : LOG_IFERR(MDBX_BAD_DBI);
 
-  if (unlikely(dbi >= env->max_dbi))
+  if (unlikely(dbi >= env->n_dbi))
     return LOG_IFERR(MDBX_BAD_DBI);
 
   rc = osal_fastmutex_acquire(&env->dbi_lock);
@@ -167,8 +167,8 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
      * в basal_txn, а уже после в env->txn. Таким образом, падение может быть
      * только при коллизии с завершением вложенной транзакции.
      *
-     * Альтернативно можно попробовать выполнять обновление/put записи в
-     * mainDb соответствующей таблице закрываемого хендла. Семантически это
+     * Альтернативно можно попробовать выполнять обновление/put строки в
+     * MainDB соответствующей таблице закрываемого хендла. Семантически это
      * верный путь, но проблема в текущем API, в котором исторически dbi-хендл
      * живет и закрывается вне транзакции. Причем проблема не только в том,
      * что нет указателя на текущую пишущую транзакцию, а в том что

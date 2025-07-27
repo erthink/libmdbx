@@ -179,7 +179,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
   txn->n_dbi = CORE_DBS;
   VALGRIND_MAKE_MEM_UNDEFINED(txn->dbi_sparse,
                               ceil_powerof2(env->max_dbi, CHAR_BIT * sizeof(txn->dbi_sparse[0])) / CHAR_BIT);
-  txn->dbi_sparse[0] = (1 << CORE_DBS) - 1;
+  txn->dbi_sparse[0] = (1u << CORE_DBS) - 1;
 #else
   txn->n_dbi = (env->n_dbi < 8) ? env->n_dbi : 8;
   if (txn->n_dbi > CORE_DBS)

@@ -127,6 +127,7 @@ __noinline int dbi_import(MDBX_txn *txn, const size_t dbi) {
     txn->dbi_state[dbi] = (dbi >= CORE_DBS) ? DBI_LINDO | DBI_VALID | DBI_STALE : DBI_LINDO | DBI_VALID;
     return MDBX_SUCCESS;
   }
+
   return MDBX_BAD_DBI;
 }
 
@@ -415,7 +416,7 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi, MD
 
   int err = dbi_check(txn, slot);
   eASSERT(env, err == MDBX_BAD_DBI);
-  if (err != MDBX_BAD_DBI)
+  if (unlikely(err != MDBX_BAD_DBI))
     return MDBX_PROBLEM;
 
   /* Find the DB info */
@@ -448,7 +449,7 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi, MD
   name.iov_base = clone;
 
   uint8_t dbi_state = DBI_LINDO | DBI_VALID | DBI_FRESH;
-  if (unlikely(rc)) {
+  if (unlikely(rc != MDBX_SUCCESS)) {
     /* MDBX_NOTFOUND and MDBX_CREATE: Create new DB */
     tASSERT(txn, rc == MDBX_NOTFOUND);
     body.iov_base = memset(&txn->dbs[slot], 0, body.iov_len = sizeof(tree_t));
