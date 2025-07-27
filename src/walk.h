@@ -18,3 +18,14 @@ typedef int walk_func(const size_t pgno, const unsigned number, void *const ctx,
 typedef enum walk_options { dont_check_keys_ordering = 1 } walk_options_t;
 
 MDBX_INTERNAL int walk_pages(MDBX_txn *txn, walk_func *visitor, void *user, walk_options_t options);
+
+typedef struct walk_ctx {
+  void *userctx;
+  walk_options_t options;
+  int deep;
+  walk_func *visitor;
+  MDBX_txn *txn;
+  MDBX_cursor *cursor;
+} walk_ctx_t;
+
+MDBX_INTERNAL int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl);

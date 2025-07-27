@@ -3,17 +3,6 @@
 
 #include "internals.h"
 
-typedef struct walk_ctx {
-  void *userctx;
-  walk_options_t options;
-  int deep;
-  walk_func *visitor;
-  MDBX_txn *txn;
-  MDBX_cursor *cursor;
-} walk_ctx_t;
-
-__cold static int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl);
-
 static page_type_t walk_page_type(const page_t *mp) {
   if (mp)
     switch (mp->flags & ~P_SPILLED) {
@@ -251,7 +240,7 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
   return MDBX_SUCCESS;
 }
 
-__cold static int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl) {
+__cold int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl) {
   tree_t *const db = tbl->internal;
   if (unlikely(db->root == P_INVALID))
     return MDBX_SUCCESS; /* empty db */
