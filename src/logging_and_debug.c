@@ -3,6 +3,9 @@
 
 #include "internals.h"
 
+/*------------------------------------------------------------------------------
+ logging */
+
 __cold void debug_log_va(int level, const char *function, int line, const char *fmt, va_list args) {
   ENSURE(nullptr, osal_fastmutex_acquire(&globals.debug_lock) == 0);
   if (globals.logger.ptr) {
@@ -110,8 +113,49 @@ __cold const char *mdbx_dump_val(const MDBX_val *val, char *const buf, const siz
   return buf;
 }
 
+__cold static int setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags, union logger_union logger, char *buffer,
+                              size_t buffer_size) {
+  ENSURE(nullptr, osal_fastmutex_acquire(&globals.debug_lock) == 0);
+
+  const int rc = globals.runtime_flags | (globals.loglevel << 16);
+  if (level != MDBX_LOG_DONTCHANGE)
+    globals.loglevel = (uint8_t)level;
+
+  if (flags != MDBX_DBG_DONTCHANGE) {
+    flags &=
+#if MDBX_DEBUG
+        MDBX_DBG_ASSERT | MDBX_DBG_AUDIT | MDBX_DBG_JITTER |
+#endif
+        MDBX_DBG_DUMP | MDBX_DBG_LEGACY_MULTIOPEN | MDBX_DBG_LEGACY_OVERLAP | MDBX_DBG_DONT_UPGRADE;
+    globals.runtime_flags = (uint8_t)flags;
+  }
+
+  assert(MDBX_LOGGER_DONTCHANGE == ((MDBX_debug_func *)(intptr_t)-1));
+  if (logger.ptr != (void *)((intptr_t)-1)) {
+    globals.logger.ptr = logger.ptr;
+    globals.logger_buffer = buffer;
+    globals.logger_buffer_size = buffer_size;
+  }
+
+  ENSURE(nullptr, osal_fastmutex_release(&globals.debug_lock) == 0);
+  return rc;
+}
+
+__cold int mdbx_setup_debug_nofmt(MDBX_log_level_t level, MDBX_debug_flags_t flags, MDBX_debug_func_nofmt *logger,
+                                  char *buffer, size_t buffer_size) {
+  union logger_union thunk;
+  thunk.nofmt = (logger && buffer && buffer_size) ? logger : MDBX_LOGGER_NOFMT_DONTCHANGE;
+  return setup_debug(level, flags, thunk, buffer, buffer_size);
+}
+
+__cold int mdbx_setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags, MDBX_debug_func *logger) {
+  union logger_union thunk;
+  thunk.fmt = logger;
+  return setup_debug(level, flags, thunk, nullptr, 0);
+}
+
 /*------------------------------------------------------------------------------
- LY: debug stuff */
+ debug stuff */
 
 __cold const char *pagetype_caption(const uint8_t type, char buf4unknown[16]) {
   switch (type) {
@@ -206,45 +250,4 @@ __cold void page_list(page_t *mp) {
   }
   VERBOSE("Total: header %u + contents %zu + unused %zu\n", is_dupfix_leaf(mp) ? PAGEHDRSZ : PAGEHDRSZ + mp->lower,
           total, page_room(mp));
-}
-
-__cold static int setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags, union logger_union logger, char *buffer,
-                              size_t buffer_size) {
-  ENSURE(nullptr, osal_fastmutex_acquire(&globals.debug_lock) == 0);
-
-  const int rc = globals.runtime_flags | (globals.loglevel << 16);
-  if (level != MDBX_LOG_DONTCHANGE)
-    globals.loglevel = (uint8_t)level;
-
-  if (flags != MDBX_DBG_DONTCHANGE) {
-    flags &=
-#if MDBX_DEBUG
-        MDBX_DBG_ASSERT | MDBX_DBG_AUDIT | MDBX_DBG_JITTER |
-#endif
-        MDBX_DBG_DUMP | MDBX_DBG_LEGACY_MULTIOPEN | MDBX_DBG_LEGACY_OVERLAP | MDBX_DBG_DONT_UPGRADE;
-    globals.runtime_flags = (uint8_t)flags;
-  }
-
-  assert(MDBX_LOGGER_DONTCHANGE == ((MDBX_debug_func *)(intptr_t)-1));
-  if (logger.ptr != (void *)((intptr_t)-1)) {
-    globals.logger.ptr = logger.ptr;
-    globals.logger_buffer = buffer;
-    globals.logger_buffer_size = buffer_size;
-  }
-
-  ENSURE(nullptr, osal_fastmutex_release(&globals.debug_lock) == 0);
-  return rc;
-}
-
-__cold int mdbx_setup_debug_nofmt(MDBX_log_level_t level, MDBX_debug_flags_t flags, MDBX_debug_func_nofmt *logger,
-                                  char *buffer, size_t buffer_size) {
-  union logger_union thunk;
-  thunk.nofmt = (logger && buffer && buffer_size) ? logger : MDBX_LOGGER_NOFMT_DONTCHANGE;
-  return setup_debug(level, flags, thunk, buffer, buffer_size);
-}
-
-__cold int mdbx_setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags, MDBX_debug_func *logger) {
-  union logger_union thunk;
-  thunk.fmt = logger;
-  return setup_debug(level, flags, thunk, nullptr, 0);
 }
