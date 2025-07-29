@@ -4,6 +4,11 @@ ChangeLog
 English version [by liar Google](https://libmdbx-dqdkfa-ru.translate.goog/md__change_log.html?_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx.dqdkfa.ru/md__change_log.html).
 
+The source code is availale on [Gitflic](https://gitflic.ru/project/erthink/libmdbx) and mirrors on [abf.io](https://abf.io/erthink/libmdbx), [hub.mos.ru](https://hub.mos.ru/leo/libmdbx) and [Github](https://github.com/erthink/libmdbx).
+Please use the `stable` branch or the latest release for production environment through stagging, but the `master` branch for development a derivative projects.
+Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`.
+Всё будет хорошо!
+
 ## v0.14.2 в активной разработке без конкретизации даты выпуска
 
 Продолжение развития нового куста/линейки версий с добавлением функционала, расширением API и внутренними переработками.
@@ -70,6 +75,8 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/libmdbx
    при тестировании на NUMA-машинах.
 
  - В стохастическом скрипте реализован случайный порядок запуска отдельных тестов.
+
+ - В функционал проверки целостности БД и утилиту mdbx_chk добавлен вывод гистограммы заполнения страниц образующих структуру дерева и участвующих в операциях разделения/слияния/перебалансировки.
 
 
 --------------------------------------------------------------------------------
