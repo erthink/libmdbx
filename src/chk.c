@@ -722,6 +722,7 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
 
   const char *pagetype_caption;
   bool branch = false;
+  struct MDBX_chk_histogram *filling = nullptr;
   switch (pagetype) {
   default:
     chk_object_issue(scope, "page", pgno, "unknown page-type", "type %u, deep %i, parent %zu", (unsigned)pagetype, deep,
@@ -751,9 +752,11 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
     if (!nested) {
       pagetype_caption = "branch";
       tbl->pages.branch += 1;
+      filling = &tbl->histogram.tree_filling;
     } else {
       pagetype_caption = "nested-branch";
       tbl->pages.nested_branch += 1;
+      filling = &tbl->histogram.nested_tree_filling;
     }
     break;
   case page_dupfix_leaf:
@@ -766,12 +769,14 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
     if (!nested) {
       pagetype_caption = "leaf";
       tbl->pages.leaf += 1;
+      filling = &tbl->histogram.tree_filling;
       if (height != tbl_info->internal->height)
         chk_object_issue(scope, "page", pgno, "wrong tree height", "actual %i != %i table %s, parent %zu", height,
                          tbl_info->internal->height, chk_v2a(chk, &tbl->name), parent_pgno);
     } else {
       pagetype_caption = (pagetype == page_leaf) ? "nested-leaf" : "nested-leaf-dupfix";
       tbl->pages.nested_leaf += 1;
+      filling = &tbl->histogram.nested_tree_filling;
       if (chk->last_nested != nested) {
         histogram_acc(height, &tbl->histogram.nested_tree);
         chk->last_nested = nested;
@@ -788,8 +793,13 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
     if ((tbl->flags & MDBX_DUPSORT) == 0 || nested)
       chk_object_issue(scope, "page", pgno, "unexpected", "type %u, table %s flags 0x%x, deep %i, parent %zu",
                        (unsigned)pagetype, chk_v2a(chk, &tbl->name), tbl->flags, deep, parent_pgno);
+    else
+      filling = &tbl->histogram.nested_tree_filling;
     break;
   }
+
+  if (filling)
+    histogram_acc((page_size - unused_bytes) * 100 / page_size, filling);
 
   if (npages) {
     if (tbl->cookie) {
@@ -965,6 +975,12 @@ __cold static int chk_tree(MDBX_chk_scope_t *const scope) {
             line = chk_print(line, ", %" PRIuSIZE " empty pages", tbl->pages.empty);
           if (tbl->lost_bytes)
             line = chk_print(line, ", %" PRIuSIZE " bytes lost", tbl->lost_bytes);
+
+          line =
+              histogram_dist(chk_line_feed(line), &tbl->histogram.tree_filling, "tree %-filling density", "1", false);
+          if (tbl->histogram.nested_tree_filling.count)
+            line = histogram_dist(chk_line_feed(line), &tbl->histogram.nested_tree_filling,
+                                  "nested tree(s) %-filling density", "1", false);
           chk_line_end(line);
         }
       }
