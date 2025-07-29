@@ -65,7 +65,7 @@ MDBX_chk_flags_t chk_flags = MDBX_CHK_DEFAULTS;
 MDBX_chk_stage_t chk_stage = MDBX_chk_none;
 
 static MDBX_chk_line_t line_struct;
-static size_t anchor_lineno;
+static size_t anchor_cookie;
 static size_t line_count;
 static FILE *line_output;
 
@@ -275,7 +275,7 @@ static MDBX_chk_user_table_cookie_t *table_filter(MDBX_chk_context_t *ctx, const
 static int stage_begin(MDBX_chk_context_t *ctx, enum MDBX_chk_stage stage) {
   (void)ctx;
   chk_stage = stage;
-  anchor_lineno = line_count;
+  anchor_cookie = line_count;
   flush();
   return MDBX_SUCCESS;
 }
@@ -284,7 +284,7 @@ static int conclude(MDBX_chk_context_t *ctx);
 static int stage_end(MDBX_chk_context_t *ctx, enum MDBX_chk_stage stage, int err) {
   if (stage == MDBX_chk_conclude && !err)
     err = conclude(ctx);
-  suffix(anchor_lineno, err ? "error(s)" : "done");
+  suffix(anchor_cookie, err ? "error(s)" : "done");
   flush();
   chk_stage = MDBX_chk_none;
   return err;
@@ -367,16 +367,16 @@ static int conclude(MDBX_chk_context_t *ctx) {
       (chk_flags & (MDBX_CHK_SKIP_BTREE_TRAVERSAL | MDBX_CHK_SKIP_KV_TRAVERSAL)) == 0 &&
       (env_flags & MDBX_RDONLY) == 0 && !only_table.iov_base && stuck_meta < 0 &&
       ctx->result.steady_txnid < ctx->result.recent_txnid) {
-    const size_t step_lineno = print(MDBX_chk_resolution,
-                                     "Perform sync-to-disk for make steady checkpoint"
-                                     " at txn-id #%" PRIi64 "...",
-                                     ctx->result.recent_txnid);
+    const size_t cookie = print(MDBX_chk_resolution,
+                                "Perform sync-to-disk for make steady checkpoint"
+                                " at txn-id #%" PRIi64 "...",
+                                ctx->result.recent_txnid);
     flush();
     err = error_fn("walk_pages", mdbx_env_sync_ex(ctx->env, true, false));
     if (err == MDBX_SUCCESS) {
       ctx->result.problems_meta -= 1;
       ctx->result.total_problems -= 1;
-      suffix(step_lineno, "done");
+      suffix(cookie, "done");
     }
   }
 
@@ -384,15 +384,14 @@ static int conclude(MDBX_chk_context_t *ctx) {
       !only_table.iov_base && (env_flags & (MDBX_RDONLY | MDBX_EXCLUSIVE)) == MDBX_EXCLUSIVE) {
     const bool successful_check = (err | ctx->result.total_problems | ctx->result.problems_meta) == 0;
     if (successful_check || force_turn_meta) {
-      const size_t step_lineno =
-          print(MDBX_chk_resolution, "Performing turn to the specified meta-page (%d) due to %s!", stuck_meta,
-                successful_check ? "successful check" : "the -T option was given");
+      const size_t cookie = print(MDBX_chk_resolution, "Performing turn to the specified meta-page (%d) due to %s!",
+                                  stuck_meta, successful_check ? "successful check" : "the -T option was given");
       flush();
       err = mdbx_env_turn_for_recovery(ctx->env, stuck_meta);
       if (err != MDBX_SUCCESS)
         error_fn("mdbx_env_turn_for_recovery", err);
       else
-        suffix(step_lineno, "done");
+        suffix(cookie, "done");
     } else {
       print(MDBX_chk_resolution,
             "Skipping turn to the specified meta-page (%d) due to "
@@ -619,14 +618,14 @@ int main(int argc, char *argv[]) {
   print_ln(MDBX_chk_verbose, "%s mode", (env_flags & MDBX_EXCLUSIVE) ? "monopolistic" : "cooperative");
 
   if (warmup) {
-    anchor_lineno = print(MDBX_chk_verbose, "warming up...");
+    anchor_cookie = print(MDBX_chk_verbose, "warming up...");
     flush();
     rc = mdbx_env_warmup(env, nullptr, warmup_flags, 3600 * 65536);
     if (MDBX_IS_ERROR(rc)) {
       error_fn("mdbx_env_warmup", rc);
       goto bailout;
     }
-    suffix(anchor_lineno, rc ? "timeout" : "done");
+    suffix(anchor_cookie, rc ? "timeout" : "done");
   }
 
   rc = mdbx_env_chk(env, &cb, &chk, chk_flags, MDBX_chk_result + (verbose << MDBX_chk_severity_prio_shift), 0);
