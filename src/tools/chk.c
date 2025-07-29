@@ -604,8 +604,10 @@ int main(int argc, char *argv[]) {
                                          rc == EBUSY || rc == EAGAIN
 #endif
                                          )) {
+      const size_t cookie = print(MDBX_chk_resolution, "Try open in non-exclusive mode...");
       env_flags &= ~MDBX_EXCLUSIVE;
       rc = mdbx_env_open(env, envname, env_flags | MDBX_ACCEDE, 0);
+      suffix(cookie, rc ? "failed" : "done");
     }
   }
 
