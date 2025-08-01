@@ -1,7 +1,7 @@
-From 349c08cf21b66ecea851340133a1b845c25675f7 Mon Sep 17 00:00:00 2001
+From f2f1f6e76c1538d044b552d9e7ecedc3433e6cd9 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?=D0=9B=D0=B5=D0=BE=D0=BD=D0=B8=D0=B4=20=D0=AE=D1=80=D1=8C?=
  =?UTF-8?q?=D0=B5=D0=B2=20=28Leonid=20Yuriev=29?= <leo@yuriev.ru>
-Date: Tue, 22 Apr 2025 14:38:49 +0300
+Date: Sun, 3 Aug 2025 23:59:11 +0300
 Subject: [PATCH] package/libmdbx: new package (library/database).
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -15,7 +15,7 @@ This patch adds libmdbx:
    in terms of reliability, features and performance.
  - more information at https://libmdbx.dqdkfa.ru
 
-The 0.13.6 "Бузина" (Elderberry) is stable release of _libmdbx_ branch with new superior features.
+The 0.13.7 "Дружба" (Friendship) is stable release of _libmdbx_ branch with new superior features.
 
 The complete ChangeLog: https://gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md
 
@@ -25,8 +25,8 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
  package/Config.in            |  1 +
  package/libmdbx/Config.in    | 45 ++++++++++++++++++++++++++++++++++++
  package/libmdbx/libmdbx.hash |  6 +++++
- package/libmdbx/libmdbx.mk   | 42 +++++++++++++++++++++++++++++++++
- 5 files changed, 97 insertions(+)
+ package/libmdbx/libmdbx.mk   | 41 ++++++++++++++++++++++++++++++++
+ 5 files changed, 96 insertions(+)
  create mode 100644 package/libmdbx/Config.in
  create mode 100644 package/libmdbx/libmdbx.hash
  create mode 100644 package/libmdbx/libmdbx.mk
@@ -110,35 +110,34 @@ index 0000000000..a9a4ac45c5
 +		!BR2_TOOLCHAIN_GCC_AT_LEAST_4_4
 diff --git a/package/libmdbx/libmdbx.hash b/package/libmdbx/libmdbx.hash
 new file mode 100644
-index 0000000000..ae5266716b
+index 0000000000..8c7efb184b
 --- /dev/null
 +++ b/package/libmdbx/libmdbx.hash
 @@ -0,0 +1,6 @@
 +# Hashes from: https://libmdbx.dqdkfa.ru/release/SHA256SUMS
-+sha256  57db987de6f7ccc66a66ae28a7bda9f9fbb48ac5fb9279bcca92fd5de13075d1  libmdbx-amalgamated-0.13.6.tar.xz
++sha256  d00c1287ec6bbc366363ccdd3eea97bd470ccb5cc102d56b341f84a9fba7e8e9  libmdbx-amalgamated-0.13.7.tar.xz
 +
 +# Locally calculated
 +sha256  0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594  LICENSE
 +sha256  651f71b46c6bb0046d2122df7f9def9cb24f4dc28c5b11cef059f66565cda30f  NOTICE
 diff --git a/package/libmdbx/libmdbx.mk b/package/libmdbx/libmdbx.mk
 new file mode 100644
-index 0000000000..571757262e
+index 0000000000..bbb37f21a6
 --- /dev/null
 +++ b/package/libmdbx/libmdbx.mk
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,41 @@
 +################################################################################
 +#
 +# libmdbx
 +#
 +################################################################################
 +
-+LIBMDBX_VERSION = 0.13.6
++LIBMDBX_VERSION = 0.13.7
 +LIBMDBX_SOURCE = libmdbx-amalgamated-$(LIBMDBX_VERSION).tar.xz
 +LIBMDBX_SITE = https://libmdbx.dqdkfa.ru/release
 +LIBMDBX_SUPPORTS_IN_SOURCE_BUILD = NO
 +LIBMDBX_LICENSE = Apache-2.0
 +LIBMDBX_LICENSE_FILES = LICENSE NOTICE
-+LIBMDBX_REDISTRIBUTE = YES
 +LIBMDBX_STRIP_COMPONENTS = 0
 +LIBMDBX_INSTALL_STAGING = YES
 +
@@ -169,5 +168,5 @@ index 0000000000..571757262e
 +
 +$(eval $(cmake-package))
 -- 
-2.49.0
+2.50.1
 
