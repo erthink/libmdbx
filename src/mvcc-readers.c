@@ -204,7 +204,7 @@ static bool pid_insert(uint32_t *list, uint32_t pid) {
   return true;
 }
 
-__cold MDBX_INTERNAL int mvcc_cleanup_dead(MDBX_env *env, int rdt_locked, int *dead) {
+__cold int mvcc_cleanup_dead(MDBX_env *env, int rdt_locked, int *dead) {
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;

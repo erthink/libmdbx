@@ -3,7 +3,7 @@
 
 #include "internals.h"
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED MDBX_INTERNAL unsigned ceil_log2n(size_t value_uintptr) {
+MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED unsigned ceil_log2n(size_t value_uintptr) {
   assert(value_uintptr > 0 && value_uintptr < INT32_MAX);
   value_uintptr -= 1;
   value_uintptr |= value_uintptr >> 1;
@@ -14,7 +14,7 @@ MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED MDBX_INTERNAL unsigned ceil_log2n(
   return log2n_powerof2(value_uintptr + 1);
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION MDBX_INTERNAL unsigned log2n_powerof2(size_t value_uintptr) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION unsigned log2n_powerof2(size_t value_uintptr) {
   assert(value_uintptr > 0 && value_uintptr < INT32_MAX && is_powerof2(value_uintptr));
   assert((value_uintptr & -(intptr_t)value_uintptr) == value_uintptr);
   const uint32_t value_uint32 = (uint32_t)value_uintptr;
@@ -33,7 +33,7 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION MDBX_INTERNAL unsigned log2n_power
 #endif
 }
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_INTERNAL uint64_t rrxmrrxmsx_0(uint64_t v) {
+MDBX_NOTHROW_CONST_FUNCTION uint64_t rrxmrrxmsx_0(uint64_t v) {
   /* Pelle Evensen's mixer, https://bit.ly/2HOfynt */
   v ^= (v << 39 | v >> 25) ^ (v << 14 | v >> 50);
   v *= UINT64_C(0xA24BAED4963EE407);

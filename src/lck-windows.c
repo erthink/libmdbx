@@ -140,7 +140,7 @@ void lck_txn_unlock(MDBX_env *env) {
 #define LCK_LOWER LCK_LO_OFFSET, LCK_LO_LEN
 #define LCK_UPPER LCK_UP_OFFSET, LCK_UP_LEN
 
-MDBX_INTERNAL int lck_rdt_lock(MDBX_env *env) {
+int lck_rdt_lock(MDBX_env *env) {
   imports.srwl_AcquireShared(&env->remap_guard);
   if (env->lck_mmap.fd == INVALID_HANDLE_VALUE)
     return MDBX_SUCCESS; /* readonly database in readonly filesystem */
@@ -158,7 +158,7 @@ MDBX_INTERNAL int lck_rdt_lock(MDBX_env *env) {
   return rc;
 }
 
-MDBX_INTERNAL void lck_rdt_unlock(MDBX_env *env) {
+void lck_rdt_unlock(MDBX_env *env) {
   if (env->lck_mmap.fd != INVALID_HANDLE_VALUE && (env->flags & MDBX_EXCLUSIVE) == 0) {
     /* transition from S-E (locked) to S-? (used), e.g. unlock upper-part */
     int err = funlock(env->lck_mmap.fd, LCK_UPPER);
@@ -168,7 +168,7 @@ MDBX_INTERNAL void lck_rdt_unlock(MDBX_env *env) {
   imports.srwl_ReleaseShared(&env->remap_guard);
 }
 
-MDBX_INTERNAL int osal_lockfile(mdbx_filehandle_t fd, bool wait) {
+int osal_lockfile(mdbx_filehandle_t fd, bool wait) {
   return flock(fd, wait ? LCK_EXCLUSIVE | LCK_WAITFOR : LCK_EXCLUSIVE | LCK_DONTWAIT, 0, DXB_MAXLEN);
 }
 
@@ -204,7 +204,7 @@ static int suspend_and_append(mdbx_handle_array_t **array, const DWORD ThreadId)
   return MDBX_SUCCESS;
 }
 
-MDBX_INTERNAL int osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
+int osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
   eASSERT(env, (env->flags & MDBX_NOSTICKYTHREADS) == 0);
   const uintptr_t CurrentTid = GetCurrentThreadId();
   int rc;
@@ -271,7 +271,7 @@ MDBX_INTERNAL int osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_a
   return MDBX_SUCCESS;
 }
 
-MDBX_INTERNAL int osal_resume_threads_after_remap(mdbx_handle_array_t *array) {
+int osal_resume_threads_after_remap(mdbx_handle_array_t *array) {
   int rc = MDBX_SUCCESS;
   for (unsigned i = 0; i < array->count; ++i) {
     const HANDLE hThread = array->handles[i];
@@ -407,7 +407,7 @@ static int internal_seize_lck(HANDLE lfd) {
   return rc;
 }
 
-MDBX_INTERNAL int lck_seize(MDBX_env *env) {
+int lck_seize(MDBX_env *env) {
   const HANDLE fd4data = env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
   assert(fd4data != INVALID_HANDLE_VALUE);
   if (env->flags & MDBX_EXCLUSIVE)
@@ -449,7 +449,7 @@ MDBX_INTERNAL int lck_seize(MDBX_env *env) {
   return rc;
 }
 
-MDBX_INTERNAL int lck_downgrade(MDBX_env *env) {
+int lck_downgrade(MDBX_env *env) {
   const HANDLE fd4data = env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
   /* Transite from exclusive-write state (E-E) to used (S-?) */
   assert(fd4data != INVALID_HANDLE_VALUE);
@@ -479,7 +479,7 @@ MDBX_INTERNAL int lck_downgrade(MDBX_env *env) {
   return MDBX_SUCCESS /* 5) now at S-? (used), done */;
 }
 
-MDBX_INTERNAL int lck_upgrade(MDBX_env *env, bool dont_wait) {
+int lck_upgrade(MDBX_env *env, bool dont_wait) {
   /* Transite from used state (S-?) to exclusive-write (E-E) */
   assert(env->lck_mmap.fd != INVALID_HANDLE_VALUE);
 
@@ -513,7 +513,7 @@ MDBX_INTERNAL int lck_upgrade(MDBX_env *env, bool dont_wait) {
   return MDBX_SUCCESS /* 6) now at E-E (exclusive-write), done */;
 }
 
-MDBX_INTERNAL int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor, int global_uniqueness_flag) {
+int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor, int global_uniqueness_flag) {
   (void)env;
   (void)inprocess_neighbor;
   (void)global_uniqueness_flag;
@@ -534,7 +534,7 @@ MDBX_INTERNAL int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor, int glob
   return MDBX_SUCCESS;
 }
 
-MDBX_INTERNAL int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const uint32_t current_pid) {
+int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const uint32_t current_pid) {
   (void)current_pid;
   /* LY: should unmap before releasing the locks to avoid race condition and
    * STATUS_USER_MAPPED_FILE/ERROR_USER_MAPPED_FILE */
@@ -555,12 +555,12 @@ MDBX_INTERNAL int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const
 /*----------------------------------------------------------------------------*/
 /* reader checking (by pid) */
 
-MDBX_INTERNAL int lck_rpid_set(MDBX_env *env) {
+int lck_rpid_set(MDBX_env *env) {
   (void)env;
   return MDBX_SUCCESS;
 }
 
-MDBX_INTERNAL int lck_rpid_clear(MDBX_env *env) {
+int lck_rpid_clear(MDBX_env *env) {
   (void)env;
   return MDBX_SUCCESS;
 }
@@ -571,7 +571,7 @@ MDBX_INTERNAL int lck_rpid_clear(MDBX_env *env) {
  *   MDBX_RESULT_TRUE, if pid is live (unable to acquire lock)
  *   MDBX_RESULT_FALSE, if pid is dead (lock acquired)
  *   or otherwise the errcode. */
-MDBX_INTERNAL int lck_rpid_check(MDBX_env *env, uint32_t pid) {
+int lck_rpid_check(MDBX_env *env, uint32_t pid) {
   (void)env;
   HANDLE hProcess = OpenProcess(SYNCHRONIZE, FALSE, pid);
   int rc;
