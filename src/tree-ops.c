@@ -932,16 +932,7 @@ retry:
   return MDBX_PROBLEM;
 }
 
-static int do_page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *const newdata, pgno_t newpgno,
-                         const unsigned naf);
-
 int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *const newdata, pgno_t newpgno,
-               const unsigned naf) {
-  int rc = do_page_split(mc, newkey, newdata, newpgno, naf);
-  return rc;
-}
-
-int do_page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *const newdata, pgno_t newpgno,
                const unsigned naf) {
   unsigned flags;
   int rc = MDBX_SUCCESS, foliage = 0;
