@@ -1628,6 +1628,12 @@ int osal_fallocate(mdbx_filehandle_t fd, uint64_t length) {
   if (fcntl(fd, F_PREALLOCATE, &store))
     err = ignore_enosys_and_eremote(errno);
 #endif /* Apple */
+#if !defined(_WIN32) && !defined(_WIN64)
+  /* Workaround for testing: ignore ENOSPC for TMPFS/RAMFS.
+   * This is insignificant for production, but it helps in some tests using /dev/shm inside docker/containers. */
+  if (err == ENOSPC && osal_check_fs_incore(fd) == MDBX_RESULT_TRUE)
+    err = MDBX_RESULT_TRUE;
+#endif /* !Windows */
   return (err == MDBX_RESULT_TRUE) ? osal_ftruncate(fd, length) : err;
 }
 
