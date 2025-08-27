@@ -516,8 +516,8 @@ function probe {
       exec {LFD}> >(logger)
     fi
     ${NUMABIND} ${MONITOR} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=${REPEAT} --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} "$@" $case >&${LFD} \
-      && ${NUMABIND} ${MONITOR} ./mdbx_chk -q ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
-      && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${NUMABIND} ${MONITOR} ./mdbx_chk -q ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
+      && ${NUMABIND} ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
+      && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${NUMABIND} ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
       || failed
     if [ ${LFD} -ne 0 ]; then
       echo "@@@ END-OF-LOG/ITERATION" >&${LFD}
