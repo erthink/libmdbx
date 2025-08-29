@@ -661,9 +661,8 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
       }
 
       if (env->flags & MDBX_RDONLY) {
-        if (filesize_before & (globals.sys_allocation_granularity - 1)) {
-          ERROR("filesize should be rounded-up to system allocation granularity %u",
-                globals.sys_allocation_granularity);
+        if (filesize_before & (globals.sys_pagesize - 1)) {
+          ERROR("filesize should be rounded-up to system page size %u", globals.sys_pagesize);
           return MDBX_WANNA_RECOVERY;
         }
         WARNING("%s", "ignore filesize mismatch in readonly-mode");
