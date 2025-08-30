@@ -78,12 +78,33 @@ MDBX_NOTHROW_PURE_FUNCTION size_t bytes_ceil2sp_bytes(const MDBX_env *env, size_
   return ceil_powerof2(bytes, (env->ps > globals.sys_pagesize) ? env->ps : globals.sys_pagesize);
 }
 
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION size_t bytes_ceil2sp_pgno(const MDBX_env *env, size_t bytes) {
+  return bytes2pgno(env, bytes_ceil2sp_bytes(env, bytes));
+}
+
 MDBX_NOTHROW_PURE_FUNCTION size_t pgno_ceil2sp_bytes(const MDBX_env *env, size_t pgno) {
   return ceil_powerof2(pgno2bytes(env, pgno), globals.sys_pagesize);
 }
 
 MDBX_NOTHROW_PURE_FUNCTION pgno_t pgno_ceil2sp_pgno(const MDBX_env *env, size_t pgno) {
   return bytes2pgno(env, pgno_ceil2sp_bytes(env, pgno));
+}
+
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION size_t bytes_ceil2ag_bytes(const MDBX_env *env, size_t bytes) {
+  return ceil_powerof2(bytes,
+                       (env->ps > globals.sys_allocation_granularity) ? env->ps : globals.sys_allocation_granularity);
+}
+
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION size_t bytes_ceil2ag_pgno(const MDBX_env *env, size_t bytes) {
+  return bytes2pgno(env, bytes_ceil2ag_bytes(env, bytes));
+}
+
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION size_t pgno_ceil2ag_bytes(const MDBX_env *env, size_t pgno) {
+  return ceil_powerof2(pgno2bytes(env, pgno), globals.sys_allocation_granularity);
+}
+
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION pgno_t pgno_ceil2ag_pgno(const MDBX_env *env, size_t pgno) {
+  return bytes2pgno(env, pgno_ceil2ag_bytes(env, pgno));
 }
 
 /*----------------------------------------------------------------------------*/
