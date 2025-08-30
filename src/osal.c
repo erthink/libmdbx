@@ -3475,10 +3475,10 @@ void osal_ctor(void) {
   globals.sys_allocation_granularity = si.dwAllocationGranularity;
 #else
   globals.sys_pagesize = sysconf(_SC_PAGE_SIZE);
-  globals.sys_allocation_granularity = (MDBX_WORDBITS > 32) ? 65536 : 4096;
-  globals.sys_allocation_granularity = (globals.sys_allocation_granularity > globals.sys_pagesize)
+  globals.sys_allocation_granularity = (MDBX_WORDBITS > 32) ? 65536 : 16384;
+  globals.sys_allocation_granularity = (globals.sys_allocation_granularity >= globals.sys_pagesize * 2)
                                            ? globals.sys_allocation_granularity
-                                           : globals.sys_pagesize;
+                                           : globals.sys_pagesize * 4;
 #endif
   assert(globals.sys_pagesize > 0 && (globals.sys_pagesize & (globals.sys_pagesize - 1)) == 0);
   assert(globals.sys_allocation_granularity >= globals.sys_pagesize &&
