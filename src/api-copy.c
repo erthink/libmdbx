@@ -316,8 +316,8 @@ __cold static void compacting_fixup_meta(MDBX_env *env, meta_t *meta) {
     meta->geometry.now = meta->geometry.first_unallocated;
     const size_t aligner = pv2pages(meta->geometry.grow_pv ? meta->geometry.grow_pv : meta->geometry.shrink_pv);
     if (aligner) {
-      const pgno_t aligned = pgno_align2os_pgno(env, meta->geometry.first_unallocated + aligner -
-                                                         meta->geometry.first_unallocated % aligner);
+      const pgno_t aligned = pgno_ceil2sp_pgno(env, meta->geometry.first_unallocated + aligner -
+                                                        meta->geometry.first_unallocated % aligner);
       meta->geometry.now = aligned;
     }
   }
@@ -558,7 +558,7 @@ retry_snap_meta:
   meta_sign_as_steady(headcopy);
 
   /* Copy the data */
-  const size_t whole_size = pgno_align2os_bytes(env, txn->geo.end_pgno);
+  const size_t whole_size = pgno_ceil2sp_bytes(env, txn->geo.end_pgno);
   const size_t used_size = pgno2bytes(env, txn->geo.first_unallocated);
   jitter4testing(false);
 
@@ -691,7 +691,7 @@ __cold static int copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd, MDBX_copy_flags_t
 
   MDBX_env *const env = txn->env;
   const size_t buffer_size =
-      pgno_align2os_bytes(env, NUM_METAS) +
+      pgno_ceil2sp_bytes(env, NUM_METAS) +
       ceil_powerof2(((flags & MDBX_CP_COMPACT) ? 2 * (size_t)MDBX_ENVCOPY_WRITEBUF : (size_t)MDBX_ENVCOPY_WRITEBUF),
                     globals.sys_pagesize);
 

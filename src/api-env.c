@@ -1222,9 +1222,9 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
     new_geo.shrink_pv = pages2pv(bytes2pgno(env, shrink_threshold));
     new_geo.first_unallocated = current_geo->first_unallocated;
 
-    ENSURE(env, pgno_align2os_bytes(env, new_geo.lower) == (size_t)size_lower);
-    ENSURE(env, pgno_align2os_bytes(env, new_geo.upper) == (size_t)size_upper);
-    ENSURE(env, pgno_align2os_bytes(env, new_geo.now) == (size_t)size_now);
+    ENSURE(env, pgno_ceil2sp_bytes(env, new_geo.lower) == (size_t)size_lower);
+    ENSURE(env, pgno_ceil2sp_bytes(env, new_geo.upper) == (size_t)size_upper);
+    ENSURE(env, pgno_ceil2sp_bytes(env, new_geo.now) == (size_t)size_now);
     ENSURE(env, new_geo.grow_pv == pages2pv(pv2pages(new_geo.grow_pv)));
     ENSURE(env, new_geo.shrink_pv == pages2pv(pv2pages(new_geo.shrink_pv)));
 

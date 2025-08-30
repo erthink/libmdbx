@@ -220,11 +220,10 @@ MDBX_NOTHROW_PURE_FUNCTION static inline pgno_t bytes2pgno(const MDBX_env *env, 
   return (pgno_t)(bytes >> env->ps2ln);
 }
 
-MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t bytes_align2os_bytes(const MDBX_env *env, size_t bytes);
-
-MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pgno_align2os_bytes(const MDBX_env *env, size_t pgno);
-
-MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL pgno_t pgno_align2os_pgno(const MDBX_env *env, size_t pgno);
+/* align to system page size */
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t bytes_ceil2sp_bytes(const MDBX_env *env, size_t bytes);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pgno_ceil2sp_bytes(const MDBX_env *env, size_t pgno);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL pgno_t pgno_ceil2sp_pgno(const MDBX_env *env, size_t pgno);
 
 MDBX_NOTHROW_PURE_FUNCTION static inline pgno_t largechunk_npages(const MDBX_env *env, size_t bytes) {
   return bytes2pgno(env, PAGEHDRSZ - 1 + bytes) + 1;

@@ -235,7 +235,7 @@ __cold int meta_wipe_steady(MDBX_env *env, txnid_t inclusive_upto) {
   if (err == MDBX_RESULT_TRUE) {
     err = MDBX_SUCCESS;
     if (!MDBX_AVOID_MSYNC && (env->flags & MDBX_WRITEMAP)) {
-      err = osal_msync(&env->dxb_mmap, 0, pgno_align2os_bytes(env, NUM_METAS), MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+      err = osal_msync(&env->dxb_mmap, 0, pgno_ceil2sp_bytes(env, NUM_METAS), MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
 #if MDBX_ENABLE_PGOP_STAT
       env->lck->pgops.msync.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
@@ -267,7 +267,7 @@ int meta_sync(const MDBX_env *env, const meta_ptr_t head) {
   int rc = MDBX_RESULT_TRUE;
   if (env->flags & MDBX_WRITEMAP) {
     if (!MDBX_AVOID_MSYNC) {
-      rc = osal_msync(&env->dxb_mmap, 0, pgno_align2os_bytes(env, NUM_METAS), MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+      rc = osal_msync(&env->dxb_mmap, 0, pgno_ceil2sp_bytes(env, NUM_METAS), MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
 #if MDBX_ENABLE_PGOP_STAT
       env->lck->pgops.msync.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
@@ -405,7 +405,7 @@ __cold int __must_check_result meta_override(MDBX_env *env, size_t target, txnid
 #if MDBX_ENABLE_PGOP_STAT
     env->lck->pgops.msync.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
-    rc = osal_msync(&env->dxb_mmap, 0, pgno_align2os_bytes(env, model->geometry.first_unallocated),
+    rc = osal_msync(&env->dxb_mmap, 0, pgno_ceil2sp_bytes(env, model->geometry.first_unallocated),
                     MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
@@ -417,7 +417,7 @@ __cold int __must_check_result meta_override(MDBX_env *env, size_t target, txnid
 #if MDBX_ENABLE_PGOP_STAT
     env->lck->pgops.msync.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
-    rc = osal_msync(&env->dxb_mmap, 0, pgno_align2os_bytes(env, target + 1), MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+    rc = osal_msync(&env->dxb_mmap, 0, pgno_ceil2sp_bytes(env, target + 1), MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
   } else {
 #if MDBX_ENABLE_PGOP_STAT
     env->lck->pgops.wops.weak += 1;

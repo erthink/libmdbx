@@ -169,7 +169,7 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn, MDBX_warmup
     const troika_t troika = meta_tap(env);
     used_pgno = meta_recent(env, &troika).ptr_v->geometry.first_unallocated;
   }
-  const size_t used_range = pgno_align2os_bytes(env, used_pgno);
+  const size_t used_range = pgno_ceil2sp_bytes(env, used_pgno);
   const pgno_t mlock_pgno = bytes2pgno(env, used_range);
 
   int rc = MDBX_SUCCESS;

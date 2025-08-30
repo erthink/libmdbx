@@ -10,7 +10,7 @@ int iov_init(MDBX_txn *const txn, iov_ctx_t *ctx, size_t items, size_t npages, m
   ctx->fd = fd;
   ctx->coherency_timestamp =
       (check_coherence || txn->env->lck->pgops.incoherence.weak) ? 0 : UINT64_MAX /* не выполнять сверку */;
-  ctx->err = osal_ioring_prepare(ctx->ior, items, pgno_align2os_bytes(txn->env, npages));
+  ctx->err = osal_ioring_prepare(ctx->ior, items, pgno_ceil2sp_bytes(txn->env, npages));
   if (likely(ctx->err == MDBX_SUCCESS)) {
 #if MDBX_NEED_WRITTEN_RANGE
     ctx->flush_begin = MAX_PAGENO;

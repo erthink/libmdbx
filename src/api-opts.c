@@ -173,7 +173,7 @@ void env_options_adjust_defaults(MDBX_env *env) {
                                                           : basis >> factor;
   threshold =
       (threshold < env->geo_in_bytes.shrink || !env->geo_in_bytes.shrink) ? threshold : env->geo_in_bytes.shrink;
-  env->madv_threshold = bytes2pgno(env, bytes_align2os_bytes(env, threshold));
+  env->madv_threshold = bytes2pgno(env, bytes_ceil2sp_bytes(env, threshold));
 }
 
 //------------------------------------------------------------------------------

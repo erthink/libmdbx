@@ -74,16 +74,16 @@ __cold bool pv2pages_verify(void) {
 
 /*----------------------------------------------------------------------------*/
 
-MDBX_NOTHROW_PURE_FUNCTION size_t bytes_align2os_bytes(const MDBX_env *env, size_t bytes) {
+MDBX_NOTHROW_PURE_FUNCTION size_t bytes_ceil2sp_bytes(const MDBX_env *env, size_t bytes) {
   return ceil_powerof2(bytes, (env->ps > globals.sys_pagesize) ? env->ps : globals.sys_pagesize);
 }
 
-MDBX_NOTHROW_PURE_FUNCTION size_t pgno_align2os_bytes(const MDBX_env *env, size_t pgno) {
+MDBX_NOTHROW_PURE_FUNCTION size_t pgno_ceil2sp_bytes(const MDBX_env *env, size_t pgno) {
   return ceil_powerof2(pgno2bytes(env, pgno), globals.sys_pagesize);
 }
 
-MDBX_NOTHROW_PURE_FUNCTION pgno_t pgno_align2os_pgno(const MDBX_env *env, size_t pgno) {
-  return bytes2pgno(env, pgno_align2os_bytes(env, pgno));
+MDBX_NOTHROW_PURE_FUNCTION pgno_t pgno_ceil2sp_pgno(const MDBX_env *env, size_t pgno) {
+  return bytes2pgno(env, pgno_ceil2sp_bytes(env, pgno));
 }
 
 /*----------------------------------------------------------------------------*/
@@ -227,8 +227,8 @@ int cmp_equal_or_wrong(const MDBX_val *a, const MDBX_val *b) { return eq_fast(a,
 __cold void update_mlcnt(const MDBX_env *env, const pgno_t new_aligned_mlocked_pgno, const bool lock_not_release) {
   for (;;) {
     const pgno_t mlock_pgno_before = atomic_load32(&env->mlocked_pgno, mo_AcquireRelease);
-    eASSERT(env, pgno_align2os_pgno(env, mlock_pgno_before) == mlock_pgno_before);
-    eASSERT(env, pgno_align2os_pgno(env, new_aligned_mlocked_pgno) == new_aligned_mlocked_pgno);
+    eASSERT(env, pgno_ceil2sp_pgno(env, mlock_pgno_before) == mlock_pgno_before);
+    eASSERT(env, pgno_ceil2sp_pgno(env, new_aligned_mlocked_pgno) == new_aligned_mlocked_pgno);
     if (lock_not_release ? (mlock_pgno_before >= new_aligned_mlocked_pgno)
                          : (mlock_pgno_before <= new_aligned_mlocked_pgno))
       break;
@@ -282,9 +282,7 @@ __cold void munlock_after(const MDBX_env *env, const pgno_t aligned_pgno, const 
   }
 }
 
-__cold void munlock_all(const MDBX_env *env) {
-  munlock_after(env, 0, bytes_align2os_bytes(env, env->dxb_mmap.current));
-}
+__cold void munlock_all(const MDBX_env *env) { munlock_after(env, 0, bytes_ceil2sp_bytes(env, env->dxb_mmap.current)); }
 
 /*----------------------------------------------------------------------------*/
 
