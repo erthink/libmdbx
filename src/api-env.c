@@ -970,23 +970,24 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
     /* get untouched params from current TXN or DB */
     if (pagesize <= 0 || pagesize >= INT_MAX)
       pagesize = env->ps;
+    if (pagesize != (intptr_t)env->ps) {
+      rc = MDBX_EINVAL;
+      goto bailout;
+    }
+
     const geo_t *const geo = env->txn ? &env->txn->geo : &meta_recent(env, &env->basal_txn->wr.troika).ptr_c->geometry;
     if (size_lower < 0)
       size_lower = pgno2bytes(env, geo->lower);
     if (size_now < 0)
-      size_now = pgno2bytes(env, geo->now);
+      size_now = pgno_ceil2sp_bytes(env, geo->now);
     if (size_upper < 0)
-      size_upper = pgno2bytes(env, geo->upper);
+      size_upper = pgno_ceil2sp_bytes(env, geo->upper);
     if (growth_step < 0)
       growth_step = pgno2bytes(env, pv2pages(geo->grow_pv));
     if (shrink_threshold < 0)
       shrink_threshold = pgno2bytes(env, pv2pages(geo->shrink_pv));
 
-    if (pagesize != (intptr_t)env->ps) {
-      rc = MDBX_EINVAL;
-      goto bailout;
-    }
-    const size_t usedbytes = pgno2bytes(env, mvcc_snapshot_largest(env, geo->first_unallocated));
+    const size_t usedbytes = pgno_ceil2sp_bytes(env, mvcc_snapshot_largest(env, geo->first_unallocated));
     if ((size_t)size_upper < usedbytes) {
       rc = MDBX_MAP_FULL;
       goto bailout;
@@ -1098,21 +1099,22 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
     goto bailout;
   }
 
-  const size_t unit = (globals.sys_pagesize > (size_t)pagesize) ? globals.sys_pagesize : (size_t)pagesize;
-  size_lower = ceil_powerof2(size_lower, unit);
-  size_upper = ceil_powerof2(size_upper, unit);
-  size_now = ceil_powerof2(size_now, unit);
+  const size_t unit_ps = (globals.sys_pagesize > (size_t)pagesize) ? globals.sys_pagesize : (size_t)pagesize;
+  const size_t unit_ag = (globals.sys_allocation_granularity > unit_ps) ? globals.sys_allocation_granularity : unit_ps;
+  size_lower = ceil_powerof2(size_lower, unit_ps);
+  size_upper = ceil_powerof2(size_upper, unit_ag);
+  size_now = ceil_powerof2(size_now, unit_ag);
 
   /* LY: подбираем значение size_upper:
    *  - кратное размеру страницы
    *  - без нарушения MAX_MAPSIZE и MAX_PAGENO */
   while (unlikely((size_t)size_upper > MAX_MAPSIZE || (uint64_t)size_upper / pagesize > MAX_PAGENO + 1)) {
-    if ((size_t)size_upper < unit + MIN_MAPSIZE || (size_t)size_upper < (size_t)pagesize * (MIN_PAGENO + 1)) {
+    if ((size_t)size_upper < unit_ag + MIN_MAPSIZE || (size_t)size_upper < (size_t)pagesize * (MIN_PAGENO + 1)) {
       /* паранойа на случай переполнения при невероятных значениях */
       rc = MDBX_EINVAL;
       goto bailout;
     }
-    size_upper -= unit;
+    size_upper -= unit_ag;
     if ((size_t)size_upper < (size_t)size_lower)
       size_lower = size_upper;
   }
@@ -1139,11 +1141,11 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
   }
   if (growth_step == 0 && shrink_threshold > 0)
     growth_step = 1;
-  growth_step = ceil_powerof2(growth_step, unit);
+  growth_step = ceil_powerof2(growth_step, unit_ag);
 
   if (shrink_threshold < 0)
     shrink_threshold = growth_step + growth_step;
-  shrink_threshold = ceil_powerof2(shrink_threshold, unit);
+  shrink_threshold = ceil_powerof2(shrink_threshold, unit_ag);
 
   //----------------------------------------------------------------------------
 

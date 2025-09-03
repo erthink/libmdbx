@@ -614,11 +614,11 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
 
       /* altering fields to match geometry given from user */
       expected_filesize = pgno_ceil2sp_bytes(env, header.geometry.now);
-      header.geometry.now = bytes2pgno(env, env->geo_in_bytes.now);
-      header.geometry.lower = bytes2pgno(env, env->geo_in_bytes.lower);
-      header.geometry.upper = bytes2pgno(env, env->geo_in_bytes.upper);
-      header.geometry.grow_pv = pages2pv(bytes2pgno(env, env->geo_in_bytes.grow));
-      header.geometry.shrink_pv = pages2pv(bytes2pgno(env, env->geo_in_bytes.shrink));
+      header.geometry.now = bytes_ceil2sp_pgno(env, env->geo_in_bytes.now);
+      header.geometry.lower = bytes_ceil2sp_pgno(env, env->geo_in_bytes.lower);
+      header.geometry.upper = bytes_ceil2sp_pgno(env, env->geo_in_bytes.upper);
+      header.geometry.grow_pv = pages2pv(bytes_ceil2sp_pgno(env, env->geo_in_bytes.grow));
+      header.geometry.shrink_pv = pages2pv(bytes_ceil2sp_pgno(env, env->geo_in_bytes.shrink));
 
       VERBOSE("amending: root %" PRIaPGNO "/%" PRIaPGNO ", geo %" PRIaPGNO "/%" PRIaPGNO "-%" PRIaPGNO "/%" PRIaPGNO
               " +%u -%u, txn_id %" PRIaTXN ", %s",
@@ -632,11 +632,11 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
     ENSURE(env, header.geometry.now >= header.geometry.first_unallocated);
   } else {
     /* geo-params are not pre-configured by user, get current values from the meta. */
-    env->geo_in_bytes.now = pgno2bytes(env, header.geometry.now);
-    env->geo_in_bytes.lower = pgno2bytes(env, header.geometry.lower);
-    env->geo_in_bytes.upper = pgno2bytes(env, header.geometry.upper);
-    env->geo_in_bytes.grow = pgno2bytes(env, pv2pages(header.geometry.grow_pv));
-    env->geo_in_bytes.shrink = pgno2bytes(env, pv2pages(header.geometry.shrink_pv));
+    env->geo_in_bytes.now = pgno_ceil2sp_bytes(env, header.geometry.now);
+    env->geo_in_bytes.lower = pgno_ceil2sp_bytes(env, header.geometry.lower);
+    env->geo_in_bytes.upper = pgno_ceil2sp_bytes(env, header.geometry.upper);
+    env->geo_in_bytes.grow = pgno_ceil2sp_bytes(env, pv2pages(header.geometry.grow_pv));
+    env->geo_in_bytes.shrink = pgno_ceil2sp_bytes(env, pv2pages(header.geometry.shrink_pv));
   }
 
   ENSURE(env, pgno_ceil2sp_bytes(env, header.geometry.now) == env->geo_in_bytes.now);
