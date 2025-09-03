@@ -179,7 +179,7 @@ retry:;
     goto bailout;
   }
   if (!head.is_steady || ((flags & MDBX_SAFE_NOSYNC) == 0 && unsynced_pages)) {
-    DEBUG("meta-head %" PRIaPGNO ", %s, sync_pending %" PRIu64, data_page(head.ptr_c)->pgno,
+    DEBUG("meta-head %" PRIaPGNO ", %s, sync_pending %" PRIu64, payload2page(head.ptr_c)->pgno,
           durable_caption(head.ptr_c), unsynced_pages);
     meta_t meta = *head.ptr_c;
     rc = dxb_sync_locked(env, flags, &meta, &env->basal_txn->wr.troika);

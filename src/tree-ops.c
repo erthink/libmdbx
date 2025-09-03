@@ -463,7 +463,7 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
         return rc;
 
       key.iov_len = csrc->tree->dupfix_size;
-      key.iov_base = page_data(psrc);
+      key.iov_base = page2payload(psrc);
       size_t i = 0;
       do {
         rc = node_add_dupfix(cdst, ii++, &key);

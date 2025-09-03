@@ -1010,9 +1010,9 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
         }
         node_set_ds(node, data->iov_len);
         if (flags & MDBX_RESERVE)
-          data->iov_base = page_data(lp.page);
+          data->iov_base = page2payload(lp.page);
         else
-          memcpy(page_data(lp.page), data->iov_base, data->iov_len);
+          memcpy(page2payload(lp.page), data->iov_base, data->iov_len);
 
         if (AUDIT_ENABLED()) {
           err = cursor_validate(mc);
@@ -1234,7 +1234,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
           cASSERT(mc, fp->upper + growth < UINT16_MAX);
           mp->upper = fp->upper + (indx_t)growth;
           if (unlikely(fp_flags & P_DUPFIX)) {
-            memcpy(page_data(mp), page_data(fp), page_numkeys(fp) * fp->dupfix_ksize);
+            memcpy(page2payload(mp), page2payload(fp), page_numkeys(fp) * fp->dupfix_ksize);
             cASSERT(mc, (((mp->dupfix_ksize & page_numkeys(mp)) ^ mp->upper) & 1) == 0);
           } else {
             cASSERT(mc, (mp->upper & 1) == 0);
@@ -2114,7 +2114,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
       cASSERT(mc, is_filled(mc) && inner_filled(mc));
       MDBX_cursor *mx = &mc->subcur->cursor;
       data->iov_len = page_numkeys(mx->pg[mx->top]) * mx->tree->dupfix_size;
-      data->iov_base = page_data(mx->pg[mx->top]);
+      data->iov_base = page2payload(mx->pg[mx->top]);
       mx->ki[mx->top] = (indx_t)page_numkeys(mx->pg[mx->top]) - 1;
       return MDBX_SUCCESS;
     }

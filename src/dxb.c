@@ -726,7 +726,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
     meta_t const *const target = METAPAGE(env, env->stuck_meta);
     err = meta_validate_copy(env, target, &clone);
     if (unlikely(err != MDBX_SUCCESS)) {
-      ERROR("target meta[%u] is corrupted", bytes2pgno(env, ptr_dist(data_page(target), env->dxb_mmap.base)));
+      ERROR("target meta[%u] is corrupted", bytes2pgno(env, ptr_dist(payload2page(target), env->dxb_mmap.base)));
       meta_troika_dump(env, &troika);
       return MDBX_CORRUPTED;
     }
@@ -1161,7 +1161,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
       target = (meta_t *)head.ptr_c;
     else {
       NOTICE("skip update meta%" PRIaPGNO " for txn#%" PRIaTXN ", since it is already steady",
-             data_page(head.ptr_c)->pgno, head.txnid);
+             payload2page(head.ptr_c)->pgno, head.txnid);
       return MDBX_SUCCESS;
     }
   } else {
@@ -1173,7 +1173,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
   /* LY: step#2 - update meta-page. */
   DEBUG("writing meta%" PRIaPGNO " = root %" PRIaPGNO "/%" PRIaPGNO ", geo %" PRIaPGNO "/%" PRIaPGNO "-%" PRIaPGNO
         "/%" PRIaPGNO " +%u -%u, txn_id %" PRIaTXN ", %s",
-        data_page(target)->pgno, pending->trees.main.root, pending->trees.gc.root, pending->geometry.lower,
+        payload2page(target)->pgno, pending->trees.main.root, pending->trees.gc.root, pending->geometry.lower,
         pending->geometry.first_unallocated, pending->geometry.now, pending->geometry.upper,
         pv2pages(pending->geometry.grow_pv), pv2pages(pending->geometry.shrink_pv), pending->unsafe_txnid,
         durable_caption(pending));
@@ -1249,7 +1249,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
 #if MDBX_ENABLE_PGOP_STAT
         env->lck->pgops.wops.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
-        const page_t *page = data_page(target);
+        const page_t *page = payload2page(target);
         rc = osal_pwrite(env->fd4meta, page, env->ps, ptr_dist(page, env->dxb_mmap.base));
         if (likely(rc == MDBX_SUCCESS)) {
           osal_flush_incoherent_mmap(target, sizeof(meta_t), globals.sys_pagesize);

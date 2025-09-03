@@ -566,7 +566,7 @@ status_done:
     if (likely(npages == 1 && suitable4loose(txn, pgno)) && (di || !txn->wr.dirtylist)) {
       DEBUG("loosen dirty page %" PRIaPGNO, pgno);
       if (MDBX_DEBUG != 0 || unlikely(txn->env->flags & MDBX_PAGEPERTURB))
-        memset(page_data(mp), -1, txn->env->ps - PAGEHDRSZ);
+        memset(page2payload(mp), -1, txn->env->ps - PAGEHDRSZ);
       mp->txnid = INVALID_TXNID;
       mp->flags = P_LOOSE;
       page_next(mp) = txn->wr.loose_pages;
@@ -575,8 +575,8 @@ status_done:
 #if MDBX_ENABLE_REFUND
       txn->wr.loose_refund_wl = (pgno + 2 > txn->wr.loose_refund_wl) ? pgno + 2 : txn->wr.loose_refund_wl;
 #endif /* MDBX_ENABLE_REFUND */
-      VALGRIND_MAKE_MEM_NOACCESS(page_data(mp), txn->env->ps - PAGEHDRSZ);
-      MDBX_ASAN_POISON_MEMORY_REGION(page_data(mp), txn->env->ps - PAGEHDRSZ);
+      VALGRIND_MAKE_MEM_NOACCESS(page2payload(mp), txn->env->ps - PAGEHDRSZ);
+      MDBX_ASAN_POISON_MEMORY_REGION(page2payload(mp), txn->env->ps - PAGEHDRSZ);
       return MDBX_SUCCESS;
     }
 
@@ -600,8 +600,9 @@ status_done:
 #endif
         page_kill(txn, mp, pgno, npages);
       if ((txn->flags & MDBX_WRITEMAP) == 0) {
-        VALGRIND_MAKE_MEM_NOACCESS(page_data(pgno2page(txn->env, pgno)), pgno2bytes(txn->env, npages) - PAGEHDRSZ);
-        MDBX_ASAN_POISON_MEMORY_REGION(page_data(pgno2page(txn->env, pgno)), pgno2bytes(txn->env, npages) - PAGEHDRSZ);
+        VALGRIND_MAKE_MEM_NOACCESS(page2payload(pgno2page(txn->env, pgno)), pgno2bytes(txn->env, npages) - PAGEHDRSZ);
+        MDBX_ASAN_POISON_MEMORY_REGION(page2payload(pgno2page(txn->env, pgno)),
+                                       pgno2bytes(txn->env, npages) - PAGEHDRSZ);
       }
     }
   skip_invalidate:

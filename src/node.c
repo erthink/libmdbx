@@ -162,7 +162,7 @@ __hot int __must_check_result node_add_leaf(MDBX_cursor *mc, size_t indx, const 
     }
   } else {
     poke_pgno(nodedata, largepage->pgno);
-    nodedata = page_data(largepage);
+    nodedata = page2payload(largepage);
   }
   if (unlikely(flags & MDBX_RESERVE))
     data->iov_base = nodedata;
@@ -233,7 +233,7 @@ __noinline int node_read_bigdata(MDBX_cursor *mc, const node_t *node, MDBX_val *
   }
 
   cASSERT(mc, page_type(lp.page) == P_LARGE);
-  data->iov_base = page_data(lp.page);
+  data->iov_base = page2payload(lp.page);
   if (!MDBX_DISABLE_VALIDATION) {
     const MDBX_env *env = mc->txn->env;
     const size_t dsize = data->iov_len;

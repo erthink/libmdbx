@@ -213,7 +213,7 @@ static int meta_unsteady(MDBX_env *env, const txnid_t inclusive_upto, const pgno
     osal_flush_incoherent_cpu_writeback();
     if (!MDBX_AVOID_MSYNC)
       return MDBX_RESULT_TRUE;
-    ptr = data_page(meta);
+    ptr = payload2page(meta);
     offset = ptr_dist(ptr, env->dxb_mmap.base);
     bytes = env->ps;
   }
@@ -275,7 +275,7 @@ int meta_sync(const MDBX_env *env, const meta_ptr_t head) {
 #if MDBX_ENABLE_PGOP_ST
       env->lck->pgops.wops.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
-      const page_t *page = data_page(head.ptr_c);
+      const page_t *page = payload2page(head.ptr_c);
       rc = osal_pwrite(env->fd4meta, page, env->ps, ptr_dist(page, env->dxb_mmap.base));
 
       if (likely(rc == MDBX_SUCCESS) && env->fd4meta == env->lazy_fd) {
@@ -652,5 +652,5 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
 
 __cold int meta_validate_copy(MDBX_env *env, const meta_t *meta, meta_t *dest) {
   *dest = *meta;
-  return meta_validate(env, dest, data_page(meta), bytes2pgno(env, ptr_dist(meta, env->dxb_mmap.base)), nullptr);
+  return meta_validate(env, dest, payload2page(meta), bytes2pgno(env, ptr_dist(meta, env->dxb_mmap.base)), nullptr);
 }

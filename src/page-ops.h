@@ -132,8 +132,8 @@ static inline void page_wash(MDBX_txn *txn, size_t di, page_t *const mp, const s
     txn->wr.writemap_dirty_npages -= (txn->wr.writemap_dirty_npages > npages) ? npages : txn->wr.writemap_dirty_npages;
   }
   VALGRIND_MAKE_MEM_UNDEFINED(mp, PAGEHDRSZ);
-  VALGRIND_MAKE_MEM_NOACCESS(page_data(mp), pgno2bytes(txn->env, npages) - PAGEHDRSZ);
-  MDBX_ASAN_POISON_MEMORY_REGION(page_data(mp), pgno2bytes(txn->env, npages) - PAGEHDRSZ);
+  VALGRIND_MAKE_MEM_NOACCESS(page2payload(mp), pgno2bytes(txn->env, npages) - PAGEHDRSZ);
+  MDBX_ASAN_POISON_MEMORY_REGION(page2payload(mp), pgno2bytes(txn->env, npages) - PAGEHDRSZ);
 }
 
 MDBX_INTERNAL size_t page_subleaf2_reserve(const MDBX_env *env, size_t host_page_room, size_t subpage_len,

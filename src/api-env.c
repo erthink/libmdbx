@@ -517,7 +517,7 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname, MDBX_env_flags
 
   DEBUG("opened database version %u, pagesize %u", (uint8_t)unaligned_peek_u64(4, head.ptr_c->magic_and_version),
         env->ps);
-  DEBUG("using meta page %" PRIaPGNO ", txn %" PRIaTXN, data_page(head.ptr_c)->pgno, head.txnid);
+  DEBUG("using meta page %" PRIaPGNO ", txn %" PRIaTXN, payload2page(head.ptr_c)->pgno, head.txnid);
   DEBUG("depth: %u", db->height);
   DEBUG("entries: %" PRIu64, db->items);
   DEBUG("branch pages: %" PRIaPGNO, db->branch_pages);

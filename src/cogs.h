@@ -248,13 +248,13 @@ static inline void get_key_optional(const node_t *node, MDBX_val *keyptr /* __ma
     *keyptr = get_key(node);
 }
 
-MDBX_NOTHROW_PURE_FUNCTION static inline void *page_data(const page_t *mp) { return ptr_disp(mp, PAGEHDRSZ); }
+MDBX_NOTHROW_PURE_FUNCTION static inline void *page2payload(const page_t *mp) { return ptr_disp(mp, PAGEHDRSZ); }
 
-MDBX_NOTHROW_PURE_FUNCTION static inline const page_t *data_page(const void *data) {
+MDBX_NOTHROW_PURE_FUNCTION static inline const page_t *payload2page(const void *data) {
   return container_of(data, page_t, entries);
 }
 
-MDBX_NOTHROW_PURE_FUNCTION static inline meta_t *page_meta(page_t *mp) { return (meta_t *)page_data(mp); }
+MDBX_NOTHROW_PURE_FUNCTION static inline meta_t *page_meta(page_t *mp) { return (meta_t *)page2payload(mp); }
 
 MDBX_NOTHROW_PURE_FUNCTION static inline size_t page_numkeys(const page_t *mp) {
   assert(mp->lower <= mp->upper);
