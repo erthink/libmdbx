@@ -236,6 +236,38 @@ MDBX_NOTHROW_PURE_FUNCTION static inline pgno_t largechunk_npages(const MDBX_env
   return bytes2pgno(env, PAGEHDRSZ - 1 + bytes) + 1;
 }
 
+typedef struct alignkey {
+  MDBX_val key;
+  uint64_t intbuf;
+} alignkey_t;
+
+static inline int check_key(const MDBX_cursor *mc, const MDBX_val *key, alignkey_t *alignkey) {
+  /* coverity[logical_vs_bitwise] */
+  if (unlikely(key->iov_len < mc->clc->k.lmin ||
+               (key->iov_len > mc->clc->k.lmax &&
+                (mc->clc->k.lmin == mc->clc->k.lmax || MDBX_DEBUG || MDBX_FORCE_ASSERTIONS)))) {
+    cASSERT(mc, !"Invalid key-size");
+    return MDBX_BAD_VALSIZE;
+  }
+
+  alignkey->key = *key;
+  if (mc->tree->flags & MDBX_INTEGERKEY) {
+    if (alignkey->key.iov_len == 8) {
+      if (unlikely(7 & (uintptr_t)alignkey->key.iov_base))
+        /* copy instead of return error to avoid break compatibility */
+        alignkey->key.iov_base = bcopy_8(&alignkey->intbuf, alignkey->key.iov_base);
+    } else if (alignkey->key.iov_len == 4) {
+      if (unlikely(3 & (uintptr_t)alignkey->key.iov_base))
+        /* copy instead of return error to avoid break compatibility */
+        alignkey->key.iov_base = bcopy_4(&alignkey->intbuf, alignkey->key.iov_base);
+    } else {
+      cASSERT(mc, !"key-size is invalid for MDBX_INTEGERKEY");
+      return MDBX_BAD_VALSIZE;
+    }
+  }
+  return MDBX_SUCCESS;
+}
+
 MDBX_NOTHROW_PURE_FUNCTION static inline MDBX_val get_key(const node_t *node) {
   MDBX_val key;
   key.iov_len = node_ks(node);

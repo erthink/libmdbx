@@ -1723,34 +1723,10 @@ fail:
 __hot csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cursor_op op) {
   DKBUF_DEBUG;
 
-  csr_t ret;
-  ret.exact = false;
-  /* coverity[logical_vs_bitwise] */
-  if (unlikely(key->iov_len < mc->clc->k.lmin ||
-               (key->iov_len > mc->clc->k.lmax &&
-                (mc->clc->k.lmin == mc->clc->k.lmax || MDBX_DEBUG || MDBX_FORCE_ASSERTIONS)))) {
-    cASSERT(mc, !"Invalid key-size");
-    ret.err = MDBX_BAD_VALSIZE;
+  alignkey_t aligned;
+  csr_t ret = {.exact = false, .err = check_key(mc, key, &aligned)};
+  if (unlikely(ret.err != MDBX_SUCCESS))
     return ret;
-  }
-
-  MDBX_val aligned_key = *key;
-  uint64_t aligned_key_buf;
-  if (mc->tree->flags & MDBX_INTEGERKEY) {
-    if (aligned_key.iov_len == 8) {
-      if (unlikely(7 & (uintptr_t)aligned_key.iov_base))
-        /* copy instead of return error to avoid break compatibility */
-        aligned_key.iov_base = bcopy_8(&aligned_key_buf, aligned_key.iov_base);
-    } else if (aligned_key.iov_len == 4) {
-      if (unlikely(3 & (uintptr_t)aligned_key.iov_base))
-        /* copy instead of return error to avoid break compatibility */
-        aligned_key.iov_base = bcopy_4(&aligned_key_buf, aligned_key.iov_base);
-    } else {
-      cASSERT(mc, !"key-size is invalid for MDBX_INTEGERKEY");
-      ret.err = MDBX_BAD_VALSIZE;
-      return ret;
-    }
-  }
 
   page_t *mp;
   node_t *node = nullptr;
@@ -1778,7 +1754,7 @@ __hot csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cur
       nodekey = get_key(node);
       inner_gone(mc);
     }
-    int cmp = mc->clc->k.cmp(&aligned_key, &nodekey);
+    int cmp = mc->clc->k.cmp(&aligned.key, &nodekey);
     if (unlikely(cmp == 0)) {
       /* Probably happens rarely, but first node on the page was the one we wanted. */
       mc->ki[mc->top] = 0;
@@ -1796,7 +1772,7 @@ __hot csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cur
           node = page_node(mp, nkeys - 1);
           nodekey = get_key(node);
         }
-        cmp = mc->clc->k.cmp(&aligned_key, &nodekey);
+        cmp = mc->clc->k.cmp(&aligned.key, &nodekey);
         if (cmp == 0) {
           /* last node was the one we wanted */
           mc->ki[mc->top] = (indx_t)(nkeys - 1);
@@ -1817,7 +1793,7 @@ __hot csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cur
               node = page_node(mp, mc->ki[mc->top]);
               nodekey = get_key(node);
             }
-            cmp = mc->clc->k.cmp(&aligned_key, &nodekey);
+            cmp = mc->clc->k.cmp(&aligned.key, &nodekey);
             if (cmp == 0) {
               /* current node was the one we wanted */
               ret.exact = true;
@@ -1867,7 +1843,7 @@ __hot csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cur
   cASSERT(mc, !inner_pointed(mc));
 
 continue_other_pages:
-  ret.err = tree_search(mc, &aligned_key, 0);
+  ret.err = tree_search(mc, &aligned.key, 0);
   if (unlikely(ret.err != MDBX_SUCCESS))
     return ret;
 
@@ -1878,7 +1854,7 @@ continue_other_pages:
 
 search_node:
   cASSERT(mc, is_pointed(mc) && !inner_pointed(mc));
-  struct node_search_result nsr = node_search(mc, &aligned_key);
+  struct node_search_result nsr = node_search(mc, &aligned.key);
   node = nsr.node;
   ret.exact = nsr.exact;
   if (!ret.exact) {
