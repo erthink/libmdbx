@@ -6043,11 +6043,10 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int mdbx_is_dirty(const MDBX_txn *txn, co
 /** \brief Sequence generation for a table.
  * \ingroup c_crud
  *
- * The function allows to create a linear sequence of unique positive integers
- * for each table. The function can be called for a read transaction to
- * retrieve the current sequence value, and the increment must be zero.
- * Sequence changes become visible outside the current write transaction after
- * it is committed, and discarded on abort.
+ * The function provides a linear sequence of unique positive integers for each table with acquire/allocate semantics.
+ * The function can be called for a read transaction to retrieve the current sequence value while the increment must be
+ * zero. Sequence changes become visible outside the current write transaction after it is committed, and discarded on
+ * abort.
  *
  * \param [in] txn        A transaction handle returned
  *                        by \ref mdbx_txn_begin().
@@ -6060,7 +6059,7 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int mdbx_is_dirty(const MDBX_txn *txn, co
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
  * \retval MDBX_RESULT_TRUE   Increasing the sequence has resulted in an
- *                            overflow and therefore cannot be executed. */
+ *                            overflow and therefore cannot be performed. */
 LIBMDBX_API int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result, uint64_t increment);
 
 /** \brief Compare two keys according to a particular table.
