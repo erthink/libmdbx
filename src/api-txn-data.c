@@ -191,7 +191,7 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
          * not to the beginning of a data. */
         return LOG_IFERR(MDBX_EINVAL);
       }
-      return ((txn->flags & MDBX_TXN_RDONLY) || !is_modifable(txn, page)) ? MDBX_RESULT_FALSE : MDBX_RESULT_TRUE;
+      return (page->txnid > txn_basis_snapshot(txn)) ? MDBX_RESULT_TRUE : MDBX_RESULT_FALSE;
     }
     if ((size_t)offset < env->dxb_mmap.limit) {
       /* Указатель адресует что-то в пределах mmap, но за границей
