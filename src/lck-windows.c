@@ -24,26 +24,35 @@ static int flock_with_event(HANDLE fd, HANDLE event, unsigned flags, size_t offs
   ov.hEvent = event;
   ov.Offset = (DWORD)offset;
   ov.OffsetHigh = HIGH_DWORD(offset);
-  if (LockFileEx(fd, flags, 0, (DWORD)bytes, HIGH_DWORD(bytes), &ov)) {
-    TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << %s", fd, event, flags, offset, bytes, "done");
-    return MDBX_SUCCESS;
-  }
 
-  DWORD rc = GetLastError();
-  if (rc == ERROR_IO_PENDING) {
-    if (event) {
-      if (GetOverlappedResult(fd, &ov, &rc, true)) {
-        TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << %s", fd, event, flags, offset, bytes,
-              "overlapped-done");
-        return MDBX_SUCCESS;
-      }
-      rc = GetLastError();
-    } else
-      CancelIo(fd);
+  int retry_left = (flags & LOCKFILE_FAIL_IMMEDIATELY) ? 3 : 0;
+  while (true) {
+    if (LockFileEx(fd, flags, 0, (DWORD)bytes, HIGH_DWORD(bytes), &ov)) {
+      TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << %s", fd, event, flags, offset, bytes, "done");
+      return MDBX_SUCCESS;
+    }
+
+    DWORD rc = GetLastError();
+    if (rc == ERROR_IO_PENDING) {
+      if (event) {
+        if (GetOverlappedResult(fd, &ov, &rc, true)) {
+          TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << %s", fd, event, flags, offset, bytes,
+                "overlapped-done");
+          return MDBX_SUCCESS;
+        }
+        rc = GetLastError();
+      } else
+        CancelIo(fd);
+    }
+
+    if (rc != ERROR_LOCK_VIOLATION || --retry_left < 1) {
+      TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << err %d", fd, event, flags, offset, bytes,
+            (int)rc);
+      return (int)rc;
+    }
+
+    SleepEx(0, true);
   }
-  TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << err %d", fd, event, flags, offset, bytes,
-        (int)rc);
-  return (int)rc;
 }
 
 static inline int flock(HANDLE fd, unsigned flags, size_t offset, size_t bytes) {
@@ -94,14 +103,6 @@ int lck_txn_lock(MDBX_env *env, bool dontwait) {
   const HANDLE fd4data = env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
   int rc = flock_with_event(fd4data, env->dxb_lock_event,
                             dontwait ? (LCK_EXCLUSIVE | LCK_DONTWAIT) : (LCK_EXCLUSIVE | LCK_WAITFOR), DXB_BODY);
-  if (rc == ERROR_LOCK_VIOLATION && dontwait) {
-    SleepEx(0, true);
-    rc = flock_with_event(fd4data, env->dxb_lock_event, LCK_EXCLUSIVE | LCK_DONTWAIT, DXB_BODY);
-    if (rc == ERROR_LOCK_VIOLATION) {
-      SleepEx(0, true);
-      rc = flock_with_event(fd4data, env->dxb_lock_event, LCK_EXCLUSIVE | LCK_DONTWAIT, DXB_BODY);
-    }
-  }
   if (rc == MDBX_SUCCESS) {
   done:
     if (env->basal_txn)
