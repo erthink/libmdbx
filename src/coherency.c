@@ -103,15 +103,7 @@ __cold int coherency_timeout(uint64_t *timestamp, intptr_t pgno, const MDBX_env 
   }
 
   osal_memory_fence(mo_AcquireRelease, true);
-#if defined(_WIN32) || defined(_WIN64)
-  SwitchToThread();
-#elif defined(__linux__) || defined(__gnu_linux__) || defined(_UNIX03_SOURCE)
-  sched_yield();
-#elif (defined(_GNU_SOURCE) && __GLIBC_PREREQ(2, 1)) || defined(_OPEN_THREADS)
-  pthread_yield();
-#else
-  usleep(42);
-#endif
+  osal_yield();
   return MDBX_RESULT_TRUE;
 }
 

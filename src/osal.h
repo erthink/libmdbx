@@ -171,6 +171,14 @@ typedef char pathchar_t;
 #define MDBX_PRIsPATH "s"
 #endif
 
+static inline bool osal_yield(void) {
+#if defined(_WIN32) || defined(_WIN64)
+  return SleepEx(0, true) == WAIT_IO_COMPLETION;
+#else
+  return sched_yield() != 0;
+#endif
+}
+
 typedef struct osal_mmap {
   union {
     void *base;

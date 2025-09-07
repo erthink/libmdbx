@@ -166,13 +166,8 @@ int dbi_defer_release(MDBX_env *const env, defer_free_item_t *const chain) {
 #endif /* MDBX_ENABLE_DBI_LOCKFREE */
 
   ENSURE(env, osal_fastmutex_release(&env->dbi_lock) == MDBX_SUCCESS);
-  if (length > 42) {
-#if defined(_WIN32) || defined(_WIN64)
-    SwitchToThread();
-#else
-    sched_yield();
-#endif /* Windows */
-  }
+  if (length > 42)
+    osal_yield();
   while (obsolete_chain) {
     defer_free_item_t *item = obsolete_chain;
     obsolete_chain = obsolete_chain->next;

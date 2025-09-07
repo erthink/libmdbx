@@ -2624,7 +2624,7 @@ __cold void osal_jitter(bool tiny) {
       break;
 #if defined(_WIN32) || defined(_WIN64)
     if (coin < 43 * 2 / 3)
-      SwitchToThread();
+      osal_yield();
     else {
       static HANDLE timer;
       if (!timer)
@@ -2639,7 +2639,7 @@ __cold void osal_jitter(bool tiny) {
       break;
     }
 #else
-    sched_yield();
+    osal_yield();
     if (coin > 43 * 2 / 3)
       usleep(coin);
 #endif

@@ -593,11 +593,6 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
   return sigbreak ? EINTR : 0 /* timeout */;
 }
 
-void osal_yield(void) {
-  if (sched_yield())
-    failure_perror("sched_yield()", errno);
-}
-
 void osal_udelay(size_t us) {
   chrono::time until, now = chrono::now_monotonic();
   until.fixedpoint = now.fixedpoint + chrono::from_us(us).fixedpoint;

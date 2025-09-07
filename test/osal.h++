@@ -20,7 +20,6 @@ bool osal_multiactor_mode(void);
 
 int osal_delay(unsigned seconds);
 void osal_udelay(size_t us);
-void osal_yield(void);
 bool osal_istty(int fd);
 std::string osal_tempdir(void);
 
