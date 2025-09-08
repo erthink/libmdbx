@@ -150,6 +150,27 @@ static int lck_op(const mdbx_filehandle_t fd, int cmd, const int lck, const off_
   }
 }
 
+static int lck_setlk_with3retries(const mdbx_filehandle_t fd, const int lck, const off_t offset, off_t len) {
+  assert(lck != F_UNLCK);
+  int retry_left = 3;
+#if defined(__ANDROID_API__)
+  retry_left *= 3;
+#endif /* Android */
+  while (true) {
+    int rc = lck_op(fd, op_setlk, lck, offset, len);
+    if (!(rc == EAGAIN || rc == EACCES || rc == EBUSY || rc == EWOULDBLOCK || rc == EDEADLK) || --retry_left < 1)
+      return rc;
+#if defined(__ANDROID_API__)
+    if (retry_left == 5 || retry_left == 3) {
+      usleep(1000 * 42 / 2);
+      continue;
+    }
+#endif /* Android */
+    if (osal_yield())
+      return rc;
+  }
+}
+
 int osal_lockfile(mdbx_filehandle_t fd, bool wait) {
 #if MDBX_USE_OFDLOCKS
   if (unlikely(op_setlk == 0))
@@ -279,7 +300,7 @@ __cold int lck_seize(MDBX_env *env) {
 
   if (env->lck_mmap.fd == INVALID_HANDLE_VALUE) {
     /* LY: without-lck mode (e.g. exclusive or on read-only filesystem) */
-    rc = lck_op(env->lazy_fd, op_setlk, (env->flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0, OFF_T_MAX);
+    rc = lck_setlk_with3retries(env->lazy_fd, (env->flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0, OFF_T_MAX);
     if (rc != MDBX_SUCCESS) {
       ERROR("%s, err %u", "without-lck", rc);
       eASSERT(env, MDBX_IS_ERROR(rc));
@@ -287,9 +308,6 @@ __cold int lck_seize(MDBX_env *env) {
     }
     return MDBX_RESULT_TRUE /* Done: return with exclusive locking. */;
   }
-#if defined(_POSIX_PRIORITY_SCHEDULING) && _POSIX_PRIORITY_SCHEDULING > 0
-  sched_yield();
-#endif
 
 retry:
   if (rc == MDBX_RESULT_TRUE) {
@@ -302,14 +320,14 @@ retry:
   }
 
   /* Firstly try to get exclusive locking.  */
-  rc = lck_op(env->lck_mmap.fd, op_setlk, F_WRLCK, 0, 1);
+  rc = lck_setlk_with3retries(env->lck_mmap.fd, F_WRLCK, 0, 1);
   if (rc == MDBX_SUCCESS) {
     rc = check_fstat(env);
     if (MDBX_IS_ERROR(rc))
       return rc;
 
   continue_dxb_exclusive:
-    rc = lck_op(env->lazy_fd, op_setlk, (env->flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0, OFF_T_MAX);
+    rc = lck_setlk_with3retries(env->lazy_fd, (env->flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0, OFF_T_MAX);
     if (rc == MDBX_SUCCESS)
       return MDBX_RESULT_TRUE /* Done: return with exclusive locking. */;
 
@@ -357,7 +375,7 @@ retry:
   }
 
   /* got shared, retry exclusive */
-  rc = lck_op(env->lck_mmap.fd, op_setlk, F_WRLCK, 0, 1);
+  rc = lck_setlk_with3retries(env->lck_mmap.fd, F_WRLCK, 0, 1);
   if (rc == MDBX_SUCCESS)
     goto continue_dxb_exclusive;
 
@@ -368,7 +386,7 @@ retry:
   }
 
   /* Lock against another process operating in without-lck or exclusive mode. */
-  rc = lck_op(env->lazy_fd, op_setlk, (env->flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, env->pid, 1);
+  rc = lck_setlk_with3retries(env->lazy_fd, (env->flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, env->pid, 1);
   if (rc != MDBX_SUCCESS) {
     ERROR("%s, err %u", "lock-against-without-lck", rc);
     eASSERT(env, MDBX_IS_ERROR(rc));
@@ -391,7 +409,7 @@ int lck_downgrade(MDBX_env *env) {
       rc = lck_op(env->lazy_fd, op_setlk, F_UNLCK, env->pid + 1, OFF_T_MAX - env->pid - 1);
   }
   if (rc == MDBX_SUCCESS)
-    rc = lck_op(env->lck_mmap.fd, op_setlk, F_RDLCK, 0, 1);
+    rc = lck_setlk_with3retries(env->lck_mmap.fd, F_RDLCK, 0, 1);
   if (unlikely(rc != 0)) {
     ERROR("%s, err %u", "lck", rc);
     assert(MDBX_IS_ERROR(rc));
@@ -410,10 +428,10 @@ int lck_upgrade(MDBX_env *env, bool dont_wait) {
     rc = (env->pid > 1) ? lck_op(env->lazy_fd, cmd, F_WRLCK, 0, env->pid - 1) : MDBX_SUCCESS;
     if (rc == MDBX_SUCCESS) {
       rc = lck_op(env->lazy_fd, cmd, F_WRLCK, env->pid + 1, OFF_T_MAX - env->pid - 1);
-      if (rc != MDBX_SUCCESS && env->pid > 1 && lck_op(env->lazy_fd, op_setlk, F_UNLCK, 0, env->pid - 1))
+      if (rc != MDBX_SUCCESS && env->pid > 1 && lck_setlk_with3retries(env->lazy_fd, F_UNLCK, 0, env->pid - 1))
         rc = MDBX_PANIC;
     }
-    if (rc != MDBX_SUCCESS && lck_op(env->lck_mmap.fd, op_setlk, F_RDLCK, 0, 1))
+    if (rc != MDBX_SUCCESS && lck_setlk_with3retries(env->lck_mmap.fd, F_RDLCK, 0, 1))
       rc = MDBX_PANIC;
   }
   if (unlikely(rc != 0)) {
