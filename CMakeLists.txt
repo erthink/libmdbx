@@ -579,9 +579,8 @@ if(WIN32 AND EXISTS "${MDBX_SOURCE_DIR}/ntdll.def")
   if(MSVC)
     if(NOT MSVC_LIB_EXE)
       # Find lib.exe
-      get_filename_component(CL_NAME ${CMAKE_C_COMPILER} NAME)
-      string(REPLACE cl.exe lib.exe MSVC_LIB_EXE ${CL_NAME})
-      find_program(MSVC_LIB_EXE ${MSVC_LIB_EXE})
+      get_filename_component(CC_DIR ${CMAKE_C_COMPILER} DIRECTORY)
+      find_program(MSVC_LIB_EXE "lib.exe" HINTS ${CC_DIR})
     endif()
     if(MSVC_LIB_EXE)
       message(STATUS "Found MSVC's lib tool: ${MSVC_LIB_EXE}")
@@ -593,25 +592,24 @@ if(WIN32 AND EXISTS "${MDBX_SOURCE_DIR}/ntdll.def")
         COMMAND ${MSVC_LIB_EXE} /def:"${MDBX_SOURCE_DIR}/ntdll.def" /out:"${MDBX_NTDLL_EXTRA_IMPLIB}"
                 ${INITIAL_CMAKE_STATIC_LINKER_FLAGS})
     else()
-      message(WARNING "MSVC's lib tool not found")
+      message(WARNING "MSVC's lib.exe not found")
     endif()
   elseif(MINGW OR MINGW64)
-    if(NOT DLLTOOL)
-      # Find dlltool
-      get_filename_component(GCC_NAME ${CMAKE_C_COMPILER} NAME)
-      string(REPLACE gcc dlltool DLLTOOL_NAME ${GCC_NAME})
-      find_program(DLLTOOL NAMES ${DLLTOOL_NAME})
+    if(NOT MINGW_DLLTOOL_EXE)
+      # Find dlltool.exe
+      get_filename_component(CC_DIR ${CMAKE_C_COMPILER} DIRECTORY)
+      find_program(MINGW_DLLTOOL_EXE "dlltool.exe" HINTS ${CC_DIR})
     endif()
-    if(DLLTOOL)
-      message(STATUS "Found dlltool: ${DLLTOOL}")
+    if(MINGW_DLLTOOL_EXE)
+      message(STATUS "Found MINGW's dlltool: ${MINGW_DLLTOOL_EXE}")
       set(MDBX_NTDLL_EXTRA_IMPLIB "${CMAKE_CURRENT_BINARY_DIR}/mdbx_ntdll_extra.a")
       add_custom_command(
         OUTPUT "${MDBX_NTDLL_EXTRA_IMPLIB}"
         COMMENT "Create extra-import-library for ntdll.dll"
         MAIN_DEPENDENCY "${MDBX_SOURCE_DIR}/ntdll.def"
-        COMMAND ${DLLTOOL} -d "${MDBX_SOURCE_DIR}/ntdll.def" -l "${MDBX_NTDLL_EXTRA_IMPLIB}")
+        COMMAND ${MINGW_DLLTOOL_EXE} -d "${MDBX_SOURCE_DIR}/ntdll.def" -l "${MDBX_NTDLL_EXTRA_IMPLIB}")
     else()
-      message(WARNING "dlltool not found")
+      message(WARNING "MINGW's dlltool.exe not found")
     endif()
   endif()
 
