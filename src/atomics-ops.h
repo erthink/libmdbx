@@ -7,6 +7,33 @@
 
 #ifndef __cplusplus
 
+MDBX_MAYBE_UNUSED static __always_inline void atomic_yield(void) {
+#if defined(_WIN32) || defined(_WIN64)
+  YieldProcessor();
+#elif defined(__ia32__) || defined(__e2k__)
+  __builtin_ia32_pause();
+#elif defined(__ia64__)
+#if defined(__HP_cc__) || defined(__HP_aCC__)
+  _Asm_hint(_HINT_PAUSE);
+#else
+  __asm__ __volatile__("hint @pause");
+#endif
+#elif defined(__aarch64__) || (defined(__ARM_ARCH) && __ARM_ARCH > 6) || defined(__ARM_ARCH_6K__)
+#ifdef __CC_ARM
+  __yield();
+#else
+  __asm__ __volatile__("yield");
+#endif
+#elif (defined(__mips64) || defined(__mips64__)) && defined(__mips_isa_rev) && __mips_isa_rev >= 2
+  __asm__ __volatile__("pause");
+#elif defined(__mips) || defined(__mips__) || defined(__mips64) || defined(__mips64__) || defined(_M_MRX000) ||        \
+    defined(_MIPS_) || defined(__MWERKS__) || defined(__sgi)
+  __asm__ __volatile__(".word 0x00000140");
+#else
+  osal_yield();
+#endif
+}
+
 #ifdef MDBX_HAVE_C11ATOMICS
 #define osal_memory_fence(order, write) atomic_thread_fence((write) ? mo_c11_store(order) : mo_c11_load(order))
 #else /* MDBX_HAVE_C11ATOMICS */
@@ -144,37 +171,11 @@ MDBX_MAYBE_UNUSED static
     if (likely(value == again))
       return value;
     value = again;
+    atomic_yield();
   }
 #endif /* !MDBX_64BIT_ATOMIC */
 }
 #endif /* atomic_load64 */
-
-MDBX_MAYBE_UNUSED static __always_inline void atomic_yield(void) {
-#if defined(_WIN32) || defined(_WIN64)
-  YieldProcessor();
-#elif defined(__ia32__) || defined(__e2k__)
-  __builtin_ia32_pause();
-#elif defined(__ia64__)
-#if defined(__HP_cc__) || defined(__HP_aCC__)
-  _Asm_hint(_HINT_PAUSE);
-#else
-  __asm__ __volatile__("hint @pause");
-#endif
-#elif defined(__aarch64__) || (defined(__ARM_ARCH) && __ARM_ARCH > 6) || defined(__ARM_ARCH_6K__)
-#ifdef __CC_ARM
-  __yield();
-#else
-  __asm__ __volatile__("yield");
-#endif
-#elif (defined(__mips64) || defined(__mips64__)) && defined(__mips_isa_rev) && __mips_isa_rev >= 2
-  __asm__ __volatile__("pause");
-#elif defined(__mips) || defined(__mips__) || defined(__mips64) || defined(__mips64__) || defined(_M_MRX000) ||        \
-    defined(_MIPS_) || defined(__MWERKS__) || defined(__sgi)
-  __asm__ __volatile__(".word 0x00000140");
-#else
-  osal_yield();
-#endif
-}
 
 #if MDBX_64BIT_CAS
 MDBX_MAYBE_UNUSED static __always_inline bool atomic_cas64(mdbx_atomic_uint64_t *p, uint64_t c, uint64_t v) {
@@ -312,10 +313,11 @@ MDBX_MAYBE_UNUSED static __always_inline void safe64_write(mdbx_atomic_uint64_t 
 
 MDBX_MAYBE_UNUSED static __always_inline uint64_t safe64_read(const mdbx_atomic_uint64_t *p) {
   jitter4testing(true);
-  uint64_t v;
-  do
+  uint64_t v = atomic_load64(p, mo_AcquireRelease);
+  while (!MDBX_64BIT_ATOMIC && unlikely(v != p->weak)) {
+    atomic_yield();
     v = atomic_load64(p, mo_AcquireRelease);
-  while (!MDBX_64BIT_ATOMIC && unlikely(v != p->weak));
+  }
   return v;
 }
 
