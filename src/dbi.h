@@ -11,7 +11,7 @@ MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED MDBX_INTERNAL size_t dbi_bitmap_ct
                                                                                            intptr_t bmi);
 
 static inline size_t dbi_bitmap_ctz(const MDBX_txn *txn, intptr_t bmi) {
-  tASSERT(txn, bmi > 0);
+  tASSERT(txn, bmi != 0);
   STATIC_ASSERT(sizeof(bmi) >= sizeof(txn->dbi_sparse[0]));
 #if __GNUC_PREREQ(4, 1) || __has_builtin(__builtin_ctzl)
   if (sizeof(txn->dbi_sparse[0]) <= sizeof(int))
