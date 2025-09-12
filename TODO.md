@@ -1,6 +1,8 @@
+
 TODO
 ----
 
+ - HarmonyOS support.
  - [SWIG](https://www.swig.org/).
  - Параллельная lto-сборка с устранением предупреждений.
  - Интеграция c DTrace и аналогами.
@@ -15,6 +17,11 @@ TODO
  - [Support for RAW devices](https://libmdbx.dqdkfa.ru/dead-github/issues/124).
  - [Support MessagePack for Keys & Values](https://libmdbx.dqdkfa.ru/dead-github/issues/115).
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
+
+In development
+--------------
+ - get-cached API.
+ - digging/refactoring/optimizing page splitting and tree rebalance.
 
 Done
 ----
