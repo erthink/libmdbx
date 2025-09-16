@@ -4562,6 +4562,10 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b) MDBX_CXX17_NOEX
  * \param [out] dbi     Address where the new \ref MDBX_dbi handle
  *                      will be stored.
  *
+ * The name in \ref mdbx_dbi_open() is a null terminated string. While
+ * \ref mdbx_dbi_open2() supports arbitrary length keys which are not
+ * truncated, for example to support a fixed width integer type.
+ *
  * For \ref mdbx_dbi_open_ex() additional arguments allow you to set custom
  * comparison functions for keys and values (for multimaps).
  * \see avoid_custom_comparators
@@ -4594,6 +4598,8 @@ LIBMDBX_API int mdbx_dbi_open2(MDBX_txn *txn, const MDBX_val *name, MDBX_db_flag
  * \param [in] name   The name of the table to open. If only a single
  *                    table is needed in the environment,
  *                    this value may be NULL.
+ *                    The name in \ref mdbx_dbi_open_ex() is null terminated,
+ *                    while \ref mdbx_dbi_open_ex2() supports an arbitrary length.
  * \param [in] flags  Special options for this table.
  * \param [in] keycmp  Optional custom key comparison function for a table.
  * \param [in] datacmp Optional custom data comparison function for a table.
