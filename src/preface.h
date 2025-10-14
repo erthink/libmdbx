@@ -428,6 +428,10 @@ __extern_C key_t ftok(const char *, int);
 #include <sys/time.h>
 #include <sys/uio.h>
 
+#if __GLIBC_PREREQ(2, 16) || __has_include(<sys/auxv.h>)
+#include <sys/auxv.h>
+#endif /* glibc >= 2.16 */
+
 #endif /*---------------------------------------------------------------------*/
 
 #if defined(__ANDROID_API__) || defined(ANDROID)

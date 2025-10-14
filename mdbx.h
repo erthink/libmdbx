@@ -2815,17 +2815,20 @@ struct MDBX_envinfo {
     uint64_t shrink;  /**< Shrink threshold for datafile */
     uint64_t grow;    /**< Growth step for datafile */
   } mi_geo;
-  uint64_t mi_mapsize;                  /**< Size of the data memory map */
+  uint64_t mi_mapsize;                  /**< Size of the database memory map */
+  uint64_t mi_dxb_fsize;                /**< Current database file size */
+  uint64_t mi_dxb_fallocated;           /**< Space allocated for the database file in a filesystem */
   uint64_t mi_last_pgno;                /**< Number of the last used page */
   uint64_t mi_recent_txnid;             /**< ID of the last committed transaction */
   uint64_t mi_latter_reader_txnid;      /**< ID of the last reader transaction */
-  uint64_t mi_self_latter_reader_txnid; /**< ID of the last reader transaction
-                                           of caller process */
+  uint64_t mi_self_latter_reader_txnid; /**< ID of the last reader transaction of this/current process */
   uint64_t mi_meta_txnid[3], mi_meta_sign[3];
   uint32_t mi_maxreaders;   /**< Total reader slots in the environment */
   uint32_t mi_numreaders;   /**< Max reader slots used in the environment */
   uint32_t mi_dxb_pagesize; /**< Database pagesize */
   uint32_t mi_sys_pagesize; /**< System pagesize */
+  uint32_t mi_sys_upcblk;   /**< System "Unified Page Cache" block size */
+  uint32_t mi_sys_ioblk;    /**< Filesystem I/O block size */
 
   /** \brief A mostly unique ID that is regenerated on each boot.
 

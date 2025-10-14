@@ -1429,7 +1429,7 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
   MDBX_chk_context_t *const usr = chk->usr;
   MDBX_env *const env = usr->env;
   MDBX_txn *const txn = usr->txn;
-  int err = env_info(env, txn, &chk->envinfo, sizeof(chk->envinfo), &chk->troika);
+  int err = env_info(env, txn, &chk->envinfo, &chk->troika);
   if (unlikely(err))
     return chk_error_rc(scope, err, "env_info");
 

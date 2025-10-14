@@ -3495,6 +3495,16 @@ void osal_ctor(void) {
   globals.sys_allocation_granularity = (globals.sys_allocation_granularity >= globals.sys_pagesize * 2)
                                            ? globals.sys_allocation_granularity
                                            : globals.sys_pagesize * 4;
+#ifdef AT_UCACHEBSIZE
+  const size_t unified_cache_block_size = getauxval(AT_UCACHEBSIZE);
+  globals.sys_unified_cache_block = globals.sys_pagesize;
+  if (unified_cache_block_size > 0 && unified_cache_block_size < INT_MAX) {
+    globals.sys_unified_cache_block = (unsigned)unified_cache_block_size;
+    if (globals.sys_unified_cache_block > globals.sys_pagesize)
+      globals.sys_allocation_granularity = globals.sys_unified_cache_block;
+  }
+#endif /* AT_UCACHEBSIZE */
+
 #endif
   assert(globals.sys_pagesize > 0 && (globals.sys_pagesize & (globals.sys_pagesize - 1)) == 0);
   assert(globals.sys_allocation_granularity >= globals.sys_pagesize &&

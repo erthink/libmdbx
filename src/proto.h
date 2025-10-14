@@ -88,7 +88,7 @@ MDBX_INTERNAL int txn_ro_end(MDBX_txn *txn, unsigned mode);
 
 /* env.c */
 MDBX_INTERNAL int env_open(MDBX_env *env, mdbx_mode_t mode);
-MDBX_INTERNAL int env_info(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo *out, size_t bytes, troika_t *troika);
+MDBX_INTERNAL int env_info(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo *out, troika_t *troika);
 MDBX_INTERNAL int env_sync(MDBX_env *env, bool force, bool nonblock);
 MDBX_INTERNAL int env_close(MDBX_env *env, bool resurrect_after_fork);
 MDBX_INTERNAL MDBX_txn *env_owned_wrtxn(const MDBX_env *env);

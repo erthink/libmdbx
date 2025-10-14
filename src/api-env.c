@@ -664,11 +664,58 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
 
 /*----------------------------------------------------------------------------*/
 
-static int env_info_snap(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo *out, const size_t bytes,
-                         troika_t *const troika) {
-  const size_t size_before_bootid = offsetof(MDBX_envinfo, mi_bootid);
-  const size_t size_before_pgop_stat = offsetof(MDBX_envinfo, mi_pgop_stat);
-  const size_t size_before_dxbid = offsetof(MDBX_envinfo, mi_dxbid);
+static void env_info_sys(const MDBX_env *env, MDBX_envinfo *out) {
+  out->mi_bootid.current.x = globals.bootid.x;
+  out->mi_bootid.current.y = globals.bootid.y;
+  out->mi_sys_pagesize = globals.sys_pagesize;
+#ifdef __OpenBSD__
+  out->mi_sys_upcblk = 0;
+#elif defined(_WIN32) || defined(_WIN64)
+  out->mi_sys_upcblk = globals.sys_allocation_granularity;
+#elif defined(AT_UCACHEBSIZE)
+  out->mi_sys_upcblk = globals.sys_unified_cache_block;
+#else
+  out->mi_sys_upcblk = globals.sys_pagesize;
+#endif /* AT_UCACHEBSIZE */
+
+  if (env->dxb_mmap.fd != INVALID_HANDLE_VALUE) {
+#if defined(_WIN32) || defined(_WIN64)
+    union {
+      BY_HANDLE_FILE_INFORMATION bh;
+      FILE_STANDARD_INFO std;
+#if _WIN32_WINNT >= _WIN32_WINNT_WIN8
+      FILE_STORAGE_INFO storage;
+#endif
+    } sys_finfo;
+    if (imports.GetFileInformationByHandleEx &&
+        imports.GetFileInformationByHandleEx(env->dxb_mmap.fd, FileStandardInfo, &sys_finfo.std,
+                                             sizeof(sys_finfo.std))) {
+      out->mi_dxb_fsize = sys_finfo.std.EndOfFile.QuadPart;
+      out->mi_dxb_fallocated = sys_finfo.std.AllocationSize.QuadPart;
+#if _WIN32_WINNT >= _WIN32_WINNT_WIN8
+      if (imports.GetFileInformationByHandleEx(env->dxb_mmap.fd, FileStorageInfo, &sys_finfo.storage,
+                                               sizeof(sys_finfo.storage))) {
+        out->mi_sys_ioblk = (sys_finfo.storage.FileSystemEffectivePhysicalBytesPerSectorForAtomicity >
+                             sys_finfo.storage.LogicalBytesPerSector)
+                                ? sys_finfo.storage.FileSystemEffectivePhysicalBytesPerSectorForAtomicity
+                                : sys_finfo.storage.LogicalBytesPerSector;
+      }
+#endif
+    } else if (GetFileInformationByHandle(env->dxb_mmap.fd, &sys_finfo.bh)) {
+      out->mi_dxb_fsize = sys_finfo.bh.nFileSizeLow | (uint64_t)sys_finfo.bh.nFileSizeHigh << 32;
+    }
+#else
+    struct stat sys_fstat;
+    if (fstat(env->dxb_mmap.fd, &sys_fstat) == 0) {
+      out->mi_dxb_fsize = sys_fstat.st_size;
+      out->mi_dxb_fallocated = UINT64_C(512) * sys_fstat.st_blocks;
+      out->mi_sys_ioblk = sys_fstat.st_blksize;
+    }
+#endif /* !Windows */
+  }
+}
+
+static int env_info_snap(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo *out, troika_t *const troika) {
   if (unlikely(env->flags & ENV_FATAL_ERROR))
     return MDBX_PANIC;
 
@@ -678,7 +725,6 @@ static int env_info_snap(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo 
     /* environment not yet opened */
 #if 1
     /* default behavior: returns the available info but zeroed the rest */
-    memset(out, 0, bytes);
     out->mi_geo.lower = env->geo_in_bytes.lower;
     out->mi_geo.upper = env->geo_in_bytes.upper;
     out->mi_geo.shrink = env->geo_in_bytes.shrink;
@@ -686,11 +732,6 @@ static int env_info_snap(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo 
     out->mi_geo.current = env->geo_in_bytes.now;
     out->mi_maxreaders = env->max_readers;
     out->mi_dxb_pagesize = env->ps;
-    out->mi_sys_pagesize = globals.sys_pagesize;
-    if (likely(bytes > size_before_bootid)) {
-      out->mi_bootid.current.x = globals.bootid.x;
-      out->mi_bootid.current.y = globals.bootid.y;
-    }
     return MDBX_SUCCESS;
 #else
     /* some users may prefer this behavior: return appropriate error */
@@ -710,13 +751,10 @@ static int env_info_snap(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo 
   out->mi_meta_sign[1] = unaligned_peek_u64(4, meta1->sign);
   out->mi_meta_txnid[2] = troika->txnid[2];
   out->mi_meta_sign[2] = unaligned_peek_u64(4, meta2->sign);
-  if (likely(bytes > size_before_bootid)) {
-    memcpy(&out->mi_bootid.meta[0], &meta0->bootid, 16);
-    memcpy(&out->mi_bootid.meta[1], &meta1->bootid, 16);
-    memcpy(&out->mi_bootid.meta[2], &meta2->bootid, 16);
-    if (likely(bytes > size_before_dxbid))
-      memcpy(&out->mi_dxbid, &meta0->dxbid, 16);
-  }
+  memcpy(&out->mi_bootid.meta[0], &meta0->bootid, 16);
+  memcpy(&out->mi_bootid.meta[1], &meta1->bootid, 16);
+  memcpy(&out->mi_bootid.meta[2], &meta2->bootid, 16);
+  memcpy(&out->mi_dxbid, &meta0->dxbid, 16);
 
   const volatile meta_t *txn_meta = head.ptr_v;
   out->mi_last_pgno = txn_meta->geometry.first_unallocated - 1;
@@ -740,44 +778,38 @@ static int env_info_snap(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo 
   out->mi_maxreaders = env->max_readers;
   out->mi_numreaders = env->lck_mmap.lck ? atomic_load32(&lck->rdt_length, mo_Relaxed) : INT32_MAX;
   out->mi_dxb_pagesize = env->ps;
-  out->mi_sys_pagesize = globals.sys_pagesize;
 
-  if (likely(bytes > size_before_bootid)) {
-    const uint64_t unsynced_pages =
-        atomic_load64(&lck->unsynced_pages, mo_Relaxed) +
-        ((uint32_t)out->mi_recent_txnid != atomic_load32(&lck->meta_sync_txnid, mo_Relaxed));
-    out->mi_unsync_volume = pgno2bytes(env, (size_t)unsynced_pages);
-    const uint64_t monotime_now = osal_monotime();
-    uint64_t ts = atomic_load64(&lck->eoos_timestamp, mo_Relaxed);
-    out->mi_since_sync_seconds16dot16 = ts ? osal_monotime_to_16dot16_noUnderflow(monotime_now - ts) : 0;
-    ts = atomic_load64(&lck->readers_check_timestamp, mo_Relaxed);
-    out->mi_since_reader_check_seconds16dot16 = ts ? osal_monotime_to_16dot16_noUnderflow(monotime_now - ts) : 0;
-    out->mi_autosync_threshold = pgno2bytes(env, atomic_load32(&lck->autosync_threshold, mo_Relaxed));
-    out->mi_autosync_period_seconds16dot16 =
-        osal_monotime_to_16dot16_noUnderflow(atomic_load64(&lck->autosync_period, mo_Relaxed));
-    out->mi_bootid.current.x = globals.bootid.x;
-    out->mi_bootid.current.y = globals.bootid.y;
-    out->mi_mode = env->lck_mmap.lck ? lck->envmode.weak : env->flags;
-  }
+  const uint64_t unsynced_pages = atomic_load64(&lck->unsynced_pages, mo_Relaxed) +
+                                  ((uint32_t)out->mi_recent_txnid != atomic_load32(&lck->meta_sync_txnid, mo_Relaxed));
+  out->mi_unsync_volume = pgno2bytes(env, (size_t)unsynced_pages);
+  const uint64_t monotime_now = osal_monotime();
+  uint64_t ts = atomic_load64(&lck->eoos_timestamp, mo_Relaxed);
+  out->mi_since_sync_seconds16dot16 = ts ? osal_monotime_to_16dot16_noUnderflow(monotime_now - ts) : 0;
+  ts = atomic_load64(&lck->readers_check_timestamp, mo_Relaxed);
+  out->mi_since_reader_check_seconds16dot16 = ts ? osal_monotime_to_16dot16_noUnderflow(monotime_now - ts) : 0;
+  out->mi_autosync_threshold = pgno2bytes(env, atomic_load32(&lck->autosync_threshold, mo_Relaxed));
+  out->mi_autosync_period_seconds16dot16 =
+      osal_monotime_to_16dot16_noUnderflow(atomic_load64(&lck->autosync_period, mo_Relaxed));
+  out->mi_bootid.current.x = globals.bootid.x;
+  out->mi_bootid.current.y = globals.bootid.y;
+  out->mi_mode = env->lck_mmap.lck ? lck->envmode.weak : env->flags;
 
-  if (likely(bytes > size_before_pgop_stat)) {
 #if MDBX_ENABLE_PGOP_STAT
-    out->mi_pgop_stat.newly = atomic_load64(&lck->pgops.newly, mo_Relaxed);
-    out->mi_pgop_stat.cow = atomic_load64(&lck->pgops.cow, mo_Relaxed);
-    out->mi_pgop_stat.clone = atomic_load64(&lck->pgops.clone, mo_Relaxed);
-    out->mi_pgop_stat.split = atomic_load64(&lck->pgops.split, mo_Relaxed);
-    out->mi_pgop_stat.merge = atomic_load64(&lck->pgops.merge, mo_Relaxed);
-    out->mi_pgop_stat.spill = atomic_load64(&lck->pgops.spill, mo_Relaxed);
-    out->mi_pgop_stat.unspill = atomic_load64(&lck->pgops.unspill, mo_Relaxed);
-    out->mi_pgop_stat.wops = atomic_load64(&lck->pgops.wops, mo_Relaxed);
-    out->mi_pgop_stat.prefault = atomic_load64(&lck->pgops.prefault, mo_Relaxed);
-    out->mi_pgop_stat.mincore = atomic_load64(&lck->pgops.mincore, mo_Relaxed);
-    out->mi_pgop_stat.msync = atomic_load64(&lck->pgops.msync, mo_Relaxed);
-    out->mi_pgop_stat.fsync = atomic_load64(&lck->pgops.fsync, mo_Relaxed);
+  out->mi_pgop_stat.newly = atomic_load64(&lck->pgops.newly, mo_Relaxed);
+  out->mi_pgop_stat.cow = atomic_load64(&lck->pgops.cow, mo_Relaxed);
+  out->mi_pgop_stat.clone = atomic_load64(&lck->pgops.clone, mo_Relaxed);
+  out->mi_pgop_stat.split = atomic_load64(&lck->pgops.split, mo_Relaxed);
+  out->mi_pgop_stat.merge = atomic_load64(&lck->pgops.merge, mo_Relaxed);
+  out->mi_pgop_stat.spill = atomic_load64(&lck->pgops.spill, mo_Relaxed);
+  out->mi_pgop_stat.unspill = atomic_load64(&lck->pgops.unspill, mo_Relaxed);
+  out->mi_pgop_stat.wops = atomic_load64(&lck->pgops.wops, mo_Relaxed);
+  out->mi_pgop_stat.prefault = atomic_load64(&lck->pgops.prefault, mo_Relaxed);
+  out->mi_pgop_stat.mincore = atomic_load64(&lck->pgops.mincore, mo_Relaxed);
+  out->mi_pgop_stat.msync = atomic_load64(&lck->pgops.msync, mo_Relaxed);
+  out->mi_pgop_stat.fsync = atomic_load64(&lck->pgops.fsync, mo_Relaxed);
 #else
-    memset(&out->mi_pgop_stat, 0, sizeof(out->mi_pgop_stat));
+  memset(&out->mi_pgop_stat, 0, sizeof(out->mi_pgop_stat));
 #endif /* MDBX_ENABLE_PGOP_STAT*/
-  }
 
   txnid_t overall_latter_reader_txnid = out->mi_recent_txnid;
   txnid_t self_latter_reader_txnid = overall_latter_reader_txnid;
@@ -800,22 +832,23 @@ static int env_info_snap(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo 
   return MDBX_SUCCESS;
 }
 
-__cold int env_info(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo *out, size_t bytes, troika_t *troika) {
+__cold int env_info(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo *out, troika_t *troika) {
+  env_info_sys(env, out);
+
   MDBX_envinfo snap;
-  int rc = env_info_snap(env, txn, &snap, sizeof(snap), troika);
+  int rc = env_info_snap(env, txn, &snap, troika);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  eASSERT(env, sizeof(snap) >= bytes);
   while (1) {
-    rc = env_info_snap(env, txn, out, bytes, troika);
+    rc = env_info_snap(env, txn, out, troika);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
     snap.mi_since_sync_seconds16dot16 = out->mi_since_sync_seconds16dot16;
     snap.mi_since_reader_check_seconds16dot16 = out->mi_since_reader_check_seconds16dot16;
-    if (likely(memcmp(&snap, out, bytes) == 0))
+    if (likely(memcmp(&snap, out, sizeof(MDBX_envinfo)) == 0))
       return MDBX_SUCCESS;
-    memcpy(&snap, out, bytes);
+    memcpy(&snap, out, sizeof(MDBX_envinfo));
   }
 }
 
@@ -823,11 +856,7 @@ __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn, MDBX_envin
   if (unlikely((env == nullptr && txn == nullptr) || arg == nullptr))
     return LOG_IFERR(MDBX_EINVAL);
 
-  const size_t size_before_bootid = offsetof(MDBX_envinfo, mi_bootid);
-  const size_t size_before_pgop_stat = offsetof(MDBX_envinfo, mi_pgop_stat);
-  const size_t size_before_dxbid = offsetof(MDBX_envinfo, mi_dxbid);
-  if (unlikely(bytes != sizeof(MDBX_envinfo)) && bytes != size_before_bootid && bytes != size_before_pgop_stat &&
-      bytes != size_before_dxbid)
+  if (unlikely(bytes != sizeof(MDBX_envinfo)))
     return LOG_IFERR(MDBX_EINVAL);
 
   if (txn) {
@@ -846,7 +875,7 @@ __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn, MDBX_envin
   }
 
   troika_t troika;
-  return LOG_IFERR(env_info(env, txn, arg, bytes, &troika));
+  return LOG_IFERR(env_info(env, txn, arg, &troika));
 }
 
 __cold int mdbx_preopen_snapinfo(const char *pathname, MDBX_envinfo *out, size_t bytes) {
@@ -865,27 +894,18 @@ __cold int mdbx_preopen_snapinfoW(const wchar_t *pathname, MDBX_envinfo *out, si
   if (unlikely(!out))
     return LOG_IFERR(MDBX_EINVAL);
 
-  const size_t size_before_bootid = offsetof(MDBX_envinfo, mi_bootid);
-  const size_t size_before_pgop_stat = offsetof(MDBX_envinfo, mi_pgop_stat);
-  const size_t size_before_dxbid = offsetof(MDBX_envinfo, mi_dxbid);
-  if (unlikely(bytes != sizeof(MDBX_envinfo)) && bytes != size_before_bootid && bytes != size_before_pgop_stat &&
-      bytes != size_before_dxbid)
+  if (unlikely(bytes != sizeof(MDBX_envinfo)))
     return LOG_IFERR(MDBX_EINVAL);
 
-  memset(out, 0, bytes);
-  if (likely(bytes > size_before_bootid)) {
-    out->mi_bootid.current.x = globals.bootid.x;
-    out->mi_bootid.current.y = globals.bootid.y;
-  }
-
-  MDBX_env env;
-  memset(&env, 0, sizeof(env));
-  env.pid = osal_getpid();
   if (unlikely(!is_powerof2(globals.sys_pagesize) || globals.sys_pagesize < MDBX_MIN_PAGESIZE)) {
     ERROR("unsuitable system pagesize %u", globals.sys_pagesize);
     return LOG_IFERR(MDBX_INCOMPATIBLE);
   }
-  out->mi_sys_pagesize = globals.sys_pagesize;
+
+  memset(out, 0, bytes);
+  MDBX_env env;
+  memset(&env, 0, sizeof(env));
+  env.pid = osal_getpid();
   env.flags = MDBX_RDONLY | MDBX_NORDAHEAD | MDBX_ACCEDE | MDBX_VALIDATION;
   env.stuck_meta = -1;
   env.lck_mmap.fd = INVALID_HANDLE_VALUE;
@@ -918,16 +938,14 @@ __cold int mdbx_preopen_snapinfoW(const wchar_t *pathname, MDBX_envinfo *out, si
   out->mi_geo.current = pgno2bytes(&env, header.geometry.now);
   out->mi_last_pgno = header.geometry.first_unallocated - 1;
 
-  const unsigned n = 0;
   out->mi_recent_txnid = constmeta_txnid(&header);
+  const unsigned n = 0;
   out->mi_meta_sign[n] = unaligned_peek_u64(4, &header.sign);
-  if (likely(bytes > size_before_bootid)) {
-    memcpy(&out->mi_bootid.meta[n], &header.bootid, 16);
-    if (likely(bytes > size_before_dxbid))
-      memcpy(&out->mi_dxbid, &header.dxbid, 16);
-  }
+  memcpy(&out->mi_bootid.meta[n], &header.bootid, 16);
+  memcpy(&out->mi_dxbid, &header.dxbid, 16);
 
 bailout:
+  env_info_sys(&env, out);
   env_close(&env, false);
   return LOG_IFERR(rc);
 }

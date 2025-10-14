@@ -65,6 +65,9 @@ union logger_union {
 struct libmdbx_globals {
   bin128_t bootid;
   unsigned sys_pagesize, sys_allocation_granularity;
+#ifdef AT_UCACHEBSIZE
+  unsigned sys_unified_cache_block;
+#endif /* AT_UCACHEBSIZE */
   uint8_t sys_pagesize_ln2;
   uint8_t runtime_flags;
   uint8_t loglevel;
