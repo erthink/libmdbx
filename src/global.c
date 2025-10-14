@@ -176,8 +176,29 @@ __cold static __attribute__((__destructor__)) void mdbx_global_destructor(void) 
 
 struct libmdbx_globals globals;
 
+static bool getenv_bool(const char *name, bool default_value) {
+  const char *value = osal_getenv(name, false);
+  if (value) {
+    if (*value == 0 /* implied ON */)
+      return true;
+    if (strcasecmp(value, "yes") == 0 || strcasecmp(value, "on") == 0 || strcasecmp(value, "true") == 0 ||
+        strcasecmp(value, "1") == 0)
+      return true;
+    if (strcasecmp(value, "no") == 0 || strcasecmp(value, "off") == 0 || strcasecmp(value, "false") == 0 ||
+        strcasecmp(value, "0") == 0)
+      return false;
+  }
+  return default_value;
+}
+
 __cold static void mdbx_init(void) {
-  globals.runtime_flags = ((MDBX_DEBUG) > 0) * MDBX_DBG_ASSERT + ((MDBX_DEBUG) > 1) * MDBX_DBG_AUDIT;
+  globals.runtime_flags = (getenv_bool("MDBX_DBG_ASSERT", (MDBX_DEBUG) > 0) ? MDBX_DBG_ASSERT : 0) |
+                          (getenv_bool("MDBX_DBG_AUDIT", (MDBX_DEBUG) > 1) ? MDBX_DBG_AUDIT : 0) |
+                          (getenv_bool("MDBX_DBG_JITTER", false) ? MDBX_DBG_JITTER : 0) |
+                          (getenv_bool("MDBX_DBG_DUMP", false) ? MDBX_DBG_DUMP : 0) |
+                          (getenv_bool("MDBX_DBG_LEGACY_MULTIOPEN", false) ? MDBX_DBG_LEGACY_MULTIOPEN : 0) |
+                          (getenv_bool("MDBX_DBG_LEGACY_OVERLAP", false) ? MDBX_DBG_LEGACY_OVERLAP : 0) |
+                          (getenv_bool("MDBX_DBG_DONT_UPGRADE", false) ? MDBX_DBG_DONT_UPGRADE : 0);
   globals.loglevel = MDBX_LOG_FATAL;
   ENSURE(nullptr, osal_fastmutex_init(&globals.debug_lock) == 0);
   osal_ctor();

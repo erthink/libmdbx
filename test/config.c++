@@ -152,21 +152,21 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option, u
   if (suffix && *suffix) {
     if (scale == no_scale || scale == intkey)
       failure("Option '--%s' doesn't accepts suffixes, so '%s' is unexpected\n", option, suffix);
-    if (strcmp(suffix, "K") == 0 || osal_strcasecmp(suffix, "Kilo") == 0)
+    if (strcmp(suffix, "K") == 0 || strcasecmp(suffix, "Kilo") == 0)
       multiplier = (scale == decimal) ? UINT64_C(1000) : UINT64_C(1024);
-    else if (strcmp(suffix, "M") == 0 || osal_strcasecmp(suffix, "Mega") == 0)
+    else if (strcmp(suffix, "M") == 0 || strcasecmp(suffix, "Mega") == 0)
       multiplier = (scale == decimal) ? UINT64_C(1000) * 1000 : UINT64_C(1024) * 1024;
-    else if (strcmp(suffix, "G") == 0 || osal_strcasecmp(suffix, "Giga") == 0)
+    else if (strcmp(suffix, "G") == 0 || strcasecmp(suffix, "Giga") == 0)
       multiplier = (scale == decimal) ? UINT64_C(1000) * 1000 * 1000 : UINT64_C(1024) * 1024 * 1024;
-    else if (strcmp(suffix, "T") == 0 || osal_strcasecmp(suffix, "Tera") == 0)
+    else if (strcmp(suffix, "T") == 0 || strcasecmp(suffix, "Tera") == 0)
       multiplier = (scale == decimal) ? UINT64_C(1000) * 1000 * 1000 * 1000 : UINT64_C(1024) * 1024 * 1024 * 1024;
-    else if (scale == duration && (strcmp(suffix, "s") == 0 || osal_strcasecmp(suffix, "Seconds") == 0))
+    else if (scale == duration && (strcmp(suffix, "s") == 0 || strcasecmp(suffix, "Seconds") == 0))
       multiplier = 1;
-    else if (scale == duration && (strcmp(suffix, "m") == 0 || osal_strcasecmp(suffix, "Minutes") == 0))
+    else if (scale == duration && (strcmp(suffix, "m") == 0 || strcasecmp(suffix, "Minutes") == 0))
       multiplier = 60;
-    else if (scale == duration && (strcmp(suffix, "h") == 0 || osal_strcasecmp(suffix, "Hours") == 0))
+    else if (scale == duration && (strcmp(suffix, "h") == 0 || strcasecmp(suffix, "Hours") == 0))
       multiplier = 3600;
-    else if (scale == duration && (strcmp(suffix, "d") == 0 || osal_strcasecmp(suffix, "Days") == 0))
+    else if (scale == duration && (strcmp(suffix, "d") == 0 || strcasecmp(suffix, "Days") == 0))
       multiplier = 3600 * 24;
     else
       failure("Option '--%s' expects a numeric value with Kilo/Mega/Giga/Tera %s"
@@ -309,14 +309,12 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option, b
     return true;
   }
 
-  if (osal_strcasecmp(value_cstr, "yes") == 0 || osal_strcasecmp(value_cstr, "1") == 0 ||
-      osal_strcasecmp(value_cstr, "on") == 0) {
+  if (strcasecmp(value_cstr, "yes") == 0 || strcasecmp(value_cstr, "1") == 0 || strcasecmp(value_cstr, "on") == 0) {
     value = true;
     return true;
   }
 
-  if (osal_strcasecmp(value_cstr, "no") == 0 || osal_strcasecmp(value_cstr, "0") == 0 ||
-      osal_strcasecmp(value_cstr, "off") == 0) {
+  if (strcasecmp(value_cstr, "no") == 0 || strcasecmp(value_cstr, "0") == 0 || strcasecmp(value_cstr, "off") == 0) {
     value = false;
     return true;
   }

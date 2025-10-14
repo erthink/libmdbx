@@ -122,8 +122,6 @@ static inline void osal_free(void *ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
 #define osal_realloc realloc
 #define osal_free free
 #define osal_strdup _strdup
-#define osal_strcasecmp _stricmp
-#define osal_strncasecmp _strnicmp
 
 #endif /* MDBX_WITHOUT_MSVC_CRT */
 
@@ -133,6 +131,14 @@ static inline void osal_free(void *ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
 
 #ifndef vsnprintf
 #define vsnprintf _vsnprintf /* ntdll */
+#endif
+
+#ifndef strcasecmp
+#define strcasecmp _stricmp /* ntdll */
+#endif
+
+#ifndef strncasecmp
+#define strncasecmp _strnicmp /* ntdll */
 #endif
 
 #else /*----------------------------------------------------------------------*/
@@ -152,8 +158,6 @@ typedef pthread_mutex_t osal_fastmutex_t;
 #define osal_realloc realloc
 #define osal_free free
 #define osal_strdup strdup
-#define osal_strcasecmp strcasecmp
-#define osal_strncasecmp strncasecmp
 #endif /* Platform */
 
 #if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
@@ -471,6 +475,7 @@ MDBX_MAYBE_UNUSED static inline bool osal_isdirsep(pathchar_t c) {
       c == '/';
 }
 
+MDBX_INTERNAL const char *osal_getenv(const char *name, bool secure);
 MDBX_INTERNAL bool osal_pathequal(const pathchar_t *l, const pathchar_t *r, size_t len);
 MDBX_INTERNAL pathchar_t *osal_fileext(const pathchar_t *pathname, size_t len);
 MDBX_INTERNAL int osal_fileexists(const pathchar_t *pathname);
