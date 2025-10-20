@@ -1449,9 +1449,11 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
     line = chk_puts(line, "is unavailable");
   chk_line_end(line);
 
-  err = osal_filesize(env->lazy_fd, &env->dxb_mmap.filesize);
-  if (unlikely(err))
-    return chk_error_rc(scope, err, "osal_filesize");
+  line = chk_print_size(chk_line_begin(scope, MDBX_chk_verbose), "system io-block ", chk->envinfo.mi_sys_ioblk, ", ");
+  line = chk_print_size(line, "unified page cache block ", chk->envinfo.mi_sys_upcblk, "");
+  chk_line_end(line);
+
+  env->dxb_mmap.filesize = chk->envinfo.mi_dxb_fsize;
 
   //--------------------------------------------------------------------------
 
@@ -1530,6 +1532,10 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
       chk_line_end(chk_print(line, " > until it will be closed or reopened in read-write mode."));
     }
 #endif /* Windows || Debug */
+    line = chk_print_size(chk_line_begin(scope, MDBX_chk_verbose), "space allocated for the dxb-file in a filesystem ",
+                          chk->envinfo.mi_dxb_fallocated, " ");
+    line = chk_print(line, "%.2f%%", 100.0 * chk->envinfo.mi_dxb_fallocated / chk->envinfo.mi_geo.current);
+    chk_line_end(line);
     chk_verbose_meta(inner, 0);
     chk_verbose_meta(inner, 1);
     chk_verbose_meta(inner, 2);
