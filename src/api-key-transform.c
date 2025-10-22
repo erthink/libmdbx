@@ -124,7 +124,7 @@ uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
     const uint64_t exponent = (uint64_t)IEEE754_DOUBLE_EXPONENTA_BIAS + IEEE754_DOUBLE_MANTISSA_SIZE - shift;
     assert(exponent > 0 && exponent <= IEEE754_DOUBLE_EXPONENTA_MAX);
     const uint64_t key = bias + (exponent << IEEE754_DOUBLE_MANTISSA_SIZE) + (mantissa - IEEE754_DOUBLE_IMPLICIT_LEAD);
-#if !defined(_MSC_VER) || defined(_DEBUG) /* Workaround for MSVC error LNK2019: unresolved external                    \
+#if !defined(_MSC_VER) || !MDBX_WITHOUT_MSVC_CRT /* Workaround for MSVC error LNK2019: unresolved external             \
                                              symbol __except1 referenced in function __ftol3_except */
     assert(key == mdbx_key_from_double((double)json_integer));
 #endif /* Workaround for MSVC */
@@ -146,7 +146,7 @@ uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
     assert(exponent > 0 && exponent <= IEEE754_DOUBLE_EXPONENTA_MAX);
     const uint64_t key =
         bias - 1 - (exponent << IEEE754_DOUBLE_MANTISSA_SIZE) - (mantissa - IEEE754_DOUBLE_IMPLICIT_LEAD);
-#if !defined(_MSC_VER) || defined(_DEBUG) /* Workaround for MSVC error LNK2019: unresolved external                    \
+#if !defined(_MSC_VER) || !MDBX_WITHOUT_MSVC_CRT /* Workaround for MSVC error LNK2019: unresolved external             \
                                              symbol __except1 referenced in function __ftol3_except */
     assert(key == mdbx_key_from_double((double)json_integer));
 #endif /* Workaround for MSVC */
