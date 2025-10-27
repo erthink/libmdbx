@@ -120,16 +120,16 @@ endef
 define uname2libs
   case "$(UNAME)" in
     CYGWIN*|MINGW*|MSYS*|Windows*)
-      echo '-lm -lntdll -lwinmm';
+      echo '-lntdll -lwinmm';
       ;;
     *SunOS*|*Solaris*)
-      echo '-lm -lkstat -lrt';
+      echo '-lkstat -lrt';
       ;;
     *Darwin*|OpenBSD*)
-      echo '-lm';
+      echo '';
       ;;
     *)
-      echo '-lm -lrt';
+      echo '-lrt';
       ;;
   esac
 endef
@@ -562,7 +562,7 @@ $(foreach file,$(TOOLS),$(eval $(call tool-rule,$(file))))
 
 mdbx_test: $(TEST_OBJ) libmdbx.$(SO_SUFFIX)
 	@echo '  LD $@'
-	$(QUIET)$(CXX) $(CXXFLAGS) $(TEST_OBJ) -Wl,-rpath . -L . -l mdbx $(EXE_LDFLAGS) $(LIBS) -o $@
+	$(QUIET)$(CXX) $(CXXFLAGS) $(TEST_OBJ) -Wl,-rpath . -L . -l mdbx $(EXE_LDFLAGS) $(LIBS) -lm -o $@
 
 $(MDBX_GIT_DIR)/HEAD $(MDBX_GIT_DIR)/index $(MDBX_GIT_DIR)/refs/tags:
 	@echo '*** ' >&2
