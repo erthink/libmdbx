@@ -6548,7 +6548,7 @@ typedef struct MDBX_chk_table {
 
   size_t payload_bytes, lost_bytes;
   struct {
-    size_t all, empty, other;
+    size_t all, empty, broken;
     size_t branch, leaf;
     size_t nested_branch, nested_leaf, nested_subleaf;
   } pages;

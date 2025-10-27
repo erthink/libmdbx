@@ -771,17 +771,17 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
     chk_object_issue(scope, "page", pgno, "unknown page-type", "type %u, deep %i, parent %zu", (unsigned)pagetype, deep,
                      parent_pgno);
     pagetype_caption = "unknown";
-    tbl->pages.other += npages;
+    tbl->pages.broken += npages;
     break;
   case page_broken:
     assert(page_err != MDBX_SUCCESS);
     pagetype_caption = "broken";
-    tbl->pages.other += npages;
+    tbl->pages.broken += npages;
     break;
   case page_sub_broken:
     assert(page_err != MDBX_SUCCESS);
     pagetype_caption = "broken-subpage";
-    tbl->pages.other += npages;
+    tbl->pages.broken += npages;
     break;
   case page_large:
     pagetype_caption = "large";
@@ -957,7 +957,7 @@ __cold static int chk_tree(MDBX_chk_scope_t *const scope) {
     total.lost_bytes += tbl->lost_bytes;
     total.pages.all += tbl->pages.all;
     total.pages.empty += tbl->pages.empty;
-    total.pages.other += tbl->pages.other;
+    total.pages.broken += tbl->pages.broken;
     total.pages.branch += tbl->pages.branch;
     total.pages.leaf += tbl->pages.leaf;
     total.pages.nested_branch += tbl->pages.nested_branch;
@@ -986,9 +986,9 @@ __cold static int chk_tree(MDBX_chk_scope_t *const scope) {
           line = chk_print(line, "page usage: subtotal %" PRIuSIZE, tbl->pages.all);
           const size_t branch_pages = tbl->pages.branch + tbl->pages.nested_branch;
           const size_t leaf_pages = tbl->pages.leaf + tbl->pages.nested_leaf + tbl->pages.nested_subleaf;
-          if (tbl->pages.other)
-            line = chk_print(line, ", other %" PRIuSIZE, tbl->pages.other);
-          if (tbl->pages.other == 0 || (branch_pages | leaf_pages | tbl->histogram.large_pages.count) != 0) {
+          if (tbl->pages.broken)
+            line = chk_print(line, ", broken %" PRIuSIZE, tbl->pages.broken);
+          if (tbl->pages.broken == 0 || (branch_pages | leaf_pages | tbl->histogram.large_pages.count) != 0) {
             line = chk_print(line, ", branch %" PRIuSIZE ", leaf %" PRIuSIZE, branch_pages, leaf_pages);
             if (tbl->histogram.large_pages.count || (tbl->flags & MDBX_DUPSORT) == 0) {
               line = chk_print(line, ", large %" PRIuSIZE, tbl->histogram.large_pages.count);
@@ -999,7 +999,7 @@ __cold static int chk_tree(MDBX_chk_scope_t *const scope) {
           line = histogram_dist(chk_line_feed(line), &tbl->histogram.deep, "tree deep density", "1", false);
           if (tbl != &chk->table_gc && tbl->histogram.nested_tree.count) {
             line = chk_print(chk_line_feed(line), "nested tree(s) %" PRIuSIZE, tbl->histogram.nested_tree.count);
-            line = histogram_dist(line, &tbl->histogram.nested_tree, " density", "1", false);
+            line = histogram_dist(line, &tbl->histogram.nested_tree, ", density", "1", false);
             line = chk_print(chk_line_feed(line),
                              "nested tree(s) pages %" PRIuSIZE ": branch %" PRIuSIZE ", leaf %" PRIuSIZE
                              ", subleaf %" PRIuSIZE,
