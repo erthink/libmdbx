@@ -196,6 +196,49 @@ __cold static MDBX_chk_line_t *chk_print_size(MDBX_chk_line_t *line, const char 
   return line;
 }
 
+__cold static MDBX_chk_line_t *chk_print_ratio(MDBX_chk_line_t *line, size_t numerator, size_t denominator,
+                                               unsigned precision) {
+  if (line) {
+    ratio2digits_buffer_t buffer;
+    line = chk_puts(line, ratio2digits(numerator, denominator, &buffer, precision));
+  }
+  return line;
+}
+
+__cold static MDBX_chk_line_t *chk_print_percent(MDBX_chk_line_t *line, const char *triplet, size_t value, size_t whole,
+                                                 const char *unit) {
+  if (line) {
+    const char *s1 = triplet;
+    const char *s2 = s1 + strlen(s1) + 1;
+    const char *s3 = s2 + strlen(s2) + 1;
+    ratio2digits_buffer_t buffer;
+    line = chk_print(line, "%s %" PRIuSIZE "%s%s (%s%%%s)%s", s1, value, unit, &"s"[*unit == 0 || value == 1],
+                     ratio2percent(value, whole, &buffer), s2, s3);
+  }
+  return line;
+}
+
+__cold static MDBX_chk_line_t *chk_print_pages_percent(MDBX_chk_line_t *line, const char *triplet, size_t pages,
+                                                       size_t whole) {
+  return chk_print_percent(line, triplet, pages, whole, " page");
+}
+
+__cold static MDBX_chk_line_t *chk_print_bytes_percent(MDBX_chk_line_t *line, const char *triplet, size_t pages,
+                                                       size_t whole) {
+  return chk_print_percent(line, triplet, pages, whole, " byte");
+}
+
+__cold static MDBX_chk_line_t *chk_print_pages_percent_bb(MDBX_chk_line_t *line, const char *prefix, size_t pages,
+                                                          size_t backed, size_t boundary) {
+  if (line) {
+    ratio2digits_buffer_t buffer_backed, buffer_boundary;
+    line =
+        chk_print(line, "%s %" PRIuSIZE " page%s (%s%% of backed, %s%% of boundary)", prefix, pages, &"s"[pages == 1],
+                  ratio2percent(pages, backed, &buffer_backed), ratio2percent(pages, boundary, &buffer_boundary));
+  }
+  return line;
+}
+
 __cold static int chk_error_rc(MDBX_chk_scope_t *const scope, int err, const char *subj) {
   MDBX_chk_line_t *line = chk_line_begin(scope, MDBX_chk_error);
   if (line)
@@ -964,13 +1007,11 @@ __cold static int chk_tree(MDBX_chk_scope_t *const scope) {
                              tbl->pages.nested_leaf, tbl->pages.nested_subleaf);
           }
 
+          line = chk_line_feed(line);
           const size_t bytes = pgno2bytes(env, tbl->pages.all);
-          line =
-              chk_print(chk_line_feed(line),
-                        "page filling: subtotal %" PRIuSIZE " bytes (%.1f%%), payload %" PRIuSIZE
-                        " (%.1f%%), unused %" PRIuSIZE " (%.1f%%)",
-                        bytes, bytes * 100.0 / total_page_bytes, tbl->payload_bytes, tbl->payload_bytes * 100.0 / bytes,
-                        bytes - tbl->payload_bytes, (bytes - tbl->payload_bytes) * 100.0 / bytes);
+          line = chk_print_bytes_percent(line, "page filling: subtotal\0\0", bytes, total_page_bytes);
+          line = chk_print_percent(line, ", payload\0\0", tbl->payload_bytes, bytes, "");
+          line = chk_print_percent(line, ", unused\0\0", bytes - tbl->payload_bytes, bytes, "");
           if (tbl->pages.empty)
             line = chk_print(line, ", %" PRIuSIZE " empty pages", tbl->pages.empty);
           if (tbl->lost_bytes)
@@ -989,14 +1030,11 @@ __cold static int chk_tree(MDBX_chk_scope_t *const scope) {
   }
 
   MDBX_chk_line_t *line = chk_line_begin(scope, MDBX_chk_resolution);
-  line = chk_print(line,
-                   "summary: total %" PRIuSIZE " bytes, payload %" PRIuSIZE " (%.1f%%), unused %" PRIuSIZE " (%.1f%%),"
-                   " average fill %.1f%%",
-                   total_page_bytes, usr->result.total_payload_bytes,
-                   usr->result.total_payload_bytes * 100.0 / total_page_bytes,
-                   total_page_bytes - usr->result.total_payload_bytes,
-                   (total_page_bytes - usr->result.total_payload_bytes) * 100.0 / total_page_bytes,
-                   usr->result.total_payload_bytes * 100.0 / total_page_bytes);
+  line = chk_print(line, "summary: total %" PRIuSIZE " bytes", total_page_bytes);
+  line =
+      chk_print_percent(line, ", payload\0 average density\0", usr->result.total_payload_bytes, total_page_bytes, "");
+  line = chk_print_percent(line, ", unused\0 average sparsity\0", total_page_bytes - usr->result.total_payload_bytes,
+                           total_page_bytes, "");
   if (total.pages.empty)
     line = chk_print(line, ", %" PRIuSIZE " empty pages", total.pages.empty);
   if (total.lost_bytes)
@@ -1292,8 +1330,9 @@ bailout:
           chk_line_feed(line);
           line = histogram_dist(line, &tbl->histogram.multival, "number of multi-values density", "single", false);
           chk_line_feed(line);
-          line = chk_print(line, "number of keys %" PRIuSIZE ", average values per key %.1f",
-                           tbl->histogram.multival.count, record_count / (double)tbl->histogram.multival.count);
+          line =
+              chk_print(line, "number of keys %" PRIuSIZE ", average values per key ", tbl->histogram.multival.count);
+          line = chk_print_ratio(line, record_count, tbl->histogram.multival.count, 1);
         }
         chk_line_end(line);
       }
@@ -1449,8 +1488,8 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
     line = chk_puts(line, "is unavailable");
   chk_line_end(line);
 
-  line = chk_print_size(chk_line_begin(scope, MDBX_chk_verbose), "system io-block ", chk->envinfo.mi_sys_ioblk, ", ");
-  line = chk_print_size(line, "unified page cache block ", chk->envinfo.mi_sys_upcblk, "");
+  line = chk_print_size(chk_line_begin(scope, MDBX_chk_verbose), "system unified page cache block ",
+                        chk->envinfo.mi_sys_upcblk, "");
   chk_line_end(line);
 
   env->dxb_mmap.filesize = chk->envinfo.mi_dxb_fsize;
@@ -1532,9 +1571,18 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
       chk_line_end(chk_print(line, " > until it will be closed or reopened in read-write mode."));
     }
 #endif /* Windows || Debug */
-    line = chk_print_size(chk_line_begin(scope, MDBX_chk_verbose), "space allocated for the dxb-file in a filesystem ",
-                          chk->envinfo.mi_dxb_fallocated, " ");
-    line = chk_print(line, "%.2f%%", 100.0 * chk->envinfo.mi_dxb_fallocated / chk->envinfo.mi_geo.current);
+    line = chk_print_size(chk_line_begin(scope, MDBX_chk_verbose), "filesystem: io-block ", chk->envinfo.mi_sys_ioblk,
+                          ", space allocated for the dxb-file ");
+    if (chk->envinfo.mi_dxb_fallocated == chk->envinfo.mi_geo.current) {
+      line = chk_puts(line, "exactly");
+    } else {
+      line = chk_print_size(
+          line, (chk->envinfo.mi_dxb_fallocated > chk->envinfo.mi_geo.current) ? "with excess " : "partially ",
+          chk->envinfo.mi_dxb_fallocated, " ");
+      ratio2digits_buffer_t buffer;
+      line =
+          chk_print(line, "%s%%", ratio2percent(chk->envinfo.mi_dxb_fallocated, chk->envinfo.mi_geo.current, &buffer));
+    }
     chk_line_end(line);
     chk_verbose_meta(inner, 0);
     chk_verbose_meta(inner, 1);
@@ -1652,69 +1700,50 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
   //--------------------------------------------------------------------------
 
   err = chk_scope_begin(chk, 1, MDBX_chk_space, nullptr, nullptr, "Page allocation:");
-  const double percent_boundary_reciprocal = 100.0 / txn->geo.upper;
-  const double percent_backed_reciprocal = 100.0 / usr->result.backed_pages;
+  const size_t backed = usr->result.backed_pages;
+  const size_t boundary = txn->geo.upper;
   const size_t detained = usr->result.gc_pages - usr->result.reclaimable_pages;
-  const size_t available2boundary = txn->geo.upper - usr->result.alloc_pages + usr->result.reclaimable_pages;
-  const size_t available2backed = usr->result.backed_pages - usr->result.alloc_pages + usr->result.reclaimable_pages;
-  const size_t remained2boundary = txn->geo.upper - usr->result.alloc_pages;
-  const size_t remained2backed = usr->result.backed_pages - usr->result.alloc_pages;
+  const size_t available2boundary = boundary - usr->result.alloc_pages + usr->result.reclaimable_pages;
+  const size_t available2backed = backed - usr->result.alloc_pages + usr->result.reclaimable_pages;
+  const size_t remained2boundary = boundary - usr->result.alloc_pages;
+  const size_t remained2backed = backed - usr->result.alloc_pages;
 
   const size_t used = (chk->flags & MDBX_CHK_SKIP_BTREE_TRAVERSAL) ? usr->result.alloc_pages - usr->result.gc_pages
                                                                    : usr->result.processed_pages;
 
   line = chk_line_begin(usr->scope, MDBX_chk_info);
-  line = chk_print(line,
-                   "backed by file: %" PRIuSIZE " pages (%.1f%%)"
-                   ", %" PRIuSIZE " left to boundary (%.1f%%)",
-                   usr->result.backed_pages, usr->result.backed_pages * percent_boundary_reciprocal,
-                   txn->geo.upper - usr->result.backed_pages,
-                   (txn->geo.upper - usr->result.backed_pages) * percent_boundary_reciprocal);
+  line = chk_print_pages_percent(line, "backed by file:\0 of boundary\0", backed, boundary);
+  line = chk_print_pages_percent(line, ",\0\0 left to boundary", boundary - backed, boundary);
   line = chk_line_feed(line);
 
-  line = chk_print(line, "%s: %" PRIuSIZE " page(s), %.1f%% of backed, %.1f%% of boundary", "used", used,
-                   used * percent_backed_reciprocal, used * percent_boundary_reciprocal);
+  line = chk_print_pages_percent_bb(line, "used:", used, backed, boundary);
   line = chk_line_feed(line);
 
-  line = chk_print(line, "%s: %" PRIuSIZE " page(s) (%.1f%%) of backed, %" PRIuSIZE " to boundary (%.1f%% of boundary)",
-                   "remained", remained2backed, remained2backed * percent_backed_reciprocal, remained2boundary,
-                   remained2boundary * percent_boundary_reciprocal);
+  line = chk_print_pages_percent(line, "remained:\0\0 of backed", remained2backed, backed);
+  line = chk_print_pages_percent(line, ", left\0\0 to boundary", remained2boundary, boundary);
   line = chk_line_feed(line);
 
-  line =
-      chk_print(line,
-                "reclaimable: %" PRIuSIZE " (%.1f%% of backed, %.1f%% of boundary)"
-                ", GC %" PRIuSIZE " (%.1f%% of backed, %.1f%% of boundary)",
-                usr->result.reclaimable_pages, usr->result.reclaimable_pages * percent_backed_reciprocal,
-                usr->result.reclaimable_pages * percent_boundary_reciprocal, usr->result.gc_pages,
-                usr->result.gc_pages * percent_backed_reciprocal, usr->result.gc_pages * percent_boundary_reciprocal);
+  line = chk_print_pages_percent_bb(line, "reclaimable:", usr->result.reclaimable_pages, backed, boundary);
+  line = chk_print_pages_percent_bb(line, ", within GC", usr->result.gc_pages, backed, boundary);
   line = chk_line_feed(line);
 
-  line = chk_print(line,
-                   "detained by reader(s): %" PRIuSIZE " (%.1f%% of backed, %.1f%% of boundary)"
-                   ", %u reader(s), lag %" PRIi64,
-                   detained, detained * percent_backed_reciprocal, detained * percent_boundary_reciprocal,
-                   chk->envinfo.mi_numreaders, chk->envinfo.mi_recent_txnid - chk->envinfo.mi_latter_reader_txnid);
+  line = chk_print_pages_percent_bb(line, "detained by reader(s):", detained, backed, boundary);
+  line = chk_print(line, ", %u reader(s), lag %" PRIi64, chk->envinfo.mi_numreaders,
+                   chk->envinfo.mi_recent_txnid - chk->envinfo.mi_latter_reader_txnid);
   line = chk_line_feed(line);
 
-  line = chk_print(line, "%s: %" PRIuSIZE " page(s), %.1f%% of backed, %.1f%% of boundary", "allocated",
-                   usr->result.alloc_pages, usr->result.alloc_pages * percent_backed_reciprocal,
-                   usr->result.alloc_pages * percent_boundary_reciprocal);
+  line = chk_print_pages_percent_bb(line, "allocated:", usr->result.alloc_pages, backed, boundary);
   line = chk_line_feed(line);
 
-  line = chk_print(line, "%s: %" PRIuSIZE " page(s) (%.1f%%) of backed, %" PRIuSIZE " to boundary (%.1f%% of boundary)",
-                   "available", available2backed, available2backed * percent_backed_reciprocal, available2boundary,
-                   available2boundary * percent_boundary_reciprocal);
+  line = chk_print_pages_percent(line, "available:\0 of backed\0", available2backed, backed);
+  line = chk_print_pages_percent(line, ", left\0\0 to boundary", available2boundary, boundary);
   chk_line_end(line);
 
   line = chk_line_begin(usr->scope, MDBX_chk_resolution);
-  line = chk_print(line, "%s %" PRIaPGNO " pages", (txn->geo.upper == txn->geo.now) ? "total" : "upto", txn->geo.upper);
-  line = chk_print(line, ", backed %" PRIuSIZE " (%.1f%%)", usr->result.backed_pages,
-                   usr->result.backed_pages * percent_boundary_reciprocal);
-  line = chk_print(line, ", allocated %" PRIuSIZE " (%.1f%%)", usr->result.alloc_pages,
-                   usr->result.alloc_pages * percent_boundary_reciprocal);
-  line = chk_print(line, ", available %" PRIuSIZE " (%.1f%%)", available2boundary,
-                   available2boundary * percent_boundary_reciprocal);
+  line = chk_print(line, "%s %zu pages", (boundary == txn->geo.now) ? "total" : "upto", boundary);
+  line = chk_print_pages_percent(line, ", backed\0\0", backed, boundary);
+  line = chk_print_pages_percent(line, ", allocated\0\0", usr->result.alloc_pages, boundary);
+  line = chk_print_pages_percent(line, ", available\0\0", available2boundary, boundary);
   chk_line_end(line);
   chk_scope_restore(scope, err);
 

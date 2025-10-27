@@ -1290,9 +1290,12 @@ static int gc_fill_returned(MDBX_txn *txn, gcu_t *ctx) {
   rkl_iter_t iter = rkl_iterator(&txn->wr.gc.comeback, is_lifo(txn));
   size_t surplus = ctx->return_reserved_hi - amount, stored = 0;
   const uint64_t factor = ((uint64_t)surplus << 32) / ctx->return_reserved_hi;
-  TRACE("%s: amount %zu, slots %zu, surplus %zu (%zu..%zu), factor %.6f (%" PRIu64 " >> 32, sharp %.12f)",
-        dbg_prefix(ctx), amount, slots, surplus, ctx->return_reserved_lo, ctx->return_reserved_hi,
-        factor / (double)UINT32_MAX, factor, surplus / (double)ctx->return_reserved_hi);
+  ratio2digits_buffer_t factor_rough, factor_sharp;
+  TRACE("%s: amount %zu, slots %zu, surplus %zu (%zu..%zu), factor %s (%" PRIu64 " >> 32, sharp %s)", dbg_prefix(ctx),
+        amount, slots, surplus, ctx->return_reserved_lo, ctx->return_reserved_hi,
+        ratio2digits(factor, UINT32_MAX, &factor_rough, 6), factor,
+        ratio2digits(surplus, ctx->return_reserved_hi, &factor_sharp, 12));
+
   do {
     const size_t left = amount - stored;
     tASSERT(txn, left > 0 && left <= amount);

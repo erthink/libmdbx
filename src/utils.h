@@ -76,3 +76,10 @@ MDBX_MAYBE_UNUSED static inline uint64_t monotime_since_cached(uint64_t begin_ti
   }
   return cache->value - begin_timestamp;
 }
+
+typedef struct ratio2digits_buffer {
+  char string[1 + 20 + 1 + 19 + 1];
+} ratio2digits_buffer_t;
+
+char *ratio2digits(const uint64_t v, const uint64_t d, ratio2digits_buffer_t *const buffer, int precision);
+char *ratio2percent(const uint64_t v, const uint64_t d, ratio2digits_buffer_t *const buffer);

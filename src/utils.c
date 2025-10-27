@@ -41,3 +41,52 @@ MDBX_NOTHROW_CONST_FUNCTION uint64_t rrxmrrxmsx_0(uint64_t v) {
   v *= UINT64_C(0x9FB21C651E98DF25);
   return v ^ v >> 28;
 }
+
+__cold char *ratio2digits(const uint64_t v, const uint64_t d, ratio2digits_buffer_t *const buffer, int precision) {
+  assert(d > 0 && precision < 20);
+  char *const dot = buffer->string + 21;
+  uint64_t i = v / d, f = v % d, m = d;
+
+  char *tail = dot;
+  bool carry = m - f < m / 2;
+  if (precision > 0) {
+    *tail = '.';
+    do {
+      while (unlikely(f > UINT64_MAX / 10)) {
+        f >>= 1;
+        m >>= 1;
+      }
+      f *= 10;
+      assert(tail > buffer->string && tail < ARRAY_END(buffer->string) - 1);
+      *++tail = '0' + (char)(f / m);
+      f %= m;
+    } while (--precision && tail < ARRAY_END(buffer->string) - 1);
+
+    carry = m - f < m / 2;
+    for (char *scan = tail; carry && scan > dot; --scan)
+      *scan = (carry = *scan == '9') ? '0' : *scan + 1;
+  }
+  assert(tail > buffer->string && tail < ARRAY_END(buffer->string) - 1);
+  *++tail = '\0';
+
+  char *head = dot;
+  i += carry;
+  while (i > 9) {
+    assert(head > buffer->string && head < ARRAY_END(buffer->string));
+    *--head = '0' + (char)(i % 10);
+    i /= 10;
+  }
+  assert(head > buffer->string && head < ARRAY_END(buffer->string));
+  *--head = '0' + (char)i;
+
+  return head;
+}
+
+__cold char *ratio2percent(uint64_t value, uint64_t whole, ratio2digits_buffer_t *buffer) {
+  while (unlikely(value > UINT64_MAX / 100)) {
+    value >>= 1;
+    whole >>= 1;
+  }
+  const bool rough = whole >= value && (!value || value > whole / 16);
+  return ratio2digits(value * 100, whole, buffer, rough ? 1 : 2);
+}
