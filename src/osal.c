@@ -1777,8 +1777,8 @@ int osal_check_fs_incore(mdbx_filehandle_t handle) {
   const size_t name_len = 0;
 #endif
   if (name_len) {
-    if (strncasecmp("tmpfs", name, 6) == 0 || strncasecmp("mfs", name, 4) == 0 || strncasecmp("ramfs", name, 6) == 0 ||
-        strncasecmp("romfs", name, 6) == 0)
+    if (osal_strncasecmp("tmpfs", name, 6) == 0 || osal_strncasecmp("mfs", name, 4) == 0 ||
+        osal_strncasecmp("ramfs", name, 6) == 0 || osal_strncasecmp("romfs", name, 6) == 0)
       return MDBX_RESULT_TRUE;
   }
 #endif /* !Windows */
@@ -1990,13 +1990,14 @@ int osal_check_fs_local(mdbx_filehandle_t handle, int flags) {
 #endif
 
   if (name_len) {
-    if (((name_len > 2 && strncasecmp("nfs", name, 3) == 0) || strncasecmp("cifs", name, name_len) == 0 ||
-         strncasecmp("ncpfs", name, name_len) == 0 || strncasecmp("smbfs", name, name_len) == 0 ||
-         strcasecmp("9P" /* WSL2 */, name) == 0 ||
-         ((name_len > 3 && strncasecmp("fuse", name, 4) == 0) && strncasecmp("fuseblk", name, name_len) != 0)) &&
+    if (((name_len > 2 && osal_strncasecmp("nfs", name, 3) == 0) || osal_strncasecmp("cifs", name, name_len) == 0 ||
+         osal_strncasecmp("ncpfs", name, name_len) == 0 || osal_strncasecmp("smbfs", name, name_len) == 0 ||
+         osal_strcasecmp("9P" /* WSL2 */, name) == 0 ||
+         ((name_len > 3 && osal_strncasecmp("fuse", name, 4) == 0) &&
+          osal_strncasecmp("fuseblk", name, name_len) != 0)) &&
         !(flags & MDBX_EXCLUSIVE))
       return MDBX_EREMOTE;
-    if (strcasecmp("ftp", name) == 0 || strcasecmp("http", name) == 0 || strcasecmp("sshfs", name) == 0)
+    if (osal_strcasecmp("ftp", name) == 0 || osal_strcasecmp("http", name) == 0 || osal_strcasecmp("sshfs", name) == 0)
       return MDBX_EREMOTE;
   }
 
