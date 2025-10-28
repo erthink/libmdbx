@@ -106,11 +106,12 @@ endef
 define uname2ldflags
   case "$(UNAME)" in
     CYGWIN*|MINGW*|MSYS*|Windows*)
-      echo '-Wl,--gc-sections,-O1';
+      echo '-Wl,--gc-sections,-O1,--as-needed';
       ;;
     *)
       $(LD) --help 2>/dev/null | grep -q -- --gc-sections && echo '-Wl,--gc-sections,-z,relro,-O1';
       $(LD) --help 2>/dev/null | grep -q -- -dead_strip && echo '-Wl,-dead_strip';
+      $(LD) --help 2>/dev/null | grep -q -- --as-needed && echo '-Wl,--as-needed';
       ;;
   esac
 endef
