@@ -6554,11 +6554,11 @@ typedef struct MDBX_chk_table {
   } pages;
   struct {
     /// Tree deep histogram
-    struct MDBX_chk_histogram deep;
+    struct MDBX_chk_histogram height;
     /// Histogram of large/overflow pages length
     struct MDBX_chk_histogram large_pages;
     /// Histogram of nested trees height, span length for GC
-    struct MDBX_chk_histogram nested_tree;
+    struct MDBX_chk_histogram nested_height;
     /// Keys length histogram
     struct MDBX_chk_histogram key_len;
     /// Values length histogram
@@ -6566,9 +6566,9 @@ typedef struct MDBX_chk_table {
     /// Number of multi-values (aka duplicates) histogram
     struct MDBX_chk_histogram multival;
     /// Histogram of branch and leaf pages filling in percents
-    struct MDBX_chk_histogram tree_filling;
+    struct MDBX_chk_histogram tree_density;
     /// Histogram of nested tree(s) branch and leaf pages filling in percents
-    struct MDBX_chk_histogram nested_tree_filling;
+    struct MDBX_chk_histogram large_or_nested_density;
   } histogram;
 } MDBX_chk_table_t;
 

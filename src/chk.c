@@ -611,11 +611,23 @@ static void histogram_acc(const size_t n, struct MDBX_chk_histogram *p) {
 
 __cold static MDBX_chk_line_t *histogram_dist(MDBX_chk_line_t *line, const struct MDBX_chk_histogram *histogram,
                                               const char *prefix, const char *first, bool amount) {
+  /* https://en.wikipedia.org/wiki/Multiplication_sign */
+#if defined(unix) || defined(linux) || defined(__unix__) || defined(__unix) || defined(__linux__) ||                   \
+    defined(__APPLE__) || defined(__MACH__) || defined(_DARWIN_C_SOURCE)
+#define UNICODE_MULSIGN_STR "×"
+#define UNICODE_MULSIGN_FMT "s"
+#elif defined(_WIN32) || defined(_WIN64)
+#define UNICODE_MULSIGN_STR L"\u00d7"
+#define UNICODE_MULSIGN_FMT "ls"
+#else
+#define UNICODE_MULSIGN_STR "*"
+#define UNICODE_MULSIGN_FMT "s"
+#endif
   line = chk_print(line, "%s:", prefix);
   const char *comma = "";
   const size_t first_val = amount ? histogram->ones : histogram->pad;
   if (first_val) {
-    chk_print(line, " %s=%" PRIuSIZE, first, first_val);
+    chk_print(line, " %s%" UNICODE_MULSIGN_FMT "%" PRIuSIZE, first, UNICODE_MULSIGN_STR, first_val);
     comma = ",";
   }
   for (size_t n = 0; n < ARRAY_LENGTH(histogram->ranges); ++n)
@@ -623,7 +635,8 @@ __cold static MDBX_chk_line_t *histogram_dist(MDBX_chk_line_t *line, const struc
       chk_print(line, "%s %" PRIuSIZE, comma, histogram->ranges[n].begin);
       if (histogram->ranges[n].begin != histogram->ranges[n].end - 1)
         chk_print(line, "-%" PRIuSIZE, histogram->ranges[n].end - 1);
-      line = chk_print(line, "=%" PRIuSIZE, amount ? histogram->ranges[n].amount : histogram->ranges[n].count);
+      line = chk_print(line, "%" UNICODE_MULSIGN_FMT "%" PRIuSIZE, UNICODE_MULSIGN_STR,
+                       amount ? histogram->ranges[n].amount : histogram->ranges[n].count);
       comma = ",";
     }
   return line;
@@ -711,7 +724,7 @@ __cold static void chk_verbose_meta(MDBX_chk_scope_t *const scope, const unsigne
     line = chk_print(line, " txn#%" PRIaTXN ", ", meta_txnid);
     if (chk->envinfo.mi_bootid.meta[num].x | chk->envinfo.mi_bootid.meta[num].y)
       line = chk_print(line, "boot-id %" PRIx64 "-%" PRIx64 " (%s)", chk->envinfo.mi_bootid.meta[num].x,
-                       chk->envinfo.mi_bootid.meta[num].y, bootid_match ? "live" : "not match");
+                       chk->envinfo.mi_bootid.meta[num].y, bootid_match ? "live" : "dissimilar");
     else
       line = chk_puts(line, "no boot-id");
 
@@ -744,7 +757,7 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
     chk_scope_issue(scope, "too deeply %u, page %zu, parent %zu", deep, pgno, parent_pgno);
     return MDBX_CORRUPTED /* avoid infinite loop/recursion */;
   }
-  histogram_acc(deep, &tbl->histogram.deep);
+  histogram_acc(deep, &tbl->histogram.height);
   usr->result.processed_pages += npages;
   const size_t page_bytes = payload_bytes + header_bytes + unused_bytes;
 
@@ -765,7 +778,7 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
 
   const char *pagetype_caption;
   bool branch = false;
-  struct MDBX_chk_histogram *filling = nullptr;
+  struct MDBX_chk_histogram *density = nullptr;
   switch (pagetype) {
   default:
     chk_object_issue(scope, "page", pgno, "unknown page-type", "type %u, deep %i, parent %zu", (unsigned)pagetype, deep,
@@ -786,6 +799,7 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
   case page_large:
     pagetype_caption = "large";
     histogram_acc(npages, &tbl->histogram.large_pages);
+    density = &tbl->histogram.large_or_nested_density;
     if (tbl->flags & MDBX_DUPSORT)
       chk_object_issue(scope, "page", pgno, "unexpected", "type %u, table %s flags 0x%x, deep %i, parent %zu",
                        (unsigned)pagetype, chk_v2a(chk, &tbl->name), tbl->flags, deep, parent_pgno);
@@ -795,11 +809,11 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
     if (!nested) {
       pagetype_caption = "branch";
       tbl->pages.branch += 1;
-      filling = &tbl->histogram.tree_filling;
+      density = &tbl->histogram.tree_density;
     } else {
       pagetype_caption = "nested-branch";
       tbl->pages.nested_branch += 1;
-      filling = &tbl->histogram.nested_tree_filling;
+      density = &tbl->histogram.large_or_nested_density;
     }
     break;
   case page_dupfix_leaf:
@@ -812,16 +826,16 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
     if (!nested) {
       pagetype_caption = "leaf";
       tbl->pages.leaf += 1;
-      filling = &tbl->histogram.tree_filling;
+      density = &tbl->histogram.tree_density;
       if (height != tbl_info->internal->height)
         chk_object_issue(scope, "page", pgno, "wrong tree height", "actual %i != %i table %s, parent %zu", height,
                          tbl_info->internal->height, chk_v2a(chk, &tbl->name), parent_pgno);
     } else {
       pagetype_caption = (pagetype == page_leaf) ? "nested-leaf" : "nested-leaf-dupfix";
       tbl->pages.nested_leaf += 1;
-      filling = &tbl->histogram.nested_tree_filling;
+      density = &tbl->histogram.large_or_nested_density;
       if (chk->last_nested != nested) {
-        histogram_acc(height, &tbl->histogram.nested_tree);
+        histogram_acc(height, &tbl->histogram.nested_height);
         chk->last_nested = nested;
       }
       if (height != nested->height)
@@ -837,12 +851,12 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
       chk_object_issue(scope, "page", pgno, "unexpected", "type %u, table %s flags 0x%x, deep %i, parent %zu",
                        (unsigned)pagetype, chk_v2a(chk, &tbl->name), tbl->flags, deep, parent_pgno);
     else
-      filling = &tbl->histogram.nested_tree_filling;
+      density = &tbl->histogram.large_or_nested_density;
     break;
   }
 
-  if (filling)
-    histogram_acc((page_size - unused_bytes) * 100 / page_size, filling);
+  if (density)
+    histogram_acc((page_size - unused_bytes) * 100 / page_size, density);
 
   if (npages) {
     if (tbl->cookie) {
@@ -977,51 +991,55 @@ __cold static int chk_tree(MDBX_chk_scope_t *const scope) {
   if (scope->verbosity > MDBX_chk_info) {
     for (size_t i = 0; i < ARRAY_LENGTH(chk->table) && chk->table[i]; ++i) {
       MDBX_chk_table_t *const tbl = chk->table[i];
-      MDBX_chk_scope_t *inner = chk_scope_push(scope, 0, "tree %s:", chk_v2a(chk, &tbl->name));
-      if (tbl->pages.all == 0)
-        chk_line_end(chk_print(chk_line_begin(inner, MDBX_chk_resolution), "empty"));
-      else {
+      MDBX_chk_scope_t *inner =
+          chk_scope_push(scope, 0, (tbl->pages.all ? "b-tree %s, subtotal %" PRIuSIZE " pages:" : "b-tree %s: empty"),
+                         chk_v2a(chk, &tbl->name), tbl->pages.all);
+      if (tbl->pages.all) {
         MDBX_chk_line_t *line = chk_line_begin(inner, MDBX_chk_info);
         if (line) {
-          line = chk_print(line, "page usage: subtotal %" PRIuSIZE, tbl->pages.all);
-          const size_t branch_pages = tbl->pages.branch + tbl->pages.nested_branch;
-          const size_t leaf_pages = tbl->pages.leaf + tbl->pages.nested_leaf + tbl->pages.nested_subleaf;
+          line = chk_puts(line, "pages composition: ");
           if (tbl->pages.broken)
-            line = chk_print(line, ", broken %" PRIuSIZE, tbl->pages.broken);
-          if (tbl->pages.broken == 0 || (branch_pages | leaf_pages | tbl->histogram.large_pages.count) != 0) {
-            line = chk_print(line, ", branch %" PRIuSIZE ", leaf %" PRIuSIZE, branch_pages, leaf_pages);
+            line = chk_print(line, "broken %" PRIuSIZE ", ", tbl->pages.broken);
+          if (tbl->pages.broken != tbl->pages.all) {
+            line = chk_print(line, "branch %" PRIuSIZE ", leaf %" PRIuSIZE, tbl->pages.branch, tbl->pages.leaf);
+            if (tbl->pages.nested_subleaf || (tbl->flags & MDBX_DUPSORT) != 0)
+              line = chk_print(line, ", subleaf %" PRIuSIZE, tbl->pages.nested_subleaf);
+            if (tbl->pages.nested_branch || (tbl->flags & MDBX_DUPSORT) != 0)
+              line = chk_print(line, ", nested-branch %" PRIuSIZE, tbl->pages.nested_branch);
+            if (tbl->pages.nested_leaf || (tbl->flags & MDBX_DUPSORT) != 0)
+              line = chk_print(line, ", nested-leaf %" PRIuSIZE, tbl->pages.nested_leaf);
             if (tbl->histogram.large_pages.count || (tbl->flags & MDBX_DUPSORT) == 0) {
               line = chk_print(line, ", large %" PRIuSIZE, tbl->histogram.large_pages.count);
               if (tbl->histogram.large_pages.amount | tbl->histogram.large_pages.count)
                 line = histogram_print(inner, line, &tbl->histogram.large_pages, " amount", "single", true);
             }
-          }
-          line = histogram_dist(chk_line_feed(line), &tbl->histogram.deep, "tree deep density", "1", false);
-          if (tbl != &chk->table_gc && tbl->histogram.nested_tree.count) {
-            line = chk_print(chk_line_feed(line), "nested tree(s) %" PRIuSIZE, tbl->histogram.nested_tree.count);
-            line = histogram_dist(line, &tbl->histogram.nested_tree, ", density", "1", false);
-            line = chk_print(chk_line_feed(line),
-                             "nested tree(s) pages %" PRIuSIZE ": branch %" PRIuSIZE ", leaf %" PRIuSIZE
-                             ", subleaf %" PRIuSIZE,
-                             tbl->pages.nested_branch + tbl->pages.nested_leaf, tbl->pages.nested_branch,
-                             tbl->pages.nested_leaf, tbl->pages.nested_subleaf);
-          }
+            line = histogram_dist(chk_line_feed(line), &tbl->histogram.height, "tree levels", "1", false);
+            if ((tbl->flags & MDBX_DUPSORT) != 0 || (tbl->histogram.nested_height.count && tbl != &chk->table_gc)) {
+              line = chk_print(chk_line_feed(line),
+                               "nested tree(s): quantity %" PRIuSIZE ", subtotal pages %" PRIuSIZE ", ",
+                               tbl->histogram.nested_height.count, tbl->pages.nested_branch + tbl->pages.nested_leaf);
+              if (tbl != &chk->table_gc && tbl->histogram.nested_height.count)
+                line = histogram_dist(line, &tbl->histogram.nested_height, "levels", "1", false);
+            }
+            line = chk_line_feed(line);
 
-          line = chk_line_feed(line);
-          const size_t bytes = pgno2bytes(env, tbl->pages.all);
-          line = chk_print_bytes_percent(line, "page filling: subtotal\0\0", bytes, total_page_bytes);
-          line = chk_print_percent(line, ", payload\0\0", tbl->payload_bytes, bytes, "");
-          line = chk_print_percent(line, ", unused\0\0", bytes - tbl->payload_bytes, bytes, "");
-          if (tbl->pages.empty)
-            line = chk_print(line, ", %" PRIuSIZE " empty pages", tbl->pages.empty);
-          if (tbl->lost_bytes)
-            line = chk_print(line, ", %" PRIuSIZE " bytes lost", tbl->lost_bytes);
+            const size_t bytes = pgno2bytes(env, tbl->pages.all);
+            line = chk_print_bytes_percent(line, "pages density: subtotal\0\0", bytes, total_page_bytes);
+            line = chk_print_percent(line, ", payload\0\0", tbl->payload_bytes, bytes, "");
+            line = chk_print_percent(line, ", unused\0\0", bytes - tbl->payload_bytes, bytes, "");
+            if (tbl->pages.empty)
+              line = chk_print(line, ", %" PRIuSIZE " empty pages", tbl->pages.empty);
+            if (tbl->lost_bytes)
+              line = chk_print(line, ", %" PRIuSIZE " bytes lost", tbl->lost_bytes);
 
-          line =
-              histogram_dist(chk_line_feed(line), &tbl->histogram.tree_filling, "tree %-filling density", "1", false);
-          if (tbl->histogram.nested_tree_filling.count)
-            line = histogram_dist(chk_line_feed(line), &tbl->histogram.nested_tree_filling,
-                                  "nested tree(s) %-filling density", "1", false);
+            line = histogram_dist(chk_line_feed(line), &tbl->histogram.tree_density, "pages %-density distribution",
+                                  "1", false);
+            if (tbl->histogram.large_or_nested_density.count)
+              line = histogram_dist(chk_line_feed(line), &tbl->histogram.large_or_nested_density,
+                                    (tbl->flags & MDBX_DUPSORT) ? "nested %-density distribution"
+                                                                : "large pages %-density distribution",
+                                    "1", false);
+          }
           chk_line_end(line);
         }
       }
@@ -1323,12 +1341,12 @@ bailout:
     if (handler) {
       if (record_count) {
         MDBX_chk_line_t *line = chk_line_begin(scope, MDBX_chk_info);
-        line = histogram_dist(line, &tbl->histogram.key_len, "key length density", "0/1", false);
+        line = histogram_dist(line, &tbl->histogram.key_len, "key length distribution", "0/1", false);
         chk_line_feed(line);
-        line = histogram_dist(line, &tbl->histogram.val_len, "value length density", "0/1", false);
+        line = histogram_dist(line, &tbl->histogram.val_len, "value length distribution", "0/1", false);
         if (tbl->histogram.multival.amount) {
           chk_line_feed(line);
-          line = histogram_dist(line, &tbl->histogram.multival, "number of multi-values density", "single", false);
+          line = histogram_dist(line, &tbl->histogram.multival, "number of multi-values distribution", "single", false);
           chk_line_feed(line);
           line =
               chk_print(line, "number of keys %" PRIuSIZE ", average values per key ", tbl->histogram.multival.count);
@@ -1444,7 +1462,7 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t 
                          iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pgno, span) : pgno_sub(pgno, span));
                ++span)
             ;
-          histogram_acc(span, &tbl->histogram.nested_tree);
+          histogram_acc(span, &tbl->histogram.nested_height);
           MDBX_chk_line_t *line = chk_line_begin(scope, MDBX_chk_extra);
           if (line) {
             if (span > 1)
@@ -1682,7 +1700,7 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
       err = chk_db(usr->scope, FREE_DBI, &chk->table_gc, chk_handle_gc);
     line = chk_line_begin(scope, MDBX_chk_info);
     if (line) {
-      histogram_print(scope, line, &chk->table_gc.histogram.nested_tree, "span(s)", "single", false);
+      histogram_print(scope, line, &chk->table_gc.histogram.nested_height, "span(s)", "single", false);
       chk_line_end(line);
     }
     if (usr->result.problems_gc == 0 && (chk->flags & MDBX_CHK_SKIP_BTREE_TRAVERSAL) == 0) {
