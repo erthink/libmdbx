@@ -163,3 +163,29 @@ int mdbx_txn_unlock(MDBX_env *env) {
   lck_txn_unlock(env);
   return MDBX_SUCCESS;
 }
+
+/*------------------------------------------------------------------------------
+ * Auxiliary */
+
+__cold const char *mdbx_ratio2digits(uint64_t numerator, uint64_t denominator, int precision, char *buffer,
+                                     size_t buffer_size) {
+  if (!buffer)
+    return "nullptr";
+  else if (buffer_size < sizeof(ratio2digits_buffer_t))
+    return "buffer-to-small";
+  else if (!denominator)
+    return numerator ? "infinity" : "undefined";
+  else
+    return ratio2digits(numerator, denominator, (ratio2digits_buffer_t *)buffer, precision);
+}
+
+__cold const char *mdbx_ratio2percents(uint64_t value, uint64_t whole, char *buffer, size_t buffer_size) {
+  if (!buffer)
+    return "nullptr";
+  else if (buffer_size < sizeof(ratio2digits_buffer_t))
+    return "buffer-to-small";
+  else if (!whole)
+    return value ? "infinity" : "undefined";
+  else
+    return ratio2percent(value, whole, (ratio2digits_buffer_t *)buffer);
+}
