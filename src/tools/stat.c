@@ -341,8 +341,8 @@ int main(int argc, char *argv[]) {
     }
     print_stat(&mst);
 
-    pgno_t pages = 0, *iptr;
-    pgno_t reclaimable = 0;
+    size_t gc_pages = 0, *iptr;
+    size_t gc_reclaimable = 0;
     MDBX_val key, data;
     while (MDBX_SUCCESS == (rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT))) {
       if (user_break) {
@@ -352,9 +352,9 @@ int main(int argc, char *argv[]) {
       iptr = data.iov_base;
       const pgno_t number = *iptr++;
 
-      pages += number;
+      gc_pages += number;
       if (envinfo && mei.mi_latter_reader_txnid > *(txnid_t *)key.iov_base)
-        reclaimable += number;
+        gc_reclaimable += number;
 
       if (freinfo > 1) {
         char *bad = "";
@@ -402,36 +402,43 @@ int main(int argc, char *argv[]) {
     }
 
     if (envinfo) {
-      uint64_t value = mei.mi_mapsize / mei.mi_dxb_pagesize;
-      double percent = value / 100.0;
-      printf("Page Usage\n");
-      printf("  Total: %" PRIu64 " 100%%\n", value);
+      char buffer[64];
 
-      value = mei.mi_geo.current / mei.mi_dxb_pagesize;
-      printf("  Backed: %" PRIu64 " %.1f%%\n", value, value / percent);
+      puts("Page Usage");
+      const size_t total_pages = mei.mi_mapsize / mei.mi_dxb_pagesize;
+      printf("  Total: %" PRIuSIZE " 100%%\n", total_pages);
 
-      value = mei.mi_last_pgno + 1;
-      printf("  Allocated: %" PRIu64 " %.1f%%\n", value, value / percent);
+      const size_t backed_pages = mei.mi_geo.current / mei.mi_dxb_pagesize;
+      printf("  Backed: %" PRIuSIZE " %s%%\n", backed_pages,
+             mdbx_ratio2percents(backed_pages, total_pages, buffer, sizeof(buffer)));
 
-      value = mei.mi_mapsize / mei.mi_dxb_pagesize - (mei.mi_last_pgno + 1);
-      printf("  Remained: %" PRIu64 " %.1f%%\n", value, value / percent);
+      const size_t allocated_pages = mei.mi_last_pgno + 1;
+      printf("  Allocated: %" PRIuSIZE " %s%%\n", allocated_pages,
+             mdbx_ratio2percents(allocated_pages, total_pages, buffer, sizeof(buffer)));
 
-      value = mei.mi_last_pgno + 1 - pages;
-      printf("  Used: %" PRIu64 " %.1f%%\n", value, value / percent);
+      const size_t remained_pages = total_pages - allocated_pages;
+      printf("  Remained: %" PRIuSIZE " %s%%\n", remained_pages,
+             mdbx_ratio2percents(remained_pages, total_pages, buffer, sizeof(buffer)));
 
-      value = pages;
-      printf("  GC: %" PRIu64 " %.1f%%\n", value, value / percent);
+      const size_t used_pages = allocated_pages - gc_pages;
+      printf("  Used: %" PRIuSIZE " %s%%\n", used_pages,
+             mdbx_ratio2percents(used_pages, total_pages, buffer, sizeof(buffer)));
 
-      value = pages - reclaimable;
-      printf("  Retained: %" PRIu64 " %.1f%%\n", value, value / percent);
+      printf("  GC: %" PRIuSIZE " %s%%\n", gc_pages,
+             mdbx_ratio2percents(gc_pages, total_pages, buffer, sizeof(buffer)));
 
-      value = reclaimable;
-      printf("  Reclaimable: %" PRIu64 " %.1f%%\n", value, value / percent);
+      printf("  Reclaimable: %" PRIuSIZE " %s%%\n", gc_reclaimable,
+             mdbx_ratio2percents(gc_reclaimable, total_pages, buffer, sizeof(buffer)));
 
-      value = mei.mi_mapsize / mei.mi_dxb_pagesize - (mei.mi_last_pgno + 1) + reclaimable;
-      printf("  Available: %" PRIu64 " %.1f%%\n", value, value / percent);
+      const size_t gc_retained = gc_pages - gc_reclaimable;
+      printf("  Retained: %" PRIuSIZE " %s%%\n", gc_retained,
+             mdbx_ratio2percents(gc_retained, total_pages, buffer, sizeof(buffer)));
+
+      const size_t available_pages = gc_reclaimable + remained_pages;
+      printf("  Available: %" PRIuSIZE " %s%%\n", available_pages,
+             mdbx_ratio2percents(available_pages, total_pages, buffer, sizeof(buffer)));
     } else
-      printf("  GC: %" PRIaPGNO " pages\n", pages);
+      printf("  GC: %" PRIuSIZE " pages\n", gc_pages);
   }
 
   rc = mdbx_dbi_open(txn, table, MDBX_DB_ACCEDE, &dbi);
