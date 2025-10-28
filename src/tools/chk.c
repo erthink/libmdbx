@@ -414,7 +414,6 @@ int main(int argc, char *argv[]) {
   if (argc < 2)
     usage(prog);
 
-  double elapsed;
 #if defined(_WIN32) || defined(_WIN64)
   uint64_t timestamp_start, timestamp_finish;
   timestamp_start = GetMilliseconds();
@@ -652,23 +651,26 @@ bailout:
 
 #if defined(_WIN32) || defined(_WIN64)
   timestamp_finish = GetMilliseconds();
-  elapsed = (timestamp_finish - timestamp_start) * 1e-3;
+  const uint64_t elapsed_msec = (timestamp_finish - timestamp_start);
 #else
   if (clock_gettime(CLOCK_MONOTONIC, &timestamp_finish)) {
     error_fn("clock_gettime", errno);
     return EXIT_FAILURE_SYS;
   }
-  elapsed =
-      timestamp_finish.tv_sec - timestamp_start.tv_sec + (timestamp_finish.tv_nsec - timestamp_start.tv_nsec) * 1e-9;
+  const uint64_t elapsed_msec = UINT64_C(1000) * (timestamp_finish.tv_sec - timestamp_start.tv_sec) +
+                                (timestamp_finish.tv_nsec - timestamp_start.tv_nsec) / 1000000;
 #endif /* !WINDOWS */
 
+  const size_t elapsed_seconds = (size_t)(elapsed_msec / 1000u);
+  const size_t elapsed_mod_ms = (size_t)(elapsed_msec % 1000u);
   if (chk.result.total_problems) {
-    print_ln(MDBX_chk_result, "Total %" PRIuSIZE " error%s detected, elapsed %.3f seconds.", chk.result.total_problems,
-             (chk.result.total_problems > 1) ? "s are" : " is", elapsed);
+    print_ln(MDBX_chk_result, "Total %" PRIuSIZE " error%s detected, elapsed %zu.%03zu seconds.",
+             chk.result.total_problems, (chk.result.total_problems > 1) ? "s are" : " is", elapsed_seconds,
+             elapsed_mod_ms);
     if (chk.result.problems_meta || chk.result.problems_kv || chk.result.problems_gc)
       return EXIT_FAILURE_CHECK_MAJOR;
     return EXIT_FAILURE_CHECK_MINOR;
   }
-  print_ln(MDBX_chk_result, "No error is detected, elapsed %.3f seconds.", elapsed);
+  print_ln(MDBX_chk_result, "No error is detected, elapsed %zu.%03zu seconds.", elapsed_seconds, elapsed_mod_ms);
   return EXIT_SUCCESS;
 }
