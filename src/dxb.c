@@ -639,7 +639,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
     env->geo_in_bytes.shrink = pgno_ceil2sp_bytes(env, pv2pages(header.geometry.shrink_pv));
   }
 
-  ENSURE(env, pgno_ceil2sp_bytes(env, header.geometry.now) == env->geo_in_bytes.now);
+  ENSURE(env, pgno_ceil2ag_bytes(env, header.geometry.now) == env->geo_in_bytes.now);
   ENSURE(env, env->geo_in_bytes.now >= used_bytes);
   if (!expected_filesize)
     expected_filesize = env->geo_in_bytes.now;
