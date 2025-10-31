@@ -208,7 +208,7 @@ static inline int tbl_setup_ifneed(const MDBX_env *env, volatile kvx_t *const kv
 
 MDBX_NOTHROW_PURE_FUNCTION static inline size_t pgno2bytes(const MDBX_env *env, size_t pgno) {
   eASSERT(env, (1u << env->ps2ln) == env->ps);
-  return ((size_t)pgno) << env->ps2ln;
+  return pgno << env->ps2ln;
 }
 
 MDBX_NOTHROW_PURE_FUNCTION static inline page_t *pgno2page(const MDBX_env *env, size_t pgno) {
