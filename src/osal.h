@@ -179,7 +179,7 @@ typedef char pathchar_t;
 #define MDBX_PRIsPATH "s"
 #endif
 
-static inline bool osal_yield(void) {
+MDBX_MAYBE_UNUSED static inline bool osal_yield(void) {
 #if defined(_WIN32) || defined(_WIN64)
   return SleepEx(0, true) == WAIT_IO_COMPLETION;
 #else
