@@ -1,13 +1,13 @@
-From f2f1f6e76c1538d044b552d9e7ecedc3433e6cd9 Mon Sep 17 00:00:00 2001
+From b2f1297dd2cd42cc0e04f1900fbf6da6c2694b7b Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?=D0=9B=D0=B5=D0=BE=D0=BD=D0=B8=D0=B4=20=D0=AE=D1=80=D1=8C?=
  =?UTF-8?q?=D0=B5=D0=B2=20=28Leonid=20Yuriev=29?= <leo@yuriev.ru>
-Date: Sun, 3 Aug 2025 23:59:11 +0300
+Date: Fri, 31 Oct 2025 16:58:31 +0300
 Subject: [PATCH] package/libmdbx: new package (library/database).
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
-This patch adds libmdbx:
+This patch adds libmdbx 0.13.9:
  - libmdbx is one of the fastest compact embeddable key-value ACID database.
  - libmdbx has a specific set of properties and capabilities,
    focused on creating unique lightweight solutions.
@@ -15,158 +15,55 @@ This patch adds libmdbx:
    in terms of reliability, features and performance.
  - more information at https://libmdbx.dqdkfa.ru
 
-The 0.13.7 "Дружба" (Friendship) is stable release of _libmdbx_ branch with new superior features.
-
-The complete ChangeLog: https://gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md
+The 0.13.9 "ИС-2" (IS-2) is bugfix release of the stable branch.
+For more information please see [ChangeLog](https://github.com/erthink/libmdbx/blob/stable/ChangeLog.md).
 
 Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 ---
- DEVELOPERS                   |  3 +++
- package/Config.in            |  1 +
- package/libmdbx/Config.in    | 45 ++++++++++++++++++++++++++++++++++++
- package/libmdbx/libmdbx.hash |  6 +++++
- package/libmdbx/libmdbx.mk   | 41 ++++++++++++++++++++++++++++++++
- 5 files changed, 96 insertions(+)
- create mode 100644 package/libmdbx/Config.in
- create mode 100644 package/libmdbx/libmdbx.hash
- create mode 100644 package/libmdbx/libmdbx.mk
+ package/libmdbx/Config.in    | 4 +++-
+ package/libmdbx/libmdbx.hash | 2 +-
+ package/libmdbx/libmdbx.mk   | 2 +-
+ 3 files changed, 5 insertions(+), 3 deletions(-)
 
-diff --git a/DEVELOPERS b/DEVELOPERS
-index 9ab1e125f4..758ff6a2d5 100644
---- a/DEVELOPERS
-+++ b/DEVELOPERS
-@@ -1482,6 +1482,9 @@ N:	Leon Anavi <leon.anavi@konsulko.com>
- F:	board/olimex/a10_olinuxino
- F:	configs/olimex_a10_olinuxino_lime_defconfig
- 
-+N:	Leonid Yuriev <leo@yuriev.ru>
-+F:	package/libmdbx/
-+
- N:	Lionel Flandrin <lionel@svkt.org>
- F:	package/python-babel/
- F:	package/python-daemonize/
-diff --git a/package/Config.in b/package/Config.in
-index 016a99ed1a..a6f95bfaa9 100644
---- a/package/Config.in
-+++ b/package/Config.in
-@@ -1372,6 +1372,7 @@ menu "Database"
- 	source "package/kompexsqlite/Config.in"
- 	source "package/leveldb/Config.in"
- 	source "package/libgit2/Config.in"
-+	source "package/libmdbx/Config.in"
- 	source "package/libodb/Config.in"
- 	source "package/libodb-boost/Config.in"
- 	source "package/libodb-mysql/Config.in"
 diff --git a/package/libmdbx/Config.in b/package/libmdbx/Config.in
-new file mode 100644
-index 0000000000..a9a4ac45c5
---- /dev/null
+index a9a4ac45c5..1640dbd9de 100644
+--- a/package/libmdbx/Config.in
 +++ b/package/libmdbx/Config.in
-@@ -0,0 +1,45 @@
-+config BR2_PACKAGE_LIBMDBX
-+	bool "libmdbx"
-+	depends on BR2_USE_MMU
-+	depends on BR2_TOOLCHAIN_HAS_SYNC_4
-+	depends on BR2_TOOLCHAIN_HAS_THREADS
-+	depends on BR2_TOOLCHAIN_GCC_AT_LEAST_4_4
-+	help
-+	  One of the fastest compact key-value ACID database
-+	  without WAL. libmdbx has a specific set of properties
-+	  and capabilities, focused on creating unique lightweight
-+	  solutions.
-+
-+	  libmdbx surpasses the legendary LMDB in terms of
-+	  reliability, features and performance.
-+
-+	  https://libmdbx.dqdkfa.ru
-+
-+if BR2_PACKAGE_LIBMDBX
-+
-+config BR2_PACKAGE_LIBMDBX_TOOLS
-+	bool "install tools"
-+	help
-+	  Install libmdbx tools for checking, dump, restore
-+	  and show statistics of databases.
-+
-+config BR2_PACKAGE_LIBMDBX_CXX
-+	bool "C++ API"
-+	depends on BR2_INSTALL_LIBSTDCPP
-+	depends on BR2_TOOLCHAIN_GCC_AT_LEAST_4_8
-+	depends on !BR2_TOOLCHAIN_HAS_GCC_BUG_64735
-+	help
-+	  Enable modern C++11/14/17/20 API for libmdbx.
-+
-+comment "libmdbx C++ support needs a toolchain w/ C++11, gcc >= 4.8 w/o bug#64735"
-+	depends on !BR2_INSTALL_LIBSTDCPP || \
-+		!BR2_TOOLCHAIN_GCC_AT_LEAST_4_8 || \
-+		BR2_TOOLCHAIN_HAS_GCC_BUG_64735
-+
-+endif
-+
-+comment "libmdbx needs MMU, a toolchain w/ threads, gcc >= 4.4 w/ 4-byte atomics"
-+	depends on BR2_USE_MMU
-+	depends on !BR2_TOOLCHAIN_HAS_THREADS || \
-+		!BR2_TOOLCHAIN_HAS_SYNC_4 || \
-+		!BR2_TOOLCHAIN_GCC_AT_LEAST_4_4
+@@ -11,7 +11,9 @@ config BR2_PACKAGE_LIBMDBX
+ 	  solutions.
+ 
+ 	  libmdbx surpasses the legendary LMDB in terms of
+-	  reliability, features and performance.
++	  reliability, features and performance. At the end of 2024
++	  libmdbx was chosen by all modern Ethereum frontiers/nodes
++	  as a storage engine.
+ 
+ 	  https://libmdbx.dqdkfa.ru
+ 
 diff --git a/package/libmdbx/libmdbx.hash b/package/libmdbx/libmdbx.hash
-new file mode 100644
-index 0000000000..8c7efb184b
---- /dev/null
+index ae5266716b..4a4f302015 100644
+--- a/package/libmdbx/libmdbx.hash
 +++ b/package/libmdbx/libmdbx.hash
-@@ -0,0 +1,6 @@
-+# Hashes from: https://libmdbx.dqdkfa.ru/release/SHA256SUMS
-+sha256  d00c1287ec6bbc366363ccdd3eea97bd470ccb5cc102d56b341f84a9fba7e8e9  libmdbx-amalgamated-0.13.7.tar.xz
-+
-+# Locally calculated
-+sha256  0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594  LICENSE
-+sha256  651f71b46c6bb0046d2122df7f9def9cb24f4dc28c5b11cef059f66565cda30f  NOTICE
+@@ -1,5 +1,5 @@
+ # Hashes from: https://libmdbx.dqdkfa.ru/release/SHA256SUMS
+-sha256  57db987de6f7ccc66a66ae28a7bda9f9fbb48ac5fb9279bcca92fd5de13075d1  libmdbx-amalgamated-0.13.6.tar.xz
++sha256  63d2608c8f7c23185c0d27d817d42dd720e84973224ffc584c7f7b522f5f06fe  libmdbx-amalgamated-0.13.9.tar.xz
+ 
+ # Locally calculated
+ sha256  0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594  LICENSE
 diff --git a/package/libmdbx/libmdbx.mk b/package/libmdbx/libmdbx.mk
-new file mode 100644
-index 0000000000..bbb37f21a6
---- /dev/null
+index f461d98397..62817a98f8 100644
+--- a/package/libmdbx/libmdbx.mk
 +++ b/package/libmdbx/libmdbx.mk
-@@ -0,0 +1,41 @@
-+################################################################################
-+#
-+# libmdbx
-+#
-+################################################################################
-+
-+LIBMDBX_VERSION = 0.13.7
-+LIBMDBX_SOURCE = libmdbx-amalgamated-$(LIBMDBX_VERSION).tar.xz
-+LIBMDBX_SITE = https://libmdbx.dqdkfa.ru/release
-+LIBMDBX_SUPPORTS_IN_SOURCE_BUILD = NO
-+LIBMDBX_LICENSE = Apache-2.0
-+LIBMDBX_LICENSE_FILES = LICENSE NOTICE
-+LIBMDBX_STRIP_COMPONENTS = 0
-+LIBMDBX_INSTALL_STAGING = YES
-+
-+# Set CMAKE_BUILD_TYPE to Release to remove -Werror and avoid a build failure
-+# with glibc < 2.12
-+LIBMDBX_CONF_OPTS = \
-+	-DCMAKE_BUILD_TYPE=Release \
-+	-DMDBX_INSTALL_MANPAGES=OFF \
-+	-DBUILD_FOR_NATIVE_CPU=OFF \
-+	-DMDBX_BUILD_CXX=$(if $(BR2_PACKAGE_LIBMDBX_CXX),ON,OFF) \
-+	-DMDBX_BUILD_TOOLS=$(if $(BR2_PACKAGE_LIBMDBX_TOOLS),ON,OFF)
-+
-+ifeq ($(BR2_STATIC_LIBS)$(BR2_SHARED_STATIC_LIBS),y)
-+LIBMDBX_CONF_OPTS += -DMDBX_INSTALL_STATIC=ON
-+else
-+LIBMDBX_CONF_OPTS += -DMDBX_INSTALL_STATIC=OFF
-+endif
-+
-+ifeq ($(BR2_SHARED_LIBS)$(BR2_SHARED_STATIC_LIBS),y)
-+LIBMDBX_CONF_OPTS += \
-+	-DMDBX_BUILD_SHARED_LIBRARY=ON \
-+	-DMDBX_LINK_TOOLS_NONSTATIC=ON
-+else
-+LIBMDBX_CONF_OPTS += \
-+	-DMDBX_BUILD_SHARED_LIBRARY=OFF \
-+	-DMDBX_LINK_TOOLS_NONSTATIC=OFF
-+endif
-+
-+$(eval $(cmake-package))
+@@ -4,7 +4,7 @@
+ #
+ ################################################################################
+ 
+-LIBMDBX_VERSION = 0.13.6
++LIBMDBX_VERSION = 0.13.9
+ LIBMDBX_SOURCE = libmdbx-amalgamated-$(LIBMDBX_VERSION).tar.xz
+ LIBMDBX_SITE = https://libmdbx.dqdkfa.ru/release
+ LIBMDBX_SUPPORTS_IN_SOURCE_BUILD = NO
 -- 
-2.50.1
+2.51.2
 
