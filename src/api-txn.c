@@ -7,8 +7,7 @@
 /* LY: avoid tsan-trap by txn, mm_last_pg and geo.first_unallocated */
 __attribute__((__no_sanitize_thread__, __noinline__))
 #endif
-int mdbx_txn_straggler(const MDBX_txn *txn, int *percent)
-{
+int mdbx_txn_straggler(const MDBX_txn *txn, int *percent) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_PARKED);
   if (likely(rc == MDBX_SUCCESS))
     rc = check_env(txn->env, true);

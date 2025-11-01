@@ -6675,7 +6675,8 @@ LIBMDBX_API int mdbx_env_chk(MDBX_env *env, const MDBX_chk_callbacks_t *cb, MDBX
  * \returns Нулевое значение в случае успеха, иначе код ошибки. */
 LIBMDBX_API int mdbx_env_chk_encount_problem(MDBX_chk_context_t *ctx);
 
-LIBMDBX_API const char *mdbx_ratio2digits(uint64_t numerator, uint64_t denominator, int precision, char* buffer, size_t buffer_size);
+LIBMDBX_API const char *mdbx_ratio2digits(uint64_t numerator, uint64_t denominator, int precision, char *buffer,
+                                          size_t buffer_size);
 
 LIBMDBX_API const char *mdbx_ratio2percents(uint64_t value, uint64_t whole, char *buffer, size_t buffer_size);
 

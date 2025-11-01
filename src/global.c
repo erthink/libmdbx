@@ -27,8 +27,7 @@ BOOL APIENTRY DllMain(HANDLE module, DWORD reason, LPVOID reserved)
 #if !MDBX_MANUAL_MODULE_HANDLER
 static
 #endif /* !MDBX_MANUAL_MODULE_HANDLER */
-    void NTAPI
-    mdbx_module_handler(PVOID module, DWORD reason, PVOID reserved)
+    void NTAPI mdbx_module_handler(PVOID module, DWORD reason, PVOID reserved)
 #endif /* MDBX_BUILD_SHARED_LIBRARY */
 {
   (void)reserved;

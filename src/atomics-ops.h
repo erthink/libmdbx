@@ -142,8 +142,7 @@ MDBX_MAYBE_UNUSED static
 #if MDBX_64BIT_ATOMIC
     __always_inline
 #endif /* MDBX_64BIT_ATOMIC */
-        uint64_t
-        atomic_load64(const volatile mdbx_atomic_uint64_t *p, enum mdbx_memory_order order) {
+        uint64_t atomic_load64(const volatile mdbx_atomic_uint64_t *p, enum mdbx_memory_order order) {
   STATIC_ASSERT(sizeof(mdbx_atomic_uint64_t) == 8);
 #if MDBX_64BIT_ATOMIC
 #ifdef MDBX_HAVE_C11ATOMICS
@@ -355,8 +354,7 @@ MDBX_MAYBE_UNUSED static
 #if MDBX_64BIT_ATOMIC
     __always_inline
 #endif /* MDBX_64BIT_ATOMIC */
-    void
-    safe64_inc(mdbx_atomic_uint64_t *p, const uint64_t v) {
+    void safe64_inc(mdbx_atomic_uint64_t *p, const uint64_t v) {
   assert(v > 0);
   safe64_update(p, safe64_read(p) + v);
 }
