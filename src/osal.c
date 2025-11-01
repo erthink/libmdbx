@@ -3517,7 +3517,8 @@ void osal_ctor(void) {
   SYSTEM_INFO si;
   GetSystemInfo(&si);
   globals.sys_pagesize = si.dwPageSize;
-  globals.sys_allocation_granularity = si.dwAllocationGranularity;
+  globals.sys_allocation_granularity =
+      (si.dwAllocationGranularity > globals.sys_pagesize) ? si.dwAllocationGranularity : globals.sys_pagesize;
 #else
   globals.sys_pagesize = sysconf(_SC_PAGE_SIZE);
   globals.sys_allocation_granularity = (MDBX_WORDBITS > 32) ? 65536 : 16384;
@@ -3533,8 +3534,9 @@ void osal_ctor(void) {
       globals.sys_allocation_granularity = globals.sys_unified_cache_block;
   }
 #endif /* AT_UCACHEBSIZE */
-
 #endif
+  if (globals.sys_allocation_granularity > 4 * MEGABYTE && globals.sys_pagesize < MEGABYTE)
+    globals.sys_allocation_granularity = 4 * MEGABYTE;
   assert(globals.sys_pagesize > 0 && (globals.sys_pagesize & (globals.sys_pagesize - 1)) == 0);
   assert(globals.sys_allocation_granularity >= globals.sys_pagesize &&
          globals.sys_allocation_granularity % globals.sys_pagesize == 0);

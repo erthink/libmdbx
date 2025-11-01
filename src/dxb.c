@@ -570,7 +570,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
 
   size_t expected_filesize = 0;
   const size_t used_bytes = pgno2bytes(env, header.geometry.first_unallocated);
-  const size_t used_aligned2os_bytes = ceil_powerof2(used_bytes, globals.sys_pagesize);
+  const size_t used_aligned2os_bytes = ceil_powerof2(used_bytes, globals.sys_allocation_granularity);
   if ((env->flags & MDBX_RDONLY)    /* readonly */
       || lck_rc != MDBX_RESULT_TRUE /* not exclusive */
       || /* recovery mode */ env->stuck_meta >= 0) {
@@ -843,13 +843,13 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
   if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
     //-------------------------------------------------- shrink DB & update geo
     /* re-check size after mmap */
-    if ((env->dxb_mmap.current & (globals.sys_pagesize - 1)) != 0 || env->dxb_mmap.current < used_bytes) {
+    if (floor_powerof2(env->dxb_mmap.current, globals.sys_pagesize) < used_bytes) {
       ERROR("unacceptable/unexpected datafile size %" PRIuPTR, env->dxb_mmap.current);
       return MDBX_PROBLEM;
     }
     if (env->dxb_mmap.current != env->geo_in_bytes.now) {
-      header.geometry.now = bytes2pgno(env, env->dxb_mmap.current);
-      NOTICE("need update meta-geo to filesize %" PRIuPTR " bytes, %" PRIaPGNO " pages", env->dxb_mmap.current,
+      header.geometry.now = bytes2pgno(env, env->geo_in_bytes.now);
+      NOTICE("need update meta-geo to filesize %" PRIuPTR " bytes, aligned %" PRIaPGNO " pages", env->geo_in_bytes.now,
              header.geometry.now);
     }
 

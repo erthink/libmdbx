@@ -1118,13 +1118,16 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
   }
 
   const size_t unit_ps = (globals.sys_pagesize > (size_t)pagesize) ? globals.sys_pagesize : (size_t)pagesize;
-  const size_t unit_ag = (globals.sys_allocation_granularity > unit_ps) ? globals.sys_allocation_granularity : unit_ps;
+  const size_t unit_ag = (globals.sys_allocation_granularity > unit_ps &&
+                          (growth_step < 0 || (size_t)growth_step >= globals.sys_allocation_granularity))
+                             ? globals.sys_allocation_granularity
+                             : unit_ps;
   size_lower = ceil_powerof2(size_lower, unit_ps);
   size_upper = ceil_powerof2(size_upper, unit_ag);
   size_now = ceil_powerof2(size_now, unit_ag);
 
   /* LY: подбираем значение size_upper:
-   *  - кратное размеру страницы
+   *  - кратное размеру unit_ag (размеру страницы БД и системному размеру выделения)
    *  - без нарушения MAX_MAPSIZE и MAX_PAGENO */
   while (unlikely((size_t)size_upper > MAX_MAPSIZE || (uint64_t)size_upper / pagesize > MAX_PAGENO + 1)) {
     if ((size_t)size_upper < unit_ag + MIN_MAPSIZE || (size_t)size_upper < (size_t)pagesize * (MIN_PAGENO + 1)) {
