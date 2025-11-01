@@ -757,7 +757,8 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
     chk_scope_issue(scope, "too deeply %u, page %zu, parent %zu", deep, pgno, parent_pgno);
     return MDBX_CORRUPTED /* avoid infinite loop/recursion */;
   }
-  histogram_acc(deep, &tbl->histogram.height);
+  if (pagetype != page_large)
+    histogram_acc(deep, &tbl->histogram.height);
   usr->result.processed_pages += npages;
   const size_t page_bytes = payload_bytes + header_bytes + unused_bytes;
 
@@ -1359,16 +1360,20 @@ bailout:
       if (chk->cb->table_conclude)
         err = chk->cb->table_conclude(usr, tbl, cursor, err);
       MDBX_chk_line_t *line = chk_line_begin(scope, MDBX_chk_resolution);
-      line = chk_print(line, "summary: %" PRIuSIZE " records,", record_count);
-      if (dups || (tbl->flags & (MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_REVERSEDUP | MDBX_INTEGERDUP)))
-        line = chk_print(line, " %" PRIuSIZE " dups,", dups);
-      if (sub_databases || dbi == MAIN_DBI)
-        line = chk_print(line, " %" PRIuSIZE " tables,", sub_databases);
-      line = chk_print(line,
-                       " %" PRIuSIZE " key's bytes,"
-                       " %" PRIuSIZE " data's bytes,"
-                       " %" PRIuSIZE " problem(s)",
-                       tbl->histogram.key_len.amount, tbl->histogram.val_len.amount, scope->subtotal_issues);
+      if (record_count | tbl->histogram.key_len.amount | tbl->histogram.val_len.amount | scope->subtotal_issues) {
+        line = chk_print(line, "summary: %" PRIuSIZE " records,", record_count);
+        if (dups || (tbl->flags & (MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_REVERSEDUP | MDBX_INTEGERDUP)))
+          line = chk_print(line, " %" PRIuSIZE " dups,", dups);
+        if (sub_databases || dbi == MAIN_DBI)
+          line = chk_print(line, " %" PRIuSIZE " tables,", sub_databases);
+        line = chk_print(line,
+                         " %" PRIuSIZE " key's bytes,"
+                         " %" PRIuSIZE " data's bytes,"
+                         " %" PRIuSIZE " problem(s)",
+                         tbl->histogram.key_len.amount, tbl->histogram.val_len.amount, scope->subtotal_issues);
+      } else {
+        line = chk_puts(line, "empty");
+      }
       chk_line_end(chk_flush(line));
     }
 
@@ -1562,11 +1567,13 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
         usr->result.backed_pages = (size_t)dxbfile_pages;
     }
 
-    line = chk_line_feed(chk_print(chk_line_begin(inner, MDBX_chk_info),
-                                   "pagesize %u (%u system), max keysize %u..%u"
-                                   ", max readers %u",
+    line = chk_line_feed(chk_print(chk_line_begin(inner, MDBX_chk_info), "pagesize %u (%u system), max keysize %u..%u",
                                    env->ps, globals.sys_pagesize, mdbx_env_get_maxkeysize_ex(env, MDBX_DUPSORT),
-                                   mdbx_env_get_maxkeysize_ex(env, MDBX_DB_DEFAULTS), env->max_readers));
+                                   mdbx_env_get_maxkeysize_ex(env, MDBX_DB_DEFAULTS)));
+    if ((env->flags & MDBX_EXCLUSIVE) == 0 && env->lck_mmap.lck) {
+      line = chk_line_feed(chk_print(chk_line_begin(inner, MDBX_chk_info), "currently %u readers of %u maximum",
+                                     atomic_load32(&env->lck_mmap.lck->rdt_length, mo_Relaxed), env->max_readers));
+    }
     line = chk_line_feed(chk_print_size(line, "mapsize ", env->dxb_mmap.current, nullptr));
     if (txn->geo.lower == txn->geo.upper)
       line = chk_print_size(line, "fixed datafile: ", chk->envinfo.mi_geo.current, nullptr);
