@@ -373,25 +373,27 @@ __cold static int rthc_drown(MDBX_env *const env) {
   int rc = MDBX_SUCCESS;
   MDBX_env *inprocess_neighbor = nullptr;
   if (likely(env->lck_mmap.lck && current_pid == env->pid)) {
-    reader_slot_t *const begin = &env->lck_mmap.lck->rdt[0];
-    reader_slot_t *const end = &env->lck_mmap.lck->rdt[env->max_readers];
-    TRACE("== %s env %p pid %d, readers %p ...%p, current-pid %d", (current_pid == env->pid) ? "cleanup" : "skip",
-          __Wpedantic_format_voidptr(env), env->pid, __Wpedantic_format_voidptr(begin), __Wpedantic_format_voidptr(end),
-          current_pid);
-    bool cleaned = false;
-    for (reader_slot_t *r = begin; r < end; ++r) {
-      if (atomic_load32(&r->pid, mo_Relaxed) == current_pid) {
-        atomic_store32(&r->pid, 0, mo_AcquireRelease);
-        TRACE("== cleanup %p", __Wpedantic_format_voidptr(r));
-        cleaned = true;
-      }
-    }
-    if (cleaned)
-      atomic_store32(&env->lck_mmap.lck->rdt_refresh_flag, true, mo_Relaxed);
     rc = rthc_uniq_check(&env->lck_mmap, &inprocess_neighbor);
-    if (!inprocess_neighbor && env->registered_reader_pid && env->lck_mmap.fd != INVALID_HANDLE_VALUE) {
-      int err = lck_rpid_clear(env);
-      rc = rc ? rc : err;
+    if (!inprocess_neighbor) {
+      reader_slot_t *const begin = &env->lck_mmap.lck->rdt[0];
+      reader_slot_t *const end = &env->lck_mmap.lck->rdt[env->max_readers];
+      TRACE("== %s env %p pid %d, readers %p ...%p, current-pid %d", (current_pid == env->pid) ? "cleanup" : "skip",
+            __Wpedantic_format_voidptr(env), env->pid, __Wpedantic_format_voidptr(begin),
+            __Wpedantic_format_voidptr(end), current_pid);
+      bool cleaned = false;
+      for (reader_slot_t *r = begin; r < end; ++r) {
+        if (atomic_load32(&r->pid, mo_Relaxed) == current_pid) {
+          atomic_store32(&r->pid, 0, mo_AcquireRelease);
+          TRACE("== cleanup %p", __Wpedantic_format_voidptr(r));
+          cleaned = true;
+        }
+      }
+      if (cleaned)
+        atomic_store32(&env->lck_mmap.lck->rdt_refresh_flag, true, mo_Relaxed);
+      if (env->registered_reader_pid && env->lck_mmap.fd != INVALID_HANDLE_VALUE) {
+        int err = lck_rpid_clear(env);
+        rc = rc ? rc : err;
+      }
     }
   }
   int err = lck_destroy(env, inprocess_neighbor, current_pid);
