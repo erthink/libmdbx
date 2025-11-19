@@ -229,6 +229,8 @@ __dll_export
 #else
   #if defined(__ANDROID_API__)
     "Android" MDBX_STRINGIFY(__ANDROID_API__)
+  #elif defined(__OHOS__)
+    "Harmony OS"
   #elif defined(__linux__) || defined(__gnu_linux__)
     "Linux"
   #elif defined(EMSCRIPTEN) || defined(__EMSCRIPTEN__)
@@ -276,7 +278,9 @@ __dll_export
 
     "-"
 
-  #if defined(__amd64__)
+  #if defined(__e2k__) || defined(__elbrus__)
+    "Elbrus"
+  #elif defined(__amd64__)
     "AMD64"
   #elif defined(__ia32__)
     "IA32"
@@ -313,6 +317,8 @@ __dll_export
     "SPARC"
   #elif defined(__s390__) || defined(__s390) || defined(__zarch__) || defined(__zarch)
     "S390"
+  #elif defined(__riscv) || defined(__riscv__) || defined(__RISCV) || defined(__RISCV__)
+    "RISC-V (стеклянные бусы)"
   #else
     "UnknownARCH"
   #endif
