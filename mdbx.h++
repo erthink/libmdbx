@@ -1059,6 +1059,19 @@ protected:
   MDBX_CXX11_CONSTEXPR slice(size_t invalid_length) noexcept : ::MDBX_val({nullptr, invalid_length}) {}
 };
 
+/// \brief Cache entry for get-cached API (initial draft).
+class cache_entry : public MDBX_cache_entry_t {
+public:
+  cache_entry() noexcept { reset(); }
+  cache_entry(const cache_entry &) noexcept = default;
+  cache_entry &operator=(const cache_entry &) noexcept = default;
+  cache_entry(cache_entry &&other) noexcept {
+    *this = other;
+    other.reset();
+  }
+  void reset() noexcept { mdbx_cache_init(this); }
+};
+
 //------------------------------------------------------------------------------
 
 namespace allocation_aware_details {
