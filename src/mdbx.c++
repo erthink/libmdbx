@@ -1315,12 +1315,12 @@ __cold env &env::copy(const MDBX_STD_FILESYSTEM_PATH &destination, bool compacti
 
 __cold path env::get_path() const {
 #if defined(_WIN32) || defined(_WIN64)
-  const wchar_t *c_wstr;
+  const wchar_t *c_wstr = nullptr;
   error::success_or_throw(::mdbx_env_get_pathW(handle_, &c_wstr));
   static_assert(sizeof(path::value_type) == sizeof(wchar_t), "Oops");
   return path(c_wstr);
 #else
-  const char *c_str;
+  const char *c_str = nullptr;
   error::success_or_throw(::mdbx_env_get_path(handle_, &c_str));
   static_assert(sizeof(path::value_type) == sizeof(char), "Oops");
   return path(c_str);
