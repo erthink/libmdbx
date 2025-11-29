@@ -1400,8 +1400,14 @@ int osal_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, uint64_t offset) {
 
   DWORD read = 0;
   if (unlikely(!ReadFile(fd, buf, (DWORD)bytes, &read, &ov))) {
-    int rc = (int)GetLastError();
-    return (rc == MDBX_SUCCESS) ? /* paranoia */ ERROR_READ_FAULT : rc;
+    int err = (int)GetLastError();
+    if (err != ERROR_IO_PENDING)
+      return (err == MDBX_SUCCESS) ? /* paranoia */ ERROR_READ_FAULT : err;
+    if (!GetOverlappedResult(fd, &ov, &read, true)) {
+      err = (int)GetLastError();
+      CancelIo(fd);
+      return (err == MDBX_SUCCESS) ? /* paranoia */ ERROR_READ_FAULT : err;
+    }
   }
 #else
   STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t), "libmdbx requires 64-bit file I/O on 64-bit systems");
