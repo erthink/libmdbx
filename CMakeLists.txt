@@ -228,15 +228,11 @@ else()
   endif()
 
   project(libmdbx C)
-  if(NOT MDBX_AMALGAMATED_SOURCE AND NOT DEFINED BUILD_TESTING)
-    set(BUILD_TESTING ON)
-  endif()
 endif()
 
-if(NOT MDBX_AMALGAMATED_SOURCE)
-  include(CTest)
-  option(MDBX_ENABLE_TESTS "Build libmdbx tests." ${BUILD_TESTING})
-elseif(DEFINED MDBX_ENABLE_TESTS AND MDBX_ENABLE_TESTS)
+if(MDBX_AMALGAMATED_SOURCE
+   AND DEFINED MDBX_ENABLE_TESTS
+   AND MDBX_ENABLE_TESTS)
   message(WARNING "MDBX_ENABLE_TESTS=${MDBX_ENABLE_TESTS}: But amalgamated source code don't includes tests.")
   set(MDBX_ENABLE_TESTS OFF)
 endif()
@@ -444,19 +440,23 @@ else()
   endif()
 
   if(NOT MDBX_AMALGAMATED_SOURCE)
-    find_program(VALGRIND valgrind)
-    if(VALGRIND)
-      # (LY) cmake is ugly and nasty. Therefore memcheck-options should be defined before including ctest. Otherwise
-      # ctest may ignore it.
-      set(MEMORYCHECK_SUPPRESSIONS_FILE
-          "${CMAKE_CURRENT_SOURCE_DIR}/test/valgrind_suppress.txt"
-          CACHE FILEPATH "Suppressions file for Valgrind" FORCE)
-      set(MEMORYCHECK_COMMAND_OPTIONS
-          "--trace-children=yes --leak-check=full --track-origins=yes --track-origins=yes --error-exitcode=42 --error-markers=@ --errors-for-leak-kinds=definite --fair-sched=yes --suppressions=${MEMORYCHECK_SUPPRESSIONS_FILE}"
-          CACHE STRING "Valgrind options" FORCE)
-      set(VALGRIND_COMMAND_OPTIONS
-          "${MEMORYCHECK_COMMAND_OPTIONS}"
-          CACHE STRING "Valgrind options" FORCE)
+    if(NOT WIN32)
+      if(NOT MEMORYCHECK_COMMAND)
+        find_program(MEMORYCHECK_COMMAND valgrind)
+      endif()
+      if(MEMORYCHECK_COMMAND)
+        # (LY) cmake is ugly and nasty. Therefore memcheck-options should be defined before including ctest. Otherwise
+        # ctest may ignore it.
+        set(MEMORYCHECK_SUPPRESSIONS_FILE
+            "${CMAKE_CURRENT_SOURCE_DIR}/test/valgrind_suppress.txt"
+            CACHE FILEPATH "Suppressions file for Valgrind" FORCE)
+        set(MEMORYCHECK_COMMAND_OPTIONS
+            "--trace-children=yes --leak-check=full --track-origins=yes --expensive-definedness-checks=yes --error-exitcode=42 --error-markers=@VALGRIND --errors-for-leak-kinds=definite --fair-sched=yes --suppressions=${MEMORYCHECK_SUPPRESSIONS_FILE}"
+            CACHE STRING "Valgrind options" FORCE)
+        set(MEMORYCHECK_COMMAND_OPTIONS
+            "${MEMORYCHECK_COMMAND_OPTIONS}"
+            CACHE STRING "Valgrind options" FORCE)
+      endif()
     endif()
 
     # Enable 'make tags' target.
@@ -686,8 +686,7 @@ add_option(MDBX TRUST_RTC "Does a system have battery-backed Real-Time Clock or 
 mark_as_advanced(MDBX_TRUST_RTC)
 add_option(MDBX FORCE_ASSERTIONS "Force enable assertion checking" OFF)
 add_option(
-  MDBX
-  DISABLE_VALIDATION
+  MDBX DISABLE_VALIDATION
   "Disable some checks to reduce an overhead and detection probability of database corruption to a values closer to the LMDB"
   OFF)
 mark_as_advanced(MDBX_DISABLE_VALIDATION)
@@ -722,6 +721,7 @@ if(CMAKE_CXX_COMPILER_LOADED
    AND MDBX_CXX_STANDARD LESS 83
    AND NOT MDBX_CXX_STANDARD LESS 11)
   if(NOT MDBX_AMALGAMATED_SOURCE)
+    include(CTest)
     option(MDBX_ENABLE_TESTS "Build MDBX tests" ${BUILD_TESTING})
   endif()
   if(NOT MDBX_WITHOUT_MSVC_CRT
@@ -730,11 +730,27 @@ if(CMAKE_CXX_COMPILER_LOADED
      AND NOT (MSVC AND MSVC_VERSION LESS 1900))
     option(MDBX_BUILD_CXX "Build C++ portion" ON)
   else()
+    if(DEFINED MDBX_BUILD_CXX AND MDBX_BUILD_CXX)
+      if(MDBX_WITHOUT_MSVC_CRT)
+        message(
+          WARNING
+            "MDBX_BUILD_CXX=${MDBX_BUILD_CXX}: But MDBX_WITHOUT_MSVC_CRT=${MDBX_WITHOUT_MSVC_CRT} which does not allow the use of C++."
+        )
+      else()
+        message(WARNING "MDBX_BUILD_CXX=${MDBX_BUILD_CXX}: But there is no suitable C++ compiler available.")
+      endif()
+    endif()
     set(MDBX_BUILD_CXX FALSE)
   endif()
 else()
-  set(MDBX_BUILD_CXX FALSE)
-  set(MDBX_ENABLE_TESTS FALSE)
+  if(DEFINED MDBX_BUILD_CXX AND MDBX_BUILD_CXX)
+    message(WARNING "MDBX_BUILD_CXX=${MDBX_BUILD_CXX}: But there is no suitable C++ compiler available.")
+  endif()
+  if(DEFINED MDBX_ENABLE_TESTS AND MDBX_ENABLE_TESTS)
+    message(WARNING "MDBX_ENABLE_TESTS=${MDBX_ENABLE_TESTS}: But there is no suitable C++ compiler available.")
+  endif()
+  set(MDBX_ENABLE_TESTS OFF)
+  set(MDBX_BUILD_CXX OFF)
 endif()
 
 if(CI)
