@@ -4,10 +4,10 @@
 #include "test.h++"
 
 registry *registry::instance() {
-  static registry *singleton;
+  static std::unique_ptr<registry> singleton;
   if (!singleton)
-    singleton = new registry();
-  return singleton;
+    singleton.reset(new registry());
+  return singleton.get();
 }
 
 bool registry::add(const record *item) {

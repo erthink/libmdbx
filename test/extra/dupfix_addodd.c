@@ -91,4 +91,7 @@ int main() {
     fprintf(stderr, "mdbx_txn_commit: (%d) %s\n", rc, mdbx_strerror(rc));
     exit(EXIT_FAILURE);
   }
+
+  mdbx_env_close(env);
+  return EXIT_SUCCESS;
 }
