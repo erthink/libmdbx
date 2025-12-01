@@ -1028,14 +1028,13 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
     /* is requested some auto-value for pagesize ? */
     if (pagesize >= INT_MAX /* maximal */)
       pagesize = MDBX_MAX_PAGESIZE;
-    else if (pagesize <= 0) {
-      if (pagesize < 0 /* default */) {
-        pagesize = globals.sys_pagesize;
-        if ((uintptr_t)pagesize > MDBX_MAX_PAGESIZE)
-          pagesize = MDBX_MAX_PAGESIZE;
-        eASSERT(env, (uintptr_t)pagesize >= MDBX_MIN_PAGESIZE);
-      } else if (pagesize == 0 /* minimal */)
-        pagesize = MDBX_MIN_PAGESIZE;
+    else if (pagesize == 0 /* minimal */)
+      pagesize = MDBX_MIN_PAGESIZE;
+    else if (pagesize < 0 /* default */) {
+      pagesize = globals.sys_pagesize;
+      if ((uintptr_t)pagesize > MDBX_MAX_PAGESIZE)
+        pagesize = MDBX_MAX_PAGESIZE;
+      eASSERT(env, (uintptr_t)pagesize >= MDBX_MIN_PAGESIZE);
 
       /* choose pagesize */
       intptr_t top = (size_now > size_lower) ? size_now : size_lower;
