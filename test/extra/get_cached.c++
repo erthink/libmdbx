@@ -577,50 +577,79 @@ struct track_context {
   }
 };
 
-static uint_fast32_t deep_transition_mask() {
-  uint_fast32_t mask = 0;
-  for (size_t from_deep = 0; from_deep < 5; ++from_deep)
-    for (size_t to_deep = 0; to_deep < 5; ++to_deep)
-      if (from_deep != to_deep)
-        mask |= uint_fast32_t(1) << (from_deep * 5 + to_deep);
-  return mask;
-}
+template <size_t DEEP> struct deepwalk_path_generator {
+  prng &rnd;
+  using path_type = std::array<uint8_t, DEEP *(DEEP - 1)>;
+  using mask_type = uint_fast64_t;
+  path_type path;
+
+  deepwalk_path_generator(prng &rnd) : rnd(rnd) { *path.rbegin() = 0; }
+
+  static inline mask_type transition_bit(size_t from, size_t to) {
+    static_assert(DEEP > 2 && DEEP * DEEP <= 64, "WTF?");
+    assert(from < DEEP && to < DEEP);
+    return mask_type(1) << (from * DEEP + to);
+  }
+
+  static inline mask_type transition_lane(size_t from) {
+    assert(from < DEEP);
+    const auto lane_bits = (mask_type(1) << DEEP) - 1 /* - transition_bit(0, from) */;
+    return lane_bits << from * DEEP;
+  }
+
+  static mask_type transition_mask() {
+    mask_type mask = 0;
+    for (size_t from = 0; from < DEEP; ++from)
+      for (size_t to = 0; to < DEEP; ++to)
+        if (from != to)
+          mask |= transition_bit(from, to);
+    return mask;
+  }
+
+  bool turn(const size_t step, const size_t from, const mask_type left_mask) {
+    const auto lane_mask = transition_lane(from);
+    if (left_mask & lane_mask) {
+      assert(step < path.size());
+      const auto salt = size_t(rnd());
+      for (size_t i = 0; i < DEEP; ++i) {
+        const auto to = (i + salt) % DEEP;
+        const auto turn_mask = transition_bit(from, to);
+        if (left_mask & turn_mask) {
+          path[step] = uint8_t((from << 4) | to);
+          if (left_mask == turn_mask) {
+            assert(step == path.size() - 1);
+            return true;
+          }
+          if (turn(step + 1, to, left_mask - turn_mask))
+            return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  bool make() { return turn(0, 0, transition_mask()); }
+};
+
+#if defined(ENABLE_MEMCHECK) || defined(MDBX_CI) || !defined(NDEBUG)
+#define TRANSITION_DEEP 5
+#else
+#define TRANSITION_DEEP 6
+#endif
 
 bool case1_stairway_pass(track_context &ctx, mdbx::env env, prng &rnd, generator::keys_order order) {
   bool ok = true;
   ctx.rx.clear();
 
-  /* путь обхода матрицы 5x5, соответствующей проверочным шагам/переходам
-   * с измененем глубины b-tree 0 до 4 включительно */
-  //                                 0 1 2 3 4
-  // a:0->1 b:1->2 c:2->3 d:3->4   0 ! A I M O
-  // e:4->3 f:3->2 g:2->1 h:1->0   1 H ! B Q S
-  // i:0->2 j:2->4 k:4->2 l:2->0   2 L G ! C J
-  // m:0->3 n:3->0 o:0->4 p:4->1   3 N R F ! D
-  // q:1->3 r:3->1 s:1->4 t:4->0   4 T P K E !
-  //                                0 1 2 3 4
-  const std::array<uint8_t, 20> deep_transition_path = {/* A */ 0x01, /* B */ 0x12, /* C */ 0x23, /* D */ 0x34,
-                                                        /* E */ 0x43, /* F */ 0x32, /* G */ 0x21, /* H */ 0x10,
-                                                        /* I */ 0x02, /* J */ 0x24, /* K */ 0x42, /* L */ 0x20,
-                                                        /* M */ 0x03, /* N */ 0x30, /* O */ 0x04, /* P */ 0x41,
-                                                        /* Q */ 0x13, /* R */ 0x31, /* S */ 0x14, /* T */ 0x40};
-
-  /* начальные точки при обходе матрицы */
-  std::vector<size_t> starts;
-  starts.reserve(ctx.tables.size());
-
-  /* начиная со случайной позиции */
-  size_t start = rnd() * 532384033u % deep_transition_path.size();
-  for (size_t n = 0; n < ctx.tables.size(); ++n) {
-    /* ищем точку с нулевой исходной глубиной b-tree */
-    do
-      start = (start + 1) % deep_transition_path.size();
-    while (deep_transition_path[start] & 0xF0);
-    starts.push_back(start);
+  deepwalk_path_generator<TRANSITION_DEEP> walker(rnd);
+  std::vector<decltype(walker)::path_type> deep_paths;
+  std::vector<decltype(walker)::mask_type> deep_check_masks;
+  for (size_t n = 0; n < ctx.tables_vector.size(); ++n) {
+    if (!walker.make())
+      unexpected(__LINE__);
+    deep_paths.push_back(walker.path);
+    deep_check_masks.push_back(0);
   }
-
-  /* контрольная битовая маска для матрицы 5x5 */
-  uint_fast32_t check_mask = 0;
 
   /* загружаем начальные данные (пока должно быть пусто) */
   auto txn = env.start_read();
@@ -632,21 +661,19 @@ bool case1_stairway_pass(track_context &ctx, mdbx::env env, prng &rnd, generator
   generator gen(order, rnd);
   /* проходим путь обхода матрицы глубины b-tree по всем таблицам параллельно,
    * но начиная с разой стартовой позиции */
-  for (size_t i = 0; i < deep_transition_path.size(); ++i) {
+  for (size_t pos = 0; pos < walker.path.size(); ++pos) {
     std::shuffle(ctx.tables_vector.begin(), ctx.tables_vector.end(), rnd);
     txn = env.start_write();
     gen.seed(rnd);
     mvcc = txn.id();
     for (size_t n = 0; n < ctx.tables_vector.size(); ++n) {
-      const size_t pos = starts[n]++ % deep_transition_path.size();
-      const size_t from_deep = deep_transition_path[pos] >> 4;
-      const size_t to_deep = deep_transition_path[pos] & 0x0F;
-      if (n == 0) {
-        const auto step = uint_fast32_t(1) << (from_deep * 5 + to_deep);
-        if (check_mask & step)
-          unexpected(__LINE__);
-        check_mask += step;
-      }
+      const size_t from_deep = deep_paths[n][pos] >> 4;
+      const size_t to_deep = deep_paths[n][pos] & 0x0F;
+      const auto step = walker.transition_bit(from_deep, to_deep);
+      if (deep_check_masks[n] & step)
+        unexpected(__LINE__);
+      deep_check_masks[n] += step;
+
       /* обеспечиваем целевую высоту b-tree для выбранной таблице */
       ctx.turn(txn, gen, *ctx.tables_vector[n], to_deep);
     }
@@ -658,8 +685,10 @@ bool case1_stairway_pass(track_context &ctx, mdbx::env env, prng &rnd, generator
     number_checks += pool.size();
     number_passes += 1;
   }
-  if (check_mask != deep_transition_mask() || check_mask != 076767676u)
-    unexpected(__LINE__);
+
+  for (size_t n = 0; n < ctx.tables_vector.size(); ++n)
+    if (deep_check_masks[n] != walker.transition_mask())
+      unexpected(__LINE__);
 
   /* --------------------------------------------------------------------------------
    * Теперь есть набор MVCC-снимком и читающих их транзакций, а также история изменений в контексте.
@@ -702,20 +731,9 @@ bool case1_stairway_pass(track_context &ctx, mdbx::env env, prng &rnd, generator
   return ok;
 }
 
-bool case1_stairway(mdbx::env env) {
+bool case1_stairway(mdbx::env env, prng &rnd) {
   // get_cached_t get_cached = mdbx_cache_get_SingleThreaded;
   bool ok = true;
-#if 1
-  std::random_device random;
-  std::seed_seq seed({random(), random(), random(), random(), random()});
-#else
-  std::seed_seq seed({42});
-#endif
-
-  std::cout << "seed ";
-  seed.param(std::ostream_iterator<size_t>(std::cout, ", "));
-  std::cout << std::endl;
-  prng rnd(seed);
 
   auto txn = env.start_write();
   track_context ctx;
@@ -731,6 +749,18 @@ bool case1_stairway(mdbx::env env) {
 //--------------------------------------------------------------------------------------------
 
 int doit() {
+#if 1
+  std::random_device random;
+  std::seed_seq seed({random(), random(), random(), random(), random()});
+#else
+  std::seed_seq seed({42});
+#endif
+
+  std::cout << "seed ";
+  seed.param(std::ostream_iterator<size_t>(std::cout, ", "));
+  std::cout << std::endl;
+  prng rnd(seed);
+
   mdbx::path db_filename = "test-get-cached";
   mdbx::env::remove(db_filename);
 
@@ -746,7 +776,7 @@ int doit() {
     unexpected(__LINE__);
 
   bool ok = case0_trivia(env);
-  ok = case1_stairway(env) && ok;
+  ok = case1_stairway(env, rnd) && ok;
   // ok = case2(env) && ok;
 
   if (ok) {
