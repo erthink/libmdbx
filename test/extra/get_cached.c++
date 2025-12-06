@@ -92,9 +92,12 @@ static bool check_state_and_value(const MDBX_cache_result_t &r, const mdbx::slic
   return ok;
 }
 
-bool case0_trivia(mdbx::env env) {
-  get_cached_t get_cached = mdbx_cache_get_SingleThreaded;
+bool case0_trivia(mdbx::env env, get_cached_t get_cached) {
   auto txn = env.start_write();
+  txn.drop_map("case0");
+  txn.commit();
+
+  txn = env.start_write();
   auto table = txn.create_map("case0", mdbx::key_mode::usual, mdbx::value_mode::single);
 
   MDBX_cache_entry_t entry;
@@ -322,7 +325,9 @@ struct track_context {
   std::map<mdbx::map_handle, history> tables;
   using table_ref = decltype(tables)::value_type;
   std::vector<table_ref *> tables_vector;
-  get_cached_t get_cached = mdbx_cache_get_SingleThreaded;
+  const get_cached_t get_cached;
+
+  track_context(get_cached_t get_cached) : get_cached(get_cached) {}
 
   struct entry {
     table_ref *ref;
@@ -731,12 +736,11 @@ bool case1_stairway_pass(track_context &ctx, mdbx::env env, prng &rnd, generator
   return ok;
 }
 
-bool case1_stairway(mdbx::env env, prng &rnd) {
-  // get_cached_t get_cached = mdbx_cache_get_SingleThreaded;
+bool case1_stairway(mdbx::env env, prng &rnd, get_cached_t get_cached) {
   bool ok = true;
 
   auto txn = env.start_write();
-  track_context ctx;
+  track_context ctx(get_cached);
   ctx.create_tables("case1_", txn, 4);
   txn.commit();
 
@@ -775,9 +779,15 @@ int doit() {
   if (env.get_info().mi_dxb_pagesize != 256)
     unexpected(__LINE__);
 
-  bool ok = case0_trivia(env);
-  ok = case1_stairway(env, rnd) && ok;
-  // ok = case2(env) && ok;
+  bool ok = true;
+  ok = case0_trivia(env, mdbx_cache_get_SingleThreaded) && ok;
+  ok = case0_trivia(env, (get_cached_t)mdbx_cache_get) && ok;
+
+  ok = case1_stairway(env, rnd, mdbx_cache_get_SingleThreaded) && ok;
+  ok = case1_stairway(env, rnd, (get_cached_t)mdbx_cache_get) && ok;
+
+  // ok = case2(env, mdbx_cache_get_SingleThreaded) && ok;
+  // ok = case2(env, mdbx_cache_get) && ok;
 
   if (ok) {
     std::cout << "OK\n";
