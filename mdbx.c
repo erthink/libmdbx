@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 8916c04a1d0598afd3f4e15336ada8cc6684b27d706e5f1ddb4a870da3d86f91_v0_13_10_0_gcc5debac
+#define MDBX_BUILD_SOURCERY 3fb27e580c2da1ce8d791838e9fddafb33d06dcc872cd68bc18a7d8b821b5d8a_v0_13_10_2_gde4a934f
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -37554,10 +37554,10 @@ __dll_export
         0,
         13,
         10,
-        0,
+        2,
         "", /* pre-release suffix of SemVer
-                                        0.13.10 */
-        {"2025-12-17T16:38:01+03:00", "5f2fb7cf4d63674a38de546c2f5ee5613221b683", "cc5debac5bed76b4a680c5d64feb0f633e9165e1", "v0.13.10-0-gcc5debac"},
+                                        0.13.10.2 */
+        {"2025-12-21T18:19:46+03:00", "75a08543b8341b6771ac158a23714f763bcc69ad", "de4a934fa4c515a5819ab8fc61880ae058741f37", "v0.13.10-2-gde4a934f"},
         sourcery};
 
 __dll_export

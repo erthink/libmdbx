@@ -34,35 +34,15 @@ Telegram Group archive: [1](https://libmdbx.dqdkfa.ru/tg-archive/messages1.html)
 
 ### in English
 
-The mirror on github is no longer being updated or used. The _libmdbx_ project has been completely relocated to the jurisdiction of the Russian Federation.
-Please refer to https://libmdbx.dqdkfa.ru for documentation and https://sourcecraft.dev/dqdkfa/libmdbx for the source code (it is still open and provided with first-class free support).
-Regardless of anything else, I would like to thank [Erigon](https://erigon.tech/) once again for the sponsorship.
+For ease of use and to eliminate potential limitations in both distribution and obstacles in technology development, _libmdbx_ is distributed as an amalgamated source code starting at the end of 2025. The source code of the tests, as well as the internal documentation, will be available only to the team directly involved in the development. A little later, a new _libmdbx_ development strategy will be published, the essence of which is the continuous movement towards the _MithrilDB_. In this regard, some of the information provided below and in other parts of the documentation may be inaccurate or inapplicable. We will try to resolve all discrepancies as quickly as possible.
 
-##### Explanations
-
-In the spring of 2022, without any warnings or explanations, the Github administration deleted my account and all projects. A few months later, without any involvement or notification from me, the projects were restored/opened in the "public read-only archive" status from some kind of incomplete backup. I regard these actions of Github as malicious sabotage, and I consider the Github service itself to have lost any trust forever.
-
-As a result of what has happened, I will never, under any circumstances, post the primary sources (aka origins) of my projects on Github, or rely in any way on the Github infrastructure.
-
-Nonetheless, taking into account that it is more convenient for users of my projects to access them on Github, I did not want to restrict their freedom or create inconvenience, and therefore I posted mirrors on Github.
-However, it was noticed that despite the development of _libmdbx_, free support and consultations, many projects and users deviated from the rules of a fair deal and instead of helping and building relationships, they began to adjust links and delete references in violation of the license.
-Therefore, in protest against such unworthy actions, on December 10, 2025, I decided to abandon the placement of mirrors on Github.
+The _libmdbx_ code will forever remain open and with high-quality free support, as far as the life circumstances of the project participants allow. However, support will be provided only for officially published versions of the code. As an identity criterion, the `git tree hash` must match the signed commit in the _libmdbx_ public repository. For all other cases, paid support will be offered. We will also insist and enforce that all derivative versions comply with the license requirements, including the explicit presence of a notice stating that such derivative modified code originates from _libdmbx_, but is no longer original and supported, and is not subject to any quality guarantees from _libmdbx_.
 
 ### на Русском (мой родной язык)
 
-Зеркало на github больше не обновляется и не используется. Проект _libmdbx_ полностью перемещен в юрисдикцию Российской Федерации.
-Пожалуйста обращайтесь на https://libmdbx.dqdkfa.ru за документацией и на https://sourcecraft.dev/dqdkfa/libmdbx за исходным кодом (он по-прежнему открыт и обеспечен первоклассной бесплатной поддержкой).
-Вне зависимости от прочего хочу ещё раз поблагодарить [Erigon](https://erigon.tech/) за спонсорскую помощь.
+Для удобства использования и устранения потенциальных ограничений как в распространении, так и препятствий в разработке технологий, начиная с конца 2025 года _libmdbx_ распространяется в виде амальгамированного исходного кода. Исходный код тестов, как и внутренняя документация будет доступна только команде непосредственно занимающейся разработкой. Чуть позже будет опубликована новая стратегия развития _libmdbx_, суть которой в непрерывном движении к _MithrilDB_. В связи с этим часть информации изложенной ниже и в других частях документации может быть неточной или неприменимой. Мы постараемся устранить все несоответствия по-быстрее.
 
-##### Пояснения
-
-Весной 2022, без каких-либо предупреждений или пояснений, администрация Github удалила мой аккаунт и все проекты. Через несколько месяцев, без какого-либо моего участия или уведомления, проекты были восстановлены/открыты в статусе "public read-only archive" из какой-то неполноценной резервной копии. Эти действия Github я расцениваю как злонамеренный саботаж, а сам сервис Github считаю навсегда утратившим какое-либо доверие.
-
-Вследствие произошедшего, никогда и ни при каких условиях, я не буду размещать на Github первоисточники (aka origins) моих проектов, либо как-либо полагаться на инфраструктуру Github.
-
-Тем не менее, принимая во внимание что пользователям моих проектов удобнее получать к ним доступ именно на Github, я не хотел ограничивать их свободу или создавать неудобство, и поэтому размещал зеркала на Github.
-Однако, было замечено, что несмотря на развитие _libmdbx_, бесплатную поддержку и консультации, многие проекты и пользователи отошли от правил честной сделки и вместо помощи и налаживания отношений стали корректировать ссылки и удалять упоминания в нарушение лицензии.
-Поэтому в знак протеста таким действиям, 10 декабря 2025 года я решил отказаться от размещения зеркал на Github.
+Код _libmdbx_ навсегда останется открытым и с качественной бесплатной поддержкой, насколько это позволят жизненные обстоятельства участников проекта. Однако, поддержка будет оказываться только для официально публикуемых версий кода. В качестве критерия идентичности требуется совпадение `git tree hash` с подписанным коммитом в публичном репозитории _libmdbx_. Для всех остальных случаев будет предлагаться платная поддержка. Также мы будем настаивать и добиваться выполнения всеми производными версиями требований лицензии, включая явное присутствие уведомления о том, что такой производный модифицированный код происходит от _libdmbx_, но уже не является оригинальным и поддерживаемым, и на него не распространяются какие-либо гарантии качества _libmdbx_.
 
 ## MithrilDB and Future
 
