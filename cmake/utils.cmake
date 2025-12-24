@@ -379,7 +379,7 @@ macro(semver_provide name source_root_directory build_directory_for_json_output 
       endif()
       if(_source_root STREQUAL _git_root AND EXISTS "${_git_root}/VERSION.json")
         message(
-          FATAL_ERROR
+          WARNING
             "Несколько источников информации о версии, допустим только один из: репозиторий git, либо файл VERSION.json"
         )
       endif()
