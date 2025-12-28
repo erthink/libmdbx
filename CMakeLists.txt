@@ -172,8 +172,10 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git"
   set(MDBX_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 elseif(
   EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION.json"
+  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/COPYRIGHT"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/NOTICE"
+  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.c"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.c++"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.h"
@@ -240,6 +242,10 @@ if(MDBX_AMALGAMATED_SOURCE
    AND MDBX_ENABLE_TESTS)
   message(WARNING "MDBX_ENABLE_TESTS=${MDBX_ENABLE_TESTS}: But amalgamated source code don't includes tests.")
   set(MDBX_ENABLE_TESTS OFF)
+endif()
+
+if(NOT CMAKE_VERSION VERSION_LESS 3.8.2)
+  source_group("markdown" FILES REGULAR_EXPRESSION ".*[.]md")
 endif()
 
 # Try to find a C++ compiler unless sure that this is unnecessary.
@@ -868,6 +874,7 @@ else()
     endif()
     include_directories("${MDBX_SOURCE_DIR}")
   endif()
+  add_custom_target(doc-files SOURCES README.md TODO.md ChangeLog.md LICENSE NOTICE COPYRIGHT)
 endif(MDBX_AMALGAMATED_SOURCE)
 if(MDBX_BUILD_CXX)
   message(STATUS "Use C${MDBX_C_STANDARD} and C++${MDBX_CXX_STANDARD} for libmdbx")
