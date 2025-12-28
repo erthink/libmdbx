@@ -32,6 +32,8 @@ Telegram Group archive: [1](https://libmdbx.dqdkfa.ru/tg-archive/messages1.html)
 
 ## The Turnpoint
 
+[![Turnpoint'HNY2026](https://libmdbx.dqdkfa.ru/img/Turnpoint-HNY2026.webp)](https://libmdbx.dqdkfa.ru/release/libmdbx-roadmap-HNY2026-english.pdf)
+
 ### in English
 
 > **To get acquainted with important changes and plans, we recommend reading the compact [presentation "libmdbx: successes, obstacles, goals and roadmap"](https://libmdbx.dqdkfa.ru/release/libmdbx-roadmap-HNY2026-english.pdf), which contains important explanations in the form of embedded comments.**
