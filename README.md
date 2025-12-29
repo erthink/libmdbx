@@ -30,17 +30,23 @@ Historically, _libmdbx_ is a deeply revised and extended descendant of the legen
 
 Telegram Group archive: [1](https://libmdbx.dqdkfa.ru/tg-archive/messages1.html), [2](https://libmdbx.dqdkfa.ru/tg-archive/messages2.html), [3](https://libmdbx.dqdkfa.ru/tg-archive/messages3.html), [4](https://libmdbx.dqdkfa.ru/tg-archive/messages4.html), [5](https://libmdbx.dqdkfa.ru/tg-archive/messages5.html), [6](https://libmdbx.dqdkfa.ru/tg-archive/messages6.html), [7](https://libmdbx.dqdkfa.ru/tg-archive/messages7.html).
 
-## Github
+## The Turnpoint
+
+[![Turnpoint'HNY2026](https://libmdbx.dqdkfa.ru/img/Turnpoint-HNY2026.webp)](https://libmdbx.dqdkfa.ru/release/libmdbx-roadmap-HNY2026-english.pdf)
 
 ### in English
 
-For ease of use and to eliminate potential limitations in both distribution and obstacles in technology development, _libmdbx_ is distributed as an amalgamated source code starting at the end of 2025. The source code of the tests, as well as the internal documentation, will be available only to the team directly involved in the development. A little later, a new _libmdbx_ development strategy will be published, the essence of which is the continuous movement towards the _MithrilDB_. In this regard, some of the information provided below and in other parts of the documentation may be inaccurate or inapplicable. We will try to resolve all discrepancies as quickly as possible.
+> **To get acquainted with important changes and plans, we recommend reading the compact [presentation "libmdbx: successes, obstacles, goals and roadmap"](https://libmdbx.dqdkfa.ru/release/libmdbx-roadmap-HNY2026-english.pdf), which contains important explanations in the form of embedded comments.**
+
+For ease of use and to eliminate potential limitations in both distribution and obstacles in technology development, _libmdbx_ is distributed as an amalgamated source code starting at the end of 2025. The source code of the tests, as well as the internal documentation, will be available only to the team directly involved in the development. The new _libmdbx_ development strategy is [presented](https://libmdbx.dqdkfa.ru/release/libmdbx-roadmap-HNY2026-english.pdf), the essence of which is the continuous movement towards the _MithrilDB_. In this regard, some of the information provided below and in other parts of the documentation may be inaccurate or inapplicable. We will try to resolve all discrepancies as quickly as possible.
 
 The _libmdbx_ code will forever remain open and with high-quality free support, as far as the life circumstances of the project participants allow. However, support will be provided only for officially published versions of the code. As an identity criterion, the `git tree hash` must match the signed commit in the _libmdbx_ public repository. For all other cases, paid support will be offered. We will also insist and enforce that all derivative versions comply with the license requirements, including the explicit presence of a notice stating that such derivative modified code originates from _libdmbx_, but is no longer original and supported, and is not subject to any quality guarantees from _libmdbx_.
 
 ### на Русском (мой родной язык)
 
-Для удобства использования и устранения потенциальных ограничений как в распространении, так и препятствий в разработке технологий, начиная с конца 2025 года _libmdbx_ распространяется в виде амальгамированного исходного кода. Исходный код тестов, как и внутренняя документация будет доступна только команде непосредственно занимающейся разработкой. Чуть позже будет опубликована новая стратегия развития _libmdbx_, суть которой в непрерывном движении к _MithrilDB_. В связи с этим часть информации изложенной ниже и в других частях документации может быть неточной или неприменимой. Мы постараемся устранить все несоответствия по-быстрее.
+> **Для знакомства с важными изменениями и планами рекомендуем ознакомится с компактной [презентацией "libmdbx: успехи, премятствия, цели и план развития"](https://libmdbx.dqdkfa.ru/release/libmdbx-roadmap-HNY2026-russian.pdf), в которой важные пояснения даны в виде встроенных комментариев.**
+
+Для удобства использования и устранения потенциальных ограничений как в распространении, так и препятствий в разработке технологий, начиная с конца 2025 года _libmdbx_ распространяется в виде амальгамированного исходного кода. Исходный код тестов, как и внутренняя документация будет доступна только команде непосредственно занимающейся разработкой. Также [представлена](https://libmdbx.dqdkfa.ru/release/libmdbx-roadmap-HNY2026-russian.pdf) новая стратегия развития _libmdbx_, суть которой в непрерывном движении к _MithrilDB_. В связи с этим часть информации изложенной ниже и в других частях документации может быть неточной или неприменимой. Мы постараемся устранить все несоответствия по-быстрее.
 
 Код _libmdbx_ навсегда останется открытым и с качественной бесплатной поддержкой, насколько это позволят жизненные обстоятельства участников проекта. Однако, поддержка будет оказываться только для официально публикуемых версий кода. В качестве критерия идентичности требуется совпадение `git tree hash` с подписанным коммитом в публичном репозитории _libmdbx_. Для всех остальных случаев будет предлагаться платная поддержка. Также мы будем настаивать и добиваться выполнения всеми производными версиями требований лицензии, включая явное присутствие уведомления о том, что такой производный модифицированный код происходит от _libdmbx_, но уже не является оригинальным и поддерживаемым, и на него не распространяются какие-либо гарантии качества _libmdbx_.
 
@@ -48,7 +54,7 @@ The _libmdbx_ code will forever remain open and with high-quality free support, 
 
 <!-- section-begin mithril -->
 
-The next version is under non-public development from scratch and will be released as **MithrilDB** and `libmithrildb` for libraries & packages. Admittedly mythical [Mithril](https://en.wikipedia.org/wiki/Mithril) is resembling silver but being stronger and lighter than steel. Therefore _MithrilDB_ is a rightly relevant name.
+The next version is under non-public development and will be released as **MithrilDB** and `libmithrildb` for libraries & packages. Admittedly mythical [Mithril](https://en.wikipedia.org/wiki/Mithril) is resembling silver but being stronger and lighter than steel. Therefore _MithrilDB_ is a rightly relevant name.
 
 _MithrilDB_ is radically different from _libmdbx_ by the new database format and API based on C++20. The goal of this revolution is to provide a clearer and robust API, add more features and new valuable properties of the database. All fundamental architectural problems of libmdbx/LMDB have been solved there, but now the active development has been suspended for top-three reasons:
 
@@ -293,53 +299,20 @@ Usage
 
 <!-- section-begin usage -->
 
-Currently, libmdbx is only available in a [source code](https://en.wikipedia.org/wiki/Source_code) form. Packages support for common Linux distributions is planned in the future, since release the version `1.0`.
+Since December 2025 _libmdbx_ is available only in an amalgamated source code form like [SQLite](https://www.sqlite.org/amalgamation.html), without additional dependencies and internal resources needed only for development of _libmdbx_ itself. Packages support for common Linux distributions is planned in the future, since release the version `1.0`.
 
-The source code is available on [SourceCraft](https://sourcecraft.dev/dqdkfa/libmdbx) and mirrors on [abf.io](https://abf.io/erthink/libmdbx) and [Gitflic](https://gitflic.ru/project/erthink/libmdbx). Please use the `stable` branch or the latest release for production environment through stagging and the `master` branch for development a derivative projects.
-
-## Source code embedding
-
-_libmdbx_ provides three official ways for integration in source code form:
-
-1. Using an amalgamated source code which available in the [releases section](https://sourcecraft.dev/dqdkfa/libmdbx/release) on SourceCraft.
-   > An amalgamated source code includes all files required to build and use _libmdbx_, but not for testing _libmdbx_ itself. Beside the releases an amalgamated sources could be created any time from the original clone of git repository on Linux by executing `make dist`. As a result, the desired set of files will be formed in the `dist` subdirectory.
-
-2. Using [Conan Package Manager](https://conan.io/):
-    - optional: Setup your own conan-server;
-    - Create conan-package by `conan create .` inside the _libmdbx_' repo subdirectory;
-    - optional: Upload created recipe and/or package to the conan-server by `conan upload -r SERVER 'mdbx/*'`;
-    - Consume libmdbx-package from the local conan-cache or from conan-server in accordance with the [Conan tutorial](https://docs.conan.io/2/tutorial/consuming_packages.html).
-
-3. Adding the complete source code as a `git submodule` from the [origin git repository](https://sourcecraft.dev/dqdkfa/libmdbx) on SourceCraft.
-   > This allows you to build as _libmdbx_ and testing tool. On the other hand, this way requires you to pull git tags, and use C++11 compiler for test tool.
-
-_**Please, avoid using any other techniques.**_ Otherwise, at least don't ask for support and don't name such chimeras `libmdbx`.
+The source code is available on [SourceCraft](https://sourcecraft.dev/dqdkfa/libmdbx) and mirrors on [abf.io](https://abf.io/erthink/libmdbx), [Gitflic](https://gitflic.ru/project/erthink/libmdbx) and [Github](https://github.com/erthink/libmdbx). Please use the `stable` branch or the latest release for production environment through stagging and the `master` branch for development a derivative projects.
 
 ## Building and Testing
 
-Both amalgamated and original source code provides build through the use [CMake](https://cmake.org/) or [GNU Make](https://www.gnu.org/software/make/) with [bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)).
+[Source code](https://en.wikipedia.org/wiki/Source_code) provides build through the use [CMake](https://cmake.org/) or [GNU Make](https://www.gnu.org/software/make/) with [bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)).
 
 All build ways are completely traditional and have minimal prerequirements like `build-essential`, i.e. the non-obsolete C/C++ compiler and a [SDK](https://en.wikipedia.org/wiki/Software_development_kit) for the target platform. Obviously you need building tools itself, i.e. `git`, `cmake` or GNU `make` with `bash`. For your convenience, `make help` and `make options` are also available for listing existing targets and build options respectively.
 
-The only significant specificity is that git' tags are required to build from complete (not amalgamated) source codes. Executing **`git fetch --tags --force --prune`** is enough to get ones, and `--unshallow` or `--update-shallow` is required for shallow cloned case.
-
-So just using CMake or GNU Make in your habitual manner and feel free to fill an issue or make pull request in the case something will be unexpected or broken down.
+So just using CMake or GNU Make in your habitual manner and feel free to fill an issue in the case something will be unexpected or broken down.
 
 ### Testing
-The amalgamated source code does not contain any tests for or several reasons. Please read [the explanation](https://libmdbx.dqdkfa.ru/dead-github/issues/214#issuecomment-870717981) and don't ask to alter this. So for testing _libmdbx_ itself you need a full source code, i.e. the clone of a git repository, there is no option.
-
-The full source code of _libmdbx_ has a [`test` subdirectory](https://sourcecraft.dev/dqdkfa/libmdbx/tree/master/test) with minimalistic test "framework". Actually yonder is a source code of the `mdbx_test` – console utility which has a set of command-line options that allow construct and run a reasonable enough test scenarios. This test utility is intended for _libmdbx_'s developers for testing library itself, but not for use by users. Therefore, only basic information is provided:
-
-   - There are few CRUD-based test cases (hill, TTL, nested, append, jitter, etc), which can be combined to test the concurrent operations within shared database in a multi-processes environment. This is the `basic` test scenario.
-   - The `Makefile` provide several self-described targets for testing: `smoke`, `test`, `check`, `memcheck`, `test-valgrind`, `test-asan`, `test-leak`, `test-ubsan`, `cross-gcc`, `cross-qemu`, `gcc-analyzer`, `smoke-fault`, `smoke-singleprocess`, `test-singleprocess`, `long-test`. Please run `make --help` if doubt.
-   - In addition to the `mdbx_test` utility, there is the script [`stochastic.sh`](https://sourcecraft.dev/dqdkfa/libmdbx/blob/master/test/stochastic.sh), which calls `mdbx_test` by going through set of modes and options, with gradually increasing the number of operations and the size of transactions. This script is used for mostly of all automatic testing, including `Makefile` targets and Continuous Integration.
-   - Brief information of available command-line options is available by `--help`. However, you should dive into source code to get all, there is no option.
-
-Anyway, no matter how thoroughly the _libmdbx_ is tested, you should rely only on your own tests for a few reasons:
-
-1. Mostly of all use cases are unique. So it is no warranty that your use case was properly tested, even the _libmdbx_'s tests engages stochastic approach.
-2. If there are problems, then your test on the one hand will help to verify whether you are using _libmdbx_ correctly, on the other hand it will allow to reproduce the problem and insure against regression in a future.
-3. Actually you should rely on than you checked by yourself or take a risk.
+Amalgamated source code does not contain most of the tests and other internal components for several reasons. You can find explanations of the reasons in the comments to the presentation of [_libmdbx_ roadmap](https://libmdbx.dqdkfa.ru/release/libmdbx-roadmap-HNY2026-english.pdf) on the eve of 2026. However, an extended example of using the C++ API will be added soon, which can also be used as a simple smoke-test.
 
 ### Common important details
 
@@ -405,6 +378,9 @@ Current [native build tools](https://en.wikipedia.org/wiki/Xcode) for MacOS incl
 Next, to build the library, it is enough to run `make all` in the directory with source code, and run `make check` to execute the base tests. If something goes wrong, it is recommended to install [Homebrew](https://brew.sh/) and try again.
 
 To run the [long stochastic test scenario](test/stochastic.sh), you will need to install the current (not outdated) version of [Bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)). Just install it as noted above.
+
+### Harmony OS
+Please use CMake with the ["toolchain file"](https://cmake.org/cmake/help/latest/variable/CMAKE_TOOLCHAIN_FILE.html) provided by HarmonyOS SDK.
 
 ### Android
 I recommend using CMake to build _libmdbx_ for Android. Please refer to the [official guide](https://developer.android.com/studio/projects/add-native-code).
