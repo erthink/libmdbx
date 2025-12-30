@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY cb2bd72ce44010f459d6669adba5aa7378e904c5502ac5b179172b65bbd35055_v0_13_10_6_g0bf87ba8
+#define MDBX_BUILD_SOURCERY ae2738ca21f05d4083555ea24bc3c190dd832e09ab76039e3692bc26d3a2c8ff_v0_13_10_8_g59bf36d8
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -1199,6 +1199,25 @@ typedef struct osal_mmap {
 #if defined(_WIN32) || defined(_WIN64)
 
 #define MDBX_HAVE_PWRITEV 0
+
+MDBX_INTERNAL int osal_ntstatus2errcode(NTSTATUS status);
+
+static inline int osal_waitstatus2errcode(DWORD result) {
+  switch (result) {
+  case WAIT_OBJECT_0:
+    return MDBX_SUCCESS;
+  case WAIT_FAILED:
+    return (int)GetLastError();
+  case WAIT_ABANDONED:
+    return ERROR_ABANDONED_WAIT_0;
+  case WAIT_IO_COMPLETION:
+    return ERROR_USER_APC;
+  case WAIT_TIMEOUT:
+    return ERROR_TIMEOUT;
+  default:
+    return osal_ntstatus2errcode(result);
+  }
+}
 
 #elif defined(__ANDROID_API__)
 
@@ -27728,25 +27747,8 @@ __hot struct node_search_result node_search(MDBX_cursor *mc, const MDBX_val *key
 #include <crtdbg.h>
 #endif
 
-static int waitstatus2errcode(DWORD result) {
-  switch (result) {
-  case WAIT_OBJECT_0:
-    return MDBX_SUCCESS;
-  case WAIT_FAILED:
-    return (int)GetLastError();
-  case WAIT_ABANDONED:
-    return ERROR_ABANDONED_WAIT_0;
-  case WAIT_IO_COMPLETION:
-    return ERROR_USER_APC;
-  case WAIT_TIMEOUT:
-    return ERROR_TIMEOUT;
-  default:
-    return ERROR_UNHANDLED_ERROR;
-  }
-}
-
 /* Map a result from an NTAPI call to WIN32 error code. */
-static int ntstatus2errcode(NTSTATUS status) {
+MDBX_INTERNAL int osal_ntstatus2errcode(NTSTATUS status) {
   DWORD dummy;
   OVERLAPPED ov;
   memset(&ov, 0, sizeof(ov));
@@ -27974,7 +27976,7 @@ __cold void mdbx_panic(const char *fmt, ...) {
     if (IsDebuggerPresent())
       DebugBreak();
 #endif
-    FatalExit(ERROR_UNHANDLED_ERROR);
+    FatalExit(ERROR_UNHANDLED_EXCEPTION);
 #else
     __assert_fail(const_message, "mdbx", 0, "panic");
     abort();
@@ -28128,7 +28130,7 @@ int osal_condpair_destroy(osal_condpair_t *condpair) {
 int osal_condpair_lock(osal_condpair_t *condpair) {
 #if defined(_WIN32) || defined(_WIN64)
   DWORD code = WaitForSingleObject(condpair->mutex, INFINITE);
-  return waitstatus2errcode(code);
+  return osal_waitstatus2errcode(code);
 #else
   return osal_pthread_mutex_lock(&condpair->mutex);
 #endif
@@ -28158,7 +28160,7 @@ int osal_condpair_wait(osal_condpair_t *condpair, bool part) {
     if (code == WAIT_OBJECT_0)
       return MDBX_SUCCESS;
   }
-  return waitstatus2errcode(code);
+  return osal_waitstatus2errcode(code);
 #else
   return pthread_cond_wait(&condpair->cond[part], &condpair->mutex);
 #endif
@@ -29406,7 +29408,7 @@ int osal_thread_create(osal_thread_t *thread, THREAD_RESULT(THREAD_CALL *start_r
 int osal_thread_join(osal_thread_t thread) {
 #if defined(_WIN32) || defined(_WIN64)
   DWORD code = WaitForSingleObject(thread, INFINITE);
-  return waitstatus2errcode(code);
+  return osal_waitstatus2errcode(code);
 #else
   void *unused_retval = &unused_retval;
   return pthread_join(thread, &unused_retval);
@@ -29551,7 +29553,7 @@ int osal_check_fs_local(mdbx_filehandle_t handle, int flags) {
         return MDBX_EREMOTE;
     } else if (rc != STATUS_OBJECT_NOT_EXTERNALLY_BACKED && rc != STATUS_INVALID_DEVICE_REQUEST &&
                rc != STATUS_NOT_SUPPORTED)
-      return ntstatus2errcode(rc);
+      return osal_ntstatus2errcode(rc);
   }
 
   if (imports.GetVolumeInformationByHandleW && imports.GetFinalPathNameByHandleW) {
@@ -29868,7 +29870,7 @@ int osal_mmap(const int flags, osal_mmap_t *map, size_t size, const size_t limit
                         (flags & MDBX_RDONLY) ? PAGE_READONLY : PAGE_READWRITE,
                         /* AllocationAttributes */ SEC_RESERVE, map->fd);
   if (!NT_SUCCESS(err))
-    return ntstatus2errcode(err);
+    return osal_ntstatus2errcode(err);
 
   SIZE_T ViewSize = (flags & MDBX_RDONLY) ? 0 : globals.running_under_Wine ? size : limit;
   err = NtMapViewOfSection(map->section, GetCurrentProcess(), &map->base,
@@ -29883,7 +29885,7 @@ int osal_mmap(const int flags, osal_mmap_t *map, size_t size, const size_t limit
     NtClose(map->section);
     map->section = 0;
     map->base = nullptr;
-    return ntstatus2errcode(err);
+    return osal_ntstatus2errcode(err);
   }
   assert(map->base != MAP_FAILED);
 
@@ -29957,7 +29959,7 @@ int osal_munmap(osal_mmap_t *map) {
     NtClose(map->section);
   NTSTATUS rc = NtUnmapViewOfSection(GetCurrentProcess(), map->base);
   if (!NT_SUCCESS(rc))
-    ntstatus2errcode(rc);
+    osal_ntstatus2errcode(rc);
 #else
   if (unlikely(munmap(map->base, map->limit))) {
     assert(errno != 0);
@@ -29997,7 +29999,7 @@ int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
       SectionSize.QuadPart = size;
       status = imports.NtExtendSection(map->section, &SectionSize);
       if (!NT_SUCCESS(status))
-        return ntstatus2errcode(status);
+        return osal_ntstatus2errcode(status);
       map->current = size;
       if (map->filesize < size)
         map->filesize = size;
@@ -30017,11 +30019,11 @@ int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
     if (status == (NTSTATUS) /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018)
       return MDBX_UNABLE_EXTEND_MAPSIZE;
     if (!NT_SUCCESS(status))
-      return ntstatus2errcode(status);
+      return osal_ntstatus2errcode(status);
 
     status = NtFreeVirtualMemory(GetCurrentProcess(), &BaseAddress, &RegionSize, MEM_RELEASE);
     if (!NT_SUCCESS(status))
-      return ntstatus2errcode(status);
+      return osal_ntstatus2errcode(status);
   }
 
   /* Windows unable:
@@ -30041,7 +30043,7 @@ int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
   MDBX_ASAN_UNPOISON_MEMORY_REGION(map->base, map->limit);
   status = NtUnmapViewOfSection(GetCurrentProcess(), map->base);
   if (!NT_SUCCESS(status))
-    return ntstatus2errcode(status);
+    return osal_ntstatus2errcode(status);
   status = NtClose(map->section);
   map->section = nullptr;
   PVOID ReservedAddress = nullptr;
@@ -30049,7 +30051,7 @@ int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
 
   if (!NT_SUCCESS(status)) {
   bailout_ntstatus:
-    err = ntstatus2errcode(status);
+    err = osal_ntstatus2errcode(status);
     map->base = nullptr;
     map->current = map->limit = 0;
     if (ReservedAddress) {
@@ -37554,10 +37556,10 @@ __dll_export
         0,
         13,
         10,
-        6,
+        8,
         "", /* pre-release suffix of SemVer
-                                        0.13.10.6 */
-        {"2025-12-29T12:31:37+03:00", "8f22757c3c8d9d90a4b4a862988d4de3ac107182", "0bf87ba8c8005bd571c1530add1e9d5bbff32e99", "v0.13.10-6-g0bf87ba8"},
+                                        0.13.10.8 */
+        {"2025-12-31T01:38:53+03:00", "6cbca2a1f169886c0b36f885dff0544072afc89b", "59bf36d8d1a3e439b5d7ee7472735338a7284560", "v0.13.10-8-g59bf36d8"},
         sourcery};
 
 __dll_export

@@ -22,7 +22,8 @@ Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`.
 Всё будет хорошо!
 
 \note The libmdbx project has been completely relocated to the jurisdiction of the Russian Federation.
-Please refer to https://libmdbx.dqdkfa.ru for documentation and https://sourcecraft.dev/dqdkfa/libmdbx for the source code (it is still open and provided with first-class free support).
+It is still open and provided with first-class free support. Please refer to https://libmdbx.dqdkfa.ru for documentation
+and https://sourcecraft.dev/dqdkfa/libmdbx for the source code.
 
 \section copyright LICENSE & COPYRIGHT
 \copyright SPDX-License-Identifier: Apache-2.0

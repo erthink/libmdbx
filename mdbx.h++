@@ -18,8 +18,9 @@
 
 ///
 /// The libmdbx project has been completely relocated to the jurisdiction of the Russian Federation.
+/// It is still open and provided with first-class free support.
 /// Please refer to https://libmdbx.dqdkfa.ru for documentation
-/// and https://sourcecraft.dev/dqdkfa/libmdbx for the source code (it is still open and provided with first-class free support).
+/// and https://sourcecraft.dev/dqdkfa/libmdbx for the source code.
 ///
 
 #pragma once

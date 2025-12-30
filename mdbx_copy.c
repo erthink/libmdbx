@@ -18,7 +18,7 @@
 /// \copyright SPDX-License-Identifier: Apache-2.0
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2025
 
-#define MDBX_BUILD_SOURCERY cb2bd72ce44010f459d6669adba5aa7378e904c5502ac5b179172b65bbd35055_v0_13_10_6_g0bf87ba8
+#define MDBX_BUILD_SOURCERY ae2738ca21f05d4083555ea24bc3c190dd832e09ab76039e3692bc26d3a2c8ff_v0_13_10_8_g59bf36d8
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -1213,6 +1213,25 @@ typedef struct osal_mmap {
 #if defined(_WIN32) || defined(_WIN64)
 
 #define MDBX_HAVE_PWRITEV 0
+
+MDBX_INTERNAL int osal_ntstatus2errcode(NTSTATUS status);
+
+static inline int osal_waitstatus2errcode(DWORD result) {
+  switch (result) {
+  case WAIT_OBJECT_0:
+    return MDBX_SUCCESS;
+  case WAIT_FAILED:
+    return (int)GetLastError();
+  case WAIT_ABANDONED:
+    return ERROR_ABANDONED_WAIT_0;
+  case WAIT_IO_COMPLETION:
+    return ERROR_USER_APC;
+  case WAIT_TIMEOUT:
+    return ERROR_TIMEOUT;
+  default:
+    return osal_ntstatus2errcode(result);
+  }
+}
 
 #elif defined(__ANDROID_API__)
 
