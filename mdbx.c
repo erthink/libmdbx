@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY c10fd457492b633d8a9b4cc666c8fe1b1dba5b6f6d14dc5edf46282a4228c79a_v0_14_1_202_g84d81f61
+#define MDBX_BUILD_SOURCERY 9fae6763798200a36f4757d6f62711f47d8dbcd0769c36fe7bd8a60a4c8dcc43_v0_14_1_209_g67fcd717
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -1214,6 +1214,8 @@ typedef struct osal_mmap {
 
 #define MDBX_HAVE_PWRITEV 0
 
+MDBX_INTERNAL int osal_ntstatus2errcode(NTSTATUS status);
+
 static inline int osal_waitstatus2errcode(DWORD result) {
   switch (result) {
   case WAIT_OBJECT_0:
@@ -1227,7 +1229,7 @@ static inline int osal_waitstatus2errcode(DWORD result) {
   case WAIT_TIMEOUT:
     return ERROR_TIMEOUT;
   default:
-    return ERROR_UNHANDLED_ERROR;
+    return osal_ntstatus2errcode(result);
   }
 }
 
@@ -9331,6 +9333,100 @@ __cold int mdbx_cursor_ignord(MDBX_cursor *mc) {
     mc->subcur->cursor.checking |= z_ignord;
 
   return MDBX_SUCCESS;
+}
+
+/*----------------------------------------------------------------------------*/
+
+/* FIXME: This naive implementation should be replaced by handling special cases
+ * and dropping with entire branches inside the B+tree. */
+int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, size_t *number_of_affected) {
+  int rc = cursor_check_rw(mc);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  if (unlikely(action < MDBX_DELETE_CURRENT_VALUE || action > MDBX_DELETE_WHOLE))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  const uint64_t save_items = mc->tree->items;
+  switch (action) {
+  default:
+    rc = MDBX_EINVAL;
+    break;
+  case MDBX_DELETE_CURRENT_VALUE:
+    rc = cursor_del(mc, 0);
+    break;
+  case MDBX_DELETE_CURRENT_MULTIVAL_ALL:
+    rc = cursor_del(mc, MDBX_ALLDUPS);
+    break;
+  case MDBX_DELETE_WHOLE:
+    rc = tbl_purge(mc);
+    break;
+
+  case MDBX_DELETE_CURRENT_MULTIVAL_BEFORE_INCLUDING:
+    rc = cursor_del(mc, 0);
+    __fallthrough /* fall through */;
+  case MDBX_DELETE_CURRENT_MULTIVAL_BEFORE_EXCLUDING:
+    while (rc == MDBX_SUCCESS) {
+      rc = outer_prev(mc, nullptr, nullptr, MDBX_PREV_DUP);
+      if (rc != MDBX_SUCCESS) {
+        rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
+        break;
+      }
+      rc = cursor_del(mc, 0);
+    }
+    break;
+
+  case MDBX_DELETE_CURRENT_MULTIVAL_AFTER_INCLUDING:
+    rc = cursor_del(mc, 0);
+    __fallthrough /* fall through */;
+  case MDBX_DELETE_CURRENT_MULTIVAL_AFTER_EXCLUDING:
+    while (rc == MDBX_SUCCESS) {
+      rc = outer_next(mc, nullptr, nullptr, MDBX_NEXT_DUP);
+      mc->flags &= ~z_eof_hard;
+      ((cursor_couple_t *)mc)->inner.cursor.flags &= ~z_eof_hard;
+      if (rc != MDBX_SUCCESS) {
+        rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
+        break;
+      }
+      rc = cursor_del(mc, 0);
+    }
+    break;
+
+  case MDBX_DELETE_BEFORE_INCLUDING:
+    rc = cursor_del(mc, 0);
+    __fallthrough /* fall through */;
+  case MDBX_DELETE_BEFORE_EXCLUDING:
+    while (rc == MDBX_SUCCESS) {
+      rc = outer_prev(mc, nullptr, nullptr, MDBX_PREV);
+      if (rc != MDBX_SUCCESS) {
+        rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
+        break;
+      }
+      rc = cursor_del(mc, 0);
+    }
+    break;
+
+  case MDBX_DELETE_AFTER_INCLUDING:
+    rc = cursor_del(mc, 0);
+    __fallthrough /* fall through */;
+  case MDBX_DELETE_AFTER_EXCLUDING:
+    while (rc == MDBX_SUCCESS) {
+      rc = outer_next(mc, nullptr, nullptr, MDBX_NEXT);
+      mc->flags &= ~z_eof_hard;
+      ((cursor_couple_t *)mc)->inner.cursor.flags &= ~z_eof_hard;
+      if (rc != MDBX_SUCCESS) {
+        rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
+        break;
+      }
+      rc = cursor_del(mc, 0);
+    }
+    break;
+  }
+
+  if (number_of_affected)
+    *number_of_affected = save_items - mc->tree->items;
+
+  return LOG_IFERR(rc);
 }
 /// \copyright SPDX-License-Identifier: Apache-2.0
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2025
@@ -28457,7 +28553,7 @@ __hot struct node_search_result node_search(MDBX_cursor *mc, const MDBX_val *key
 #endif
 
 /* Map a result from an NTAPI call to WIN32 error code. */
-static int ntstatus2errcode(NTSTATUS status) {
+MDBX_INTERNAL int osal_ntstatus2errcode(NTSTATUS status) {
   DWORD dummy;
   OVERLAPPED ov;
   memset(&ov, 0, sizeof(ov));
@@ -28691,7 +28787,7 @@ __cold void mdbx_panic(const char *fmt, ...) {
 #endif
     if (IsDebuggerPresent())
       DebugBreak();
-    FatalExit(ERROR_UNHANDLED_ERROR);
+    FatalExit(ERROR_UNHANDLED_EXCEPTION);
 #else
     __assert_fail(const_message, "mdbx-panic", 0, const_message);
     abort();
@@ -30270,7 +30366,7 @@ int osal_check_fs_local(mdbx_filehandle_t handle, int flags) {
         return MDBX_EREMOTE;
     } else if (rc != STATUS_OBJECT_NOT_EXTERNALLY_BACKED && rc != STATUS_INVALID_DEVICE_REQUEST &&
                rc != STATUS_NOT_SUPPORTED)
-      return ntstatus2errcode(rc);
+      return osal_ntstatus2errcode(rc);
   }
 
   if (imports.GetVolumeInformationByHandleW && imports.GetFinalPathNameByHandleW) {
@@ -30587,7 +30683,7 @@ int osal_mmap(const int flags, osal_mmap_t *map, size_t size, const size_t limit
                         (flags & MDBX_RDONLY) ? PAGE_READONLY : PAGE_READWRITE,
                         /* AllocationAttributes */ SEC_RESERVE, map->fd);
   if (!NT_SUCCESS(err))
-    return ntstatus2errcode(err);
+    return osal_ntstatus2errcode(err);
 
   SIZE_T ViewSize = (flags & MDBX_RDONLY) ? 0 : globals.running_under_Wine ? size : limit;
   err = NtMapViewOfSection(map->section, GetCurrentProcess(), &map->base,
@@ -30602,7 +30698,7 @@ int osal_mmap(const int flags, osal_mmap_t *map, size_t size, const size_t limit
     NtClose(map->section);
     map->section = 0;
     map->base = nullptr;
-    return ntstatus2errcode(err);
+    return osal_ntstatus2errcode(err);
   }
   assert(map->base != MAP_FAILED);
 
@@ -30676,7 +30772,7 @@ int osal_munmap(osal_mmap_t *map) {
     NtClose(map->section);
   NTSTATUS rc = NtUnmapViewOfSection(GetCurrentProcess(), map->base);
   if (!NT_SUCCESS(rc))
-    ntstatus2errcode(rc);
+    osal_ntstatus2errcode(rc);
 #else
   if (unlikely(munmap(map->base, map->limit))) {
     assert(errno != 0);
@@ -30716,7 +30812,7 @@ int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
       SectionSize.QuadPart = size;
       status = imports.NtExtendSection(map->section, &SectionSize);
       if (!NT_SUCCESS(status))
-        return ntstatus2errcode(status);
+        return osal_ntstatus2errcode(status);
       map->current = size;
       if (map->filesize < size)
         map->filesize = size;
@@ -30736,11 +30832,11 @@ int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
     if (status == (NTSTATUS) /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018)
       return MDBX_UNABLE_EXTEND_MAPSIZE;
     if (!NT_SUCCESS(status))
-      return ntstatus2errcode(status);
+      return osal_ntstatus2errcode(status);
 
     status = NtFreeVirtualMemory(GetCurrentProcess(), &BaseAddress, &RegionSize, MEM_RELEASE);
     if (!NT_SUCCESS(status))
-      return ntstatus2errcode(status);
+      return osal_ntstatus2errcode(status);
   }
 
   /* Windows unable:
@@ -30760,7 +30856,7 @@ int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
   MDBX_ASAN_UNPOISON_MEMORY_REGION(map->base, map->limit);
   status = NtUnmapViewOfSection(GetCurrentProcess(), map->base);
   if (!NT_SUCCESS(status))
-    return ntstatus2errcode(status);
+    return osal_ntstatus2errcode(status);
   status = NtClose(map->section);
   map->section = nullptr;
   PVOID ReservedAddress = nullptr;
@@ -30768,7 +30864,7 @@ int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
 
   if (!NT_SUCCESS(status)) {
   bailout_ntstatus:
-    err = ntstatus2errcode(status);
+    err = osal_ntstatus2errcode(status);
     map->base = nullptr;
     map->current = map->limit = 0;
     if (ReservedAddress) {
@@ -39801,10 +39897,10 @@ __dll_export
         0,
         14,
         1,
-        202,
+        209,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.202 */
-        {"2025-12-29T12:15:52+03:00", "a40f148fd82dabccc92c784cc7517dc7389ed825", "84d81f61a5c93d6af1bdff14562274732d3a4d3f", "v0.14.1-202-g84d81f61"},
+                                        0.14.1.209 */
+        {"2025-12-31T01:07:06+03:00", "3292543f72fc3f6e135d900ee88d87dcd7112a18", "67fcd7174247288a8dfc63b2f5e75eade2413a94", "v0.14.1-209-g67fcd717"},
         sourcery};
 
 __dll_export

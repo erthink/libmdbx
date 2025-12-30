@@ -22,7 +22,8 @@ Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`.
 Всё будет хорошо!
 
 \note The libmdbx project has been completely relocated to the jurisdiction of the Russian Federation.
-Please refer to https://libmdbx.dqdkfa.ru for documentation and https://sourcecraft.dev/dqdkfa/libmdbx for the source code (it is still open and provided with first-class free support).
+It is still open and provided with first-class free support. Please refer to https://libmdbx.dqdkfa.ru for documentation
+and https://sourcecraft.dev/dqdkfa/libmdbx for the source code.
 
 \section copyright LICENSE & COPYRIGHT
 \copyright SPDX-License-Identifier: Apache-2.0
@@ -5804,6 +5805,55 @@ LIBMDBX_API int mdbx_cursor_put(MDBX_cursor *cursor, const MDBX_val *key, MDBX_v
  *                            transaction.
  * \retval MDBX_EINVAL        An invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_del(MDBX_cursor *cursor, MDBX_put_flags_t flags);
+
+/** \brief Modes for deleting bunches of neighboring items with self-documenting names.
+ *
+ * The EXCLUDING and INCLUDING suffixes mean correspondingly
+ * excluding and including deletion items in the current cursor position, and so forth.
+ *
+ * \ingroup c_crud
+ * \see mdbx_cursor_bunch_delete() */
+typedef enum MDBX_bunch_action {
+  MDBX_DELETE_CURRENT_VALUE,
+  MDBX_DELETE_CURRENT_MULTIVAL_BEFORE_EXCLUDING,
+  MDBX_DELETE_CURRENT_MULTIVAL_BEFORE_INCLUDING,
+  MDBX_DELETE_CURRENT_MULTIVAL_AFTER_INCLUDING,
+  MDBX_DELETE_CURRENT_MULTIVAL_AFTER_EXCLUDING,
+  MDBX_DELETE_CURRENT_MULTIVAL_ALL,
+  MDBX_DELETE_BEFORE_EXCLUDING,
+  MDBX_DELETE_BEFORE_INCLUDING,
+  MDBX_DELETE_AFTER_INCLUDING,
+  MDBX_DELETE_AFTER_EXCLUDING,
+  MDBX_DELETE_WHOLE,
+} MDBX_bunch_action_t;
+
+/** \brief Quickly removes bunches of neighboring items.
+ * \ingroup c_crud
+ * \see MDBX_bunch_action_t
+ *
+ * The function performs massive deletion much faster by cutting whole pages and branches
+ * with will deleted elements from the B+tree structure.
+ *
+ * \note Currently, only a naive implementation of the function is available,
+ *       which will be replaced with a full-fledged one when ready.
+ *
+ * \param [in] cursor  A cursor handle returned by mdbx_cursor_open().
+ * \param [in] action  The requested deletion action as the one
+ *                     value of \ref MDBX_bunch_action_t.
+ * \param [out] number_of_affected  Address to store the result
+ *                                  number of removed items.
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
+ *                               by current thread.
+ * \retval MDBX_MAP_FULL      The database is full,
+ *                            see \ref mdbx_env_set_mapsize().
+ * \retval MDBX_TXN_FULL      The transaction has too many dirty pages.
+ * \retval MDBX_EACCES        An attempt was made to write in a read-only
+ *                            transaction.
+ * \retval MDBX_EINVAL        An invalid parameter was specified. */
+LIBMDBX_API int mdbx_cursor_bunch_delete(MDBX_cursor *cursor, MDBX_bunch_action_t action, uint64_t *number_of_affected);
 
 /** \brief Return count values (aka duplicates) for current key.
  * \ingroup c_crud

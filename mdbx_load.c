@@ -18,7 +18,7 @@
 /// \copyright SPDX-License-Identifier: Apache-2.0
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2025
 
-#define MDBX_BUILD_SOURCERY c10fd457492b633d8a9b4cc666c8fe1b1dba5b6f6d14dc5edf46282a4228c79a_v0_14_1_202_g84d81f61
+#define MDBX_BUILD_SOURCERY 9fae6763798200a36f4757d6f62711f47d8dbcd0769c36fe7bd8a60a4c8dcc43_v0_14_1_209_g67fcd717
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -1228,6 +1228,8 @@ typedef struct osal_mmap {
 
 #define MDBX_HAVE_PWRITEV 0
 
+MDBX_INTERNAL int osal_ntstatus2errcode(NTSTATUS status);
+
 static inline int osal_waitstatus2errcode(DWORD result) {
   switch (result) {
   case WAIT_OBJECT_0:
@@ -1241,7 +1243,7 @@ static inline int osal_waitstatus2errcode(DWORD result) {
   case WAIT_TIMEOUT:
     return ERROR_TIMEOUT;
   default:
-    return ERROR_UNHANDLED_ERROR;
+    return osal_ntstatus2errcode(result);
   }
 }
 
