@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 9fae6763798200a36f4757d6f62711f47d8dbcd0769c36fe7bd8a60a4c8dcc43_v0_14_1_209_g67fcd717
+#define MDBX_BUILD_SOURCERY f7f5123962e752f13134b4013b9332f1b311a5f0dd19f3d45ba4e65d806a3545_v0_14_1_215_g541e81ed
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -9339,7 +9339,7 @@ __cold int mdbx_cursor_ignord(MDBX_cursor *mc) {
 
 /* FIXME: This naive implementation should be replaced by handling special cases
  * and dropping with entire branches inside the B+tree. */
-int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, size_t *number_of_affected) {
+int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, uint64_t *number_of_affected) {
   int rc = cursor_check_rw(mc);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
@@ -18629,6 +18629,8 @@ int cursor_check(const MDBX_cursor *mc, int txn_bad_bits) {
 /// \copyright SPDX-License-Identifier: Apache-2.0
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2025
 
+static defer_free_item_t *dbi_close_locked(MDBX_env *env, MDBX_dbi dbi);
+
 #if MDBX_ENABLE_DBI_SPARSE
 size_t dbi_bitmap_ctz_fallback(const MDBX_txn *txn, intptr_t bmi) {
   tASSERT(txn, bmi != 0);
@@ -18671,7 +18673,6 @@ int dbi_gone(MDBX_txn *txn, const size_t dbi, const int rc) {
     txn = txn->parent;
   }
 
-  /* TODO: FIXME */
   txn->dbi_seqs[dbi] = 0;
   return rc;
 }
@@ -18822,7 +18823,7 @@ int dbi_defer_release(MDBX_env *const env, defer_free_item_t *const chain) {
 /* Export or close DBI handles opened in this txn. */
 int dbi_update(MDBX_txn *txn, bool keep) {
   MDBX_env *const env = txn->env;
-  tASSERT(txn, !txn->parent && txn == env->basal_txn);
+  tASSERT(txn, (!txn->parent && txn == env->basal_txn) || !keep);
   bool locked = false;
   defer_free_item_t *defer_chain = nullptr;
   TXN_FOREACH_DBI_USER(txn, dbi) {
@@ -18900,8 +18901,7 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags, MDBX_cmp_func
    */
   if ((user_flags & ~MDBX_CREATE) != (unsigned)(env->dbs_flags[dbi] & DB_PERSISTENT_FLAGS)) {
     /* flags are differs, check other conditions */
-    if ((!user_flags && (!keycmp || keycmp == env->kvs[dbi].clc.k.cmp) &&
-         (!datacmp || datacmp == env->kvs[dbi].clc.v.cmp)) ||
+    if (((!keycmp || keycmp == env->kvs[dbi].clc.k.cmp) && (!datacmp || datacmp == env->kvs[dbi].clc.v.cmp)) ||
         user_flags == MDBX_DB_ACCEDE) {
       user_flags = env->dbs_flags[dbi] & DB_PERSISTENT_FLAGS;
     } else if ((user_flags & MDBX_CREATE) == 0)
@@ -18969,9 +18969,11 @@ static inline size_t dbi_namelen(const MDBX_val name) {
 }
 
 static int dbi_open_locked(MDBX_txn *txn, cursor_couple_t *maindb_cx, unsigned user_flags, MDBX_cmp_func *keycmp,
-                           MDBX_cmp_func *datacmp, MDBX_val name, const size_t fastpath_slot) {
-  int rc;
+                           MDBX_cmp_func *datacmp, MDBX_val name, const size_t fastpath_slot,
+                           defer_free_item_t **defer_chain) {
   MDBX_env *const env = txn->env;
+  *defer_chain = nullptr;
+  int rc;
 
   /* Cannot mix named table(s) with DUPSORT flags */
   tASSERT(txn, (txn->dbi_state[MAIN_DBI] & (DBI_LINDO | DBI_VALID | DBI_STALE)) == (DBI_LINDO | DBI_VALID));
@@ -19023,21 +19025,22 @@ static int dbi_open_locked(MDBX_txn *txn, cursor_couple_t *maindb_cx, unsigned u
     if (env->kvs[MAIN_DBI].clc.k.cmp(&name, &env->kvs[scan].name) == 0) {
       slot = scan;
       rc = dbi_check(txn, slot);
-      if (rc == MDBX_BAD_DBI && txn->dbi_state[slot] == (DBI_OLDEN | DBI_LINDO)) {
-        /* хендл использовался, стал невалидным,
-         * но теперь явно пере-открывается в этой транзакции */
+      if (rc == MDBX_BAD_DBI &&
+          (txn->dbi_state[slot] ==
+               /* хендл использовался, стал невалидным, но теперь явно пере-открывается */ (DBI_OLDEN | DBI_LINDO) ||
+           (txn->dbi_state[slot] ==
+            /* хендл был инициализирован в дочерней транзакции, но она была прервана */ DBI_LINDO))) {
         eASSERT(env, !txn->cursors[slot]);
         txn->dbi_state[slot] = DBI_LINDO;
         txn->dbi_seqs[slot] = 0;
         rc = dbi_import(txn, slot);
-        /* TODO: FIXME */
       }
       if (unlikely(rc != MDBX_SUCCESS))
-        return rc;
+        goto gone;
 
       rc = dbi_bind(txn, slot, user_flags, keycmp, datacmp);
       if (unlikely(rc != MDBX_SUCCESS))
-        return rc;
+        goto gone;
 
       if (unlikely((txn->dbi_state[slot] & DBI_STALE) == 0))
         goto done;
@@ -19064,7 +19067,9 @@ static int dbi_open_locked(MDBX_txn *txn, cursor_couple_t *maindb_cx, unsigned u
         goto create;
       }
 
-      return dbi_gone(txn, slot, rc);
+    gone:
+      *defer_chain = dbi_close_locked(env, slot);
+      return rc;
     }
   }
 
@@ -19231,11 +19236,12 @@ int dbi_open(MDBX_txn *txn, const MDBX_val *const name, unsigned user_flags, MDB
       goto slowpath_locking;
 
     rc = dbi_check(txn, slot);
-    if (rc == MDBX_BAD_DBI && txn->dbi_state[slot] == (DBI_OLDEN | DBI_LINDO)) {
-      /* хендл использовался, стал невалидным,
-       * но теперь явно пере-открывается в этой транзакции */
+    if (rc == MDBX_BAD_DBI &&
+        (txn->dbi_state[slot] ==
+             /* хендл использовался, стал невалидным, но теперь явно пере-открывается */ (DBI_OLDEN | DBI_LINDO) ||
+         (txn->dbi_state[slot] ==
+          /* хендл был инициализирован в дочерней транзакции, но она была прервана */ DBI_LINDO)))
       goto slowpath_locking;
-    }
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
 
@@ -19254,11 +19260,8 @@ int dbi_open(MDBX_txn *txn, const MDBX_val *const name, unsigned user_flags, MDB
     if (txn->dbi_state[slot] & DBI_STALE) {
       rc = tbl_fetch(txn, &cx.outer, fastpath_slot = slot, name, user_flags);
       if (unlikely(rc != MDBX_SUCCESS)) {
-        if (rc == MDBX_NOTFOUND && (user_flags & MDBX_CREATE))
-          /* таблицы уже нет, но запрошено её пересоздание */
-          goto slowpath_locking;
-
-        return dbi_gone(txn, slot, rc);
+        /* таблица отсутствует, её нужно создавать (если запрос с MDBX_CREATE), либо освобождать слот. */
+        goto slowpath_locking;
       }
       txn->dbi_state[slot] -= DBI_STALE;
     }
@@ -19282,8 +19285,9 @@ slowpath_locking:
   cx.userctx = dbi;
   rc = osal_fastmutex_acquire(&txn->env->dbi_lock);
   if (likely(rc == MDBX_SUCCESS)) {
-    rc = dbi_open_locked(txn, &cx, user_flags, keycmp, datacmp, *name, fastpath_slot);
-    ENSURE(txn->env, osal_fastmutex_release(&txn->env->dbi_lock) == MDBX_SUCCESS);
+    defer_free_item_t *defer_chain = nullptr;
+    rc = dbi_open_locked(txn, &cx, user_flags, keycmp, datacmp, *name, fastpath_slot, &defer_chain);
+    dbi_defer_release(txn->env, defer_chain);
   }
   return rc;
 }
@@ -38461,6 +38465,9 @@ void txn_nested_abort(MDBX_txn *nested) {
     parent->wr.retired_pages = nested->wr.retired_pages;
   }
 
+  if (nested->flags & MDBX_TXN_DIRTY)
+    dbi_update(nested, false);
+
   tASSERT(parent, dpl_check(parent));
   tASSERT(parent, audit_ex(parent, 0, false) == 0);
   dpl_release_shadows(nested);
@@ -39897,10 +39904,10 @@ __dll_export
         0,
         14,
         1,
-        209,
+        215,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.209 */
-        {"2025-12-31T01:07:06+03:00", "3292543f72fc3f6e135d900ee88d87dcd7112a18", "67fcd7174247288a8dfc63b2f5e75eade2413a94", "v0.14.1-209-g67fcd717"},
+                                        0.14.1.215 */
+        {"2026-01-01T01:10:47+03:00", "0d2ce6d87b92a6e4230b34454a2285496f8a75f2", "541e81ed1c8e47d5cbdb050a2102263a255002d4", "v0.14.1-215-g541e81ed"},
         sourcery};
 
 __dll_export

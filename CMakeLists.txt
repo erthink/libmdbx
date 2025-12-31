@@ -53,129 +53,12 @@ endif()
 
 cmake_policy(SET CMP0054 NEW)
 
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/COPYRIGHT"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/NOTICE"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.h++"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/alloy.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/api-cold.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/api-copy.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/api-cursor.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/api-dbi.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/api-env.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/api-extra.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/api-key-transform.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/api-misc.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/api-opts.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/api-range-estimate.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/api-txn-data.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/api-txn.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/atomics-ops.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/atomics-types.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/audit.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/chk.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/cogs.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/cogs.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/coherency.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/config.h.in"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/cursor.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/cursor.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/dbi.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/dbi.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/debug_begin.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/debug_end.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/dpl.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/dpl.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/dxb.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/env.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/essentials.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/gc-get.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/gc-put.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/gc.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/global.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/internals.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/layout-dxb.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/layout-lck.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/lck-posix.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/lck-windows.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/lck.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/lck.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/logging_and_debug.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/logging_and_debug.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/man1/mdbx_chk.1"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/man1/mdbx_copy.1"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/man1/mdbx_drop.1"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/man1/mdbx_dump.1"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/man1/mdbx_load.1"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/man1/mdbx_stat.1"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/mdbx.c++"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/meta.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/meta.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/mvcc-readers.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/node.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/node.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/ntdll.def"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/options.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/osal.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/osal.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/page-get.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/page-iov.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/page-iov.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/page-ops.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/page-ops.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/tree-search.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/pnl.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/pnl.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/preface.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/proto.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/refund.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/rkl.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/rkl.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/sort.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/spill.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/spill.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/table.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/tls.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/tls.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/tools/chk.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/tools/copy.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/tools/drop.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/tools/dump.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/tools/load.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/tools/stat.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/tools/wingetopt.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/tools/wingetopt.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/tree-ops.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/txl.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/txl.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/txn-basal.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/txn-nested.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/txn-ro.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/txn.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/unaligned.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/utils.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/utils.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/version.c.in"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/walk.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/walk.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/windows-import.c"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/windows-import.h"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/CMakeLists.txt")
-  set(MDBX_AMALGAMATED_SOURCE FALSE)
-  find_program(GIT git)
-  if(NOT GIT)
-    message(SEND_ERROR "Git command-line tool not found")
-  endif()
-  set(MDBX_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
-elseif(
-  EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION.json"
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION.json"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/COPYRIGHT"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/NOTICE"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
+  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/GNUmakefile"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.c"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.c++"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.h"
@@ -193,8 +76,9 @@ elseif(
 else()
   message(
     FATAL_ERROR
-      "\nThe set of libmdbx source code files is incomplete!  "
-      "Instead just follow the https://libmdbx.dqdkfa.ru/usage.html  " "PLEASE, AVOID USING ANY OTHER TECHNIQUES.")
+      "\nThe set of libmdbx source code files is incomplete!"
+      "  Instead just follow the https://libmdbx.dqdkfa.ru/usage.html"
+      "  PLEASE, AVOID USING ANY OTHER TECHNIQUES.")
 endif()
 
 # Provide version
@@ -772,109 +656,10 @@ set(LIBMDBX_SOURCES mdbx.h "${CMAKE_CURRENT_BINARY_DIR}/config-cmake.h")
 if(MDBX_AMALGAMATED_SOURCE)
   list(APPEND LIBMDBX_SOURCES mdbx.c)
 else()
-  # generate version file
-  file(REMOVE "${MDBX_SOURCE_DIR}/version.c")
-  configure_file("${MDBX_SOURCE_DIR}/version.c.in" "${CMAKE_CURRENT_BINARY_DIR}/version.c" ESCAPE_QUOTES)
-  file(SHA256 "${CMAKE_CURRENT_BINARY_DIR}/version.c" MDBX_SOURCERY_DIGEST)
-  string(MAKE_C_IDENTIFIER "${MDBX_GIT_DESCRIBE}" MDBX_SOURCERY_SUFFIX)
-  set(MDBX_BUILD_SOURCERY "${MDBX_SOURCERY_DIGEST}_${MDBX_SOURCERY_SUFFIX}")
-
-  if(MDBX_ALLOY_BUILD)
-    list(APPEND LIBMDBX_SOURCES "${MDBX_SOURCE_DIR}/alloy.c")
-    include_directories("${MDBX_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}")
-  else()
-    list(
-      APPEND
-      LIBMDBX_SOURCES
-      "${MDBX_SOURCE_DIR}/api-cold.c"
-      "${MDBX_SOURCE_DIR}/api-copy.c"
-      "${MDBX_SOURCE_DIR}/api-cursor.c"
-      "${MDBX_SOURCE_DIR}/api-dbi.c"
-      "${MDBX_SOURCE_DIR}/api-env.c"
-      "${MDBX_SOURCE_DIR}/api-extra.c"
-      "${MDBX_SOURCE_DIR}/api-key-transform.c"
-      "${MDBX_SOURCE_DIR}/api-misc.c"
-      "${MDBX_SOURCE_DIR}/api-opts.c"
-      "${MDBX_SOURCE_DIR}/api-range-estimate.c"
-      "${MDBX_SOURCE_DIR}/api-txn-data.c"
-      "${MDBX_SOURCE_DIR}/api-txn.c"
-      "${MDBX_SOURCE_DIR}/atomics-ops.h"
-      "${MDBX_SOURCE_DIR}/atomics-types.h"
-      "${MDBX_SOURCE_DIR}/audit.c"
-      "${MDBX_SOURCE_DIR}/chk.c"
-      "${MDBX_SOURCE_DIR}/cogs.c"
-      "${MDBX_SOURCE_DIR}/cogs.h"
-      "${MDBX_SOURCE_DIR}/coherency.c"
-      "${MDBX_SOURCE_DIR}/cursor.c"
-      "${MDBX_SOURCE_DIR}/cursor.h"
-      "${MDBX_SOURCE_DIR}/dbi.c"
-      "${MDBX_SOURCE_DIR}/dbi.h"
-      "${MDBX_SOURCE_DIR}/dpl.c"
-      "${MDBX_SOURCE_DIR}/dpl.h"
-      "${MDBX_SOURCE_DIR}/dxb.c"
-      "${MDBX_SOURCE_DIR}/env.c"
-      "${MDBX_SOURCE_DIR}/essentials.h"
-      "${MDBX_SOURCE_DIR}/gc-get.c"
-      "${MDBX_SOURCE_DIR}/gc-put.c"
-      "${MDBX_SOURCE_DIR}/gc.h"
-      "${MDBX_SOURCE_DIR}/global.c"
-      "${MDBX_SOURCE_DIR}/internals.h"
-      "${MDBX_SOURCE_DIR}/layout-dxb.h"
-      "${MDBX_SOURCE_DIR}/layout-lck.h"
-      "${MDBX_SOURCE_DIR}/lck.c"
-      "${MDBX_SOURCE_DIR}/lck.h"
-      "${MDBX_SOURCE_DIR}/logging_and_debug.c"
-      "${MDBX_SOURCE_DIR}/logging_and_debug.h"
-      "${MDBX_SOURCE_DIR}/meta.c"
-      "${MDBX_SOURCE_DIR}/meta.h"
-      "${MDBX_SOURCE_DIR}/mvcc-readers.c"
-      "${MDBX_SOURCE_DIR}/node.c"
-      "${MDBX_SOURCE_DIR}/node.h"
-      "${MDBX_SOURCE_DIR}/options.h"
-      "${MDBX_SOURCE_DIR}/osal.c"
-      "${MDBX_SOURCE_DIR}/osal.h"
-      "${MDBX_SOURCE_DIR}/page-get.c"
-      "${MDBX_SOURCE_DIR}/page-iov.c"
-      "${MDBX_SOURCE_DIR}/page-iov.h"
-      "${MDBX_SOURCE_DIR}/page-ops.c"
-      "${MDBX_SOURCE_DIR}/page-ops.h"
-      "${MDBX_SOURCE_DIR}/tree-search.c"
-      "${MDBX_SOURCE_DIR}/pnl.c"
-      "${MDBX_SOURCE_DIR}/pnl.h"
-      "${MDBX_SOURCE_DIR}/preface.h"
-      "${MDBX_SOURCE_DIR}/proto.h"
-      "${MDBX_SOURCE_DIR}/refund.c"
-      "${MDBX_SOURCE_DIR}/rkl.c"
-      "${MDBX_SOURCE_DIR}/rkl.h"
-      "${MDBX_SOURCE_DIR}/sort.h"
-      "${MDBX_SOURCE_DIR}/spill.c"
-      "${MDBX_SOURCE_DIR}/spill.h"
-      "${MDBX_SOURCE_DIR}/table.c"
-      "${MDBX_SOURCE_DIR}/tls.c"
-      "${MDBX_SOURCE_DIR}/tls.h"
-      "${MDBX_SOURCE_DIR}/tree-ops.c"
-      "${MDBX_SOURCE_DIR}/txl.c"
-      "${MDBX_SOURCE_DIR}/txl.h"
-      "${MDBX_SOURCE_DIR}/txn-basal.c"
-      "${MDBX_SOURCE_DIR}/txn-nested.c"
-      "${MDBX_SOURCE_DIR}/txn-ro.c"
-      "${MDBX_SOURCE_DIR}/txn.c"
-      "${MDBX_SOURCE_DIR}/unaligned.h"
-      "${MDBX_SOURCE_DIR}/utils.c"
-      "${MDBX_SOURCE_DIR}/utils.h"
-      "${MDBX_SOURCE_DIR}/walk.c"
-      "${MDBX_SOURCE_DIR}/walk.h"
-      "${CMAKE_CURRENT_BINARY_DIR}/version.c")
-    if(NOT MSVC)
-      list(APPEND LIBMDBX_SOURCES "${MDBX_SOURCE_DIR}/lck-posix.c")
-    endif()
-    if(NOT APPLE)
-      list(APPEND LIBMDBX_SOURCES "${MDBX_SOURCE_DIR}/windows-import.h" "${MDBX_SOURCE_DIR}/windows-import.c"
-           "${MDBX_SOURCE_DIR}/lck-windows.c")
-    endif()
-    include_directories("${MDBX_SOURCE_DIR}")
+  if(NOT CMAKE_CURRENT_LIST_FILE)
+    set(CMAKE_CURRENT_LIST_FILE "CMakeLists.txt")
   endif()
-  add_custom_target(doc-files SOURCES README.md TODO.md ChangeLog.md LICENSE NOTICE COPYRIGHT)
+  message(FATAL_ERROR "This \"${CMAKE_CURRENT_LIST_FILE}\" has been trimmed and is therefore intended only for build from an amalgamated form of the source code.")
 endif(MDBX_AMALGAMATED_SOURCE)
 if(MDBX_BUILD_CXX)
   message(STATUS "Use C${MDBX_C_STANDARD} and C++${MDBX_CXX_STANDARD} for libmdbx")
@@ -1269,7 +1054,6 @@ if(NOT MDBX_AMALGAMATED_SOURCE AND MDBX_ENABLE_TESTS)
   if(NOT CMAKE_CXX_COMPILER_LOADED)
     message(FATAL_ERROR "MDBX_ENABLE_TESTS=${MDBX_ENABLE_TESTS}: The C++ compiler is required to build the tests.")
   endif()
-  add_subdirectory(test)
 endif()
 
 # ######################################################################################################################
