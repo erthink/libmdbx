@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY ae2738ca21f05d4083555ea24bc3c190dd832e09ab76039e3692bc26d3a2c8ff_v0_13_10_8_g59bf36d8
+#define MDBX_BUILD_SOURCERY fd3a35bbcdd759746c3e19887f27598f94cdb35c70fa08f660c52e5d860620d8_v0_13_10_12_gef5a4836
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -18678,7 +18678,7 @@ int dbi_defer_release(MDBX_env *const env, defer_free_item_t *const chain) {
 /* Export or close DBI handles opened in this txn. */
 int dbi_update(MDBX_txn *txn, int keep) {
   MDBX_env *const env = txn->env;
-  tASSERT(txn, !txn->parent && txn == env->basal_txn);
+  tASSERT(txn, (!txn->parent && txn == env->basal_txn) || !keep);
   bool locked = false;
   defer_free_item_t *defer_chain = nullptr;
   TXN_FOREACH_DBI_USER(txn, dbi) {
@@ -36913,6 +36913,9 @@ int txn_end(MDBX_txn *txn, unsigned mode) {
       eASSERT(env, pnl_check_allocated(txn->tw.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
       eASSERT(env, memcmp(&txn->tw.troika, &parent->tw.troika, sizeof(troika_t)) == 0);
 
+      if ((mode & TXN_END_UPDATE) == 0)
+        dbi_update(txn, false);
+
       txn->owner = 0;
       if (txn->tw.gc.retxl) {
         eASSERT(env, MDBX_PNL_GETSIZE(txn->tw.gc.retxl) >= (uintptr_t)parent->tw.gc.retxl);
@@ -37556,10 +37559,10 @@ __dll_export
         0,
         13,
         10,
-        8,
+        12,
         "", /* pre-release suffix of SemVer
-                                        0.13.10.8 */
-        {"2025-12-31T01:38:53+03:00", "6cbca2a1f169886c0b36f885dff0544072afc89b", "59bf36d8d1a3e439b5d7ee7472735338a7284560", "v0.13.10-8-g59bf36d8"},
+                                        0.13.10.12 */
+        {"2026-01-01T00:32:16+03:00", "901b144ff73a93a73430bb75b77ccfc1630e245d", "ef5a48367d6da4cb4a03c7fbeac39c39ca81b2b4", "v0.13.10-12-gef5a4836"},
         sourcery};
 
 __dll_export

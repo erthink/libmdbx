@@ -7,6 +7,30 @@ The source code is availale on [SourceCraft](https://sourcecraft.dev/dqdkfa/libm
 Please use the `stable` branch or the latest release for production environment through stagging, but the `master` branch for development a derivative projects.
 Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`. Всё будет хорошо!
 
+## v0.13.11 in a release engineering stage
+
+The supporting release of a stable branch with bug fixes.
+
+Appreciations:
+
+ - [Erigon](https://erigon.tech/) for sponsorship.
+ - [Cosmin Apreutesei](https://github.com/capr) for bug reporting.
+
+Important:
+
+ - _libmdbx_ project has changed its code development and distribution model.
+   **To get acquainted with important changes and plans, we recommend reading the compact [presentation "libmdbx: successes, obstacles, goals and roadmap"](https://libmdbx.dqdkfa.ru/release/libmdbx-roadmap-HNY2026-english.pdf), which contains important explanations in the form of embedded comments.**
+
+ - At a many requests of users, the change log is kept in English.
+
+Fixes:
+
+ - Fixed using of the identifier `ERROR_UNHANDLED_ERROR`, which is not defined in new versions of Windows SDK.
+
+ - Fixed non-closing of DBI descriptors for tables created in nested transactions when such transactions are aborted.
+
+--------------------------------------------------------------------------------
+
 ## v0.13.10 "Блеск Славы" (Gloss of Glory) от 2025-12-17
 
 Поддерживающий выпуск стабильной ветки с исправлением обнаруженных ошибок и устранением недочётов,
