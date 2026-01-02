@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2025 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> ###############################################
+# Copyright (c) 2020-2026 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> ###############################################
 # SPDX-License-Identifier: Apache-2.0
 #
 # Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`. Всё будет хорошо!
@@ -12,10 +12,8 @@
 # The next version is under active non-public development and will be released as MithrilDB and libmithrildb for
 # libraries & packages. Admittedly mythical Mithril is resembling silver but being stronger and lighter than steel.
 # Therefore MithrilDB is rightly relevant name.
-#
-# MithrilDB will be radically different from libmdbx by the new database format and API based on C++17, as well as the
-# Apache 2.0 License. The goal of this revolution is to provide a clearer and robust API, add more features and new
-# valuable properties of database.
+# MithrilDB will be radically different from libmdbx by the new database format and API based on C++20.
+# The goal of this revolution is to provide a clearer and robust API, add more features and new valuable properties.
 
 if(CMAKE_VERSION VERSION_LESS 3.8.2)
   cmake_minimum_required(VERSION 3.0.2)
@@ -97,9 +95,6 @@ endif()
 if(DEFINED PROJECT_NAME AND NOT MDBX_FORCE_BUILD_AS_MAIN_PROJECT)
   set(SUBPROJECT ON)
   set(NOT_SUBPROJECT OFF)
-  if(NOT MDBX_AMALGAMATED_SOURCE AND NOT DEFINED BUILD_TESTING)
-    set(BUILD_TESTING OFF)
-  endif()
   enable_language(C)
 else()
   set(SUBPROJECT OFF)
@@ -121,23 +116,20 @@ else()
   project(libmdbx C)
 endif()
 
-if(MDBX_AMALGAMATED_SOURCE
-   AND DEFINED MDBX_ENABLE_TESTS
-   AND MDBX_ENABLE_TESTS)
-  message(WARNING "MDBX_ENABLE_TESTS=${MDBX_ENABLE_TESTS}: But amalgamated source code don't includes tests.")
-  set(MDBX_ENABLE_TESTS OFF)
-endif()
-
 if(NOT CMAKE_VERSION VERSION_LESS 3.8.2)
   source_group("markdown" FILES REGULAR_EXPRESSION ".*[.]md")
+endif()
+
+if(NOT ((DEFINED BUILD_TESTING AND NOT BUILD_TESTING) OR (DEFINED MDBX_ENABLE_TESTS AND NOT MDBX_ENABLE_TESTS)))
+  include(CTest)
+  option(MDBX_ENABLE_TESTS "Build MDBX tests" ${BUILD_TESTING})
 endif()
 
 # Try to find a C++ compiler unless sure that this is unnecessary.
 if(NOT CMAKE_CXX_COMPILER_LOADED)
   include(CheckLanguage)
-  if(NOT DEFINED MDBX_BUILD_CXX
-     OR MDBX_BUILD_CXX
-     OR (NOT MDBX_AMALGAMATED_SOURCE AND (NOT DEFINED MDBX_ENABLE_TESTS OR MDBX_ENABLE_TESTS)))
+  if(NOT (DEFINED MDBX_BUILD_CXX AND NOT MDBX_BUILD_CXX)
+     OR NOT (DEFINED MDBX_ENABLE_TESTS AND NOT MDBX_ENABLE_TESTS))
     check_language(CXX)
     if(CMAKE_CXX_COMPILER)
       enable_language(CXX)
@@ -320,72 +312,6 @@ else()
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION FALSE)
     set(LTO_ENABLED FALSE)
   endif()
-
-  if(NOT MDBX_AMALGAMATED_SOURCE)
-    if(NOT WIN32)
-      if(NOT MEMORYCHECK_COMMAND)
-        find_program(MEMORYCHECK_COMMAND valgrind)
-      endif()
-      if(MEMORYCHECK_COMMAND)
-        # (LY) cmake is ugly and nasty. Therefore memcheck-options should be defined before including ctest. Otherwise
-        # ctest may ignore it.
-        set(MEMORYCHECK_SUPPRESSIONS_FILE
-            "${CMAKE_CURRENT_SOURCE_DIR}/test/valgrind_suppress.txt"
-            CACHE FILEPATH "Suppressions file for Valgrind" FORCE)
-        set(MEMORYCHECK_COMMAND_OPTIONS
-            "--trace-children=yes --leak-check=full --track-origins=yes --expensive-definedness-checks=yes --error-exitcode=42 --error-markers=@VALGRIND --errors-for-leak-kinds=definite --fair-sched=yes --suppressions=${MEMORYCHECK_SUPPRESSIONS_FILE}"
-            CACHE STRING "Valgrind options" FORCE)
-        set(MEMORYCHECK_COMMAND_OPTIONS
-            "${MEMORYCHECK_COMMAND_OPTIONS}"
-            CACHE STRING "Valgrind options" FORCE)
-      endif()
-    endif()
-
-    # Enable 'make tags' target.
-    find_program(CTAGS ctags)
-    if(CTAGS)
-      add_custom_target(
-        tags
-        COMMAND ${CTAGS} -R -f tags
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-      add_custom_target(ctags DEPENDS tags)
-    endif(CTAGS)
-
-    if(UNIX)
-      find_program(CLANG_FORMAT NAMES clang-format-13 clang-format)
-      if(CLANG_FORMAT)
-        execute_process(COMMAND ${CLANG_FORMAT} "--version" OUTPUT_VARIABLE clang_format_version_info)
-        string(REGEX MATCH "version ([0-9]+)\\.([0-9]+)\\.([0-9]+)(.*)?" clang_format_version_info CLANG_FORMAT_VERSION)
-        if(clang_format_version_info AND NOT CLANG_FORMAT_VERSION VERSION_LESS 13.0)
-          # Enable 'make reformat' target.
-          add_custom_target(
-            reformat
-            VERBATIM
-            COMMAND git ls-files | grep -E \\.\(c|cxx|cc|cpp|h|hxx|hpp\)\(\\.in\)?\$ | xargs ${CLANG_FORMAT} -i
-                    --style=file
-            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-        endif()
-      endif()
-    endif()
-
-    if(NOT "${PROJECT_BINARY_DIR}" STREQUAL "${PROJECT_SOURCE_DIR}")
-      add_custom_target(distclean)
-      add_custom_command(
-        TARGET distclean
-        POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E remove_directory "${PROJECT_BINARY_DIR}"
-        COMMENT "Removing the build directory and its content")
-    elseif(IS_DIRECTORY .git AND GIT)
-      add_custom_target(distclean)
-      add_custom_command(
-        TARGET distclean
-        POST_BUILD
-        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-        COMMAND ${GIT} submodule foreach --recursive git clean -f -X -d
-        COMMAND ${GIT} clean -f -X -d
-        COMMENT "Removing all build files from the source directory")
-    endif()
-  endif(NOT MDBX_AMALGAMATED_SOURCE)
 
   set(MDBX_MANAGE_BUILD_FLAGS_DEFAULT ON)
 endif(SUBPROJECT)
@@ -584,32 +510,21 @@ add_option(MDBX ENABLE_DBI_LOCKFREE "Support for deferred releasing and a lockfr
 add_option(MDBX USE_FALLOCATE "Using posix_fallocate() or fcntl(F_PREALLOCATE) on OSX" AUTO)
 mark_as_advanced(MDBX_USE_FALLOCATE)
 
-if(NOT MDBX_AMALGAMATED_SOURCE)
-  if(CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE_UPPERCASE STREQUAL "DEBUG")
-    set(MDBX_ALLOY_BUILD_DEFAULT OFF)
-  else()
-    set(MDBX_ALLOY_BUILD_DEFAULT ON)
-  endif()
-  add_option(MDBX ALLOY_BUILD "Build MDBX library through single/alloyed object file" ${MDBX_ALLOY_BUILD_DEFAULT})
-endif()
-
 if((MDBX_BUILD_TOOLS OR MDBX_ENABLE_TESTS) AND MDBX_BUILD_SHARED_LIBRARY)
   add_option(MDBX LINK_TOOLS_NONSTATIC "Link MDBX tools with non-static libmdbx" OFF)
 else()
   unset(MDBX_LINK_TOOLS_NONSTATIC CACHE)
 endif()
 
+set(MDBX_CXX_AVAILABLE FALSE)
 if(CMAKE_CXX_COMPILER_LOADED
    AND MDBX_CXX_STANDARD LESS 83
    AND NOT MDBX_CXX_STANDARD LESS 11)
-  if(NOT MDBX_AMALGAMATED_SOURCE)
-    include(CTest)
-    option(MDBX_ENABLE_TESTS "Build MDBX tests" ${BUILD_TESTING})
-  endif()
   if(NOT MDBX_WITHOUT_MSVC_CRT
      AND NOT (CMAKE_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
      AND NOT (CMAKE_COMPILER_IS_CLANG AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 3.9)
      AND NOT (MSVC AND MSVC_VERSION LESS 1900))
+    set(MDBX_CXX_AVAILABLE TRUE)
     option(MDBX_BUILD_CXX "Build C++ portion" ON)
   else()
     if(DEFINED MDBX_BUILD_CXX AND MDBX_BUILD_CXX)
@@ -628,9 +543,6 @@ else()
   if(DEFINED MDBX_BUILD_CXX AND MDBX_BUILD_CXX)
     message(WARNING "MDBX_BUILD_CXX=${MDBX_BUILD_CXX}: But there is no suitable C++ compiler available.")
   endif()
-  if(DEFINED MDBX_ENABLE_TESTS AND MDBX_ENABLE_TESTS)
-    message(WARNING "MDBX_ENABLE_TESTS=${MDBX_ENABLE_TESTS}: But there is no suitable C++ compiler available.")
-  endif()
   set(MDBX_ENABLE_TESTS OFF)
   set(MDBX_BUILD_CXX OFF)
 endif()
@@ -641,8 +553,8 @@ endif()
 
 # ######################################################################################################################
 
-if(MDBX_BUILD_CXX AND NOT CMAKE_CXX_COMPILER_LOADED)
-  message(FATAL_ERROR "MDBX_BUILD_CXX=${MDBX_BUILD_CXX}: The C++ compiler is required to build the C++API.")
+if(MDBX_BUILD_CXX AND NOT MDBX_CXX_AVAILABLE)
+  message(FATAL_ERROR "MDBX_BUILD_CXX=${MDBX_BUILD_CXX}: The C++ 11 compiler is required to build the C++API.")
 endif()
 
 if(MDBX_BUILD_CXX)
@@ -744,8 +656,10 @@ target_setup_options(mdbx-static)
 libmdbx_setup_libs(mdbx-static INTERFACE)
 if(MDBX_BUILD_SHARED_LIBRARY)
   set_target_properties(mdbx-static PROPERTIES OUTPUT_NAME mdbx-static)
+  set(MDBX_LIBRARY mdbx)
 else()
   set_target_properties(mdbx-static PROPERTIES OUTPUT_NAME mdbx)
+  set(MDBX_LIBRARY mdbx-static)
 endif()
 target_include_directories(mdbx-static INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
 
@@ -1050,10 +964,8 @@ add_definitions(-DMDBX_CONFIG_H="${CMAKE_CURRENT_BINARY_DIR}/config-cmake.h")
 
 # ######################################################################################################################
 
-if(NOT MDBX_AMALGAMATED_SOURCE AND MDBX_ENABLE_TESTS)
-  if(NOT CMAKE_CXX_COMPILER_LOADED)
-    message(FATAL_ERROR "MDBX_ENABLE_TESTS=${MDBX_ENABLE_TESTS}: The C++ compiler is required to build the tests.")
-  endif()
+if(MDBX_ENABLE_TESTS)
+  add_subdirectory(ut_and_examples)
 endif()
 
 # ######################################################################################################################

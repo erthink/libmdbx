@@ -1,7 +1,7 @@
 /// \copyright SPDX-License-Identifier: Apache-2.0
 /// \note Please refer to the COPYRIGHT file for explanations license change,
 /// credits and acknowledgments.
-/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2025
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 ///
 /// mdbx_load.c - memory-mapped database load tool
 ///
@@ -16,9 +16,9 @@
 
 #define xMDBX_TOOLS /* Avoid using internal eASSERT() */
 /// \copyright SPDX-License-Identifier: Apache-2.0
-/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2025
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
-#define MDBX_BUILD_SOURCERY f7f5123962e752f13134b4013b9332f1b311a5f0dd19f3d45ba4e65d806a3545_v0_14_1_215_g541e81ed
+#define MDBX_BUILD_SOURCERY e30d838fb2509384f10339f050c97b34b790926488f78b959203d21608b421aa_v0_14_1_220_g0f8b288c
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED

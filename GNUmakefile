@@ -52,7 +52,7 @@ CC      ?= gcc
 CXX     ?= g++
 CFLAGS_EXTRA ?=
 LD      ?= ld
-CMAKE	?= cmake
+CMAKE	?= "$(shell which cmake 2>&-)"
 CMAKE_OPT ?=
 CTEST	?= ctest
 CTEST_OPT ?=
@@ -142,7 +142,7 @@ MDBX_TOOLS := $(addprefix mdbx_,$(TOOLS))
 MANPAGES   := mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1 mdbx_chk.1 mdbx_drop.1
 TIP        := // TIP:
 
-.PHONY: all help options lib libs tools clean install uninstall check_buildflags_tag tools-static
+.PHONY: all help options lib libs tools clean install uninstall check_buildflags_tag tools-static run-ut
 .PHONY: install-strip install-no-strip strip libmdbx mdbx show-options lib-static lib-shared cmake-build ninja
 
 boolean = $(if $(findstring $(strip $($1)),YES Yes yes y ON On on 1 true True TRUE),1,$(if $(findstring $(strip $($1)),NO No no n OFF Off off 0 false False FALSE),,$(error Wrong value `$($1)` of $1 for YES/NO option)))
@@ -192,6 +192,11 @@ help:
 	@echo "  make bench-triplet       - run ioarena-benchmark for mdbx, lmdb, sqlite3"
 	@echo "  make bench-quartet       - run ioarena-benchmark for mdbx, lmdb, rocksdb, wiredtiger"
 	@echo "  make bench-clean         - remove temp database(s) after benchmark"
+	@echo "  make test                - basic test(s)"
+	@echo "  make build-test          - build test(s) executable(s)"
+	@echo "  make test-asan           - build with AddressSanitizer and run basic test"
+	@echo "  make test-leak           - build with LeakSanitizer and run basic test"
+	@echo "  make test-ubsan          - build with UndefinedBehaviourSanitizer and run basic test"
 
 show-options:
 	@echo "  MDBX_BUILD_OPTIONS   = $(MDBX_BUILD_OPTIONS)"
@@ -280,9 +285,46 @@ ctest: cmake-build
 	@echo "  RUN: ctest .."
 	$(QUIET)$(CTEST) --test-dir @cmake-ninja-build --parallel `(nproc | sysctl -n hw.ncpu | echo 2) 2>/dev/null` --schedule-random $(CTEST_OPT)
 
+run-ut: mdbx_example
+	$(QUIET)for UT in $^; do echo "  Running $$UT" && ./$${UT} || exit -1; done
+
+TEST_TARGETS := mdbx_example
+TEST_BUILD_TARGETS := test-build
+ifneq ($(CMAKE),"")
+TEST_TARGETS += ctest
+TEST_BUILD_TARGETS += cmake-build
+endif
+
+.PHONY: ninja-assertions ninja-debug ninja $(TEST_TARGETS) $(TEST_BUILD_TARGETS) test-ubsan test-asan test-asan test-leak test-assertion test build-test smoke check
+test smoke check: $(TEST_TARGETS)
+build-test: $(TEST_BUILD_TARGETS)
+
+test-assertion: MDBX_BUILD_OPTIONS += -DMDBX_FORCE_ASSERTIONS=1 -UNDEBUG -DMDBX_DEBUG=0
+test-assertion: smoke
+
+test-ubsan:
+	@echo '  RE-TEST with `-fsanitize=undefined` option...'
+	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-DENABLE_UBSAN -Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error" test
+
+test-asan:
+	@echo '  RE-TEST with `-fsanitize=address` option...'
+	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Os -fsanitize=address" test
+
+test-leak:
+	@echo '  RE-TEST with `-fsanitize=leak` option...'
+	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-fsanitize=leak" test
+
+mdbx_example: mdbx.h ut_and_examples/example-mdbx.c libmdbx.$(SO_SUFFIX)
+	@echo '  CC+LD $@'
+	$(QUIET)$(CC) $(CFLAGS) -I. ut_and_examples/example-mdbx.c ./libmdbx.$(SO_SUFFIX) -o $@
+
 ################################################################################
 # Amalgamated source code, i.e. distributed after `make dist`
 MAN_SRCDIR := man1/
+
+dist:
+	@echo '  Starting 2026 libmdbx is distrubuted in an amalgamated source code form.'
+	@echo '  So amalgamation is no longer required. Please update your build scripts.'
 
 config-gnumake.h: @buildflags.tag $(WAIT) mdbx.c $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
 	@echo '  MAKE $@'

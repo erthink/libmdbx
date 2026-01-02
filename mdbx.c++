@@ -1,8 +1,8 @@
 /// \copyright SPDX-License-Identifier: Apache-2.0
-/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2025
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 /* clang-format off */
 
-#define MDBX_BUILD_SOURCERY f7f5123962e752f13134b4013b9332f1b311a5f0dd19f3d45ba4e65d806a3545_v0_14_1_215_g541e81ed
+#define MDBX_BUILD_SOURCERY e30d838fb2509384f10339f050c97b34b790926488f78b959203d21608b421aa_v0_14_1_220_g0f8b288c
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -7128,7 +7128,7 @@ MDBX_INTERNAL int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl);
 #pragma warning(pop)
 #endif /* MSVC */
 /// \copyright SPDX-License-Identifier: Apache-2.0
-/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2020-2025
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2020-2026
 ///
 /// \brief Non-inline part of the libmdbx C++ API
 ///
