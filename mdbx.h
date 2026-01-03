@@ -28,7 +28,7 @@ and https://sourcecraft.dev/dqdkfa/libmdbx for the source code.
 \section copyright LICENSE & COPYRIGHT
 \copyright SPDX-License-Identifier: Apache-2.0
 \note Please refer to the COPYRIGHT file for explanations license change, credits and acknowledgments.
-\author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2025
+\author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
 *******************************************************************************/
 
@@ -2522,8 +2522,7 @@ typedef enum MDBX_env_delete_mode {
   /** \brief Make sure that the environment is not being used by other
    * processes, or return an error otherwise. */
   MDBX_ENV_ENSURE_UNUSED = 1,
-  /** \brief Wait until other processes closes the environment before deletion.
-   */
+  /** \brief Wait until other processes closes the environment before deletion. */
   MDBX_ENV_WAIT_FOR_UNUSED = 2,
 } MDBX_env_delete_mode_t;
 
