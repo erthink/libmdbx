@@ -1,6 +1,9 @@
 /**
 
-_libmdbx_ (aka MDBX) is an extremely fast, compact, powerful, embeddable,
+\file mdbx.h
+\brief The libmdbx C API header file.
+
+\details _libmdbx_ (aka MDBX) is an extremely fast, compact, powerful, embeddable,
 transactional [key-value
 store](https://en.wikipedia.org/wiki/Key-value_database), with [Apache 2.0
 license](./LICENSE). _MDBX_ has a specific set of properties and capabilities,
@@ -18,21 +21,36 @@ C++ API description and links to the origin git repo with the source code.
 Questions, feedback and suggestions are welcome to the Telegram' group
 https://t.me/libmdbx.
 
-Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`.
+Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`,
+BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3NDMyS5wXJgfeMTmJznRi`.
 Всё будет хорошо!
 
-\note The libmdbx project has been completely relocated to the jurisdiction of the Russian Federation.
-It is still open and provided with first-class free support. Please refer to https://libmdbx.dqdkfa.ru for documentation
-and https://sourcecraft.dev/dqdkfa/libmdbx for the source code.
+The _libmdbx_ project has been completely relocated to the jurisdiction of the Russian Federation.
+\note _libmdbx_ is still open and provided with first-class free support.
 
 \section copyright LICENSE & COPYRIGHT
 \copyright SPDX-License-Identifier: Apache-2.0
-\note Please refer to the COPYRIGHT file for explanations license change, credits and acknowledgments.
+Please refer to the COPYRIGHT file for explanations license change, credits and acknowledgments.
 \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
 *******************************************************************************/
 
 #pragma once
+/*
+ * Tested with, since 2026:
+ *  - Elbrus LCC >= 1.28 (http://www.mcst.ru/lcc);
+ *  - GNU C >= 11.3;
+ *  - CLANG >= 14.0;
+ *  - MSVC >= 19.44 (Visual Studio 2022 toolchain v143),
+ * before 2026:
+ *  - Elbrus LCC >= 1.23 (http://www.mcst.ru/lcc);
+ *  - GNU C >= 4.8;
+ *  - CLANG >= 3.9;
+ *  - MSVC >= 14.0 (Visual Studio 2015),
+ *    but 19.2x could hang due optimizer bug;
+ *  - AppleClang.
+ */
+
 #ifndef LIBMDBX_H
 #define LIBMDBX_H
 
@@ -4858,6 +4876,8 @@ LIBMDBX_API int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del);
  * \note Values returned from the table are valid only until a
  * subsequent update operation, or the end of the transaction.
  *
+ * \see mdbx_cache_get()
+ *
  * \param [in] txn       A transaction handle returned by \ref mdbx_txn_begin().
  * \param [in] dbi       A table handle returned by \ref mdbx_dbi_open().
  * \param [in] key       The key to search for in the table.
@@ -4932,6 +4952,180 @@ LIBMDBX_API int mdbx_get_ex(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MD
  * \retval MDBX_NOTFOUND      The key was not in the table.
  * \retval MDBX_EINVAL        An invalid parameter was specified. */
 LIBMDBX_API int mdbx_get_equal_or_great(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data);
+
+/** \brief Lightweight transparent cache entry structure used by \ref mdbx_cache_get().
+ * \ingroup c_crud
+ *
+ * The approach of these caching is to preserve address of a value retrieved from the database with an extremely fast
+ * check of relevance it based on a transaction ID within an internal b-tree structures. Event a b-tree was modified
+ * then the search for the corresponding key from the root of the b-tree to leaf pages stops as soon as reaches a page
+ * that has not been modified after the last check of given cache entry. This way, the minimum actions is performed,
+ * which is no slower than a usual key search in the worst case, and at best, only a few lightweight checks will be do.
+ *
+ * \note The cache structure allows it to be placed in shared memory and used by multiple processes.
+ * However, such interaction and management are not provided by libmdbx in any way yet now.
+ *
+ * \note An each cache entry must be initialized by \ref mdbx_cache_init() before first use. */
+typedef struct MDBX_cache_entry {
+  uint64_t trunk_txnid;          /**< The transaction/MVCC-snapshot ID of a page or other internal DB structure
+                                  *   that hold the cached data or reflect it state. */
+  uint64_t last_confirmed_txnid; /**< The recent transaction/MVCC-snapshot ID wherein the cache entry
+                                  *   was checked and confirmed. */
+  size_t offset;                 /**< The offset of cached data value for a corresponding key.
+                                  *   The zero value means \ref MDBX_NOTFOUND. */
+  uint32_t length;               /**< The length of cached data value for a corresponding key. */
+} MDBX_cache_entry_t;
+
+/** \brief Initializes the cache entry before the first use.
+ * \ingroup c_crud
+ * \see MDBX_cache_entry
+ * \see mdbx_cache_get() */
+LIBMDBX_INLINE_API(void, mdbx_cache_init, (MDBX_cache_entry_t * entry)) {
+  entry->offset = 0;
+  entry->length = 0;
+  entry->trunk_txnid = 0;
+  entry->last_confirmed_txnid = 0;
+}
+
+/** \brief Cache entry status returned by \ref mdbx_cache_get().
+ * \ingroup c_crud
+ * \see MDBX_cache_entry
+ * \see mdbx_cache_init() */
+typedef enum MDBX_cache_status {
+  /** \brief The error other than \ref MDBX_NOTFOUND has occurred.
+   *  \details There is no correct result since an error has occurred that is not related
+   *  to the absence of the desired key-value pair.
+   *  The given cache entry has not been changed. */
+  MDBX_CACHE_ERROR = -3,
+
+  /** \brief The result was obtained by bypassing the cache, because
+   *  the transaction is too old to using the cache entry.
+   *  \details The cache entry reflects a newer version of the data that is unavailable within
+   *  an MVCC-snapshot used by current transaction.
+   *  The given cache entry has not been changed.
+   *  The result of getting a value is correct until the transaction end. */
+  MDBX_CACHE_BEHIND = -2,
+
+  /** \brief The result of getting a value is correct, but it cannot be cached since there
+   *  the ABA-like issue is in the data history, either other similar reason.
+   *  \details When a cache entry is used by different threads reading different MVCC snapshots,
+   *  there may be a situation in which the key and associated value are missing from the old
+   *  and new MVCC snapshots, but are present in one of the MVCC snapshots between ones.
+   *  In such circumstances the result from the cache may be false negative, therefore,
+   *  in order to avoid an incorrect result, a search is performed bypassing cache.
+   *  The given cache entry has not been changed.
+   *  The result of getting a value is correct until the transaction end. */
+  MDBX_CACHE_UNABLE = -1,
+
+  /** \brief The result was obtained by bypassing the cache, because
+   *  the given cache entry being updated by another thread.
+   *  \details When accessing the cache entry, a race condition was detected with its update by another thread.
+   *  Therefore, the result was obtained without using the cache entry and without affecting an operation of other
+   *  threads using it, including the ones performing an update. For a read transaction, the result is correct until
+   *  the transaction end. For a write transactions, the result is correct until the value is explicitly changed or
+   *  the transaction is completed. */
+  MDBX_CACHE_RACE = 0,
+
+  /** \brief The result of getting a value is correct, but it cannot be cached since
+   *  the changes have not been committed.
+   *  \details The requested value of a pair is in a dirty state itself or on a dirty page with other updated items.
+   *  This cache entry has not been changed because the corresponding data changes have not yet been committed
+   *  and could be aborted.
+   *  The result of the get operation and data value are valid within the current write transaction
+   *  until any next modification. */
+  MDBX_CACHE_DIRTY = 1,
+
+  /** \brief The result of getting a value is correct and was retrieved from the cache entry which is untouched.
+   *  \details There were no changes in the cached data after the last check.
+   *  The given cache entry was not altered as it is complete up-to-date.
+   *  For a read transaction, the result is correct until the transaction end.
+   *  For a write transactions, the result is correct until the value is explicitly changed
+   *  or the transaction is completed. */
+  MDBX_CACHE_HIT = 2,
+
+  /** \brief The result of getting a value is correct and has been retrieved from the cache, which has been
+   *  altered to reflect recently committed transactions.
+   *  \details There were no changes in the cached data after the last check.
+   *  The given cache entry has been slightly updated to reflect the relevance of the data for recent committed
+   * transaction(s). For a read transaction, the result is correct until the transaction end. For a write transactions,
+   * the result is correct until the value is explicitly changed or the transaction is completed. */
+  MDBX_CACHE_CONFIRMED = 3,
+
+  /** \brief The result of getting a value is correct and corresponds to the fresh data readed from the database,
+   *  which also putted into the cache entry.
+   *  \details After the last check, either the value of the requested pair itself changed,
+   *  or it was moved to a new page due to the updating of neighboring items.
+   *  The given cache entry has been completely updated to reflect the actual data.
+   *  For a read transaction, the result is correct until the transaction end.
+   *  For a write transactions, the result is correct until the value is explicitly changed
+   *  or the transaction is completed. */
+  MDBX_CACHE_REFRESHED = 4
+} MDBX_cache_status_t;
+
+/** \brief Pair of error code and cache status as a result of \ref mdbx_cache_get().
+ * \ingroup c_crud
+ * \see mdbx_cache_get()
+ * \see mdbx_cache_get_SingleThreaded() */
+typedef struct MDBX_cache_result {
+  /** The error code of getting data same as from \ref mdbx_get(). */
+  MDBX_error_t errcode;
+  /** The result of cache operation as the value of \ref MDBX_cache_status_t. */
+  MDBX_cache_status_t status;
+} MDBX_cache_result_t;
+
+/** \brief Gets items from a table using cache including multithreaded cases.
+ * \ingroup c_crud
+ * \details The essence of this "caching" is using a cached information to check as quickly as possible whether the data
+ * has changed or not, with early exit when searching though a DB. For this a petty version information is stored in
+ * a \ref MDBX_cache_entry_t structure, along with the offset to the "cached" data inside the memory-mapped database
+ * file. Instead of a full B-tree search it stops when reaches a DB page that has not been modified after the last
+ * check. Thus a minimum number of steps are performed which provides dramatic acceleration in many cases.
+ *
+ * \note This function is supports multi-threaded cases and automatically resolves collisions using lockfree approach,
+ * nonetheless \ref MDBX_NOSTICKYTHREADS mode is required to use it within a different threads.
+ *
+ * \see mdbx_cache_get_SingleThreaded()
+ * \see MDBX_cache_entry_t
+ * \see mdbx_cache_init()
+ * \see mdbx_get()
+ *
+ * \param [in] txn        A transaction handle returned by \ref mdbx_txn_begin().
+ * \param [in] dbi        A table handle returned by \ref mdbx_dbi_open().
+ * \param [in] key        The key to search for in the table.
+ * \param [in,out] data   The data corresponding to the key.
+ * \param [in,out] entry  The cache entry corresponding to the key.
+ *
+ * \returns The \ref MDBX_cache_result_t with a pair of the error codes for getting a data
+ * and the cache entry processing both. */
+LIBMDBX_API MDBX_cache_result_t mdbx_cache_get(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
+                                               volatile MDBX_cache_entry_t *entry);
+
+/** \brief Gets items from a table using cache within single-thread cases only.
+ * \ingroup c_crud
+ * \details The essence of this "caching" is using a cached information to check as quickly as possible whether the data
+ * has changed or not, with early exit when searching though a DB. For this a petty version information is stored in
+ * a \ref MDBX_cache_entry_t structure, along with the offset to the "cached" data inside the memory-mapped database
+ * file. Instead of a full B-tree search it stops when reaches a DB page that has not been modified after the last
+ * check. Thus a minimum number of steps are performed which provides dramatic acceleration in many cases.
+ *
+ * \note This function is intended to be used with a given cache entry only in single-threaded cases, otherwise
+ * behaviour is undefined.
+ *
+ * \see mdbx_cache_get()
+ * \see MDBX_cache_entry_t
+ * \see mdbx_cache_init()
+ * \see mdbx_get()
+ *
+ * \param [in] txn        A transaction handle returned by \ref mdbx_txn_begin().
+ * \param [in] dbi        A table handle returned by \ref mdbx_dbi_open().
+ * \param [in] key        The key to search for in the table.
+ * \param [in,out] data   The data corresponding to the key.
+ * \param [in,out] entry  The cache entry corresponding to the key.
+ *
+ * \returns The \ref MDBX_cache_result_t with a pair of the error codes for getting a data
+ * and the cache entry processing both. */
+LIBMDBX_API MDBX_cache_result_t mdbx_cache_get_SingleThreaded(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
+                                                              MDBX_val *data, MDBX_cache_entry_t *entry);
 
 /** \brief Store items into a table.
  * \ingroup c_crud
