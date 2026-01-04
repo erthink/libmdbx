@@ -18,7 +18,7 @@
 /// \copyright SPDX-License-Identifier: Apache-2.0
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
-#define MDBX_BUILD_SOURCERY e30d838fb2509384f10339f050c97b34b790926488f78b959203d21608b421aa_v0_14_1_220_g0f8b288c
+#define MDBX_BUILD_SOURCERY 225dda0a47ebc6c40e06f1d7820ff41263a6b47263cc0ea1832d12f5e38319c8_v0_14_1_234_g329ac7b7
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED

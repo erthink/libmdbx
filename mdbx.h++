@@ -1,29 +1,44 @@
-﻿/// \copyright SPDX-License-Identifier: Apache-2.0
-/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2020-2026
-///
-/// Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`.
-/// Всё будет хорошо!
-///
-/// \file mdbx.h++
+﻿/// \file mdbx.h++
 /// \brief The libmdbx C++ API header file.
 ///
-/// Tested with:
-///  - Elbrus LCC >= 1.23 (http://www.mcst.ru/lcc);
-///  - GNU C++ >= 4.8;
-///  - clang >= 3.9;
-///  - MSVC >= 14.0 (Visual Studio 2015),
-///    but 19.2x could hang due optimizer bug;
-///  - AppleClang, but without C++20 concepts.
+/// \details _libmdbx_ (aka MDBX) is an extremely fast, compact, powerful, embeddable,
+/// transactional [key-value
+/// store](https://en.wikipedia.org/wiki/Key-value_database), with [Apache 2.0
+/// license](./LICENSE). _MDBX_ has a specific set of properties and capabilities,
+/// focused on creating unique lightweight solutions with extraordinary performance.
 ///
-
+/// Please visit https://libmdbx.dqdkfa.ru for more information, documentation,
+/// C++ API description and links to the origin git repo with the source code.
+/// Questions, feedback and suggestions are welcome to the Telegram' group
+/// https://t.me/libmdbx.
+///
+/// Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`,
+/// BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3NDMyS5wXJgfeMTmJznRi`.
+/// Всё будет хорошо!
 ///
 /// The libmdbx project has been completely relocated to the jurisdiction of the Russian Federation.
-/// It is still open and provided with first-class free support.
-/// Please refer to https://libmdbx.dqdkfa.ru for documentation
-/// and https://sourcecraft.dev/dqdkfa/libmdbx for the source code.
+/// \note _libmdbx_ is still open and provided with first-class free support.
+///
+/// \copyright SPDX-License-Identifier: Apache-2.0
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2020-2026
 ///
 
 #pragma once
+
+//
+// Tested with, since 2026:
+//  - Elbrus LCC >= 1.28 (http://www.mcst.ru/lcc);
+//  - GNU C++ >= 11.3;
+//  - CLANG >= 14.0;
+//  - MSVC >= 19.44 (Visual Studio 2022 toolchain v143),
+// before 2026:
+//  - Elbrus LCC >= 1.23 (http://www.mcst.ru/lcc);
+//  - GNU C++ >= 4.8;
+//  - CLANG >= 3.9;
+//  - MSVC >= 14.0 (Visual Studio 2015),
+//    but 19.2x could hang due optimizer bug;
+//  - AppleClang, but without C++20 concepts.
+//
 
 /* Workaround for modern libstdc++ with CLANG < 4.x */
 #if defined(__SIZEOF_INT128__) && !defined(__GLIBCXX_TYPE_INT_N_0) && defined(__clang__) && __clang_major__ < 4
@@ -1056,6 +1071,19 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 
 protected:
   MDBX_CXX11_CONSTEXPR slice(size_t invalid_length) noexcept : ::MDBX_val({nullptr, invalid_length}) {}
+};
+
+/// \brief Cache entry for get-cached API (initial draft).
+class cache_entry : public MDBX_cache_entry_t {
+public:
+  cache_entry() noexcept { reset(); }
+  cache_entry(const cache_entry &) noexcept = default;
+  cache_entry &operator=(const cache_entry &) noexcept = default;
+  cache_entry(cache_entry &&other) noexcept {
+    *this = other;
+    other.reset();
+  }
+  void reset() noexcept { mdbx_cache_init(this); }
 };
 
 //------------------------------------------------------------------------------
