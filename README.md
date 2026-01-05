@@ -203,7 +203,7 @@ _libmdbx_ is superior to legendary _[LMDB](https://symas.com/lmdb/)_ in terms of
 
 ## Some Added Features
 
-1. Keys could be more than 2 times longer than _LMDB_.
+1. Keys could be more than 2 times longer than _LMDB_, support of zero-length for keys and values.
    > For DB with default page size _libmdbx_ support keys up to 2022 bytes and up to 32742 bytes for 64K page size. _LMDB_ allows key size up to 511 bytes and may silently loses data with large values.
 
 2. Up to 30% faster than _LMDB_ in [CRUD](https://en.wikipedia.org/wiki/Create,_read,_update_and_delete) benchmarks.
@@ -241,18 +241,21 @@ _libmdbx_ is superior to legendary _[LMDB](https://symas.com/lmdb/)_ in terms of
 12. Extended information of whole-database, tables/sub-databases, transactions, readers enumeration.
     > _libmdbx_ provides a lot of information, including dirty and leftover pages for a write transaction, reading lag and holdover space for read transactions.
 
-13. Support of Zero-length for keys and values.
+13. The ["get-cached" feature](https://libmdbx.dqdkfa.ru/group__c__crud.html#ga5bfb583bf2c5d5676ffddb466e789353) with lightweight transparent cache that could provides dramatic acceleration in many cases.
 
-14. Useful runtime options for tuning engine to application's requirements and use cases specific.
+14. [Cloning a read transactions](https://libmdbx.dqdkfa.ru/group__c__transactions.html#ga28d3db2426df24b16c0bc40cd0af8187) and [resurrect after fork](https://libmdbx.dqdkfa.ru/group__c__extra.html#gab7d13c1dbf074bc23ebda2d886add02a) feature.
 
 15. Automated steady sync-to-disk upon several thresholds and/or timeout via cheap polling.
 
-16. Ability to determine whether the particular data is on a dirty page or not, that allows to avoid copy-out before updates.
+16. Extended update and quick delete operations.
+    > _libmdbx_ allows one _at once_ with [getting previous value](https://libmdbx.dqdkfa.ru/group__c__crud.html#gaad688c4b0fbbcff676f181dc0437befa) and addressing the particular item from multi-value with the same key.
+    > _libmdbx_ support [massive deletion by bunches](https://libmdbx.dqdkfa.ru/group__c__crud.html#gac986d35a3b6b27ac43af881c471a6878) of adjacent elements much faster by cutting off entire pages and branches from a B-tree.
 
-17. Extended update and delete operations.
-    > _libmdbx_ allows one _at once_ with getting previous value and addressing the particular item from multi-value with the same key.
+17. Ability to determine whether the particular data is on a dirty page or not, that allows to avoid copy-out before updates.
 
 18. Sequence generation and three persistent 64-bit vector-clock like markers.
+
+19. Useful runtime options for tuning engine to application's requirements and use cases specific.
 
 ## Other fixes and specifics
 

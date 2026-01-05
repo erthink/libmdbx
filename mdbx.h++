@@ -321,18 +321,27 @@ namespace mdbx {
 /// \defgroup cxx_api C++ API
 /// @{
 
-// Functions whose signature depends on the `mdbx::byte` type
-// must be strictly defined as inline!
+/// \brief The byte-like type that don't presumes aliases for pointers as does the `char`.
+/// \details Essentially, to enable all kinds of an compiler optimization, we need just
+/// the `unsigned char * restrict` type in C99 terms, i.e. the non-aliasing pointer to `unsigned char`.
+/// However, C++ still doesn't have `restrict` keyword not `non-aliases` type attribute, but a char-pointers may be
+/// aliased.
+///
+/// On the other hand, while `uint8_t` is provided and `CHAR_BIT = 8` the `char8_t *` actually act the same as the C99
+/// `unsigned char * restrict`. So using `char8_t` should not be an issue, since both the `CHAR_BIT = 8` and `uint8_t
+/// `are required.
+///
+/// At the same time, the approach of using `char8_t` has several advantages:
+///  - the `restrict` attribute is defined on level of the base type and is inherited by any derived pointer type;
+///  - some compilers treat `__restrict` as an attribute of an instance of a type (i.e. a variable, a specific
+///    pointer), but not a type attribute.
+///
+/// Nonetheless, I should think about switching to the `uint8_t * __restrict__` for byte pointers.
+/// \note Functions whose signature depends on the `mdbx::byte` type must be strictly defined as inline!
 #if defined(DOXYGEN) || (defined(__cpp_char8_t) && __cpp_char8_t >= 201811)
-// To enable all kinds of an compiler optimizations we use a byte-like type
-// that don't presumes aliases for pointers as does the `char` type and its
-// derivatives/typedefs.
-// Please see https://libmdbx.dqdkfa.ru/dead-github/issues/263
-// for reasoning of the use of `char8_t` type and switching to `__restrict__`.
 using byte = char8_t;
 #else
-// Avoid `std::byte` since it doesn't add features but inconvenient
-// restrictions.
+// Avoid `std::byte` since it doesn't add features but inconvenient restrictions.
 using byte = unsigned char;
 #endif /* __cpp_char8_t >= 201811*/
 
@@ -2958,7 +2967,7 @@ MDBX_CXX01_CONSTEXPR_ENUM bool is_msgpack(value_mode mode) noexcept { return mod
 /// \brief A handle for an individual table (aka key-value space, maps or sub-database) in the environment.
 /// \see txn::open_map() \see txn::create_map()
 /// \see txn::clear_map() \see txn::drop_map()
-/// \see txn::get_handle_info() \see txn::get_map_stat()
+/// \see txn::get_map_flags() \see txn::get_map_stat()
 /// \see env::close_map()
 /// \see cursor::map()
 struct LIBMDBX_API_TYPE map_handle {
@@ -3799,6 +3808,12 @@ public:
   /// \brief Renew read-only transaction.
   inline void renew_reading();
 
+  /// \brief Clone read transaction.
+  inline txn_managed clone(void *context = nullptr) const;
+
+  /// \brief Renew given read transaction into clone.
+  inline void clone(txn_managed &txn_for_renew_into_clone, void *context = nullptr) const;
+
   /// \brief Marks transaction as broken to prevent further operations.
   inline void make_broken();
 
@@ -3941,7 +3956,7 @@ public:
   /// B+trees for given table.
   inline uint32_t get_tree_deepmask(map_handle map) const;
   /// \brief Returns information about key-value map (aka table) handle.
-  inline map_handle::info get_table_info(map_handle map) const;
+  inline map_handle::info get_map_flags(map_handle map) const;
 
   using canary = ::MDBX_canary;
   /// \brief Set integers markers (aka "canary") associated with the environment.
@@ -5609,6 +5624,19 @@ inline void txn::make_broken() { error::success_or_throw(::mdbx_txn_break(handle
 
 inline void txn::renew_reading() { error::success_or_throw(::mdbx_txn_renew(handle_)); }
 
+inline txn_managed txn::clone(void *context) const {
+  MDBX_txn *ptr = nullptr;
+  error::success_or_throw(::mdbx_txn_clone(handle_, &ptr, context));
+  assert(ptr != nullptr);
+  return txn_managed(ptr);
+}
+
+inline void txn::clone(txn_managed &txn_for_renew_into_clone, void *context) const {
+  error::throw_on_nullptr(txn_for_renew_into_clone.handle_, MDBX_BAD_TXN);
+  error::success_or_throw(::mdbx_txn_clone(handle_, &txn_for_renew_into_clone.handle_, context));
+  assert(txn_for_renew_into_clone.handle_ != nullptr);
+}
+
 inline void txn::park_reading(bool autounpark) { error::success_or_throw(::mdbx_txn_park(handle_, autounpark)); }
 
 inline bool txn::unpark_reading(bool restart_if_ousted) {
@@ -5729,7 +5757,7 @@ inline uint32_t txn::get_tree_deepmask(map_handle map) const {
   return r;
 }
 
-inline map_handle::info txn::get_table_info(map_handle map) const {
+inline map_handle::info txn::get_map_flags(map_handle map) const {
   unsigned flags, state;
   error::success_or_throw(::mdbx_dbi_flags_ex(handle_, map.dbi, &flags, &state));
   return map_handle::info(MDBX_db_flags_t(flags), MDBX_dbi_state_t(state));

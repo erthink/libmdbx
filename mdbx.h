@@ -3880,11 +3880,11 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API void *mdbx_env_get_userctx(const MDBX_env
  * \param [in] flags   Special options for this transaction. This parameter
  *                     must be set to 0 or by bitwise OR'ing together one
  *                     or more of the values described here:
- *                      - \ref MDBX_RDONLY   This transaction will not perform
- *                                           any write operations.
+ *                      - \ref MDBX_TXN_RDONLY This transaction will not perform
+ *                                             any write operations.
  *
- *                      - \ref MDBX_TXN_TRY  Do not block when starting
- *                                           a write transaction.
+ *                      - \ref MDBX_TXN_TRY    Do not block when starting
+ *                                             a write transaction.
  *
  *                      - \ref MDBX_SAFE_NOSYNC, \ref MDBX_NOMETASYNC.
  *                        Do not sync data to disk corresponding
@@ -3972,6 +3972,59 @@ LIBMDBX_API int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flag
 LIBMDBX_INLINE_API(int, mdbx_txn_begin, (MDBX_env * env, MDBX_txn *parent, MDBX_txn_flags_t flags, MDBX_txn **txn)) {
   return mdbx_txn_begin_ex(env, parent, flags, txn, NULL);
 }
+
+/** \brief Starts a read-only clone of a given transaction.
+ * \ingroup c_transactions
+ *
+ * \note Cloning read-only transactions without \ref MDBX_NOSTICKYTHREADS mode is pointless and is not allowed.
+ *
+ * Cloning a read-only transaction generates a transaction reading the same MVCC snapshot of the database.
+ * However, cloning a read-write transaction is also explicitly allowed and generates a read transaction that
+ * reads the original MVCC-snapshot of the database without uncommitted changes. This feature is a specialized
+ * tool for implementing database compactification, data transformation, replication and other specific scenarios.
+ *
+ * In the non- \ref MDBX_NOSTICKYTHREADS operation mode, the cloned transaction becomes binded to the current thread.
+ * At the same time, it is clearly assumed that the origin transaction is linked to another thread.
+ *
+ * \warning It is required to ensure that the original transaction is not used, much less interrupted
+ *          or restarted by another thread, until this function done.
+ *
+ * When cloning read-only transactions, the parking state of original is preserved and inherited by cloned transaction.
+ * Cursors and other objects associated with the original transaction are not affected and are not copied into
+ * the cloned transaction.
+ *
+ * The function provides for both the creation of a new transaction handle
+ * and the reuse of a transaction previously stopped by \ref mdbx_txn_reset().
+ *
+ * \note Cloning of a write transactions with pending changes (aka dirtied) is prohibited to avoid confusion.
+ *
+ * \param [in] origin             An transaction handle returned by \ref mdbx_txn_begin_ex() or \ref mdbx_txn_begin().
+ *
+ * \param [in, out] in_out_clone  Address of the \ref MDBX_txn handle that wants to be reused, or where to store the
+ *                                handle of the new transaction. The handle passed by the pointer must be initialized
+ *                                at the input anycase. If the pointed handle at input is NULL, then a new transaction
+ *                                will be created and returned there, otherwise it must be a valid handle of read-only
+ *                                transaction for reuse.
+ *
+ * \param [in] context            A pointer to application context to be associated with started transaction and could
+ *                                be retrieved by \ref mdbx_txn_get_userctx() until transaction finished.
+ *                                Just use NULL if doubt.
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_EINVAL        An invalid parameter was specified, i.e. the `in_out_clone` is NULL.
+ * \retval MDBX_BAD_TXN       Origin transaction is already finished or never began,
+ *                            or handle referenced by `in_out_clone` is invalid or not a read-only transaction.
+ *                            Cloning of a write transactions with pending changes (aka dirtied) is also
+ *                            prohibited to avoid confusion.
+ * \retval MDBX_EBADSIGN      Origin transaction object or reference by `in_out_clone`, has invalid signature,
+ *                            e.g. transaction was already terminated or memory was corrupted.
+ * \retval MDBX_OUSTED        Cloned was outed immediately for the sake of recycling old MVCC snapshots.
+ * \retval MDBX_MVCC_RETARDED The MVCC snapshot used by origin transaction was bygone.
+ * \retval MDBX_READERS_FULL  A read-only transaction was requested and
+ *                            the reader lock table is full.
+ *                            See \ref mdbx_env_set_maxreaders().
+ * \retval MDBX_ENOMEM        Out of memory during creating new transaction. */
+LIBMDBX_API int mdbx_txn_clone(const MDBX_txn *origin, MDBX_txn **in_out_clone, void *context);
 
 /** \brief Sets application information associated (a context pointer) with the
  * transaction.
@@ -5210,7 +5263,7 @@ LIBMDBX_API MDBX_cache_result_t mdbx_cache_get_SingleThreaded(const MDBX_txn *tx
  * \retval MDBX_EINVAL    An invalid parameter was specified. */
 LIBMDBX_API int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data, MDBX_put_flags_t flags);
 
-/** \brief Replace items in a table.
+/** \brief Replaces item in a table.
  * \ingroup c_crud
  *
  * This function allows to update or delete an existing value at the same time
@@ -5250,13 +5303,70 @@ LIBMDBX_API int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_
  *                           combination for selection particular item from
  *                           multi-value/duplicates.
  *
+ * \see mdbx_replace_ex()
  * \see \ref c_crud_hints "Quick reference for Insert/Update/Delete operations"
  *
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *new_data, MDBX_val *old_data,
                              MDBX_put_flags_t flags);
 
+/** \brief A data preservation callback for using within \ref mdbx_replace_ex().
+ * \ingroup c_crud */
 typedef int (*MDBX_preserve_func)(void *context, MDBX_val *target, const void *src, size_t bytes);
+
+/** \brief Replaces item in a table using preservation callback for an original data.
+ * \ingroup c_crud
+ *
+ * This function allows to update or delete an existing value at the same time
+ * as the previous value is retrieved. If the argument new_data equal is NULL
+ * zero, the removal is performed, otherwise the update/insert.
+ *
+ * The current value may be in an already changed (aka dirty) page. In this
+ * case, the page will be overwritten during the update, and the old value will
+ * be lost. In such cases, the given preservation callback will be used to save
+ * the source data, that, at your discretion, can perform copying, other necessary
+ * actions, or return a special error code.
+ *
+ * If an original data needs to be saved then the passed preservation callback will be called
+ * with `old_data` as a `target` parameter, and `src` with `bytes` for original data.
+ * Such callback should check necessary conditions, perform appropriate action and return
+ * corresponding error code, which will be returned from function as is.
+ * For example, for behavior similar to \ref mdbx_replace(), the callback should check if there
+ * provided buffer size is enough, then either copy the data or return \ref MDBX_RESULT_TRUE.
+ *
+ * For tables with non-unique keys (i.e. with \ref MDBX_DUPSORT flag),
+ * another use case is also possible, when by old_data argument selects a
+ * specific item from multi-value/duplicates with the same key for deletion or
+ * update. To select this scenario in flags should simultaneously specify
+ * \ref MDBX_CURRENT and \ref MDBX_NOOVERWRITE. This combination is chosen
+ * because it makes no sense, and thus allows you to identify the request of
+ * such a scenario.
+ *
+ * \param [in] txn           A transaction handle returned
+ *                           by \ref mdbx_txn_begin().
+ * \param [in] dbi           A table handle returned by \ref mdbx_dbi_open().
+ * \param [in] key           The key to store in the table.
+ * \param [in] new_data      The data to store, if NULL then deletion will
+ *                           be performed.
+ * \param [in,out] old_data  The buffer for retrieve previous value as describe
+ *                           above.
+ * \param [in] flags         Special options for this operation.
+ *                           This parameter must be set to 0 or by bitwise
+ *                           OR'ing together one or more of the values
+ *                           described in \ref mdbx_put() description above,
+ *                           and additionally
+ *                           (\ref MDBX_CURRENT | \ref MDBX_NOOVERWRITE)
+ *                           combination for selection particular item from
+ *                           multi-value/duplicates.
+ * \param [in] preserver     The callback to preserve an original data in case
+ *                           it is on a dirty page and could be overwritten.
+ * \param [in] preserver_context The optional context pointer for use within the preserving callback.
+ *
+ * \see mdbx_replace_ex()
+ * \see MDBX_preserve_func
+ * \see \ref c_crud_hints "Quick reference for Insert/Update/Delete operations"
+ *
+ * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *new_data,
                                 MDBX_val *old_data, MDBX_put_flags_t flags, MDBX_preserve_func preserver,
                                 void *preserver_context);

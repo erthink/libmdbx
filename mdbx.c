@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 225dda0a47ebc6c40e06f1d7820ff41263a6b47263cc0ea1832d12f5e38319c8_v0_14_1_234_g329ac7b7
+#define MDBX_BUILD_SOURCERY dede3aaf8e972a64ffbdc3195e53aa2ac55e0ea238548ac61e27a28a18e2f7dd_v0_14_1_243_g0cabae85
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -3795,6 +3795,7 @@ MDBX_INTERNAL int txn_ro_park(MDBX_txn *txn, bool autounpark);
 MDBX_INTERNAL int txn_ro_unpark(MDBX_txn *txn);
 MDBX_INTERNAL int txn_ro_start(MDBX_txn *txn, unsigned flags);
 MDBX_INTERNAL int txn_ro_end(MDBX_txn *txn, unsigned mode);
+MDBX_INTERNAL int txn_ro_clone(const MDBX_txn *const source, MDBX_txn *const clone);
 
 /* env.c */
 MDBX_INTERNAL int env_open(MDBX_env *env, mdbx_mode_t mode);
@@ -5475,7 +5476,7 @@ static inline int check_env(const MDBX_env *env, const bool wanna_active) {
   return MDBX_SUCCESS;
 }
 
-static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
+static __always_inline int check_txn_anythread(const MDBX_txn *txn, int bad_bits) {
   if (unlikely(!txn))
     return MDBX_EINVAL;
 
@@ -5497,15 +5498,20 @@ static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
 
   tASSERT(txn, (txn->flags & MDBX_TXN_FINISHED) ||
                    (txn->flags & MDBX_NOSTICKYTHREADS) == (txn->env->flags & MDBX_NOSTICKYTHREADS));
+  return MDBX_SUCCESS;
+}
+
+static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
+  int err = check_txn_anythread(txn, bad_bits);
 #if MDBX_TXN_CHECKOWNER
-  if ((txn->flags & (MDBX_NOSTICKYTHREADS | MDBX_TXN_FINISHED)) != MDBX_NOSTICKYTHREADS &&
+  if (err == MDBX_SUCCESS && (txn->flags & (MDBX_NOSTICKYTHREADS | MDBX_TXN_FINISHED)) != MDBX_NOSTICKYTHREADS &&
       !(bad_bits /* abort/reset/txn-break */ == 0 &&
         ((txn->flags & (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED)) == (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED))) &&
       unlikely(txn->owner != osal_thread_self()))
-    return txn->owner ? MDBX_THREAD_MISMATCH : MDBX_BAD_TXN;
+    err = txn->owner ? MDBX_THREAD_MISMATCH : MDBX_BAD_TXN;
 #endif /* MDBX_TXN_CHECKOWNER */
 
-  return MDBX_SUCCESS;
+  return err;
 }
 
 static inline int check_txn_rw(const MDBX_txn *txn, int bad_bits) {
@@ -14145,6 +14151,87 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
 
   return MDBX_SUCCESS;
 }
+
+int mdbx_txn_clone(const MDBX_txn *source, MDBX_txn **const in_out_clone, void *clone_context) {
+  if (unlikely(!in_out_clone))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  MDBX_txn *clone = *in_out_clone;
+retry:
+  osal_memory_fence(mo_AcquireRelease, true);
+  int rc = check_txn_anythread(
+      source,
+      MDBX_TXN_FINISHED |
+          /* there is no difficulty, but we do not allow dirty transactions to avoid confusion */ MDBX_TXN_DIRTY);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
+
+  if (unlikely(source->parent)) {
+    /* do not immediately jump to env->basal_txn,
+     * but check for the absence of MDBX_TXN_DIRTY in all parent transactions. */
+    source = source->parent;
+    goto retry;
+  }
+
+  MDBX_env *const env = source->env;
+  rc = check_env(env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
+
+  const txnid_t txnid = source->txnid;
+  if (clone) {
+    rc = check_txn(clone, 0);
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto bailout;
+    if (unlikely((clone->flags & MDBX_TXN_RDONLY) == 0)) {
+      rc = MDBX_EINVAL;
+      goto bailout;
+    }
+
+    if (clone_context == clone)
+      clone_context = clone->userctx;
+
+    if (unlikely(clone->owner != 0 || !(clone->flags & MDBX_TXN_FINISHED))) {
+      rc = mdbx_txn_reset(clone);
+      if (unlikely(rc != MDBX_SUCCESS))
+        goto bailout;
+      goto retry;
+    }
+  } else {
+    clone = txn_alloc(MDBX_TXN_RDONLY | MDBX_TXN_FINISHED, env);
+    if (unlikely(!clone))
+      return LOG_IFERR(MDBX_ENOMEM);
+    clone->signature = txn_signature;
+    goto retry;
+  }
+
+  rc = txn_ro_clone(source, clone);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
+
+  osal_memory_fence(mo_AcquireRelease, true);
+  rc = check_txn_anythread(source, MDBX_TXN_FINISHED | MDBX_TXN_DIRTY);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
+
+  clone->flags &= ~MDBX_TXN_FINISHED;
+  clone->userctx = clone_context;
+  if (unlikely(txn_basis_snapshot(source) != clone->txnid || txnid != source->txnid)) {
+    rc = MDBX_PROBLEM;
+    ERROR("unexpected mvcc-tnxid (%" PRIu64 " != %" PRIu64 ") mismatch during cloning of a transaction,"
+          " seems the original transaction competitively restarted in another thread",
+          txnid, (txnid != source->txnid) ? source->txnid : clone->txnid);
+    goto bailout;
+  }
+
+  *in_out_clone = clone;
+  return MDBX_SUCCESS;
+
+bailout:
+  if (clone)
+    txn_ro_end(clone, (clone != *in_out_clone) ? TXN_END_FREE | TXN_END_SLOT | TXN_END_FAIL_BEGIN : TXN_END_FAIL_BEGIN);
+  return LOG_IFERR(rc);
+}
 /// \copyright SPDX-License-Identifier: Apache-2.0
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
@@ -19280,10 +19367,10 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags, MDBX_cmp_func
    * 4) user_flags отличаются, но table пустая и задан флаг MDBX_CREATE
    *    = предполагаем что пользователь пересоздает table;
    */
-  if ((user_flags & ~MDBX_CREATE) != (unsigned)(env->dbs_flags[dbi] & DB_PERSISTENT_FLAGS)) {
+  if ((user_flags ^ env->dbs_flags[dbi]) & DB_PERSISTENT_FLAGS) {
     /* flags are differs, check other conditions */
-    if (((!keycmp || keycmp == env->kvs[dbi].clc.k.cmp) && (!datacmp || datacmp == env->kvs[dbi].clc.v.cmp)) ||
-        user_flags == MDBX_DB_ACCEDE) {
+    if (((!keycmp || keycmp == env->kvs[dbi].clc.k.cmp) && (!datacmp || datacmp == env->kvs[dbi].clc.v.cmp)) &&
+        (user_flags & MDBX_DB_ACCEDE) != 0) {
       user_flags = env->dbs_flags[dbi] & DB_PERSISTENT_FLAGS;
     } else if ((user_flags & MDBX_CREATE) == 0)
       return /* FIXME: return extended info */ MDBX_INCOMPATIBLE;
@@ -39146,8 +39233,10 @@ int txn_ro_start(MDBX_txn *txn, unsigned flags) {
 bailout:
   tASSERT(txn, err != MDBX_SUCCESS);
   txn->txnid = INVALID_TXNID;
-  if (likely(txn->ro.slot))
+  if (likely(txn->ro.slot)) {
     safe64_reset(&txn->ro.slot->txnid, true);
+    atomic_store32(&txn->ro.slot->snapshot_pages_used, 0, mo_Relaxed);
+  }
   return err;
 }
 
@@ -39288,6 +39377,94 @@ int txn_ro_unpark(MDBX_txn *txn) {
 
   int err = txn_end(txn, TXN_END_OUSTED | TXN_END_RESET | TXN_END_UPDATE);
   return err ? err : MDBX_OUSTED;
+}
+
+int txn_ro_clone(const MDBX_txn *const origin, MDBX_txn *const clone) {
+  MDBX_env *const env = origin->env;
+
+  int err = txn_ro_rslot(clone);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
+  if (unlikely(origin->txnid < MIN_TXNID || origin->txnid > MAX_TXNID)) {
+    err = MDBX_BAD_TXN;
+    goto bailout;
+  }
+
+  clone->owner = likely(clone->ro.slot) ? (uintptr_t)clone->ro.slot->tid.weak
+                                        : ((clone->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self());
+  clone->flags = (origin->flags & (MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | MDBX_TXN_AUTOUNPARK | MDBX_TXN_PARKED)) |
+                 MDBX_TXN_RDONLY | MDBX_TXN_FINISHED;
+  clone->txnid = txn_basis_snapshot(origin);
+  clone->front_txnid = clone->txnid;
+
+  if (origin->flags & MDBX_TXN_RDONLY) {
+    if ((clone->flags & MDBX_NOSTICKYTHREADS) == 0 && env->txn && unlikely(env->basal_txn->owner == clone->owner) &&
+        (globals.runtime_flags & MDBX_DBG_LEGACY_OVERLAP) == 0) {
+      err = MDBX_TXN_OVERLAPPING;
+      goto bailout;
+    }
+
+    if (likely(clone->ro.slot)) {
+      const uint32_t pages_used = origin->ro.slot ? origin->ro.slot->snapshot_pages_used.weak : 0;
+      const uint64_t pages_retired = origin->ro.slot ? origin->ro.slot->snapshot_pages_retired.weak : 0;
+      atomic_store32(&clone->ro.slot->snapshot_pages_used, pages_used, mo_Relaxed);
+      atomic_store64(&clone->ro.slot->snapshot_pages_retired, pages_retired, mo_Relaxed);
+      safe64_write(&clone->ro.slot->txnid, (clone->flags & MDBX_TXN_PARKED) ? MDBX_TID_TXN_PARKED : clone->txnid);
+    } else {
+      /* exclusive mode without lck */
+      eASSERT(env, !env->lck_mmap.lck && env->lck == lckless_stub(env));
+    }
+
+    /* Setup db info */
+    clone->geo = origin->geo;
+    clone->canary = origin->canary;
+    memcpy(clone->dbs, origin->dbs, sizeof(clone->dbs[0]) * CORE_DBS);
+    tASSERT(clone, clone->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
+    tASSERT(clone, check_table_flags(clone->dbs[MAIN_DBI].flags));
+    VALGRIND_MAKE_MEM_UNDEFINED(clone->dbi_state, env->max_dbi);
+#if MDBX_ENABLE_DBI_SPARSE
+    clone->n_dbi = CORE_DBS;
+    VALGRIND_MAKE_MEM_UNDEFINED(txn->dbi_sparse,
+                                ceil_powerof2(env->max_dbi, CHAR_BIT * sizeof(txn->dbi_sparse[0])) / CHAR_BIT);
+    clone->dbi_sparse[0] = (1u << CORE_DBS) - 1;
+#else
+    clone->n_dbi = (env->n_dbi < 8) ? env->n_dbi : 8;
+    if (clone->n_dbi > CORE_DBS)
+      memset(clone->dbi_state + CORE_DBS, 0, clone->n_dbi - CORE_DBS);
+#endif /* MDBX_ENABLE_DBI_SPARSE */
+    clone->dbi_state[FREE_DBI] = DBI_LINDO | DBI_VALID;
+    clone->dbi_state[MAIN_DBI] = DBI_LINDO | DBI_VALID;
+    clone->cursors[FREE_DBI] = nullptr;
+    clone->cursors[MAIN_DBI] = nullptr;
+    clone->dbi_seqs[FREE_DBI] = origin->dbi_seqs[FREE_DBI];
+    clone->dbi_seqs[MAIN_DBI] = origin->dbi_seqs[MAIN_DBI];
+
+    if (!(clone->flags & MDBX_TXN_PARKED)) {
+      if (likely(clone->ro.slot) && unlikely(clone->txnid != atomic_load64(&clone->ro.slot->txnid, mo_Relaxed))) {
+        err = MDBX_OUSTED;
+        goto bailout;
+      }
+      if (unlikely(clone->txnid < atomic_load64(&env->lck->cached_oldest, mo_AcquireRelease))) {
+        err = MDBX_MVCC_RETARDED;
+        goto bailout;
+      }
+    }
+    return MDBX_SUCCESS;
+  }
+
+  err = txn_ro_seize(clone);
+  if (likely(err == MDBX_SUCCESS))
+    return MDBX_SUCCESS;
+
+bailout:
+  tASSERT(origin, err != MDBX_SUCCESS);
+  clone->txnid = INVALID_TXNID;
+  if (likely(clone->ro.slot)) {
+    safe64_reset(&clone->ro.slot->txnid, true);
+    atomic_store32(&clone->ro.slot->snapshot_pages_used, 0, mo_Relaxed);
+  }
+  return err;
 }
 /// \copyright SPDX-License-Identifier: Apache-2.0
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
@@ -40285,10 +40462,10 @@ __dll_export
         0,
         14,
         1,
-        234,
+        243,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.234 */
-        {"2026-01-04T14:41:25+03:00", "26e213307787c195455ed09e75f197acc4c22d3d", "329ac7b72663cd5524733f61ce5a7cff9615f5bc", "v0.14.1-234-g329ac7b7"},
+                                        0.14.1.243 */
+        {"2026-01-05T21:40:57+03:00", "3a6b8a387c7d429efc2398f19b8921514c125887", "0cabae85663f3f8ea2c6c4595df68bc461153e06", "v0.14.1-243-g0cabae85"},
         sourcery};
 
 __dll_export

@@ -2,7 +2,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 /* clang-format off */
 
-#define MDBX_BUILD_SOURCERY 225dda0a47ebc6c40e06f1d7820ff41263a6b47263cc0ea1832d12f5e38319c8_v0_14_1_234_g329ac7b7
+#define MDBX_BUILD_SOURCERY dede3aaf8e972a64ffbdc3195e53aa2ac55e0ea238548ac61e27a28a18e2f7dd_v0_14_1_243_g0cabae85
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -3793,6 +3793,7 @@ MDBX_INTERNAL int txn_ro_park(MDBX_txn *txn, bool autounpark);
 MDBX_INTERNAL int txn_ro_unpark(MDBX_txn *txn);
 MDBX_INTERNAL int txn_ro_start(MDBX_txn *txn, unsigned flags);
 MDBX_INTERNAL int txn_ro_end(MDBX_txn *txn, unsigned mode);
+MDBX_INTERNAL int txn_ro_clone(const MDBX_txn *const source, MDBX_txn *const clone);
 
 /* env.c */
 MDBX_INTERNAL int env_open(MDBX_env *env, mdbx_mode_t mode);
@@ -5473,7 +5474,7 @@ static inline int check_env(const MDBX_env *env, const bool wanna_active) {
   return MDBX_SUCCESS;
 }
 
-static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
+static __always_inline int check_txn_anythread(const MDBX_txn *txn, int bad_bits) {
   if (unlikely(!txn))
     return MDBX_EINVAL;
 
@@ -5495,15 +5496,20 @@ static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
 
   tASSERT(txn, (txn->flags & MDBX_TXN_FINISHED) ||
                    (txn->flags & MDBX_NOSTICKYTHREADS) == (txn->env->flags & MDBX_NOSTICKYTHREADS));
+  return MDBX_SUCCESS;
+}
+
+static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
+  int err = check_txn_anythread(txn, bad_bits);
 #if MDBX_TXN_CHECKOWNER
-  if ((txn->flags & (MDBX_NOSTICKYTHREADS | MDBX_TXN_FINISHED)) != MDBX_NOSTICKYTHREADS &&
+  if (err == MDBX_SUCCESS && (txn->flags & (MDBX_NOSTICKYTHREADS | MDBX_TXN_FINISHED)) != MDBX_NOSTICKYTHREADS &&
       !(bad_bits /* abort/reset/txn-break */ == 0 &&
         ((txn->flags & (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED)) == (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED))) &&
       unlikely(txn->owner != osal_thread_self()))
-    return txn->owner ? MDBX_THREAD_MISMATCH : MDBX_BAD_TXN;
+    err = txn->owner ? MDBX_THREAD_MISMATCH : MDBX_BAD_TXN;
 #endif /* MDBX_TXN_CHECKOWNER */
 
-  return MDBX_SUCCESS;
+  return err;
 }
 
 static inline int check_txn_rw(const MDBX_txn *txn, int bad_bits) {
