@@ -5,7 +5,9 @@ English version [by liar Google](https://libmdbx-dqdkfa-ru.translate.goog/md__ch
 
 The source code is availale on [SourceCraft](https://sourcecraft.dev/dqdkfa/libmdbx) and mirrors on [abf.io](https://abf.io/erthink/libmdbx) and [GitFlic](https://gitflic.ru/project/erthink/libmdbx).
 Please use the `stable` branch or the latest release for production environment through stagging, but the `master` branch for development a derivative projects.
-Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`. Всё будет хорошо!
+Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`,
+BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3NDMyS5wXJgfeMTmJznRi`.
+Всё будет хорошо!
 
 ## v0.13.11 in a release engineering stage
 
@@ -28,6 +30,8 @@ Fixes:
  - Fixed using of the identifier `ERROR_UNHANDLED_ERROR`, which is not defined in new versions of Windows SDK.
 
  - Fixed non-closing of DBI descriptors for tables created in nested transactions when such transactions are aborted.
+
+ - Clarification and addition of documentation.
 
 --------------------------------------------------------------------------------
 

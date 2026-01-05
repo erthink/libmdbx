@@ -288,14 +288,14 @@ run-ut: mdbx_example
 	$(QUIET)for UT in $^; do echo "  Running $$UT" && ./$${UT} || exit -1; done
 
 TEST_TARGETS := mdbx_example
-TEST_BUILD_TARGETS := test-build
+TEST_BUILD_TARGETS := build-test
 ifneq ($(CMAKE),"")
 TEST_TARGETS += ctest
 TEST_BUILD_TARGETS += cmake-build
 endif
 
 .PHONY: ninja-assertions ninja-debug ninja $(TEST_TARGETS) $(TEST_BUILD_TARGETS) test-ubsan test-asan test-asan test-leak test-assertion test build-test smoke check
-test smoke check: $(TEST_TARGETS)
+test: $(TEST_TARGETS)
 build-test: $(TEST_BUILD_TARGETS)
 
 test-assertion: MDBX_BUILD_OPTIONS += -DMDBX_FORCE_ASSERTIONS=1 -UNDEBUG -DMDBX_DEBUG=0
@@ -363,6 +363,8 @@ mdbx_%.static-lto: mdbx_%.c config-gnumake.h mdbx.c mdbx.h
 	@echo '  CC+LD $@'
 	$(QUIET)$(CC) $(CFLAGS) -Os -flto $(MDBX_BUILD_OPTIONS) '-DLIBMDBX_API=' '-DMDBX_CONFIG_H="config-gnumake.h"' \
 		$< mdbx.c $(EXE_LDFLAGS) $(LIBS) -static -Wl,--strip-all -o $@
+
+check smoke: test
 
 install: $(LIBRARIES) $(MDBX_TOOLS) $(HEADERS)
 	@echo '  INSTALLING...'
