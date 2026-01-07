@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY dede3aaf8e972a64ffbdc3195e53aa2ac55e0ea238548ac61e27a28a18e2f7dd_v0_14_1_243_g0cabae85
+#define MDBX_BUILD_SOURCERY 3d0786aca27f270572b5c0bfe28f74832e60f52ff9ca5510d3449b4e443d594b_v0_14_1_256_g6e4093ad
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -8175,76 +8175,36 @@ __cold static int copy_with_compacting(MDBX_env *env, MDBX_txn *txn, mdbx_fileha
 
 __cold static int copy_asis(MDBX_env *env, MDBX_txn *txn, mdbx_filehandle_t fd, uint8_t *buffer,
                             const bool dest_is_pipe, const MDBX_copy_flags_t flags) {
-  bool should_unlock = false;
-  if ((txn->flags & MDBX_TXN_RDONLY) != 0 && (flags & MDBX_CP_RENEW_TXN) != 0) {
-    /* Try temporarily block writers until we snapshot the meta pages */
-    int err = lck_txn_lock(env, true);
-    if (likely(err == MDBX_SUCCESS))
-      should_unlock = true;
-    else if (unlikely(err != MDBX_BUSY))
-      return err;
-  }
-
-  jitter4testing(false);
-  int rc = MDBX_SUCCESS;
   const size_t meta_bytes = pgno2bytes(env, NUM_METAS);
-  troika_t troika = meta_tap(env);
-  /* Make a snapshot of meta-pages,
-   * but writing ones after the data was flushed */
-retry_snap_meta:
-  memcpy(buffer, env->dxb_mmap.base, meta_bytes);
-  const meta_ptr_t recent = meta_recent(env, &troika);
-  meta_t *headcopy = /* LY: get pointer to the snapshot copy */
-      ptr_disp(buffer, ptr_dist(recent.ptr_c, env->dxb_mmap.base));
-  jitter4testing(false);
-  if (txn->flags & MDBX_TXN_RDONLY) {
-    if (recent.txnid != txn->txnid) {
-      if (flags & MDBX_CP_RENEW_TXN)
-        rc = mdbx_txn_renew(txn);
-      else {
-        rc = MDBX_MVCC_RETARDED;
-        for (size_t n = 0; n < NUM_METAS; ++n) {
-          meta_t *const meta = page_meta(ptr_disp(buffer, pgno2bytes(env, n)));
-          if (troika.txnid[n] == txn->txnid && ((/* is_steady */ (troika.fsm >> n) & 1) || rc != MDBX_SUCCESS)) {
-            rc = MDBX_SUCCESS;
-            headcopy = meta;
-          } else if (troika.txnid[n] > txn->txnid)
-            meta_set_txnid(env, meta, 0);
-        }
-      }
-    }
-    if (should_unlock)
-      lck_txn_unlock(env);
-    else {
-      troika_t snap = meta_tap(env);
-      if (memcmp(&troika, &snap, sizeof(troika_t)) && rc == MDBX_SUCCESS) {
-        troika = snap;
-        goto retry_snap_meta;
-      }
-    }
-  }
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  if (txn->flags & MDBX_TXN_RDONLY)
-    eASSERT(env, meta_txnid(headcopy) == txn->txnid);
-  if (flags & MDBX_CP_FORCE_DYNAMIC_SIZE)
-    meta_make_sizeable(headcopy);
-  /* Update signature to steady */
-  meta_sign_as_steady(headcopy);
-
-  /* Copy the data */
-  const size_t whole_size = pgno_ceil2sp_bytes(env, txn->geo.end_pgno);
-  const size_t used_size = pgno2bytes(env, txn->geo.first_unallocated);
-  jitter4testing(false);
-
-  if (flags & MDBX_CP_THROTTLE_MVCC)
-    mdbx_txn_park(txn, false);
-
-  if (dest_is_pipe)
-    rc = osal_write(fd, buffer, meta_bytes);
-
   uint8_t *const data_buffer = buffer + ceil_powerof2(meta_bytes, globals.sys_pagesize);
+  meta_t *const meta = meta_init_triplet(env, buffer);
+  meta_set_txnid(env, meta, txn->txnid);
+
+  if (flags & MDBX_CP_FORCE_DYNAMIC_SIZE)
+    meta_make_sizeable(meta);
+
+  /* copy canary sequences if present */
+  if (txn->canary.v) {
+    meta->canary = txn->canary;
+    meta->canary.v = constmeta_txnid(meta);
+  }
+
+  int rc = MDBX_SUCCESS;
+  if (flags & MDBX_CP_THROTTLE_MVCC) {
+    rc = mdbx_txn_park(txn, false);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+  }
+
+  jitter4testing(false);
+  size_t offset = meta_bytes;
+  if (dest_is_pipe) {
+    rc = osal_write(fd, buffer, meta_bytes);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+    offset = 0;
+  }
+
 #if MDBX_USE_COPYFILERANGE
   static bool copyfilerange_unavailable;
 #if (defined(__linux__) || defined(__gnu_linux__))
@@ -8260,7 +8220,10 @@ retry_snap_meta:
   }
 #endif /* MDBX_USE_COPYFILERANGE */
 
-  for (size_t offset = meta_bytes; rc == MDBX_SUCCESS && offset < used_size;) {
+  /* Copy the data */
+  const size_t whole_size = pgno_ceil2sp_bytes(env, txn->geo.end_pgno);
+  const size_t used_size = pgno2bytes(env, txn->geo.first_unallocated);
+  while (rc == MDBX_SUCCESS && offset < used_size) {
     if (flags & MDBX_CP_THROTTLE_MVCC) {
       rc = mdbx_txn_unpark(txn, false);
       if (unlikely(rc != MDBX_SUCCESS))
@@ -8315,8 +8278,11 @@ retry_snap_meta:
         ((size_t)MDBX_ENVCOPY_WRITEBUF < used_size - offset) ? (size_t)MDBX_ENVCOPY_WRITEBUF : used_size - offset;
     /* copy to avoid EFAULT in case swapped-out */
     memcpy(data_buffer, ptr_disp(env->dxb_mmap.base, offset), chunk);
-    if (flags & MDBX_CP_THROTTLE_MVCC)
-      mdbx_txn_park(txn, false);
+    if (flags & MDBX_CP_THROTTLE_MVCC) {
+      rc = mdbx_txn_park(txn, false);
+      if (unlikely(rc != MDBX_SUCCESS))
+        break;
+    }
     rc = osal_write(fd, data_buffer, chunk);
     offset += chunk;
   }
@@ -8327,7 +8293,7 @@ retry_snap_meta:
       rc = osal_fsetsize(fd, whole_size);
     else {
       memset(data_buffer, 0, (size_t)MDBX_ENVCOPY_WRITEBUF);
-      for (size_t offset = used_size; rc == MDBX_SUCCESS && offset < whole_size;) {
+      for (offset = used_size; rc == MDBX_SUCCESS && offset < whole_size;) {
         const size_t chunk =
             ((size_t)MDBX_ENVCOPY_WRITEBUF < whole_size - offset) ? (size_t)MDBX_ENVCOPY_WRITEBUF : whole_size - offset;
         rc = osal_write(fd, data_buffer, chunk);
@@ -40462,10 +40428,10 @@ __dll_export
         0,
         14,
         1,
-        243,
+        256,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.243 */
-        {"2026-01-05T21:40:57+03:00", "3a6b8a387c7d429efc2398f19b8921514c125887", "0cabae85663f3f8ea2c6c4595df68bc461153e06", "v0.14.1-243-g0cabae85"},
+                                        0.14.1.256 */
+        {"2026-01-07T15:15:51+03:00", "62e44b0432d3caeb13be585a6e41c2243e35fcaf", "6e4093ad3749c0d46f3585ef38c3a7260e5b2dd8", "v0.14.1-256-g6e4093ad"},
         sourcery};
 
 __dll_export
