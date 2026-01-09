@@ -1,0 +1,45 @@
+name: ci-wincxx
+
+env:
+  CI: GITHUB
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+on: [push]
+
+jobs:
+  ci-job:
+    strategy:
+      fail-fast: false
+      matrix:
+        toolset: [v142, v143]
+        cxx: [11, 14, 17, 20]
+        target: [Win32, x64, ARM64]
+        build-type: [Debug, Release]
+        os: [windows-latest, windows-2022]
+        exclude:
+          - os: windows-latest
+            toolset: v142
+          - os: windows-latest
+            cxx: 11
+          - os: windows-2022
+            toolset: v143
+          - os: windows-2022
+            cxx: 20
+#          - target: x64
+#            build-type: Debug
+          - target: ARM64
+            toolset: v142
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v4
+    - name: ci-step
+      env:
+        CI_MAKE_TARGET: ""
+        CXXSTD: "-std=gnu++${{ matrix.cxx }}"
+      shell: bash
+      run: |
+        . ci.sh "-A|${{ matrix.target }}|-T|${{ matrix.toolset }}|-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DCMAKE_CXX_STANDARD=${{ matrix.cxx }}" \
+          "--config|${{ matrix.build-type }}" "--build-config|${{ matrix.build-type }}"
