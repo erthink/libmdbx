@@ -2,9 +2,8 @@
 /// \brief The libmdbx C++ API header file.
 ///
 /// \details _libmdbx_ (aka MDBX) is an extremely fast, compact, powerful, embeddable,
-/// transactional [key-value
-/// store](https://en.wikipedia.org/wiki/Key-value_database), with [Apache 2.0
-/// license](./LICENSE). _MDBX_ has a specific set of properties and capabilities,
+/// transactional [key-value store](https://en.wikipedia.org/wiki/Key-value_database),
+/// with [Apache 2.0 license](./LICENSE). _MDBX_ has a specific set of properties and capabilities,
 /// focused on creating unique lightweight solutions with extraordinary performance.
 ///
 /// Please visit https://libmdbx.dqdkfa.ru for more information, documentation,
@@ -122,14 +121,18 @@
 #endif
 
 #if !defined(_MSC_VER) || defined(__clang__)
-/* adequate compilers */
-#define MDBX_EXTERN_API_TEMPLATE(API_ATTRIBUTES, API_TYPENAME) extern template class API_ATTRIBUTES API_TYPENAME
-#define MDBX_INSTALL_API_TEMPLATE(API_ATTRIBUTES, API_TYPENAME) template class API_TYPENAME
+#define MDBX_EXTERN_API_TEMPLATE(API_ATTRIBUTES, ...) extern template class API_ATTRIBUTES __VA_ARGS__
+#define MDBX_INSTALL_API_TEMPLATE(API_ATTRIBUTES, ...) template class __VA_ARGS__
 #else
-/* stupid microsoft showing off */
-#define MDBX_EXTERN_API_TEMPLATE(API_ATTRIBUTES, API_TYPENAME) extern template class API_TYPENAME
-#define MDBX_INSTALL_API_TEMPLATE(API_ATTRIBUTES, API_TYPENAME) template class API_ATTRIBUTES API_TYPENAME
+#define MDBX_EXTERN_API_TEMPLATE(API_ATTRIBUTES, ...) extern template class __VA_ARGS__
+#define MDBX_INSTALL_API_TEMPLATE(API_ATTRIBUTES, ...) template class API_ATTRIBUTES __VA_ARGS__
 #endif
+
+#if defined(_MSC_VER) && _MSC_VER >= 1900
+#define MDBX_MSVC_DECLSPEC_EMPTY_BASES __declspec(empty_bases)
+#else
+#define MDBX_MSVC_DECLSPEC_EMPTY_BASES /* nope */
+#endif                                 /* _MSC_VER >= 1900 */
 
 #if __cplusplus >= 201103L
 #include <chrono>
@@ -374,18 +377,27 @@ static MDBX_CXX20_CONSTEXPR int memcmp(const void *a, const void *b, size_t byte
 /// but it is recommended to use \ref polymorphic_allocator.
 using legacy_allocator = ::std::string::allocator_type;
 
-#if defined(DOXYGEN) ||                                                                                                \
-    (defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L && _GLIBCXX_USE_CXX11_ABI)
+#ifndef MDBX_CXX_POLYMORPHIC_ALLOCATOR
+#if defined(DOXYGEN) || (defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L &&                 \
+                         (!defined(_GLIBCXX_USE_CXX11_ABI) || _GLIBCXX_USE_CXX11_ABI))
+#define MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR 1
+#else
+#define MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR 0
+#endif
+#endif /* MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR */
+
+#if MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR
 /// \brief Default polymorphic allocator for modern code.
 using polymorphic_allocator = ::std::pmr::string::allocator_type;
 using default_allocator = polymorphic_allocator;
 #else
 using default_allocator = legacy_allocator;
-#endif /* __cpp_lib_memory_resource >= 201603L */
+#endif /* MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR */
 
 struct slice;
 struct default_capacity_policy;
-template <class ALLOCATOR = default_allocator, class CAPACITY_POLICY = default_capacity_policy> class buffer;
+template <class ALLOCATOR = default_allocator, class CAPACITY_POLICY = default_capacity_policy>
+class MDBX_MSVC_DECLSPEC_EMPTY_BASES buffer;
 class env;
 class env_managed;
 class txn;
@@ -395,9 +407,6 @@ class cursor_managed;
 
 /// \brief Transaction ID and MVCC-snapshot number.
 using txnid = uint64_t;
-
-/// \brief Default buffer.
-using default_buffer = buffer<default_allocator, default_capacity_policy>;
 
 /// \brief Default single-byte string.
 template <class ALLOCATOR = default_allocator>
@@ -604,55 +613,23 @@ static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom, size_t payload,
 
 //------------------------------------------------------------------------------
 
+/// \brief Cache entry for get-cached API (initial draft).
+class cache_entry : public MDBX_cache_entry_t {
+public:
+  cache_entry() noexcept { reset(); }
+  cache_entry(const cache_entry &) noexcept = default;
+  cache_entry &operator=(const cache_entry &) noexcept = default;
+  cache_entry(cache_entry &&other) noexcept {
+    *this = other;
+    other.reset();
+  }
+  void reset() noexcept { mdbx_cache_init(this); }
+};
+
+//------------------------------------------------------------------------------
+
 /// \defgroup cxx_data slices and buffers
 /// @{
-
-#if MDBX_HAVE_CXX20_CONCEPTS || defined(DOXYGEN)
-
-/** \concept MutableByteProducer
- *  \interface MutableByteProducer
- *  \brief MutableByteProducer C++20 concept */
-template <typename T>
-concept MutableByteProducer = requires(T a, char array[42]) {
-  { a.is_empty() } -> std::same_as<bool>;
-  { a.envisage_result_length() } -> std::same_as<size_t>;
-  { a.write_bytes(&array[0], size_t(42)) } -> std::same_as<char *>;
-};
-
-/** \concept ImmutableByteProducer
- *  \interface ImmutableByteProducer
- *  \brief ImmutableByteProducer C++20 concept */
-template <typename T>
-concept ImmutableByteProducer = requires(const T &a, char array[42]) {
-  { a.is_empty() } -> std::same_as<bool>;
-  { a.envisage_result_length() } -> std::same_as<size_t>;
-  { a.write_bytes(&array[0], size_t(42)) } -> std::same_as<char *>;
-};
-
-/** \concept SliceTranscoder
- *  \interface SliceTranscoder
- *  \brief SliceTranscoder C++20 concept */
-template <typename T>
-concept SliceTranscoder = ImmutableByteProducer<T> && requires(const slice &source, const T &a) {
-  T(source);
-  { a.is_erroneous() } -> std::same_as<bool>;
-};
-
-#endif /* MDBX_HAVE_CXX20_CONCEPTS */
-
-template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy,
-          MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)>
-inline buffer<ALLOCATOR, CAPACITY_POLICY> make_buffer(PRODUCER &producer, const ALLOCATOR &alloc = ALLOCATOR());
-
-template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy,
-          MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)>
-inline buffer<ALLOCATOR, CAPACITY_POLICY> make_buffer(const PRODUCER &producer, const ALLOCATOR &alloc = ALLOCATOR());
-
-template <class ALLOCATOR = default_allocator, MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)>
-inline string<ALLOCATOR> make_string(PRODUCER &producer, const ALLOCATOR &alloc = ALLOCATOR());
-
-template <class ALLOCATOR = default_allocator, MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)>
-inline string<ALLOCATOR> make_string(const PRODUCER &producer, const ALLOCATOR &alloc = ALLOCATOR());
 
 /// \brief References a data located outside the slice.
 ///
@@ -1082,156 +1059,128 @@ protected:
   MDBX_CXX11_CONSTEXPR slice(size_t invalid_length) noexcept : ::MDBX_val({nullptr, invalid_length}) {}
 };
 
-/// \brief Cache entry for get-cached API (initial draft).
-class cache_entry : public MDBX_cache_entry_t {
-public:
-  cache_entry() noexcept { reset(); }
-  cache_entry(const cache_entry &) noexcept = default;
-  cache_entry &operator=(const cache_entry &) noexcept = default;
-  cache_entry(cache_entry &&other) noexcept {
-    *this = other;
-    other.reset();
-  }
-  void reset() noexcept { mdbx_cache_init(this); }
-};
-
-//------------------------------------------------------------------------------
-
-namespace allocation_aware_details {
-
-template <typename A> constexpr bool allocator_is_always_equal() noexcept {
-#if defined(__cpp_lib_allocator_traits_is_always_equal) && __cpp_lib_allocator_traits_is_always_equal >= 201411L
-  return ::std::allocator_traits<A>::is_always_equal::value;
-#else
-  return ::std::is_empty<A>::value;
-#endif /* __cpp_lib_allocator_traits_is_always_equal */
-}
-
-template <typename T, typename A = typename T::allocator_type,
-          bool PoCMA = ::std::allocator_traits<A>::propagate_on_container_move_assignment::value>
-struct move_assign_alloc;
-
-template <typename T, typename A> struct move_assign_alloc<T, A, false> {
-  static constexpr bool is_nothrow() noexcept { return allocator_is_always_equal<A>(); }
-  static MDBX_CXX20_CONSTEXPR bool is_moveable(T *target, T &source) noexcept {
-    return allocator_is_always_equal<A>() || target->get_allocator() == source.get_allocator();
-  }
-  static MDBX_CXX20_CONSTEXPR void propagate(T *, T &) noexcept {}
-};
-
-template <typename T, typename A> struct move_assign_alloc<T, A, true> {
-  static constexpr bool is_nothrow() noexcept {
-    return allocator_is_always_equal<A>() || ::std::is_nothrow_move_assignable<A>::value;
-  }
-  static constexpr bool is_moveable(T *, T &) noexcept { return true; }
-  static MDBX_CXX20_CONSTEXPR void propagate(T *target, T &source) noexcept {
-    target->get_allocator() = ::std::move(source.get_allocator());
+/// \brief Combines data slice with boolean flag to represent result of certain operations.
+struct value_result {
+  slice value;
+  bool done;
+  value_result(const slice &value, bool done) noexcept : value(value), done(done) {}
+  value_result(const value_result &) noexcept = default;
+  value_result &operator=(const value_result &) noexcept = default;
+  MDBX_CXX14_CONSTEXPR operator bool() const noexcept {
+    assert(!done || bool(value));
+    return done;
   }
 };
 
-template <typename T, typename A = typename T::allocator_type,
-          bool PoCCA = ::std::allocator_traits<A>::propagate_on_container_copy_assignment::value>
-struct copy_assign_alloc;
+/// \brief Combines pair of slices for key and value to represent result of certain operations.
+struct pair {
+  using stl_pair = std::pair<slice, slice>;
+  slice key, value;
+  MDBX_CXX11_CONSTEXPR pair(const slice &key, const slice &value) noexcept : key(key), value(value) {}
+  MDBX_CXX11_CONSTEXPR pair(const stl_pair &couple) noexcept : key(couple.first), value(couple.second) {}
+  MDBX_CXX11_CONSTEXPR operator stl_pair() const noexcept { return stl_pair(key, value); }
+  pair(const pair &) noexcept = default;
+  pair &operator=(const pair &) noexcept = default;
+  pair &operator=(pair &&couple) {
+    key.assign(std::move(couple.key));
+    value.assign(std::move(couple.value));
+    return *this;
+  }
+  MDBX_CXX14_CONSTEXPR operator bool() const noexcept {
+    assert(bool(key) == bool(value));
+    return key;
+  }
+  MDBX_CXX14_CONSTEXPR static pair invalid() noexcept { return pair(slice::invalid(), slice::invalid()); }
 
-template <typename T, typename A> struct copy_assign_alloc<T, A, false> {
-  static constexpr bool is_nothrow() noexcept { return false; }
-  static MDBX_CXX20_CONSTEXPR void propagate(T *, const T &) noexcept {}
+  pair &operator=(const stl_pair &couple) {
+    key.assign(couple.first);
+    value.assign(couple.second);
+    return *this;
+  }
+  pair &operator=(stl_pair &&couple) {
+    key.assign(std::move(couple.first));
+    value.assign(std::move(couple.second));
+    return *this;
+  }
+
+  /// \brief Three-way fast non-lexicographically length-based comparison.
+  MDBX_NOTHROW_PURE_FUNCTION static MDBX_CXX14_CONSTEXPR intptr_t compare_fast(const pair &a, const pair &b) noexcept;
+
+  /// \brief Three-way lexicographically comparison.
+  MDBX_NOTHROW_PURE_FUNCTION static MDBX_CXX14_CONSTEXPR intptr_t compare_lexicographically(const pair &a,
+                                                                                            const pair &b) noexcept;
+  friend MDBX_CXX14_CONSTEXPR bool operator==(const pair &a, const pair &b) noexcept;
+  friend MDBX_CXX14_CONSTEXPR bool operator<(const pair &a, const pair &b) noexcept;
+  friend MDBX_CXX14_CONSTEXPR bool operator>(const pair &a, const pair &b) noexcept;
+  friend MDBX_CXX14_CONSTEXPR bool operator<=(const pair &a, const pair &b) noexcept;
+  friend MDBX_CXX14_CONSTEXPR bool operator>=(const pair &a, const pair &b) noexcept;
+  friend MDBX_CXX14_CONSTEXPR bool operator!=(const pair &a, const pair &b) noexcept;
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+  friend MDBX_CXX14_CONSTEXPR auto operator<=>(const pair &a, const pair &b) noexcept;
+#endif /* __cpp_impl_three_way_comparison */
 };
 
-template <typename T, typename A> struct copy_assign_alloc<T, A, true> {
-  static constexpr bool is_nothrow() noexcept {
-    return allocator_is_always_equal<A>() || ::std::is_nothrow_copy_assignable<A>::value;
-  }
-  static MDBX_CXX20_CONSTEXPR void propagate(T *target, const T &source) noexcept(is_nothrow()) {
-    if MDBX_IF_CONSTEXPR (!allocator_is_always_equal<A>()) {
-      if (MDBX_UNLIKELY(target->get_allocator() != source.get_allocator()))
-        MDBX_CXX20_UNLIKELY target->get_allocator() =
-            ::std::allocator_traits<A>::select_on_container_copy_construction(source.get_allocator());
-    } else {
-      /* gag for buggy compilers */
-      (void)target;
-      (void)source;
-    }
+/// \brief Combines pair of slices for key and value with boolean flag to
+/// represent result of certain operations.
+struct pair_result : public pair {
+  bool done;
+  MDBX_CXX11_CONSTEXPR pair_result() noexcept : pair(pair::invalid()), done(false) {}
+  MDBX_CXX11_CONSTEXPR pair_result(const slice &key, const slice &value, bool done) noexcept
+      : pair(key, value), done(done) {}
+  pair_result(const pair_result &) noexcept = default;
+  pair_result &operator=(const pair_result &) noexcept = default;
+  MDBX_CXX14_CONSTEXPR operator bool() const noexcept {
+    assert(!done || (bool(key) && bool(value)));
+    return done;
   }
 };
 
-template <typename T, typename A = typename T::allocator_type,
-          bool PoCS = ::std::allocator_traits<A>::propagate_on_container_swap::value>
-struct swap_alloc;
+#if MDBX_HAVE_CXX20_CONCEPTS || defined(DOXYGEN)
 
-template <typename T, typename A> struct swap_alloc<T, A, false> {
-  static constexpr bool is_nothrow() noexcept { return allocator_is_always_equal<A>(); }
-  static MDBX_CXX20_CONSTEXPR void propagate(T &left, T &right) noexcept(is_nothrow()) {
-    if MDBX_IF_CONSTEXPR (!allocator_is_always_equal<A>()) {
-      if (MDBX_UNLIKELY(left.get_allocator() != right.get_allocator()))
-        MDBX_CXX20_UNLIKELY throw_allocators_mismatch();
-    } else {
-      /* gag for buggy compilers */
-      (void)left;
-      (void)right;
-    }
-  }
+/** \concept MutableByteProducer
+ *  \interface MutableByteProducer
+ *  \brief MutableByteProducer C++20 concept */
+template <typename T>
+concept MutableByteProducer = requires(T a, char array[42]) {
+  { a.is_empty() } -> std::same_as<bool>;
+  { a.envisage_result_length() } -> std::same_as<size_t>;
+  { a.write_bytes(&array[0], size_t(42)) } -> std::same_as<char *>;
 };
 
-template <typename T, typename A> struct swap_alloc<T, A, true> {
-  static constexpr bool is_nothrow() noexcept {
-    return allocator_is_always_equal<A>() ||
-#if defined(__cpp_lib_is_swappable) && __cpp_lib_is_swappable >= 201603L
-           ::std::is_nothrow_swappable<A>() ||
-#endif /* __cpp_lib_is_swappable >= 201603L */
-           (::std::is_nothrow_move_constructible<A>::value && ::std::is_nothrow_move_assignable<A>::value);
-  }
-  static MDBX_CXX20_CONSTEXPR void propagate(T &left, T &right) noexcept(is_nothrow()) {
-    if MDBX_IF_CONSTEXPR (!allocator_is_always_equal<A>()) {
-      if (MDBX_UNLIKELY(left.get_allocator() != right.get_allocator()))
-        MDBX_CXX20_UNLIKELY ::std::swap(left.get_allocator(), right.get_allocator());
-    } else {
-      /* gag for buggy compilers */
-      (void)left;
-      (void)right;
-    }
-  }
+/** \concept ImmutableByteProducer
+ *  \interface ImmutableByteProducer
+ *  \brief ImmutableByteProducer C++20 concept */
+template <typename T>
+concept ImmutableByteProducer = requires(const T &a, char array[42]) {
+  { a.is_empty() } -> std::same_as<bool>;
+  { a.envisage_result_length() } -> std::same_as<size_t>;
+  { a.write_bytes(&array[0], size_t(42)) } -> std::same_as<char *>;
 };
 
-} // namespace allocation_aware_details
-
-struct default_capacity_policy {
-  enum : size_t {
-    extra_inplace_storage = 0,
-    inplace_storage_size_rounding = 16,
-    pettiness_threshold = 64,
-    max_reserve = 65536
-  };
-
-  static MDBX_CXX11_CONSTEXPR size_t round(const size_t value) {
-    static_assert((pettiness_threshold & (pettiness_threshold - 1)) == 0, "pettiness_threshold must be a power of 2");
-    static_assert(pettiness_threshold % 2 == 0, "pettiness_threshold must be even");
-    static_assert(pettiness_threshold >= sizeof(uint64_t), "pettiness_threshold must be > 7");
-    constexpr const auto pettiness_mask = ~size_t(pettiness_threshold - 1);
-    return (value + pettiness_threshold - 1) & pettiness_mask;
-  }
-
-  static MDBX_CXX11_CONSTEXPR size_t advise(const size_t current, const size_t wanna, const size_t inplace) {
-    static_assert(max_reserve % pettiness_threshold == 0, "max_reserve must be a multiple of pettiness_threshold");
-    static_assert(max_reserve / 3 > pettiness_threshold, "max_reserve must be > pettiness_threshold * 3");
-
-    if (wanna <= inplace && (current <= inplace || current >= std::max(inplace + inplace, size_t(pettiness_threshold))))
-      return inplace;
-
-    if (wanna > current)
-      /* doubling capacity, but don't made reserve more than max_reserve */
-      return round(wanna + ::std::min(size_t(max_reserve), current));
-
-    if (current - wanna >
-        /* shrink if reserve will more than half of current or max_reserve,
-         * but not less than pettiness_threshold */
-        ::std::min(wanna + pettiness_threshold, size_t(max_reserve)))
-      return round(wanna);
-
-    /* keep unchanged */
-    return current;
-  }
+/** \concept SliceTranscoder
+ *  \interface SliceTranscoder
+ *  \brief SliceTranscoder C++20 concept */
+template <typename T>
+concept SliceTranscoder = ImmutableByteProducer<T> && requires(const slice &source, const T &a) {
+  T(source);
+  { a.is_erroneous() } -> std::same_as<bool>;
 };
+
+#endif /* MDBX_HAVE_CXX20_CONCEPTS */
+
+template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy,
+          MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)>
+inline buffer<ALLOCATOR, CAPACITY_POLICY> make_buffer(PRODUCER &producer, const ALLOCATOR &alloc = ALLOCATOR());
+
+template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy,
+          MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)>
+inline buffer<ALLOCATOR, CAPACITY_POLICY> make_buffer(const PRODUCER &producer, const ALLOCATOR &alloc = ALLOCATOR());
+
+template <class ALLOCATOR = default_allocator, MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)>
+inline string<ALLOCATOR> make_string(PRODUCER &producer, const ALLOCATOR &alloc = ALLOCATOR());
+
+template <class ALLOCATOR = default_allocator, MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)>
+inline string<ALLOCATOR> make_string(const PRODUCER &producer, const ALLOCATOR &alloc = ALLOCATOR());
 
 /// \brief Hexadecimal encoder which satisfy \ref SliceTranscoder concept.
 struct LIBMDBX_API to_hex {
@@ -1375,10 +1324,6 @@ struct LIBMDBX_API to_base64 {
   bool is_erroneous() const noexcept { return false; }
 };
 
-inline ::std::ostream &operator<<(::std::ostream &out, const to_hex &wrapper) { return wrapper.output(out); }
-inline ::std::ostream &operator<<(::std::ostream &out, const to_base58 &wrapper) { return wrapper.output(out); }
-inline ::std::ostream &operator<<(::std::ostream &out, const to_base64 &wrapper) { return wrapper.output(out); }
-
 /// \brief Hexadecimal decoder which satisfy \ref SliceTranscoder concept.
 struct LIBMDBX_API from_hex {
   const slice source;
@@ -1502,11 +1447,148 @@ struct LIBMDBX_API from_base64 {
   bool is_erroneous() const noexcept;
 };
 
+namespace allocation_aware_details {
+
+template <typename A> constexpr bool allocator_is_always_equal() noexcept {
+#if defined(__cpp_lib_allocator_traits_is_always_equal) && __cpp_lib_allocator_traits_is_always_equal >= 201411L
+  return ::std::allocator_traits<A>::is_always_equal::value;
+#else
+  return ::std::is_empty<A>::value;
+#endif /* __cpp_lib_allocator_traits_is_always_equal */
+}
+
+template <typename T, typename A = typename T::allocator_type,
+          bool PoCMA = ::std::allocator_traits<A>::propagate_on_container_move_assignment::value>
+struct move_assign_alloc;
+
+template <typename T, typename A> struct move_assign_alloc<T, A, false> {
+  static constexpr bool is_nothrow() noexcept { return allocator_is_always_equal<A>(); }
+  static MDBX_CXX20_CONSTEXPR bool is_moveable(T *target, T &source) noexcept {
+    return allocator_is_always_equal<A>() || target->get_allocator() == source.get_allocator();
+  }
+  static MDBX_CXX20_CONSTEXPR void propagate(T *, T &) noexcept {}
+};
+
+template <typename T, typename A> struct move_assign_alloc<T, A, true> {
+  static constexpr bool is_nothrow() noexcept {
+    return allocator_is_always_equal<A>() || ::std::is_nothrow_move_assignable<A>::value;
+  }
+  static constexpr bool is_moveable(T *, T &) noexcept { return true; }
+  static MDBX_CXX20_CONSTEXPR void propagate(T *target, T &source) noexcept {
+    target->get_allocator() = ::std::move(source.get_allocator());
+  }
+};
+
+template <typename T, typename A = typename T::allocator_type,
+          bool PoCCA = ::std::allocator_traits<A>::propagate_on_container_copy_assignment::value>
+struct copy_assign_alloc;
+
+template <typename T, typename A> struct copy_assign_alloc<T, A, false> {
+  static constexpr bool is_nothrow() noexcept { return false; }
+  static MDBX_CXX20_CONSTEXPR void propagate(T *, const T &) noexcept {}
+};
+
+template <typename T, typename A> struct copy_assign_alloc<T, A, true> {
+  static constexpr bool is_nothrow() noexcept {
+    return allocator_is_always_equal<A>() || ::std::is_nothrow_copy_assignable<A>::value;
+  }
+  static MDBX_CXX20_CONSTEXPR void propagate(T *target, const T &source) noexcept(is_nothrow()) {
+    if MDBX_IF_CONSTEXPR (!allocator_is_always_equal<A>()) {
+      if (MDBX_UNLIKELY(target->get_allocator() != source.get_allocator()))
+        MDBX_CXX20_UNLIKELY target->get_allocator() =
+            ::std::allocator_traits<A>::select_on_container_copy_construction(source.get_allocator());
+    } else {
+      /* gag for buggy compilers */
+      (void)target;
+      (void)source;
+    }
+  }
+};
+
+template <typename T, typename A = typename T::allocator_type,
+          bool PoCS = ::std::allocator_traits<A>::propagate_on_container_swap::value>
+struct swap_alloc;
+
+template <typename T, typename A> struct swap_alloc<T, A, false> {
+  static constexpr bool is_nothrow() noexcept { return allocator_is_always_equal<A>(); }
+  static MDBX_CXX20_CONSTEXPR void propagate(T &left, T &right) noexcept(is_nothrow()) {
+    if MDBX_IF_CONSTEXPR (!allocator_is_always_equal<A>()) {
+      if (MDBX_UNLIKELY(left.get_allocator() != right.get_allocator()))
+        MDBX_CXX20_UNLIKELY throw_allocators_mismatch();
+    } else {
+      /* gag for buggy compilers */
+      (void)left;
+      (void)right;
+    }
+  }
+};
+
+template <typename T, typename A> struct swap_alloc<T, A, true> {
+  static constexpr bool is_nothrow() noexcept {
+    return allocator_is_always_equal<A>() ||
+#if defined(__cpp_lib_is_swappable) && __cpp_lib_is_swappable >= 201603L
+           ::std::is_nothrow_swappable<A>() ||
+#endif /* __cpp_lib_is_swappable >= 201603L */
+           (::std::is_nothrow_move_constructible<A>::value && ::std::is_nothrow_move_assignable<A>::value);
+  }
+  static MDBX_CXX20_CONSTEXPR void propagate(T &left, T &right) noexcept(is_nothrow()) {
+    if MDBX_IF_CONSTEXPR (!allocator_is_always_equal<A>()) {
+      if (MDBX_UNLIKELY(left.get_allocator() != right.get_allocator()))
+        MDBX_CXX20_UNLIKELY ::std::swap(left.get_allocator(), right.get_allocator());
+    } else {
+      /* gag for buggy compilers */
+      (void)left;
+      (void)right;
+    }
+  }
+};
+
+} // namespace allocation_aware_details
+
+struct default_capacity_policy {
+  enum : size_t {
+    extra_inplace_storage = 0,
+    inplace_storage_size_rounding = 16,
+    pettiness_threshold = 64,
+    max_reserve = 65536
+  };
+
+  static MDBX_CXX11_CONSTEXPR size_t round(const size_t value) {
+    static_assert((pettiness_threshold & (pettiness_threshold - 1)) == 0, "pettiness_threshold must be a power of 2");
+    static_assert(pettiness_threshold % 2 == 0, "pettiness_threshold must be even");
+    static_assert(pettiness_threshold >= sizeof(uint64_t), "pettiness_threshold must be > 7");
+    constexpr const auto pettiness_mask = ~size_t(pettiness_threshold - 1);
+    return (value + pettiness_threshold - 1) & pettiness_mask;
+  }
+
+  static MDBX_CXX11_CONSTEXPR size_t advise(const size_t current, const size_t wanna, const size_t inplace) {
+    static_assert(max_reserve % pettiness_threshold == 0, "max_reserve must be a multiple of pettiness_threshold");
+    static_assert(max_reserve / 3 > pettiness_threshold, "max_reserve must be > pettiness_threshold * 3");
+
+    if (wanna <= inplace && (current <= inplace || current >= std::max(inplace + inplace, size_t(pettiness_threshold))))
+      return inplace;
+
+    if (wanna > current)
+      /* doubling capacity, but don't made reserve more than max_reserve */
+      return round(wanna + ::std::min(size_t(max_reserve), current));
+
+    if (current - wanna >
+        /* shrink if reserve will more than half of current or max_reserve,
+         * but not less than pettiness_threshold */
+        ::std::min(wanna + pettiness_threshold, size_t(max_reserve)))
+      return round(wanna);
+
+    /* keep unchanged */
+    return current;
+  }
+};
+
 /// \brief Type tag for delivered buffer template classes.
 struct buffer_tag {};
 
 /// \brief The chunk of data stored inside the buffer or located outside it.
-template <class ALLOCATOR, typename CAPACITY_POLICY> class buffer : public buffer_tag, public slice {
+template <class ALLOCATOR, typename CAPACITY_POLICY>
+class MDBX_MSVC_DECLSPEC_EMPTY_BASES buffer : public slice, public buffer_tag {
 public:
   using inherited = slice;
 #if !defined(_MSC_VER) || _MSC_VER > 1900
@@ -1573,11 +1655,16 @@ private:
 #endif /* __cpp_lib_to_address */
     }
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4324) /* structure was padded due to alignment specifier */
+#endif                          /* _MSC_VER */
+
     union alignas(max_align_t) bin {
       struct stub_allocated_holder /* используется только для вычисления (минимального необходимого) размера,
                                       с учетом выравнивания */
       {
-        allocator_pointer ptr_;
+        allocator_pointer stub_ptr_;
         size_t stub_capacity_bytes_;
       };
 
@@ -1676,6 +1763,10 @@ private:
       }
       constexpr size_t capacity() const noexcept { return is_inplace() ? inplace_capacity() : capacity_.bytes_; }
     } bin_;
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif /* _MSC_VER */
 
     constexpr bool is_inplace(const void *ptr) const noexcept { return bin_.is_inplace(ptr); }
 
@@ -2054,13 +2145,8 @@ public:
 
   MDBX_CXX20_CONSTEXPR buffer() noexcept = default;
   MDBX_CXX20_CONSTEXPR buffer(const allocator_type &alloc) noexcept : silo_(alloc) {}
-
-  MDBX_CXX20_CONSTEXPR
-  buffer(const struct slice &src, bool make_reference, const allocator_type &alloc = allocator_type())
-      : inherited(src), silo_(alloc) {
-    if (!make_reference)
-      insulate();
-  }
+  MDBX_CXX20_CONSTEXPR buffer(const struct slice &src, bool make_reference,
+                              const allocator_type &alloc = allocator_type());
 
   MDBX_CXX20_CONSTEXPR
   buffer(const void *ptr, size_t bytes, bool make_reference, const allocator_type &alloc = allocator_type())
@@ -2613,132 +2699,6 @@ public:
   const slice &slice() const noexcept { return *this; }
 };
 
-template <class ALLOCATOR, class CAPACITY_POLICY, MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)>
-inline buffer<ALLOCATOR, CAPACITY_POLICY> make_buffer(PRODUCER &producer, const ALLOCATOR &alloc) {
-  if (MDBX_LIKELY(!producer.is_empty()))
-    MDBX_CXX20_LIKELY {
-      buffer<ALLOCATOR, CAPACITY_POLICY> result(producer.envisage_result_length(), alloc);
-      result.set_end(producer.write_bytes(result.end_char_ptr(), result.tailroom()));
-      return result;
-    }
-  return buffer<ALLOCATOR, CAPACITY_POLICY>(alloc);
-}
-
-template <class ALLOCATOR, class CAPACITY_POLICY, MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)>
-inline buffer<ALLOCATOR, CAPACITY_POLICY> make_buffer(const PRODUCER &producer, const ALLOCATOR &alloc) {
-  if (MDBX_LIKELY(!producer.is_empty()))
-    MDBX_CXX20_LIKELY {
-      buffer<ALLOCATOR, CAPACITY_POLICY> result(producer.envisage_result_length(), alloc);
-      result.set_end(producer.write_bytes(result.end_char_ptr(), result.tailroom()));
-      return result;
-    }
-  return buffer<ALLOCATOR, CAPACITY_POLICY>(alloc);
-}
-
-template <class ALLOCATOR, MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)>
-inline string<ALLOCATOR> make_string(PRODUCER &producer, const ALLOCATOR &alloc) {
-  string<ALLOCATOR> result(alloc);
-  if (MDBX_LIKELY(!producer.is_empty()))
-    MDBX_CXX20_LIKELY {
-      result.resize(producer.envisage_result_length());
-      result.resize(producer.write_bytes(const_cast<char *>(result.data()), result.capacity()) - result.data());
-    }
-  return result;
-}
-
-template <class ALLOCATOR, MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)>
-inline string<ALLOCATOR> make_string(const PRODUCER &producer, const ALLOCATOR &alloc) {
-  string<ALLOCATOR> result(alloc);
-  if (MDBX_LIKELY(!producer.is_empty()))
-    MDBX_CXX20_LIKELY {
-      result.resize(producer.envisage_result_length());
-      result.resize(producer.write_bytes(const_cast<char *>(result.data()), result.capacity()) - result.data());
-    }
-  return result;
-}
-
-MDBX_EXTERN_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<legacy_allocator>);
-
-#if defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L && _GLIBCXX_USE_CXX11_ABI
-MDBX_EXTERN_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<polymorphic_allocator>);
-#endif /* __cpp_lib_memory_resource >= 201603L */
-
-/// \brief Combines data slice with boolean flag to represent result of certain operations.
-struct value_result {
-  slice value;
-  bool done;
-  value_result(const slice &value, bool done) noexcept : value(value), done(done) {}
-  value_result(const value_result &) noexcept = default;
-  value_result &operator=(const value_result &) noexcept = default;
-  MDBX_CXX14_CONSTEXPR operator bool() const noexcept {
-    assert(!done || bool(value));
-    return done;
-  }
-};
-
-/// \brief Combines pair of slices for key and value to represent result of certain operations.
-struct pair {
-  using stl_pair = std::pair<slice, slice>;
-  slice key, value;
-  MDBX_CXX11_CONSTEXPR pair(const slice &key, const slice &value) noexcept : key(key), value(value) {}
-  MDBX_CXX11_CONSTEXPR pair(const stl_pair &couple) noexcept : key(couple.first), value(couple.second) {}
-  MDBX_CXX11_CONSTEXPR operator stl_pair() const noexcept { return stl_pair(key, value); }
-  pair(const pair &) noexcept = default;
-  pair &operator=(const pair &) noexcept = default;
-  pair &operator=(pair &&couple) {
-    key.assign(std::move(couple.key));
-    value.assign(std::move(couple.value));
-    return *this;
-  }
-  MDBX_CXX14_CONSTEXPR operator bool() const noexcept {
-    assert(bool(key) == bool(value));
-    return key;
-  }
-  MDBX_CXX14_CONSTEXPR static pair invalid() noexcept { return pair(slice::invalid(), slice::invalid()); }
-
-  pair &operator=(const stl_pair &couple) {
-    key.assign(couple.first);
-    value.assign(couple.second);
-    return *this;
-  }
-  pair &operator=(stl_pair &&couple) {
-    key.assign(std::move(couple.first));
-    value.assign(std::move(couple.second));
-    return *this;
-  }
-
-  /// \brief Three-way fast non-lexicographically length-based comparison.
-  MDBX_NOTHROW_PURE_FUNCTION static MDBX_CXX14_CONSTEXPR intptr_t compare_fast(const pair &a, const pair &b) noexcept;
-
-  /// \brief Three-way lexicographically comparison.
-  MDBX_NOTHROW_PURE_FUNCTION static MDBX_CXX14_CONSTEXPR intptr_t compare_lexicographically(const pair &a,
-                                                                                            const pair &b) noexcept;
-  friend MDBX_CXX14_CONSTEXPR bool operator==(const pair &a, const pair &b) noexcept;
-  friend MDBX_CXX14_CONSTEXPR bool operator<(const pair &a, const pair &b) noexcept;
-  friend MDBX_CXX14_CONSTEXPR bool operator>(const pair &a, const pair &b) noexcept;
-  friend MDBX_CXX14_CONSTEXPR bool operator<=(const pair &a, const pair &b) noexcept;
-  friend MDBX_CXX14_CONSTEXPR bool operator>=(const pair &a, const pair &b) noexcept;
-  friend MDBX_CXX14_CONSTEXPR bool operator!=(const pair &a, const pair &b) noexcept;
-#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
-  friend MDBX_CXX14_CONSTEXPR auto operator<=>(const pair &a, const pair &b) noexcept;
-#endif /* __cpp_impl_three_way_comparison */
-};
-
-/// \brief Combines pair of slices for key and value with boolean flag to
-/// represent result of certain operations.
-struct pair_result : public pair {
-  bool done;
-  MDBX_CXX11_CONSTEXPR pair_result() noexcept : pair(pair::invalid()), done(false) {}
-  MDBX_CXX11_CONSTEXPR pair_result(const slice &key, const slice &value, bool done) noexcept
-      : pair(key, value), done(done) {}
-  pair_result(const pair_result &) noexcept = default;
-  pair_result &operator=(const pair_result &) noexcept = default;
-  MDBX_CXX14_CONSTEXPR operator bool() const noexcept {
-    assert(!done || (bool(key) && bool(value)));
-    return done;
-  }
-};
-
 template <typename ALLOCATOR, typename CAPACITY_POLICY> struct buffer_pair_spec {
   using buffer_type = buffer<ALLOCATOR, CAPACITY_POLICY>;
   using allocator_type = typename buffer_type::allocator_type;
@@ -2834,16 +2794,7 @@ template <typename ALLOCATOR, typename CAPACITY_POLICY> struct buffer_pair_spec 
   operator pair() const noexcept { return pair(key, value); }
 };
 
-/// \brief Combines pair of buffers for key and value to hold an operands for certain operations.
-template <typename BUFFER>
-using buffer_pair = buffer_pair_spec<typename BUFFER::allocator_type, typename BUFFER::reservation_policy>;
-
-/// \brief Default pair of buffers.
-using default_buffer_pair = buffer_pair<default_buffer>;
-
 /// end of cxx_data @}
-
-//------------------------------------------------------------------------------
 
 /// \brief Loop control constants for readers enumeration functor and other
 /// cases. \see env::enumerate_readers()
@@ -2934,12 +2885,12 @@ enum class value_mode {
   multi_reverse_samelength = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_REVERSEDUP) | uint32_t(MDBX_DUPFIXED),
 #endif
   msgpack = -1 ///< A more than one data value could be associated with each
-               ///< key. Values are in [MessagePack](https://msgpack.org/)
-               ///< format with appropriate comparison. Internally each key is
-               ///< stored once, and the corresponding data values are sorted.
-               ///< In terms of keys, they are not unique, i.e. has duplicates
-               ///< which are sorted by associated data values.
-               ///< \note Not yet implemented and PRs are welcome.
+  ///< key. Values are in [MessagePack](https://msgpack.org/)
+  ///< format with appropriate comparison. Internally each key is
+  ///< stored once, and the corresponding data values are sorted.
+  ///< In terms of keys, they are not unique, i.e. has duplicates
+  ///< which are sorted by associated data values.
+  ///< \note Not yet implemented and PRs are welcome.
 };
 
 MDBX_CXX01_CONSTEXPR_ENUM bool is_usual(value_mode mode) noexcept {
@@ -3037,8 +2988,7 @@ enum put_mode {
 /// but does not manage nor destroys the represented underlying object from the own class destructor.
 ///
 /// An environment supports multiple key-value tables (aka key-value maps,
-/// tables or sub-databases), all residing in the same shared-memory mapped
-/// file.
+/// tables or sub-databases), all residing in the same shared-memory mapped file.
 class LIBMDBX_API_TYPE env {
   friend class txn;
 
@@ -4599,29 +4549,6 @@ public:
   ~cursor_managed() noexcept { ::mdbx_cursor_close(handle_); }
 };
 
-//------------------------------------------------------------------------------
-
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const slice &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const pair &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const pair_result &);
-template <class ALLOCATOR, typename CAPACITY_POLICY>
-inline ::std::ostream &operator<<(::std::ostream &out, const buffer<ALLOCATOR, CAPACITY_POLICY> &it) {
-  return (it.is_freestanding() ? out << "buf-" << it.headroom() << "." << it.tailroom() : out << "ref-") << it.slice();
-}
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const env::geometry::size &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const env::geometry &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const env::operate_parameters &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const env::mode &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const env::durability &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const env::reclaiming_options &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const env::operate_options &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const env_managed::create_parameters &);
-
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const MDBX_log_level_t &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const MDBX_debug_flags_t &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const error &);
-inline ::std::ostream &operator<<(::std::ostream &out, const MDBX_error_t &errcode) { return out << error(errcode); }
-
 //==============================================================================
 //
 // Inline body of the libmdbx C++ API
@@ -4669,6 +4596,19 @@ static MDBX_CXX20_CONSTEXPR int memcmp(const void *a, const void *b, size_t byte
   } else
 #endif /* __cpp_lib_is_constant_evaluated >= 201811 */
     return ::std::memcmp(a, b, bytes);
+}
+
+//------------------------------------------------------------------------------
+
+MDBX_CXX11_CONSTEXPR map_handle::info::info(map_handle::flags flags, map_handle::state state) noexcept
+    : flags(flags), state(state) {}
+
+MDBX_CXX11_CONSTEXPR_ENUM mdbx::key_mode map_handle::info::key_mode() const noexcept {
+  return ::mdbx::key_mode(flags & (MDBX_REVERSEKEY | MDBX_INTEGERKEY));
+}
+
+MDBX_CXX11_CONSTEXPR_ENUM mdbx::value_mode map_handle::info::value_mode() const noexcept {
+  return ::mdbx::value_mode(flags & (MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_DUPFIXED | MDBX_INTEGERDUP));
 }
 
 static MDBX_CXX14_CONSTEXPR size_t check_length(size_t bytes) {
@@ -4806,8 +4746,6 @@ inline bool error::boolean_or_throw(int error_code, const exception_thunk &thunk
     MDBX_CXX20_UNLIKELY thunk.rethrow_captured();
   return boolean_or_throw(error_code);
 }
-
-//------------------------------------------------------------------------------
 
 MDBX_CXX11_CONSTEXPR slice::slice() noexcept : ::MDBX_val({nullptr, 0}) {}
 
@@ -5045,6 +4983,86 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR auto operator<=>(const slice &a,
 }
 #endif /* __cpp_impl_three_way_comparison */
 
+template <class ALLOCATOR, typename CAPACITY_POLICY>
+MDBX_CXX20_CONSTEXPR buffer<ALLOCATOR, CAPACITY_POLICY>::buffer(const struct slice &src, bool make_reference,
+                                                                const allocator_type &alloc)
+    : inherited(src), silo_(alloc) {
+  if (!make_reference)
+    insulate();
+}
+
+template <class ALLOCATOR, typename CAPACITY_POLICY>
+inline buffer<ALLOCATOR, CAPACITY_POLICY>::buffer(const txn &txn, const struct slice &src, const allocator_type &alloc)
+    : buffer(src, !txn.is_dirty(src.data()), alloc) {}
+
+template <class ALLOCATOR, typename CAPACITY_POLICY>
+inline ::std::ostream &operator<<(::std::ostream &out, const buffer<ALLOCATOR, CAPACITY_POLICY> &it) {
+  return (it.is_freestanding() ? out << "buf-" << it.headroom() << "." << it.tailroom() : out << "ref-") << it.slice();
+}
+
+#if (defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)) &&                                            \
+    (defined(MDBX_EXPORTS) || defined(MDBX_IMPORTS))
+#info                                                                                                                  \
+    "Most MinGW versions have various problems with exporting and/or importing C++ template symbols instantiated in a DLL."
+#endif /* MinGW */
+
+#if !(defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)) || defined(MDBX_EXPORTS)
+MDBX_EXTERN_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<legacy_allocator, default_capacity_policy>);
+
+#if MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR
+MDBX_EXTERN_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<polymorphic_allocator, default_capacity_policy>);
+#endif /* MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR */
+#endif /* !MinGW || MDBX_EXPORTS */
+
+/// \brief Default buffer.
+using default_buffer = buffer<default_allocator, default_capacity_policy>;
+
+//------------------------------------------------------------------------------
+
+template <class ALLOCATOR, class CAPACITY_POLICY, MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)>
+inline buffer<ALLOCATOR, CAPACITY_POLICY> make_buffer(PRODUCER &producer, const ALLOCATOR &alloc) {
+  if (MDBX_LIKELY(!producer.is_empty()))
+    MDBX_CXX20_LIKELY {
+      buffer<ALLOCATOR, CAPACITY_POLICY> result(producer.envisage_result_length(), alloc);
+      result.set_end(producer.write_bytes(result.end_char_ptr(), result.tailroom()));
+      return result;
+    }
+  return buffer<ALLOCATOR, CAPACITY_POLICY>(alloc);
+}
+
+template <class ALLOCATOR, class CAPACITY_POLICY, MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)>
+inline buffer<ALLOCATOR, CAPACITY_POLICY> make_buffer(const PRODUCER &producer, const ALLOCATOR &alloc) {
+  if (MDBX_LIKELY(!producer.is_empty()))
+    MDBX_CXX20_LIKELY {
+      buffer<ALLOCATOR, CAPACITY_POLICY> result(producer.envisage_result_length(), alloc);
+      result.set_end(producer.write_bytes(result.end_char_ptr(), result.tailroom()));
+      return result;
+    }
+  return buffer<ALLOCATOR, CAPACITY_POLICY>(alloc);
+}
+
+template <class ALLOCATOR, MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)>
+inline string<ALLOCATOR> make_string(PRODUCER &producer, const ALLOCATOR &alloc) {
+  string<ALLOCATOR> result(alloc);
+  if (MDBX_LIKELY(!producer.is_empty()))
+    MDBX_CXX20_LIKELY {
+      result.resize(producer.envisage_result_length());
+      result.resize(producer.write_bytes(const_cast<char *>(result.data()), result.capacity()) - result.data());
+    }
+  return result;
+}
+
+template <class ALLOCATOR, MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)>
+inline string<ALLOCATOR> make_string(const PRODUCER &producer, const ALLOCATOR &alloc) {
+  string<ALLOCATOR> result(alloc);
+  if (MDBX_LIKELY(!producer.is_empty()))
+    MDBX_CXX20_LIKELY {
+      result.resize(producer.envisage_result_length());
+      result.resize(producer.write_bytes(const_cast<char *>(result.data()), result.capacity()) - result.data());
+    }
+  return result;
+}
+
 template <class ALLOCATOR>
 inline string<ALLOCATOR> slice::as_hex_string(bool uppercase, unsigned wrap_width, const ALLOCATOR &alloc) const {
   return to_hex(*this, uppercase, wrap_width).as_string<ALLOCATOR>(alloc);
@@ -5089,18 +5107,6 @@ inline buffer<ALLOCATOR, CAPACITY_POLICY> slice::base58_decode(bool ignore_space
 template <class ALLOCATOR, class CAPACITY_POLICY>
 inline buffer<ALLOCATOR, CAPACITY_POLICY> slice::base64_decode(bool ignore_spaces, const ALLOCATOR &alloc) const {
   return from_base64(*this, ignore_spaces).as_buffer<ALLOCATOR, CAPACITY_POLICY>(alloc);
-}
-
-MDBX_NOTHROW_PURE_FUNCTION inline bool slice::is_hex(bool ignore_spaces) const noexcept {
-  return !from_hex(*this, ignore_spaces).is_erroneous();
-}
-
-MDBX_NOTHROW_PURE_FUNCTION inline bool slice::is_base58(bool ignore_spaces) const noexcept {
-  return !from_base58(*this, ignore_spaces).is_erroneous();
-}
-
-MDBX_NOTHROW_PURE_FUNCTION inline bool slice::is_base64(bool ignore_spaces) const noexcept {
-  return !from_base64(*this, ignore_spaces).is_erroneous();
 }
 
 //------------------------------------------------------------------------------
@@ -5149,23 +5155,29 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR auto operator<=>(const pair &a, 
 }
 #endif /* __cpp_impl_three_way_comparison */
 
+/// \brief Combines pair of buffers for key and value to hold an operands for certain operations.
+template <typename BUFFER>
+using buffer_pair = buffer_pair_spec<typename BUFFER::allocator_type, typename BUFFER::reservation_policy>;
+
+/// \brief Default pair of buffers.
+using default_buffer_pair = buffer_pair<default_buffer>;
+
 //------------------------------------------------------------------------------
 
-template <class ALLOCATOR, typename CAPACITY_POLICY>
-inline buffer<ALLOCATOR, CAPACITY_POLICY>::buffer(const txn &txn, const struct slice &src, const allocator_type &alloc)
-    : buffer(src, !txn.is_dirty(src.data()), alloc) {}
+inline ::std::ostream &operator<<(::std::ostream &out, const to_hex &wrapper) { return wrapper.output(out); }
+inline ::std::ostream &operator<<(::std::ostream &out, const to_base58 &wrapper) { return wrapper.output(out); }
+inline ::std::ostream &operator<<(::std::ostream &out, const to_base64 &wrapper) { return wrapper.output(out); }
 
-//------------------------------------------------------------------------------
-
-MDBX_CXX11_CONSTEXPR map_handle::info::info(map_handle::flags flags, map_handle::state state) noexcept
-    : flags(flags), state(state) {}
-
-MDBX_CXX11_CONSTEXPR_ENUM mdbx::key_mode map_handle::info::key_mode() const noexcept {
-  return ::mdbx::key_mode(flags & (MDBX_REVERSEKEY | MDBX_INTEGERKEY));
+MDBX_NOTHROW_PURE_FUNCTION inline bool slice::is_hex(bool ignore_spaces) const noexcept {
+  return !from_hex(*this, ignore_spaces).is_erroneous();
 }
 
-MDBX_CXX11_CONSTEXPR_ENUM mdbx::value_mode map_handle::info::value_mode() const noexcept {
-  return ::mdbx::value_mode(flags & (MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_DUPFIXED | MDBX_INTEGERDUP));
+MDBX_NOTHROW_PURE_FUNCTION inline bool slice::is_base58(bool ignore_spaces) const noexcept {
+  return !from_base58(*this, ignore_spaces).is_erroneous();
+}
+
+MDBX_NOTHROW_PURE_FUNCTION inline bool slice::is_base64(bool ignore_spaces) const noexcept {
+  return !from_base64(*this, ignore_spaces).is_erroneous();
 }
 
 //------------------------------------------------------------------------------
@@ -5557,8 +5569,6 @@ inline txn_managed env::start_write(txn &parent) {
 
 inline txn_managed env::try_start_write() { return start_write(true); }
 
-//------------------------------------------------------------------------------
-
 MDBX_CXX11_CONSTEXPR txn::txn(MDBX_txn *ptr) noexcept : handle_(ptr) {}
 
 inline txn &txn::operator=(txn &&other) noexcept {
@@ -5604,7 +5614,7 @@ inline bool txn::is_dirty(const void *ptr) const {
   }
 }
 
-inline ::mdbx::env txn::env() const noexcept { return ::mdbx_txn_env(handle_); }
+inline env txn::env() const noexcept { return ::mdbx_txn_env(handle_); }
 
 inline MDBX_txn_flags_t txn::flags() const {
   const int bits = mdbx_txn_flags(handle_);
@@ -6062,8 +6072,6 @@ inline ptrdiff_t txn::estimate_to_last(map_handle map, const slice &from) const 
   return result;
 }
 
-//------------------------------------------------------------------------------
-
 MDBX_CXX11_CONSTEXPR cursor::cursor(MDBX_cursor *ptr) noexcept : handle_(ptr) {}
 
 inline cursor_managed cursor::clone(void *your_context) const {
@@ -6366,7 +6374,28 @@ inline size_t cursor::put_multiple_samelength(const slice &key, const size_t val
   return args[1].iov_len /* done item count */;
 }
 
-/// end cxx_api @}
+//------------------------------------------------------------------------------
+
+//------------------------------------------------------------------------------
+
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const slice &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const pair &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const pair_result &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const env::geometry::size &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const env::geometry &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const env::operate_parameters &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const env::mode &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const env::durability &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const env::reclaiming_options &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const env::operate_options &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const env_managed::create_parameters &);
+
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const MDBX_log_level_t &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const MDBX_debug_flags_t &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const error &);
+
+inline ::std::ostream &operator<<(::std::ostream &out, const MDBX_error_t &errcode) { return out << error(errcode); }
+
 } // namespace mdbx
 
 //------------------------------------------------------------------------------

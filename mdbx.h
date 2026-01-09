@@ -191,6 +191,8 @@ typedef mode_t mdbx_mode_t;
 #pragma warning(pop)
 #endif
 
+#define MDBX_AMALGAMATED_SOURCE 1
+
 /** end of c_api @}
  *
  * \defgroup api_macros Common Macros
@@ -368,7 +370,7 @@ typedef mode_t mdbx_mode_t;
 #else
 #define __dll_export
 #endif
-#elif defined(__GNUC__) || __has_attribute(__visibility__)
+#elif defined(__GNUC__) || defined(__clang__) || __has_attribute(__visibility__)
 #define __dll_export __attribute__((__visibility__("default")))
 #else
 #define __dll_export

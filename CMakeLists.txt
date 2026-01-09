@@ -13,9 +13,9 @@
 #
 # The next version is under active non-public development and will be released as MithrilDB and libmithrildb for
 # libraries & packages. Admittedly mythical Mithril is resembling silver but being stronger and lighter than steel.
-# Therefore MithrilDB is rightly relevant name.
-# MithrilDB will be radically different from libmdbx by the new database format and API based on C++20.
-# The goal of this revolution is to provide a clearer and robust API, add more features and new valuable properties.
+# Therefore MithrilDB is rightly relevant name. MithrilDB will be radically different from libmdbx by the new database
+# format and API based on C++20. The goal of this revolution is to provide a clearer and robust API, add more features
+# and new valuable properties.
 
 if(CMAKE_VERSION VERSION_LESS 3.8.2)
   cmake_minimum_required(VERSION 3.0.2)
@@ -54,23 +54,23 @@ endif()
 cmake_policy(SET CMP0054 NEW)
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION.json"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/COPYRIGHT"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/NOTICE"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/GNUmakefile"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.c"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.c++"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.h"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.h++"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_chk.c"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_copy.c"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_dump.c"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_load.c"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_stat.c"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_drop.c"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ntdll.def"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/config.h.in")
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/COPYRIGHT"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/NOTICE"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/GNUmakefile"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.c"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.c++"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.h"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.h++"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_chk.c"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_copy.c"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_dump.c"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_load.c"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_stat.c"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_drop.c"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ntdll.def"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/config.h.in")
   set(MDBX_AMALGAMATED_SOURCE TRUE)
   set(MDBX_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 else()
@@ -130,8 +130,7 @@ endif()
 # Try to find a C++ compiler unless sure that this is unnecessary.
 if(NOT CMAKE_CXX_COMPILER_LOADED)
   include(CheckLanguage)
-  if(NOT (DEFINED MDBX_BUILD_CXX AND NOT MDBX_BUILD_CXX)
-     OR NOT (DEFINED MDBX_ENABLE_TESTS AND NOT MDBX_ENABLE_TESTS))
+  if(NOT (DEFINED MDBX_BUILD_CXX AND NOT MDBX_BUILD_CXX) OR NOT (DEFINED MDBX_ENABLE_TESTS AND NOT MDBX_ENABLE_TESTS))
     check_language(CXX)
     if(CMAKE_CXX_COMPILER)
       enable_language(CXX)
@@ -348,7 +347,8 @@ if(NOT DEFINED MDBX_CXX_STANDARD)
   elseif(CXX_FALLBACK_GNU11 OR CXX_FALLBACK_11)
     set(MDBX_CXX_STANDARD 11)
   else()
-    message(NOTICE "The C++ example will be skipped, since C++20 standard is unavailable or C++ API of libmdbx was disabled.")
+    message(NOTICE
+            "The C++ example will be skipped, since C++20 standard is unavailable or C++ API of libmdbx was disabled.")
     set(MDBX_CXX_STANDARD 0)
   endif()
 endif()
@@ -520,8 +520,7 @@ else()
 endif()
 
 set(MDBX_CXX_AVAILABLE FALSE)
-if(CMAKE_CXX_COMPILER_LOADED
-   AND NOT MDBX_CXX_STANDARD LESS 11)
+if(CMAKE_CXX_COMPILER_LOADED AND NOT MDBX_CXX_STANDARD LESS 11)
   if(NOT MDBX_WITHOUT_MSVC_CRT
      AND NOT (CMAKE_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
      AND NOT (CMAKE_COMPILER_IS_CLANG AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 3.9)
@@ -573,7 +572,10 @@ else()
   if(NOT CMAKE_CURRENT_LIST_FILE)
     set(CMAKE_CURRENT_LIST_FILE "CMakeLists.txt")
   endif()
-  message(FATAL_ERROR "This \"${CMAKE_CURRENT_LIST_FILE}\" has been trimmed and is therefore intended only for build from an amalgamated form of the source code.")
+  message(
+    FATAL_ERROR
+      "This \"${CMAKE_CURRENT_LIST_FILE}\" has been trimmed and is therefore intended only for build from an amalgamated form of the source code."
+  )
 endif(MDBX_AMALGAMATED_SOURCE)
 
 if(MDBX_BUILD_CXX)
@@ -670,6 +672,12 @@ target_include_directories(mdbx-static INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
 
 # build shared library
 if(MDBX_BUILD_SHARED_LIBRARY)
+  if((MINGW OR MINGW64) AND MDBX_BUILD_CXX)
+    message(
+      WARNING
+        "Most MinGW versions have various problems with exporting and/or importing C++ template symbols instantiated in a DLL."
+    )
+  endif()
   add_library(mdbx SHARED ${LIBMDBX_SOURCES})
   set_target_properties(mdbx PROPERTIES PUBLIC_HEADER "${LIBMDBX_PUBLIC_HEADERS}")
   target_compile_definitions(
@@ -683,6 +691,24 @@ if(MDBX_BUILD_SHARED_LIBRARY)
       set_property(TARGET mdbx PROPERTY LINKER_FLAGS "/NODEFAULTLIB")
     else()
       set_property(TARGET mdbx PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    endif()
+  else()
+    include(CheckLinkerFlag)
+    check_linker_flag(C "LINKER:-z,combreloc" HAVE_LINKER_COMBRELOC)
+    check_linker_flag(C "LINKER:--gc-sections" HAVE_LINKER_GC_SECTIONS)
+    check_linker_flag(C "LINKER:-z,relro" HAVE_LINKER_Z_RELRO)
+    check_linker_flag(C "LINKER:-O1" HAVE_LINKER_O1)
+    if(HAVE_LINKER_COMBRELOC)
+      target_link_options(mdbx PRIVATE "LINKER:-z,combreloc")
+    endif()
+    if(HAVE_LINKER_GC_SECTIONS)
+      target_link_options(mdbx PRIVATE "LINKER:--gc-sections")
+    endif()
+    if(HAVE_LINKER_Z_RELRO)
+      target_link_options(mdbx PRIVATE "LINKER:-z,relro")
+    endif()
+    if(HAVE_LINKER_O1)
+      target_link_options(mdbx PRIVATE "LINKER:-O1")
     endif()
   endif()
   if(CC_HAS_VISIBILITY AND (LTO_ENABLED OR INTERPROCEDURAL_OPTIMIZATION))

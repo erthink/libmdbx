@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 3d0786aca27f270572b5c0bfe28f74832e60f52ff9ca5510d3449b4e443d594b_v0_14_1_256_g6e4093ad
+#define MDBX_BUILD_SOURCERY e3fe013d3a658998dc3699fe46d09a964e88cf22cb112e511bb52a55b3d18c7a_v0_14_1_264_g263e1192
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -1214,24 +1214,7 @@ typedef struct osal_mmap {
 
 #define MDBX_HAVE_PWRITEV 0
 
-MDBX_INTERNAL int osal_ntstatus2errcode(NTSTATUS status);
-
-static inline int osal_waitstatus2errcode(DWORD result) {
-  switch (result) {
-  case WAIT_OBJECT_0:
-    return MDBX_SUCCESS;
-  case WAIT_FAILED:
-    return (int)GetLastError();
-  case WAIT_ABANDONED:
-    return ERROR_ABANDONED_WAIT_0;
-  case WAIT_IO_COMPLETION:
-    return ERROR_USER_APC;
-  case WAIT_TIMEOUT:
-    return ERROR_TIMEOUT;
-  default:
-    return osal_ntstatus2errcode(result);
-  }
-}
+MDBX_INTERNAL int osal_waitstatus2errcode(DWORD result);
 
 #elif defined(__ANDROID_API__)
 
@@ -28991,7 +28974,7 @@ __hot struct node_search_result node_search(MDBX_cursor *mc, const MDBX_val *key
 #endif
 
 /* Map a result from an NTAPI call to WIN32 error code. */
-MDBX_INTERNAL int osal_ntstatus2errcode(NTSTATUS status) {
+static int osal_ntstatus2errcode(NTSTATUS status) {
   DWORD dummy;
   OVERLAPPED ov;
   memset(&ov, 0, sizeof(ov));
@@ -28999,6 +28982,23 @@ MDBX_INTERNAL int osal_ntstatus2errcode(NTSTATUS status) {
   /* Zap: '_Param_(1)' could be '0' */
   MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6387);
   return GetOverlappedResult(nullptr, &ov, &dummy, FALSE) ? MDBX_SUCCESS : (int)GetLastError();
+}
+
+MDBX_INTERNAL int osal_waitstatus2errcode(DWORD result) {
+  switch (result) {
+  case WAIT_OBJECT_0:
+    return MDBX_SUCCESS;
+  case WAIT_FAILED:
+    return (int)GetLastError();
+  case WAIT_ABANDONED:
+    return ERROR_ABANDONED_WAIT_0;
+  case WAIT_IO_COMPLETION:
+    return ERROR_USER_APC;
+  case WAIT_TIMEOUT:
+    return ERROR_TIMEOUT;
+  default:
+    return osal_ntstatus2errcode(result);
+  }
 }
 
 /* We use native NT APIs to setup the memory map, so that we can
@@ -40428,10 +40428,10 @@ __dll_export
         0,
         14,
         1,
-        256,
+        264,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.256 */
-        {"2026-01-07T15:15:51+03:00", "62e44b0432d3caeb13be585a6e41c2243e35fcaf", "6e4093ad3749c0d46f3585ef38c3a7260e5b2dd8", "v0.14.1-256-g6e4093ad"},
+                                        0.14.1.264 */
+        {"2026-01-10T00:56:27+03:00", "3b74227f70ae0007be3e48d94335423bc3c68942", "263e1192ba042b22bc152c237f375265e6ae1306", "v0.14.1-264-g263e1192"},
         sourcery};
 
 __dll_export
