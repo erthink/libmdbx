@@ -377,16 +377,20 @@ static MDBX_CXX20_CONSTEXPR int memcmp(const void *a, const void *b, size_t byte
 /// but it is recommended to use \ref polymorphic_allocator.
 using legacy_allocator = ::std::string::allocator_type;
 
-#ifndef MDBX_CXX_POLYMORPHIC_ALLOCATOR
-#if defined(DOXYGEN) || (defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L &&                 \
-                         (!defined(_GLIBCXX_USE_CXX11_ABI) || _GLIBCXX_USE_CXX11_ABI))
+/// \brief Defined as `1` if the `mdbx::polymorphic_allocator` is available.
+/// \see The `<memory_resource>` Standard C++17 library header
+#if defined(DOXYGEN)
+#define MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR 1
+#elif !defined(MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR)
+#if defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L &&                                      \
+    (!defined(_GLIBCXX_USE_CXX11_ABI) || _GLIBCXX_USE_CXX11_ABI)
 #define MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR 1
 #else
 #define MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR 0
 #endif
 #endif /* MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR */
 
-#if MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR
+#if defined(DOXYGEN) || MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR
 /// \brief Default polymorphic allocator for modern code.
 using polymorphic_allocator = ::std::pmr::string::allocator_type;
 using default_allocator = polymorphic_allocator;
@@ -605,26 +609,22 @@ MDBX_DECLARE_EXCEPTION(mvcc_retarded);
 [[noreturn]] LIBMDBX_API void throw_allocators_mismatch();
 [[noreturn]] LIBMDBX_API void throw_bad_value_size();
 [[noreturn]] LIBMDBX_API void throw_incomparable_cursors();
-static MDBX_CXX14_CONSTEXPR size_t check_length(size_t bytes);
-static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom, size_t payload);
-static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom, size_t payload, size_t tailroom);
+
+static MDBX_CXX14_CONSTEXPR size_t check_length(size_t bytes) {
+  if (MDBX_UNLIKELY(bytes > size_t(MDBX_MAXDATASIZE)))
+    MDBX_CXX20_UNLIKELY throw_max_length_exceeded();
+  return bytes;
+}
+
+static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom, size_t payload) {
+  return check_length(check_length(headroom) + check_length(payload));
+}
+
+MDBX_MAYBE_UNUSED static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom, size_t payload, size_t tailroom) {
+  return check_length(check_length(headroom, payload) + check_length(tailroom));
+}
 
 /// end of cxx_exceptions @}
-
-//------------------------------------------------------------------------------
-
-/// \brief Cache entry for get-cached API (initial draft).
-class cache_entry : public MDBX_cache_entry_t {
-public:
-  cache_entry() noexcept { reset(); }
-  cache_entry(const cache_entry &) noexcept = default;
-  cache_entry &operator=(const cache_entry &) noexcept = default;
-  cache_entry(cache_entry &&other) noexcept {
-    *this = other;
-    other.reset();
-  }
-  void reset() noexcept { mdbx_cache_init(this); }
-};
 
 //------------------------------------------------------------------------------
 
@@ -1168,20 +1168,6 @@ concept SliceTranscoder = ImmutableByteProducer<T> && requires(const slice &sour
 
 #endif /* MDBX_HAVE_CXX20_CONCEPTS */
 
-template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy,
-          MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)>
-inline buffer<ALLOCATOR, CAPACITY_POLICY> make_buffer(PRODUCER &producer, const ALLOCATOR &alloc = ALLOCATOR());
-
-template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy,
-          MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)>
-inline buffer<ALLOCATOR, CAPACITY_POLICY> make_buffer(const PRODUCER &producer, const ALLOCATOR &alloc = ALLOCATOR());
-
-template <class ALLOCATOR = default_allocator, MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)>
-inline string<ALLOCATOR> make_string(PRODUCER &producer, const ALLOCATOR &alloc = ALLOCATOR());
-
-template <class ALLOCATOR = default_allocator, MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)>
-inline string<ALLOCATOR> make_string(const PRODUCER &producer, const ALLOCATOR &alloc = ALLOCATOR());
-
 /// \brief Hexadecimal encoder which satisfy \ref SliceTranscoder concept.
 struct LIBMDBX_API to_hex {
   const slice source;
@@ -1194,15 +1180,11 @@ struct LIBMDBX_API to_hex {
 
   /// \brief Returns a string with a hexadecimal dump of a passed slice.
   template <class ALLOCATOR = default_allocator>
-  string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_string<ALLOCATOR>(*this, alloc);
-  }
+  inline string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns a buffer with a hexadecimal dump of a passed slice.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
-  buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_buffer<ALLOCATOR>(*this, alloc);
-  }
+  inline buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns the buffer size in bytes needed for hexadecimal
   /// dump of a passed slice.
@@ -1241,16 +1223,12 @@ struct LIBMDBX_API to_base58 {
   /// \brief Returns a string with a
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of a passed slice.
   template <class ALLOCATOR = default_allocator>
-  string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_string<ALLOCATOR>(*this, alloc);
-  }
+  inline string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns a buffer with a
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of a passed slice.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
-  buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_buffer<ALLOCATOR>(*this, alloc);
-  }
+  inline buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns the buffer size in bytes needed for
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of passed slice.
@@ -1287,16 +1265,12 @@ struct LIBMDBX_API to_base64 {
   /// \brief Returns a string with a
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump of a passed slice.
   template <class ALLOCATOR = default_allocator>
-  string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_string<ALLOCATOR>(*this, alloc);
-  }
+  inline string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns a buffer with a
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump of a passed slice.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
-  buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_buffer<ALLOCATOR>(*this, alloc);
-  }
+  inline buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns the buffer size in bytes needed for
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump of passed slice.
@@ -1335,15 +1309,11 @@ struct LIBMDBX_API from_hex {
 
   /// \brief Decodes hexadecimal dump from a passed slice to returned string.
   template <class ALLOCATOR = default_allocator>
-  string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_string<ALLOCATOR>(*this, alloc);
-  }
+  inline string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Decodes hexadecimal dump from a passed slice to returned buffer.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
-  buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_buffer<ALLOCATOR>(*this, alloc);
-  }
+  inline buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns the number of bytes needed for conversion
   /// hexadecimal dump from a passed slice to decoded data.
@@ -1374,16 +1344,12 @@ struct LIBMDBX_API from_base58 {
   /// \brief Decodes [Base58](https://en.wikipedia.org/wiki/Base58) dump from a
   /// passed slice to returned string.
   template <class ALLOCATOR = default_allocator>
-  string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_string<ALLOCATOR>(*this, alloc);
-  }
+  inline string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Decodes [Base58](https://en.wikipedia.org/wiki/Base58) dump from a
   /// passed slice to returned buffer.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
-  buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_buffer<ALLOCATOR>(*this, alloc);
-  }
+  inline buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns the number of bytes needed for conversion
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump from a passed slice to decoded data.
@@ -1417,16 +1383,12 @@ struct LIBMDBX_API from_base64 {
   /// \brief Decodes [Base64](https://en.wikipedia.org/wiki/Base64) dump from a
   /// passed slice to returned string.
   template <class ALLOCATOR = default_allocator>
-  string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_string<ALLOCATOR>(*this, alloc);
-  }
+  inline string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Decodes [Base64](https://en.wikipedia.org/wiki/Base64) dump from a
   /// passed slice to returned buffer.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
-  buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_buffer<ALLOCATOR>(*this, alloc);
-  }
+  inline buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns the number of bytes needed for conversion
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump from a passed slice to decoded data.
@@ -2795,6 +2757,21 @@ template <typename ALLOCATOR, typename CAPACITY_POLICY> struct buffer_pair_spec 
 };
 
 /// end of cxx_data @}
+
+/// \brief Cache entry for get-cached API (initial draft).
+class cache_entry : public MDBX_cache_entry_t {
+public:
+  cache_entry() noexcept { reset(); }
+  cache_entry(const cache_entry &) noexcept = default;
+  cache_entry &operator=(const cache_entry &) noexcept = default;
+  cache_entry(cache_entry &&other) noexcept {
+    *this = other;
+    other.reset();
+  }
+  void reset() noexcept { mdbx_cache_init(this); }
+};
+
+//------------------------------------------------------------------------------
 
 /// \brief Loop control constants for readers enumeration functor and other
 /// cases. \see env::enumerate_readers()
@@ -4611,20 +4588,6 @@ MDBX_CXX11_CONSTEXPR_ENUM mdbx::value_mode map_handle::info::value_mode() const 
   return ::mdbx::value_mode(flags & (MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_DUPFIXED | MDBX_INTEGERDUP));
 }
 
-static MDBX_CXX14_CONSTEXPR size_t check_length(size_t bytes) {
-  if (MDBX_UNLIKELY(bytes > size_t(MDBX_MAXDATASIZE)))
-    MDBX_CXX20_UNLIKELY throw_max_length_exceeded();
-  return bytes;
-}
-
-static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom, size_t payload) {
-  return check_length(check_length(headroom) + check_length(payload));
-}
-
-MDBX_MAYBE_UNUSED static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom, size_t payload, size_t tailroom) {
-  return check_length(check_length(headroom, payload) + check_length(tailroom));
-}
-
 inline bool exception_thunk::is_clean() const noexcept { return !captured_; }
 
 inline void exception_thunk::capture() noexcept {
@@ -4992,21 +4955,16 @@ MDBX_CXX20_CONSTEXPR buffer<ALLOCATOR, CAPACITY_POLICY>::buffer(const struct sli
 }
 
 template <class ALLOCATOR, typename CAPACITY_POLICY>
-inline buffer<ALLOCATOR, CAPACITY_POLICY>::buffer(const txn &txn, const struct slice &src, const allocator_type &alloc)
-    : buffer(src, !txn.is_dirty(src.data()), alloc) {}
+inline buffer<ALLOCATOR, CAPACITY_POLICY>::buffer(const txn &transaction, const struct slice &src,
+                                                  const allocator_type &alloc)
+    : buffer(src, !transaction.is_dirty(src.data()), alloc) {}
 
 template <class ALLOCATOR, typename CAPACITY_POLICY>
 inline ::std::ostream &operator<<(::std::ostream &out, const buffer<ALLOCATOR, CAPACITY_POLICY> &it) {
   return (it.is_freestanding() ? out << "buf-" << it.headroom() << "." << it.tailroom() : out << "ref-") << it.slice();
 }
 
-#if (defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)) &&                                            \
-    (defined(MDBX_EXPORTS) || defined(MDBX_IMPORTS))
-#info                                                                                                                  \
-    "Most MinGW versions have various problems with exporting and/or importing C++ template symbols instantiated in a DLL."
-#endif /* MinGW */
-
-#if !(defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)) || defined(MDBX_EXPORTS)
+#if !(defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)) || defined(LIBMDBX_EXPORTS)
 MDBX_EXTERN_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<legacy_allocator, default_capacity_policy>);
 
 #if MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR
@@ -5061,6 +5019,60 @@ inline string<ALLOCATOR> make_string(const PRODUCER &producer, const ALLOCATOR &
       result.resize(producer.write_bytes(const_cast<char *>(result.data()), result.capacity()) - result.data());
     }
   return result;
+}
+
+template <class ALLOCATOR> string<ALLOCATOR> to_hex::as_string(const ALLOCATOR &alloc) const {
+  return make_string<ALLOCATOR>(*this, alloc);
+}
+
+template <class ALLOCATOR, typename CAPACITY_POLICY>
+buffer<ALLOCATOR, CAPACITY_POLICY> to_hex::as_buffer(const ALLOCATOR &alloc) const {
+  return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
+}
+
+template <class ALLOCATOR> string<ALLOCATOR> to_base58::as_string(const ALLOCATOR &alloc) const {
+  return make_string<ALLOCATOR>(*this, alloc);
+}
+
+template <class ALLOCATOR, typename CAPACITY_POLICY>
+buffer<ALLOCATOR, CAPACITY_POLICY> to_base58::as_buffer(const ALLOCATOR &alloc) const {
+  return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
+}
+
+template <class ALLOCATOR> string<ALLOCATOR> to_base64::as_string(const ALLOCATOR &alloc) const {
+  return make_string<ALLOCATOR>(*this, alloc);
+}
+
+template <class ALLOCATOR, typename CAPACITY_POLICY>
+buffer<ALLOCATOR, CAPACITY_POLICY> to_base64::as_buffer(const ALLOCATOR &alloc) const {
+  return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
+}
+
+template <class ALLOCATOR> string<ALLOCATOR> from_hex::as_string(const ALLOCATOR &alloc) const {
+  return make_string<ALLOCATOR>(*this, alloc);
+}
+
+template <class ALLOCATOR, typename CAPACITY_POLICY>
+buffer<ALLOCATOR, CAPACITY_POLICY> from_hex::as_buffer(const ALLOCATOR &alloc) const {
+  return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
+}
+
+template <class ALLOCATOR> string<ALLOCATOR> from_base58::as_string(const ALLOCATOR &alloc) const {
+  return make_string<ALLOCATOR>(*this, alloc);
+}
+
+template <class ALLOCATOR, typename CAPACITY_POLICY>
+buffer<ALLOCATOR, CAPACITY_POLICY> from_base58::as_buffer(const ALLOCATOR &alloc) const {
+  return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
+}
+
+template <class ALLOCATOR> string<ALLOCATOR> from_base64::as_string(const ALLOCATOR &alloc) const {
+  return make_string<ALLOCATOR>(*this, alloc);
+}
+
+template <class ALLOCATOR, typename CAPACITY_POLICY>
+buffer<ALLOCATOR, CAPACITY_POLICY> from_base64::as_buffer(const ALLOCATOR &alloc) const {
+  return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
 }
 
 template <class ALLOCATOR>
@@ -6376,8 +6388,6 @@ inline size_t cursor::put_multiple_samelength(const slice &key, const size_t val
 
 //------------------------------------------------------------------------------
 
-//------------------------------------------------------------------------------
-
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const slice &);
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const pair &);
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const pair_result &);
@@ -6396,6 +6406,8 @@ LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const error &);
 
 inline ::std::ostream &operator<<(::std::ostream &out, const MDBX_error_t &errcode) { return out << error(errcode); }
 
+/// end cxx_api @}
+
 } // namespace mdbx
 
 //------------------------------------------------------------------------------
@@ -6403,9 +6415,6 @@ inline ::std::ostream &operator<<(::std::ostream &out, const MDBX_error_t &errco
 /// \brief The `std:: namespace part of libmdbx C++ API
 /// \ingroup cxx_api
 namespace std {
-
-/// \defgroup cxx_api C++ API
-/// @{
 
 inline string to_string(const ::mdbx::slice &value) {
   ostringstream out;
@@ -6517,7 +6526,6 @@ template <class ALLOCATOR, typename CAPACITY_POLICY> struct hash<::mdbx::buffer<
   }
 };
 
-/// end cxx_api @}
 } // namespace std
 
 #if defined(__LCC__) && __LCC__ >= 126
