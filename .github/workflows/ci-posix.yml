@@ -1,0 +1,34 @@
+name: ci-posix
+
+env:
+  CI: GITHUB
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+on: [push]
+
+jobs:
+  ci-job:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14, macos-26]
+        build-type: [Debug, Release]
+#        alloy: [ON, OFF]
+        cxx: [ON, OFF]
+#        exclude:
+#          - os: macos-14
+#            cxx: OFF
+#            alloy: ON
+    steps:
+    - uses: actions/checkout@v4
+    - name: ci-step
+      shell: bash
+      run: |
+        export CI_MAKE_TARGET=$(if [ "$(uname)" = 'Linux' ]; then echo 'check'; elif [ "${{ matrix.build-type }}" != 'Debug' ]; then echo 'test'; else echo 'smoke'; fi) && \
+        export MDBX_BUILD_OPTIONS=$(if [ "${{ matrix.build-type }}" = 'Debug' ]; then echo '-DMDBX_FORCE_ASSERTIONS=1'; else echo '-DNDEBUG=1'; fi) && \
+        export MDBX_BUILD_CXX=$(if [ "${{ matrix.cxx }}" = 'ON' ]; then echo 'YES'; else echo 'NO'; fi) && \
+        . ci.sh "-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DMDBX_BUILD_CXX:BOOL=${{ matrix.cxx }}"
