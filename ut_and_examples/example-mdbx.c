@@ -1,8 +1,8 @@
-/* The example of using the libmdbx C API.
+/** \file The example of using the libmdbx C API.
  * However, it is strongly recommended to use the modern C++ API, which requires less effort
  * and insures against many errors related to resource leaks.
  *
- * If you have already used Berkeley DB,
+ * \note If you have already used Berkeley DB,
  * it will be useful to make a line-by-line comparison of this example and the sample-bdb.txt
  */
 

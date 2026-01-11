@@ -2,7 +2,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 /* clang-format off */
 
-#define MDBX_BUILD_SOURCERY b8f344d280d93384d5ac4da3de0f16c1608446e16a84dbb9a25b9443b0d797cd_v0_13_10_23_g1ee6a154
+#define MDBX_BUILD_SOURCERY 1dd9041024641ca497b8e16e3035423a10d4844487f0bca0330ed3dd00c857f4_v0_13_10_36_g834438ea
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -1198,24 +1198,7 @@ typedef struct osal_mmap {
 
 #define MDBX_HAVE_PWRITEV 0
 
-MDBX_INTERNAL int osal_ntstatus2errcode(NTSTATUS status);
-
-static inline int osal_waitstatus2errcode(DWORD result) {
-  switch (result) {
-  case WAIT_OBJECT_0:
-    return MDBX_SUCCESS;
-  case WAIT_FAILED:
-    return (int)GetLastError();
-  case WAIT_ABANDONED:
-    return ERROR_ABANDONED_WAIT_0;
-  case WAIT_IO_COMPLETION:
-    return ERROR_USER_APC;
-  case WAIT_TIMEOUT:
-    return ERROR_TIMEOUT;
-  default:
-    return osal_ntstatus2errcode(result);
-  }
-}
+MDBX_INTERNAL int osal_waitstatus2errcode(DWORD result);
 
 #elif defined(__ANDROID_API__)
 
@@ -3687,6 +3670,7 @@ bool slice::is_printable(bool disable_utf8) const noexcept {
   enum : byte {
     LS = 4,                     // shift for UTF8 sequence length
     P_ = 1 << LS,               // printable ASCII flag
+    X_ = 1 << (LS - 1),         // printable extended ASCII flag
     N_ = 0,                     // non-printable ASCII
     second_range_mask = P_ - 1, // mask for range flag
     r80_BF = 0,                 // flag for UTF8 2nd byte range
@@ -3723,14 +3707,14 @@ bool slice::is_printable(bool disable_utf8) const noexcept {
       P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, // 50
       P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, // 60
       P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, N_, // 70
-      N_, N_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, N_, P_, N_, // 80
-      N_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, N_, P_, P_, // 90
-      P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, // a0
-      P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, // b0
-      P_, P_, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, // c0
+      N_, N_, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, N_, X_, N_, // 80
+      N_, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, N_, X_, X_, // 90
+      X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, // a0
+      X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, // b0
+      X_, X_, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, // c0
       C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, // df
       E0, E1, E1, E1, E1, E1, E1, E1, E1, E1, E1, E1, E1, ED, EE, EE, // e0
-      F0, F1, F1, F1, F4, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_  // f0
+      F0, F1, F1, F1, F4, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_, X_  // f0
   };
 
   if (MDBX_UNLIKELY(length() < 1))
@@ -3740,7 +3724,7 @@ bool slice::is_printable(bool disable_utf8) const noexcept {
   const auto end = src + length();
   if (MDBX_UNLIKELY(disable_utf8)) {
     do
-      if (MDBX_UNLIKELY((P_ & map[*src]) == 0))
+      if (MDBX_UNLIKELY(((P_ | X_) & map[*src]) == 0))
         MDBX_CXX20_UNLIKELY return false;
     while (++src < end);
     return true;
@@ -4433,9 +4417,9 @@ bool from_base64::is_erroneous() const noexcept {
 
 MDBX_INSTALL_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<legacy_allocator>);
 
-#if defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L && _GLIBCXX_USE_CXX11_ABI
+#if MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR
 MDBX_INSTALL_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<polymorphic_allocator>);
-#endif /* __cpp_lib_memory_resource >= 201603L */
+#endif /* MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR */
 
 #if defined(_MSC_VER)
 #pragma warning(pop)
@@ -4869,13 +4853,13 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const slice &it) {
   else if (it.empty())
     out << "EMPTY->" << it.data();
   else {
-    const slice root(it.head(std::min(it.length(), size_t(64))));
+    const slice head(it.head(std::min(it.length(), size_t(64))));
     out << it.length() << ".";
-    if (root.is_printable())
-      (out << "\"").write(root.char_ptr(), root.length()) << "\"";
+    if (head.is_printable())
+      (out << "\"").write(head.char_ptr(), head.length()) << "\"";
     else
-      out << root.encode_base58();
-    if (root.length() < it.length())
+      out << to_hex(head);
+    if (head.length() < it.length())
       out << "...";
   }
   return out << "}";

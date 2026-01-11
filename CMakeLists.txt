@@ -357,7 +357,8 @@ if(NOT DEFINED MDBX_CXX_STANDARD)
   elseif(CXX_FALLBACK_GNU11 OR CXX_FALLBACK_11)
     set(MDBX_CXX_STANDARD 11)
   else()
-    set(MDBX_CXX_STANDARD 98)
+    message(NOTICE "The C++ example will be skipped, since C++20 standard is unavailable or C++ API of libmdbx was disabled.")
+    set(MDBX_CXX_STANDARD 0)
   endif()
 endif()
 
@@ -529,7 +530,6 @@ endif()
 
 set(MDBX_CXX_AVAILABLE FALSE)
 if(CMAKE_CXX_COMPILER_LOADED
-   AND MDBX_CXX_STANDARD LESS 83
    AND NOT MDBX_CXX_STANDARD LESS 11)
   if(NOT MDBX_WITHOUT_MSVC_CRT
      AND NOT (CMAKE_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
@@ -552,7 +552,7 @@ if(CMAKE_CXX_COMPILER_LOADED
   endif()
 else()
   if(DEFINED MDBX_BUILD_CXX AND MDBX_BUILD_CXX)
-    message(WARNING "MDBX_BUILD_CXX=${MDBX_BUILD_CXX}: But there is no suitable C++ compiler available.")
+    message(WARNING "MDBX_BUILD_CXX=${MDBX_BUILD_CXX}: But there is no suitable C++11 compiler available.")
   endif()
   set(MDBX_ENABLE_TESTS OFF)
   set(MDBX_BUILD_CXX OFF)
