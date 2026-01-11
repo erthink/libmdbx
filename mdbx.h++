@@ -374,14 +374,22 @@ static MDBX_CXX20_CONSTEXPR int memcmp(const void *a, const void *b, size_t byte
 /// but it is recommended to use \ref polymorphic_allocator.
 using legacy_allocator = ::std::string::allocator_type;
 
-#if defined(DOXYGEN) ||                                                                                                \
-    (defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L && _GLIBCXX_USE_CXX11_ABI)
+#ifndef MDBX_CXX_POLYMORPHIC_ALLOCATOR
+#if defined(DOXYGEN) || (defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L &&                 \
+                         (!defined(_GLIBCXX_USE_CXX11_ABI) || _GLIBCXX_USE_CXX11_ABI))
+#define MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR 1
+#else
+#define MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR 0
+#endif
+#endif /* MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR */
+
+#if MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR
 /// \brief Default polymorphic allocator for modern code.
 using polymorphic_allocator = ::std::pmr::string::allocator_type;
 using default_allocator = polymorphic_allocator;
 #else
 using default_allocator = legacy_allocator;
-#endif /* __cpp_lib_memory_resource >= 201603L */
+#endif /* MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR */
 
 struct slice;
 struct default_capacity_policy;
@@ -1552,11 +1560,16 @@ private:
 #endif /* __cpp_lib_to_address */
     }
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4324) /* structure was padded due to alignment specifier */
+#endif                          /* _MSC_VER */
+
     union alignas(max_align_t) bin {
       struct stub_allocated_holder /* используется только для вычисления (минимального необходимого) размера,
                                       с учетом выравнивания */
       {
-        allocator_pointer ptr_;
+        allocator_pointer stub_ptr_;
         size_t stub_capacity_bytes_;
       };
 
@@ -1655,6 +1668,10 @@ private:
       }
       constexpr size_t capacity() const noexcept { return is_inplace() ? inplace_capacity() : capacity_.bytes_; }
     } bin_;
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif /* _MSC_VER */
 
     constexpr bool is_inplace(const void *ptr) const noexcept { return bin_.is_inplace(ptr); }
 
@@ -2823,9 +2840,9 @@ inline string<ALLOCATOR> make_string(const PRODUCER &producer, const ALLOCATOR &
 
 MDBX_EXTERN_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<legacy_allocator>);
 
-#if defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L && _GLIBCXX_USE_CXX11_ABI
+#if MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR
 MDBX_EXTERN_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<polymorphic_allocator>);
-#endif /* __cpp_lib_memory_resource >= 201603L */
+#endif /* MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR */
 
 /// \brief Combines data slice with boolean flag to represent result of certain operations.
 struct value_result {

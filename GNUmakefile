@@ -287,7 +287,7 @@ ctest: cmake-build
 run-ut: mdbx_example
 	$(QUIET)for UT in $^; do echo "  Running $$UT" && ./$${UT} || exit -1; done
 
-TEST_TARGETS := mdbx_example
+TEST_TARGETS := mdbx_legacy_example $(call select_by,MDBX_BUILD_CXX,mdbx_modern_example,)
 TEST_BUILD_TARGETS := build-test
 ifneq ($(CMAKE),"")
 TEST_TARGETS += ctest
@@ -313,9 +313,13 @@ test-leak:
 	@echo '  RE-TEST with `-fsanitize=leak` option...'
 	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-fsanitize=leak" test
 
-mdbx_example: mdbx.h ut_and_examples/example-mdbx.c libmdbx.$(SO_SUFFIX)
+mdbx_legacy_example: mdbx.h ut_and_examples/example-mdbx.c libmdbx.$(SO_SUFFIX)
 	@echo '  CC+LD $@'
 	$(QUIET)$(CC) $(CFLAGS) -I. ut_and_examples/example-mdbx.c ./libmdbx.$(SO_SUFFIX) -o $@
+
+mdbx_modern_example: mdbx.h ut_and_examples/example-mdbx.c++ libmdbx.$(SO_SUFFIX)
+	@echo '  CC+LD $@'
+	$(QUIET)$(CXX) $(CXXFLAGS) -I. ut_and_examples/example-mdbx.c++ ./libmdbx.$(SO_SUFFIX) -o $@
 
 ################################################################################
 # Amalgamated source code, i.e. distributed after `make dist`

@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY b8f344d280d93384d5ac4da3de0f16c1608446e16a84dbb9a25b9443b0d797cd_v0_13_10_23_g1ee6a154
+#define MDBX_BUILD_SOURCERY 1dd9041024641ca497b8e16e3035423a10d4844487f0bca0330ed3dd00c857f4_v0_13_10_36_g834438ea
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -1200,24 +1200,7 @@ typedef struct osal_mmap {
 
 #define MDBX_HAVE_PWRITEV 0
 
-MDBX_INTERNAL int osal_ntstatus2errcode(NTSTATUS status);
-
-static inline int osal_waitstatus2errcode(DWORD result) {
-  switch (result) {
-  case WAIT_OBJECT_0:
-    return MDBX_SUCCESS;
-  case WAIT_FAILED:
-    return (int)GetLastError();
-  case WAIT_ABANDONED:
-    return ERROR_ABANDONED_WAIT_0;
-  case WAIT_IO_COMPLETION:
-    return ERROR_USER_APC;
-  case WAIT_TIMEOUT:
-    return ERROR_TIMEOUT;
-  default:
-    return osal_ntstatus2errcode(result);
-  }
-}
+MDBX_INTERNAL int osal_waitstatus2errcode(DWORD result);
 
 #elif defined(__ANDROID_API__)
 
@@ -13299,8 +13282,8 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
       goto done;
     }
 
-    /* Preserve space for spill list to avoid parent's state corruption
-     * if allocation fails. */
+    /* Preserve space for parent->tw.repnl and spill list to avoid parent's
+     * state corruption if allocation fails. */
     const size_t parent_retired_len = (uintptr_t)parent->tw.retired_pages;
     tASSERT(txn, parent_retired_len <= MDBX_PNL_GETSIZE(txn->tw.retired_pages));
     const size_t retired_delta = MDBX_PNL_GETSIZE(txn->tw.retired_pages) - parent_retired_len;
@@ -27748,7 +27731,7 @@ __hot struct node_search_result node_search(MDBX_cursor *mc, const MDBX_val *key
 #endif
 
 /* Map a result from an NTAPI call to WIN32 error code. */
-MDBX_INTERNAL int osal_ntstatus2errcode(NTSTATUS status) {
+static int osal_ntstatus2errcode(NTSTATUS status) {
   DWORD dummy;
   OVERLAPPED ov;
   memset(&ov, 0, sizeof(ov));
@@ -27756,6 +27739,23 @@ MDBX_INTERNAL int osal_ntstatus2errcode(NTSTATUS status) {
   /* Zap: '_Param_(1)' could be '0' */
   MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6387);
   return GetOverlappedResult(nullptr, &ov, &dummy, FALSE) ? MDBX_SUCCESS : (int)GetLastError();
+}
+
+MDBX_INTERNAL int osal_waitstatus2errcode(DWORD result) {
+  switch (result) {
+  case WAIT_OBJECT_0:
+    return MDBX_SUCCESS;
+  case WAIT_FAILED:
+    return (int)GetLastError();
+  case WAIT_ABANDONED:
+    return ERROR_ABANDONED_WAIT_0;
+  case WAIT_IO_COMPLETION:
+    return ERROR_USER_APC;
+  case WAIT_TIMEOUT:
+    return ERROR_TIMEOUT;
+  default:
+    return osal_ntstatus2errcode(result);
+  }
 }
 
 /* We use native NT APIs to setup the memory map, so that we can
@@ -36064,7 +36064,8 @@ void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t parent_
                         (parent->parent ? parent->parent->tw.dirtyroom : parent->env->options.dp_limit));
   }
 
-  /* Remove reclaimed pages from parent's dirty list */
+  /* Remove reclaimed pages from parent's dirty list.
+   * Here the nested->tw.repnl was already moved into parent->tw.repnl ans space was reserved via retired_delta. */
   const pnl_t reclaimed_list = parent->tw.repnl;
   dpl_sift(parent, reclaimed_list, false);
 
@@ -36120,6 +36121,7 @@ void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t parent_
 
     DEBUG("reclaim retired parent's %u -> %zu %s page %" PRIaPGNO, npages, l, kind, pgno);
     int err = pnl_insert_span(&parent->tw.repnl, pgno, l);
+    /* The space for additions to parent->tw.repnl was already reserverd via the retired_delta. */
     ENSURE(txn->env, err == MDBX_SUCCESS);
   }
   MDBX_PNL_SETSIZE(parent->tw.retired_pages, w);
@@ -37559,10 +37561,10 @@ __dll_export
         0,
         13,
         10,
-        23,
+        36,
         "", /* pre-release suffix of SemVer
-                                        0.13.10.23 */
-        {"2026-01-05T23:40:46+03:00", "4c075f98e331edd206ff47243ae6ab7131888e4a", "1ee6a15474f33baf8d50313594392c6b98cb0024", "v0.13.10-23-g1ee6a154"},
+                                        0.13.10.36 */
+        {"2026-01-11T22:37:00+03:00", "171354351e4bb58c503b4de83a1d5f63c691c37f", "834438ea7ac1a76089c608a82f2290c8390a90f4", "v0.13.10-36-g834438ea"},
         sourcery};
 
 __dll_export
