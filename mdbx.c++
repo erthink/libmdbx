@@ -2,7 +2,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 /* clang-format off */
 
-#define MDBX_BUILD_SOURCERY 1dd9041024641ca497b8e16e3035423a10d4844487f0bca0330ed3dd00c857f4_v0_13_10_36_g834438ea
+#define MDBX_BUILD_SOURCERY 309b6afb2178139cd46b89e5f3526dc4052afb2dc55f8e211db56f73edbd6dad_v0_13_10_37_g3d10d4df
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -4415,10 +4415,10 @@ bool from_base64::is_erroneous() const noexcept {
 #pragma warning(disable : 4251)
 #endif /* MSVC */
 
-MDBX_INSTALL_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<legacy_allocator>);
+MDBX_INSTALL_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<legacy_allocator, default_capacity_policy>);
 
 #if MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR
-MDBX_INSTALL_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<polymorphic_allocator>);
+MDBX_INSTALL_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<polymorphic_allocator, default_capacity_policy>);
 #endif /* MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR */
 
 #if defined(_MSC_VER)

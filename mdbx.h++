@@ -122,13 +122,11 @@
 #endif
 
 #if !defined(_MSC_VER) || defined(__clang__)
-/* adequate compilers */
-#define MDBX_EXTERN_API_TEMPLATE(API_ATTRIBUTES, API_TYPENAME) extern template class API_ATTRIBUTES API_TYPENAME
-#define MDBX_INSTALL_API_TEMPLATE(API_ATTRIBUTES, API_TYPENAME) template class API_TYPENAME
+#define MDBX_EXTERN_API_TEMPLATE(API_ATTRIBUTES, ...) extern template class API_ATTRIBUTES __VA_ARGS__
+#define MDBX_INSTALL_API_TEMPLATE(API_ATTRIBUTES, ...) template class __VA_ARGS__
 #else
-/* stupid microsoft showing off */
-#define MDBX_EXTERN_API_TEMPLATE(API_ATTRIBUTES, API_TYPENAME) extern template class API_TYPENAME
-#define MDBX_INSTALL_API_TEMPLATE(API_ATTRIBUTES, API_TYPENAME) template class API_ATTRIBUTES API_TYPENAME
+#define MDBX_EXTERN_API_TEMPLATE(API_ATTRIBUTES, ...) extern template class __VA_ARGS__
+#define MDBX_INSTALL_API_TEMPLATE(API_ATTRIBUTES, ...) template class API_ATTRIBUTES __VA_ARGS__
 #endif
 
 #if __cplusplus >= 201103L
@@ -1243,7 +1241,7 @@ struct LIBMDBX_API to_hex {
   /// \brief Returns a buffer with a hexadecimal dump of a passed slice.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
   buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &allocator = ALLOCATOR()) const {
-    return make_buffer<ALLOCATOR>(*this, allocator);
+    return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, allocator);
   }
 
   /// \brief Returns the buffer size in bytes needed for hexadecimal
@@ -1291,7 +1289,7 @@ struct LIBMDBX_API to_base58 {
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of a passed slice.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
   buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &allocator = ALLOCATOR()) const {
-    return make_buffer<ALLOCATOR>(*this, allocator);
+    return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, allocator);
   }
 
   /// \brief Returns the buffer size in bytes needed for
@@ -1337,7 +1335,7 @@ struct LIBMDBX_API to_base64 {
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump of a passed slice.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
   buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &allocator = ALLOCATOR()) const {
-    return make_buffer<ALLOCATOR>(*this, allocator);
+    return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, allocator);
   }
 
   /// \brief Returns the buffer size in bytes needed for
@@ -1388,7 +1386,7 @@ struct LIBMDBX_API from_hex {
   /// \brief Decodes hexadecimal dump from a passed slice to returned buffer.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
   buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &allocator = ALLOCATOR()) const {
-    return make_buffer<ALLOCATOR>(*this, allocator);
+    return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, allocator);
   }
 
   /// \brief Returns the number of bytes needed for conversion
@@ -1428,7 +1426,7 @@ struct LIBMDBX_API from_base58 {
   /// passed slice to returned buffer.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
   buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &allocator = ALLOCATOR()) const {
-    return make_buffer<ALLOCATOR>(*this, allocator);
+    return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, allocator);
   }
 
   /// \brief Returns the number of bytes needed for conversion
@@ -1471,7 +1469,7 @@ struct LIBMDBX_API from_base64 {
   /// passed slice to returned buffer.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
   buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &allocator = ALLOCATOR()) const {
-    return make_buffer<ALLOCATOR>(*this, allocator);
+    return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, allocator);
   }
 
   /// \brief Returns the number of bytes needed for conversion
@@ -2838,11 +2836,13 @@ inline string<ALLOCATOR> make_string(const PRODUCER &producer, const ALLOCATOR &
   return result;
 }
 
-MDBX_EXTERN_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<legacy_allocator>);
+#if !(defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)) || defined(LIBMDBX_EXPORTS)
+MDBX_EXTERN_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<legacy_allocator, default_capacity_policy>);
 
 #if MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR
-MDBX_EXTERN_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<polymorphic_allocator>);
+MDBX_EXTERN_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<polymorphic_allocator, default_capacity_policy>);
 #endif /* MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR */
+#endif /* !MinGW || MDBX_EXPORTS */
 
 /// \brief Combines data slice with boolean flag to represent result of certain operations.
 struct value_result {
