@@ -17,6 +17,7 @@ Appreciations:
 
  - [Erigon](https://erigon.tech/) for sponsorship.
  - [Cosmin Apreutesei](https://github.com/capr) for bug reporting.
+ - [Igor Ikonopistsev](https://github.com/ikonopistsev) for [NodeJS bindings](https://github.com/ikonopistsev/mdbxmou).
 
 Important:
 
@@ -31,7 +32,19 @@ Fixes:
 
  - Fixed non-closing of DBI descriptors for tables created in nested transactions when such transactions are aborted.
 
+ - Fixed MSVC warning C4324 for `buffer::silo::bin`.
+
+ - Added workaround for MinGW build failures of dll-enabled C++ API.
+
+Other:
+
  - Clarification and addition of documentation.
+
+ - Considering extended ASCII as non-printable if UTF8 enabled in C++ API.
+
+ - Using hex dump of `mdbx::slice` instead of base58 in C++ API.
+
+ - Added link to [`mdbxmou`](https://github.com/ikonopistsev/mdbxmou) bindings for NodeJS.
 
 --------------------------------------------------------------------------------
 
