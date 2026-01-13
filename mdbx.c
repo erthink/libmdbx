@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY bd2d8206ee812652f687686a215850733da5cbc28be172e8f20172950e518fa4_v0_14_1_265_g75bba4d9
+#define MDBX_BUILD_SOURCERY 8a06f0c4cc0970a7ca0f7b1a6da5057c1fb1db12bf3667a33ec61a521593ff4e_v0_14_1_266_gc77004af
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -11693,7 +11693,11 @@ __hot MDBX_cache_result_t mdbx_cache_get_SingleThreaded(const MDBX_txn *txn, MDB
   return cache_get(txn, dbi, key, data, entry);
 }
 
+#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
+
 LIBMDBX_API void mdbx_cache_init(MDBX_cache_entry_t *entry) { __inline_mdbx_cache_init(entry); }
+
+#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 /// \copyright SPDX-License-Identifier: Apache-2.0
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
@@ -40428,10 +40432,10 @@ __dll_export
         0,
         14,
         1,
-        265,
+        266,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.265 */
-        {"2026-01-10T16:12:59+03:00", "0b6cdcf5c1633c997e22d26b75eac5c004c0ce43", "75bba4d924dd4b54f13b3b155c54f6c68d21ffae", "v0.14.1-265-g75bba4d9"},
+                                        0.14.1.266 */
+        {"2026-01-13T01:33:32+03:00", "c51310460b5a0629cebf0c870755bb7233a63235", "c77004afb79d3f28e964d75e992b4b2ceaabe5a3", "v0.14.1-266-gc77004af"},
         sourcery};
 
 __dll_export
