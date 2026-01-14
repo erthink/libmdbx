@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 8a06f0c4cc0970a7ca0f7b1a6da5057c1fb1db12bf3667a33ec61a521593ff4e_v0_14_1_266_gc77004af
+#define MDBX_BUILD_SOURCERY 0497c2e202853055164d8252dc5b5dbc265e5e6d0372a514fa21e84557af6086_v0_14_1_273_gdf3b445e
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -39395,8 +39395,8 @@ int txn_ro_clone(const MDBX_txn *const origin, MDBX_txn *const clone) {
     VALGRIND_MAKE_MEM_UNDEFINED(clone->dbi_state, env->max_dbi);
 #if MDBX_ENABLE_DBI_SPARSE
     clone->n_dbi = CORE_DBS;
-    VALGRIND_MAKE_MEM_UNDEFINED(txn->dbi_sparse,
-                                ceil_powerof2(env->max_dbi, CHAR_BIT * sizeof(txn->dbi_sparse[0])) / CHAR_BIT);
+    VALGRIND_MAKE_MEM_UNDEFINED(clone->dbi_sparse,
+                                ceil_powerof2(env->max_dbi, CHAR_BIT * sizeof(clone->dbi_sparse[0])) / CHAR_BIT);
     clone->dbi_sparse[0] = (1u << CORE_DBS) - 1;
 #else
     clone->n_dbi = (env->n_dbi < 8) ? env->n_dbi : 8;
@@ -40432,10 +40432,10 @@ __dll_export
         0,
         14,
         1,
-        266,
+        273,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.266 */
-        {"2026-01-13T01:33:32+03:00", "c51310460b5a0629cebf0c870755bb7233a63235", "c77004afb79d3f28e964d75e992b4b2ceaabe5a3", "v0.14.1-266-gc77004af"},
+                                        0.14.1.273 */
+        {"2026-01-14T13:23:59+03:00", "d5e311642a3d78e192e492a48a2c2aef13a5035d", "df3b445e5548a252783b5b7a566f70b3deab169f", "v0.14.1-273-gdf3b445e"},
         sourcery};
 
 __dll_export
