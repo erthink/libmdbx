@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY fa386007854375d55ffc0dba59036ae0e91b64380a027bf18660f048957f7119_v0_13_10_39_g12c7912f
+#define MDBX_BUILD_SOURCERY 7c3db6b50efa53fccd19c2645565587fe14e39e3bd30b53c395ab00678ba17e3_v0_13_10_48_gade27cfc
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -20770,12 +20770,14 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
 
   /* LY: step#1 - sync previously written/updated data-pages */
   rc = MDBX_RESULT_FALSE /* carry steady */;
-  if (atomic_load64(&env->lck->unsynced_pages, mo_Relaxed)) {
+  const uint64_t snap_unsynced_pages = atomic_load64(&env->lck->unsynced_pages, mo_Relaxed);
+  if (snap_unsynced_pages) {
+    if (snap_unsynced_pages == 1 && (flags & MDBX_NOMETASYNC))
+      goto skip_lastmeta_sync;
+
     eASSERT(env, ((flags ^ env->flags) & MDBX_WRITEMAP) == 0);
     enum osal_syncmode_bits mode_bits = MDBX_SYNC_NONE;
-    unsigned sync_op = 0;
     if ((flags & MDBX_SAFE_NOSYNC) == 0) {
-      sync_op = 1;
       mode_bits = MDBX_SYNC_DATA;
       if (pending->geometry.first_unallocated > meta_prefer_steady(env, troika).ptr_c->geometry.now)
         mode_bits |= MDBX_SYNC_SIZE;
@@ -20783,18 +20785,15 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
         mode_bits |= MDBX_SYNC_IODQ;
     } else if (unlikely(env->incore))
       goto skip_incore_sync;
+
     if (flags & MDBX_WRITEMAP) {
 #if MDBX_ENABLE_PGOP_STAT
-      env->lck->pgops.msync.weak += sync_op;
-#else
-      (void)sync_op;
+      env->lck->pgops.msync.weak += (mode_bits > MDBX_SYNC_NONE);
 #endif /* MDBX_ENABLE_PGOP_STAT */
       rc = osal_msync(&env->dxb_mmap, 0, pgno_align2os_bytes(env, pending->geometry.first_unallocated), mode_bits);
     } else {
 #if MDBX_ENABLE_PGOP_STAT
-      env->lck->pgops.fsync.weak += sync_op;
-#else
-      (void)sync_op;
+      env->lck->pgops.fsync.weak += (mode_bits > MDBX_SYNC_NONE);
 #endif /* MDBX_ENABLE_PGOP_STAT */
       rc = osal_fsync(env->lazy_fd, mode_bits);
     }
@@ -20817,6 +20816,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
     /* Может быть нулевым если unsynced_pages > 0 в результате спиллинга.
      * eASSERT(env, env->lck->eoos_timestamp.weak != 0); */
     unaligned_poke_u64(4, pending->sign, DATASIGN_WEAK);
+  skip_lastmeta_sync:;
   }
 
   const bool legal4overwrite = head.txnid == pending->unsafe_txnid &&
@@ -20951,13 +20951,17 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
     }
     osal_flush_incoherent_mmap(target, sizeof(meta_t), globals.sys_pagesize);
     /* sync meta-pages */
-    if ((flags & MDBX_NOMETASYNC) == 0 && env->fd4meta == env->lazy_fd && !env->incore) {
+    if (env->fd4meta == env->lazy_fd && !env->incore) {
+      if (flags & MDBX_NOMETASYNC)
+        env->lck->unsynced_pages.weak += 1;
+      else {
 #if MDBX_ENABLE_PGOP_STAT
-      env->lck->pgops.fsync.weak += 1;
+        env->lck->pgops.fsync.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
-      rc = osal_fsync(env->lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
-      if (rc != MDBX_SUCCESS)
-        goto undo;
+        rc = osal_fsync(env->lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+        if (rc != MDBX_SUCCESS)
+          goto undo;
+      }
     }
   }
 
@@ -22750,7 +22754,8 @@ depleted_gc:
   /* Does reclaiming stopped at the last steady point? */
   const meta_ptr_t recent = meta_recent(env, &txn->tw.troika);
   const meta_ptr_t prefer_steady = meta_prefer_steady(env, &txn->tw.troika);
-  if (recent.ptr_c != prefer_steady.ptr_c && prefer_steady.is_steady && detent == prefer_steady.txnid + 1) {
+  if ((flags & ALLOC_UNIMPORTANT) == 0 && recent.ptr_c != prefer_steady.ptr_c && prefer_steady.is_steady &&
+      detent == prefer_steady.txnid + 1) {
     DEBUG("gc-kick-steady: recent %" PRIaTXN "-%s, steady %" PRIaTXN "-%s, detent %" PRIaTXN, recent.txnid,
           durable_caption(recent.ptr_c), prefer_steady.txnid, durable_caption(prefer_steady.ptr_c), detent);
     const pgno_t autosync_threshold = atomic_load32(&env->lck->autosync_threshold, mo_Relaxed);
@@ -22788,7 +22793,7 @@ depleted_gc:
       env->lck->pgops.gc_prof.flushes += 1;
 #endif /* MDBX_ENABLE_PROFGC */
       meta_t meta = *recent.ptr_c;
-      ret.err = dxb_sync_locked(env, env->flags & MDBX_WRITEMAP, &meta, &txn->tw.troika);
+      ret.err = dxb_sync_locked(env, env->flags & (MDBX_WRITEMAP | MDBX_NOMETASYNC), &meta, &txn->tw.troika);
       DEBUG("gc-make-steady, rc %d", ret.err);
       eASSERT(env, ret.err != MDBX_RESULT_TRUE);
       if (unlikely(ret.err != MDBX_SUCCESS))
@@ -26547,9 +26552,8 @@ __cold int meta_wipe_steady(MDBX_env *env, txnid_t inclusive_upto) {
 
 int meta_sync(const MDBX_env *env, const meta_ptr_t head) {
   eASSERT(env, atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed) != (uint32_t)head.txnid);
-  /* Функция может вызываться (в том числе) при (env->flags &
-   * MDBX_NOMETASYNC) == 0 и env->fd4meta == env->dsync_fd, например если
-   * предыдущая транзакция была выполненна с флагом MDBX_NOMETASYNC. */
+  /* Функция может вызываться (в том числе) при (env->flags & MDBX_NOMETASYNC) == 0 и env->fd4meta == env->dsync_fd,
+   * например если предыдущая транзакция была выполненна с флагом MDBX_NOMETASYNC. */
 
   int rc = MDBX_RESULT_TRUE;
   if (env->flags & MDBX_WRITEMAP) {
@@ -26559,7 +26563,7 @@ int meta_sync(const MDBX_env *env, const meta_ptr_t head) {
       env->lck->pgops.msync.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
     } else {
-#if MDBX_ENABLE_PGOP_ST
+#if MDBX_ENABLE_PGOP_STAT
       env->lck->pgops.wops.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
       const page_t *page = data_page(head.ptr_c);
@@ -37561,10 +37565,10 @@ __dll_export
         0,
         13,
         10,
-        39,
+        48,
         "", /* pre-release suffix of SemVer
-                                        0.13.10.39 */
-        {"2026-01-13T11:21:15+03:00", "d69915db47eab83ee272ed7547a11d44859a4a9f", "12c7912fb336e5fc0fb4a1cc41aaa20ea40aed9b", "v0.13.10-39-g12c7912f"},
+                                        0.13.10.48 */
+        {"2026-01-17T00:28:51+03:00", "634dea88bd00c8046d1118eb024443675acdd704", "ade27cfc487a70f61421996d2682be46a4d305b5", "v0.13.10-48-gade27cfc"},
         sourcery};
 
 __dll_export

@@ -18,6 +18,7 @@ Appreciations:
  - [Erigon](https://erigon.tech/) for sponsorship.
  - [Cosmin Apreutesei](https://github.com/capr) for bug reporting.
  - [Igor Ikonopistsev](https://github.com/ikonopistsev) for [NodeJS bindings](https://github.com/ikonopistsev/mdbxmou).
+ - Anatoly Zhmur for reporting bugs.
 
 Important:
 
@@ -35,6 +36,8 @@ Fixes:
  - Fixed MSVC warning C4324 for `buffer::silo::bin`.
 
  - Added workaround for MinGW build failures of dll-enabled C++ API.
+
+ - Fixed extra msync/fsync operations during GC reclaiming in a full database.
 
 Other:
 
