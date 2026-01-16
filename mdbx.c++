@@ -2,7 +2,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 /* clang-format off */
 
-#define MDBX_BUILD_SOURCERY 0497c2e202853055164d8252dc5b5dbc265e5e6d0372a514fa21e84557af6086_v0_14_1_273_gdf3b445e
+#define MDBX_BUILD_SOURCERY 36f076b1c2cb17434c8998d4284489b7338acda1bdb528a6e2afe9da7af1dd01_v0_14_1_281_g151a5d7a
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -3777,6 +3777,7 @@ MDBX_INTERNAL int txn_ro_unpark(MDBX_txn *txn);
 MDBX_INTERNAL int txn_ro_start(MDBX_txn *txn, unsigned flags);
 MDBX_INTERNAL int txn_ro_end(MDBX_txn *txn, unsigned mode);
 MDBX_INTERNAL int txn_ro_clone(const MDBX_txn *const source, MDBX_txn *const clone);
+MDBX_INTERNAL int txn_ro_reset(MDBX_txn *txn);
 
 /* env.c */
 MDBX_INTERNAL int env_open(MDBX_env *env, mdbx_mode_t mode);

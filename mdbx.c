@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 0497c2e202853055164d8252dc5b5dbc265e5e6d0372a514fa21e84557af6086_v0_14_1_273_gdf3b445e
+#define MDBX_BUILD_SOURCERY 36f076b1c2cb17434c8998d4284489b7338acda1bdb528a6e2afe9da7af1dd01_v0_14_1_281_g151a5d7a
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -3779,6 +3779,7 @@ MDBX_INTERNAL int txn_ro_unpark(MDBX_txn *txn);
 MDBX_INTERNAL int txn_ro_start(MDBX_txn *txn, unsigned flags);
 MDBX_INTERNAL int txn_ro_end(MDBX_txn *txn, unsigned mode);
 MDBX_INTERNAL int txn_ro_clone(const MDBX_txn *const source, MDBX_txn *const clone);
+MDBX_INTERNAL int txn_ro_reset(MDBX_txn *txn);
 
 /* env.c */
 MDBX_INTERNAL int env_open(MDBX_env *env, mdbx_mode_t mode);
@@ -13641,12 +13642,7 @@ int mdbx_txn_reset(MDBX_txn *txn) {
   if (unlikely((txn->flags & MDBX_TXN_RDONLY) == 0))
     return LOG_IFERR(MDBX_EINVAL);
 
-  /* LY: don't close DBI-handles */
-  rc = txn_end(txn, TXN_END_RESET | TXN_END_UPDATE);
-  if (rc == MDBX_SUCCESS) {
-    tASSERT(txn, txn->signature == txn_signature);
-    tASSERT(txn, txn->owner == 0);
-  }
+  rc = txn_ro_reset(txn);
   return LOG_IFERR(rc);
 }
 
@@ -13695,7 +13691,7 @@ int mdbx_txn_park(MDBX_txn *txn, bool autounpark) {
     return LOG_IFERR(MDBX_TXN_INVALID);
 
   if (unlikely((txn->flags & MDBX_TXN_ERROR))) {
-    rc = txn_end(txn, TXN_END_RESET | TXN_END_UPDATE);
+    rc = txn_ro_reset(txn);
     return LOG_IFERR(rc ? rc : MDBX_OUSTED);
   }
 
@@ -13724,6 +13720,30 @@ int mdbx_txn_unpark(MDBX_txn *txn, bool restart_if_ousted) {
   return (rc == MDBX_SUCCESS) ? MDBX_RESULT_TRUE : LOG_IFERR(rc);
 }
 
+int mdbx_txn_refresh(MDBX_txn *txn) {
+  int rc = check_txn(txn, 0);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  rc = check_env(txn->env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  if (unlikely((txn->flags & MDBX_TXN_RDONLY) == 0))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  if ((txn->flags & MDBX_TXN_FINISHED) == 0) {
+    if (recent_committed_txnid(txn->env) == txn->txnid)
+      return MDBX_RESULT_TRUE;
+    rc = txn_ro_reset(txn);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
+  }
+
+  rc = txn_renew(txn, MDBX_TXN_RDONLY);
+  return LOG_IFERR(rc);
+}
+
 int mdbx_txn_renew(MDBX_txn *txn) {
   int rc = check_txn(txn, 0);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -13737,7 +13757,7 @@ int mdbx_txn_renew(MDBX_txn *txn) {
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(txn->owner != 0 || !(txn->flags & MDBX_TXN_FINISHED))) {
-    rc = mdbx_txn_reset(txn);
+    rc = txn_ro_reset(txn);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
@@ -14145,7 +14165,7 @@ retry:
       clone_context = clone->userctx;
 
     if (unlikely(clone->owner != 0 || !(clone->flags & MDBX_TXN_FINISHED))) {
-      rc = mdbx_txn_reset(clone);
+      rc = txn_ro_reset(clone);
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
       goto retry;
@@ -14236,6 +14256,8 @@ __cold static int audit_ex_locked(MDBX_txn *txn, const size_t retired_stored, co
       gc += len;
     rc = outer_next(&cx.outer, &key, &data, MDBX_NEXT);
   }
+  if (rc != MDBX_NOTFOUND)
+    ERROR("unexpected gc-cursor rc %d, gc %zu", rc, gc);
   tASSERT(txn, rc == MDBX_NOTFOUND);
 
   const size_t done_bitmap_size = (txn->n_dbi + CHAR_BIT - 1) / CHAR_BIT;
@@ -14285,7 +14307,10 @@ __cold int audit_ex(MDBX_txn *txn, size_t retired_stored, bool dont_filter_gc) {
   MDBX_env *const env = txn->env;
   int rc = osal_fastmutex_acquire(&env->dbi_lock);
   if (likely(rc == MDBX_SUCCESS)) {
+    const unsigned preserve_txn_flags = txn->flags;
+    txn->flags &= ~MDBX_TXN_BLOCKED;
     rc = audit_ex_locked(txn, retired_stored, dont_filter_gc);
+    txn->flags = preserve_txn_flags;
     ENSURE(txn->env, osal_fastmutex_release(&env->dbi_lock) == MDBX_SUCCESS);
   }
   return rc;
@@ -38453,10 +38478,10 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
 /// \copyright SPDX-License-Identifier: Apache-2.0
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
-/* Merge pageset of the nested txn into parent */
-static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t parent_retired_len) {
-  tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0);
-  dpl_t *const src = dpl_sort(txn);
+/* Merge pageset of the nested transaction into parent */
+static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const size_t parent_retired_len) {
+  tASSERT(nested, (nested->flags & MDBX_WRITEMAP) == 0);
+  dpl_t *const src = dpl_sort(nested);
 
   /* Remove refunded pages from parent's dirty list */
   dpl_t *const dst = dpl_sort(parent);
@@ -38464,7 +38489,7 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
     size_t n = dst->length;
     while (n && dst->items[n].pgno >= parent->geo.first_unallocated) {
       const unsigned npages = dpl_npages(dst, n);
-      page_shadow_release(txn->env, dst->items[n].ptr, npages);
+      page_shadow_release(nested->env, dst->items[n].ptr, npages);
       --n;
     }
     parent->wr.dirtyroom += dst->sorted - n;
@@ -38473,7 +38498,9 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
                         (parent->parent ? parent->parent->wr.dirtyroom : parent->env->options.dp_limit));
   }
 
-  /* Remove reclaimed pages from parent's dirty list */
+  /* Remove reclaimed pages from parent's dirty list.
+   * Here the nested->wr.repnl was already moved into parent->wr.repnl
+   * and space was reserved via retired_delta. */
   const pnl_t reclaimed_list = parent->wr.repnl;
   dpl_sift(parent, reclaimed_list, false);
 
@@ -38528,8 +38555,9 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
     }
 
     DEBUG("reclaim retired parent's %u -> %zu %s page %" PRIaPGNO, npages, l, kind, pgno);
+    /* The space for additions to parent->wr.repnl was already reserverd via the retired_delta. */
     int err = pnl_insert_span(&parent->wr.repnl, pgno, l);
-    ENSURE(txn->env, err == MDBX_SUCCESS);
+    ENSURE(nested->env, err == MDBX_SUCCESS);
   }
   pnl_setsize(parent->wr.retired_pages, w);
 
@@ -38561,7 +38589,7 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
         memmove(sl + 1, sl + 1 + i, len * sizeof(sl[0]));
 #endif
       }
-      tASSERT(txn, pnl_check_allocated(sl, (size_t)parent->geo.first_unallocated << 1));
+      tASSERT(nested, pnl_check_allocated(sl, (size_t)parent->geo.first_unallocated << 1));
 
       /* Remove reclaimed pages from parent's spill list */
       s = pnl_size(sl), r = pnl_size(reclaimed_list);
@@ -38619,9 +38647,9 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
   }
 
   /* Remove anything in our spill list from parent's dirty list */
-  if (txn->wr.spilled.list) {
-    tASSERT(txn, pnl_check_allocated(txn->wr.spilled.list, (size_t)parent->geo.first_unallocated << 1));
-    dpl_sift(parent, txn->wr.spilled.list, true);
+  if (nested->wr.spilled.list) {
+    tASSERT(nested, pnl_check_allocated(nested->wr.spilled.list, (size_t)parent->geo.first_unallocated << 1));
+    dpl_sift(parent, nested->wr.spilled.list, true);
     tASSERT(parent, parent->wr.dirtyroom + parent->wr.dirtylist->length ==
                         (parent->parent ? parent->parent->wr.dirtyroom : parent->env->options.dp_limit));
   }
@@ -38651,7 +38679,7 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
       ++l;
     } else {
       dst->items[d--].ptr = nullptr;
-      page_shadow_release(txn->env, dp, d_npages);
+      page_shadow_release(nested->env, dp, d_npages);
     }
   }
   assert(dst->sorted == dst->length);
@@ -38753,7 +38781,7 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
   parent->wr.dirtyroom -= dst->sorted - dst->length;
   assert(parent->wr.dirtyroom <= parent->env->options.dp_limit);
   dpl_setlen(dst, dst->sorted);
-  parent->wr.dirtylru = txn->wr.dirtylru;
+  parent->wr.dirtylru = nested->wr.dirtylru;
 
   /* В текущем понимании выгоднее пересчитать кол-во страниц,
    * чем подмешивать лишние ветвления и вычисления в циклы выше. */
@@ -38762,16 +38790,16 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
     dst->pages_including_loose += dpl_npages(dst, r);
 
   tASSERT(parent, dpl_check(parent));
-  dpl_free(txn);
+  dpl_free(nested);
 
-  if (txn->wr.spilled.list) {
+  if (nested->wr.spilled.list) {
     if (parent->wr.spilled.list) {
       /* Must not fail since space was preserved above. */
-      pnl_merge(parent->wr.spilled.list, txn->wr.spilled.list);
-      pnl_free(txn->wr.spilled.list);
+      pnl_merge(parent->wr.spilled.list, nested->wr.spilled.list);
+      pnl_free(nested->wr.spilled.list);
     } else {
-      parent->wr.spilled.list = txn->wr.spilled.list;
-      parent->wr.spilled.least_removed = txn->wr.spilled.least_removed;
+      parent->wr.spilled.list = nested->wr.spilled.list;
+      parent->wr.spilled.least_removed = nested->wr.spilled.least_removed;
     }
     tASSERT(parent, dpl_check(parent));
   }
@@ -39023,7 +39051,7 @@ int txn_nested_join(MDBX_txn *txn, struct commit_timestamp *ts) {
     ts->write = /* no write */ ts->audit;
     ts->sync = /* no sync */ ts->write;
   }
-  txn_merge(parent, txn, parent_retired_len);
+  nested_merge(parent, txn, parent_retired_len);
   tASSERT(parent, parent->flags & MDBX_TXN_HAS_CHILD);
   parent->flags -= MDBX_TXN_HAS_CHILD;
   env->txn = parent;
@@ -39208,6 +39236,16 @@ bailout:
     atomic_store32(&txn->ro.slot->snapshot_pages_used, 0, mo_Relaxed);
   }
   return err;
+}
+
+int txn_ro_reset(MDBX_txn *txn) {
+  tASSERT(txn, txn->flags & MDBX_TXN_RDONLY);
+  int rc = txn_end(txn, TXN_END_RESET | /* don't close DBI-handles */ TXN_END_UPDATE);
+  if (rc == MDBX_SUCCESS) {
+    tASSERT(txn, txn->signature == txn_signature);
+    tASSERT(txn, txn->owner == 0);
+  }
+  return rc;
 }
 
 int txn_ro_end(MDBX_txn *txn, unsigned mode) {
@@ -40432,10 +40470,10 @@ __dll_export
         0,
         14,
         1,
-        273,
+        281,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.273 */
-        {"2026-01-14T13:23:59+03:00", "d5e311642a3d78e192e492a48a2c2aef13a5035d", "df3b445e5548a252783b5b7a566f70b3deab169f", "v0.14.1-273-gdf3b445e"},
+                                        0.14.1.281 */
+        {"2026-01-16T09:54:57+03:00", "e5f2d5cacfdfa1f248e78d8eed0d16b87ba86486", "151a5d7acba0f399fc0627f7f5e72387937618e1", "v0.14.1-281-g151a5d7a"},
         sourcery};
 
 __dll_export

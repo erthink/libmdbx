@@ -4479,13 +4479,15 @@ LIBMDBX_API int mdbx_txn_unpark(MDBX_txn *txn, bool restart_if_ousted);
  * released by \ref mdbx_txn_reset(). It must be called before a reset
  * transaction may be used again.
  *
+ * \see mdbx_txn_refresh()
+ *
  * \param [in] txn  A transaction handle returned by \ref mdbx_txn_begin().
  *
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
  * \retval MDBX_PANIC            A fatal error occurred earlier and
  *                               the environment must be shut down.
- * \retval MDBX_BAD_TXN          Transaction is already finished or never began.
+ * \retval MDBX_BAD_TXN          Unexpected or wrong transaction state.
  * \retval MDBX_EBADSIGN         Transaction object has invalid signature,
  *                               e.g. transaction was already terminated
  *                               or memory was corrupted.
@@ -4493,6 +4495,29 @@ LIBMDBX_API int mdbx_txn_unpark(MDBX_txn *txn, bool restart_if_ousted);
  *                               by current thread.
  * \retval MDBX_EINVAL           Transaction handle is NULL. */
 LIBMDBX_API int mdbx_txn_renew(MDBX_txn *txn);
+
+/** \brief Refresh a read-only transaction for a recent data.
+ * \ingroup c_transactions
+ *
+ * \see mdbx_txn_renew()
+ *
+ * \param [in] txn  A transaction handle returned by \ref mdbx_txn_begin().
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possibilities are:
+ * \retval MDBX_RESULT_TRUE      The transaction is already reading
+ *                               the most recent version of the data,
+ *                               no actions have been performed.
+ * \retval MDBX_PANIC            A fatal error occurred earlier and
+ *                               the environment must be shut down.
+ * \retval MDBX_BAD_TXN          Unexpected or wrong transaction state.
+ * \retval MDBX_EBADSIGN         Transaction object has invalid signature,
+ *                               e.g. transaction was already terminated
+ *                               or memory was corrupted.
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
+ *                               by current thread.
+ * \retval MDBX_EINVAL           Transaction handle is NULL. */
+LIBMDBX_API int mdbx_txn_refresh(MDBX_txn *txn);
 
 /** \brief The fours integers markers (aka "canary") associated with the
  * environment.
