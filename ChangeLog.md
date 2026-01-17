@@ -39,7 +39,7 @@ BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3N
 
     - добавлены функции получения/поиска данных с "кэшированием" `mdbx_cache_get()` и `mdbx_cache_get_SingleThreaded()`.
 
-    - добавлена функция `mdbx_txn_refresh()` для быстрого обновление читающей транзакции.
+    - добавлена функция `mdbx_txn_refresh()` для быстрого обновления читающей транзакции, и `mdbx_txn_checkpoint()` для фиксации пишущих транзакций без освобождения блокировок.
 
  - Поддержка Harmony OS (OHOS).
 
