@@ -2,7 +2,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 /* clang-format off */
 
-#define MDBX_BUILD_SOURCERY 7c3db6b50efa53fccd19c2645565587fe14e39e3bd30b53c395ab00678ba17e3_v0_13_10_48_gade27cfc
+#define MDBX_BUILD_SOURCERY 5abddaccc58f29bd7ad8a83f190e12eee27ca0e9ff0ca37d9837b325f0335f59_v0_13_10_50_gf02e829e
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -3672,12 +3672,12 @@ bool slice::is_printable(bool disable_utf8) const noexcept {
     P_ = 1 << LS,               // printable ASCII flag
     X_ = 1 << (LS - 1),         // printable extended ASCII flag
     N_ = 0,                     // non-printable ASCII
-    second_range_mask = P_ - 1, // mask for range flag
     r80_BF = 0,                 // flag for UTF8 2nd byte range
     rA0_BF = 1,                 // flag for UTF8 2nd byte range
     r80_9F = 2,                 // flag for UTF8 2nd byte range
     r90_BF = 3,                 // flag for UTF8 2nd byte range
     r80_8F = 4,                 // flag for UTF8 2nd byte range
+    second_range_mask = 7,      // mask for range flag
 
     // valid utf-8 byte sequences
     // http://www.unicode.org/versions/Unicode6.0.0/ch03.pdf - page 94
