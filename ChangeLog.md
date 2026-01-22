@@ -39,6 +39,12 @@ Fixes:
 
  - Fixed extra msync/fsync operations during GC reclaiming in a full database.
 
+ - Fixed suboptimal reducing/merging of histogram items in an output of mdbx_chk tool.
+
+ - Added backlog-adjustment trick to avoid extra-growth of DB instead of reclaim GC in a rare specific cases.
+   In the 0.14.x version series, this mechanism has been completely updated.
+   However, for version 0.13.11, this inelegant modification done in order to reduce the risk of regression.
+
 Other:
 
  - Clarification and addition of documentation.

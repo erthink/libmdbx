@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 7c3db6b50efa53fccd19c2645565587fe14e39e3bd30b53c395ab00678ba17e3_v0_13_10_48_gade27cfc
+#define MDBX_BUILD_SOURCERY ca20edfe05b881496cbe6bd6058b8d40e4651ff0e65bbb46039de12d02995bb8_v0_13_10_55_g0e259437
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -5831,7 +5831,7 @@ typedef struct gc_update_context {
   unsigned loop;
   pgno_t prev_first_unallocated;
   bool dense;
-  size_t reserve_adj;
+  size_t reserve_adj, backlog_adj;
   size_t retired_stored;
   size_t amount, reserved, cleaned_slot, reused_slot, fill_idx;
   txnid_t cleaned_id, rid;
@@ -14329,7 +14329,7 @@ static void histogram_reduce(struct MDBX_chk_histogram *p) {
   p->ranges[min_i].count += p->ranges[min_i + 1].count;
   if (min_i < last)
     // перемещаем хвост
-    memmove(p->ranges + min_i, p->ranges + min_i + 1, (last - min_i) * sizeof(p->ranges[0]));
+    memmove(p->ranges + min_i + 1, p->ranges + min_i + 2, (last - min_i) * sizeof(p->ranges[0]));
   // обнуляем последний элемент и продолжаем
   p->ranges[last].count = 0;
 }
@@ -22755,7 +22755,7 @@ depleted_gc:
   const meta_ptr_t recent = meta_recent(env, &txn->tw.troika);
   const meta_ptr_t prefer_steady = meta_prefer_steady(env, &txn->tw.troika);
   if ((flags & ALLOC_UNIMPORTANT) == 0 && recent.ptr_c != prefer_steady.ptr_c && prefer_steady.is_steady &&
-      detent == prefer_steady.txnid + 1) {
+      detent == prefer_steady.txnid) {
     DEBUG("gc-kick-steady: recent %" PRIaTXN "-%s, steady %" PRIaTXN "-%s, detent %" PRIaTXN, recent.txnid,
           durable_caption(recent.ptr_c), prefer_steady.txnid, durable_caption(prefer_steady.ptr_c), detent);
     const pgno_t autosync_threshold = atomic_load32(&env->lck->autosync_threshold, mo_Relaxed);
@@ -22798,8 +22798,9 @@ depleted_gc:
       eASSERT(env, ret.err != MDBX_RESULT_TRUE);
       if (unlikely(ret.err != MDBX_SUCCESS))
         goto fail;
-      eASSERT(env, prefer_steady.ptr_c != meta_prefer_steady(env, &txn->tw.troika).ptr_c);
-      goto retry_gc_refresh_oldest;
+      if (prefer_steady.ptr_c != meta_prefer_steady(env, &txn->tw.troika).ptr_c)
+        goto retry_gc_refresh_oldest;
+      eASSERT(env, env->incore);
     }
   }
 
@@ -22826,14 +22827,11 @@ depleted_gc:
 
 no_gc:
   eASSERT(env, pgno == 0);
-#ifndef MDBX_ENABLE_BACKLOG_DEPLETED
-#define MDBX_ENABLE_BACKLOG_DEPLETED 0
-#endif /* MDBX_ENABLE_BACKLOG_DEPLETED*/
-  if (MDBX_ENABLE_BACKLOG_DEPLETED && unlikely(!(txn->flags & txn_gc_drained))) {
+  if (unlikely(!(txn->flags & txn_gc_drained))) {
     ret.err = MDBX_BACKLOG_DEPLETED;
     goto fail;
   }
-  if (flags & ALLOC_RESERVE) {
+  if (flags & (ALLOC_RESERVE | ALLOC_UNIMPORTANT)) {
     ret.err = MDBX_NOTFOUND;
     goto fail;
   }
@@ -23041,16 +23039,18 @@ static int prepare_backlog(MDBX_txn *txn, gcu_t *ctx) {
   const size_t for_tree_after_touch = for_rebalance + for_split;
   const size_t for_all_before_touch = for_repnl + for_tree_before_touch;
   const size_t for_all_after_touch = for_repnl + for_tree_after_touch;
+  const size_t enough_before_touch = for_all_before_touch + ctx->backlog_adj;
+  const size_t enough_after_touch = for_all_after_touch + ctx->backlog_adj;
 
-  if (likely(for_repnl < 2 && backlog_size(txn) > for_all_before_touch) &&
+  if (likely(for_repnl < 2 && backlog_size(txn) > enough_before_touch) &&
       (ctx->cursor.top < 0 || is_modifable(txn, ctx->cursor.pg[ctx->cursor.top])))
     return MDBX_SUCCESS;
 
-  TRACE(">> retired-stored %zu, left %zi, backlog %zu, need %zu (4list %zu, "
+  TRACE(">> retired-stored %zu, left %zi, backlog %zu, adj %zu, need %zu (4list %zu, "
         "4split %zu, "
         "4cow %zu, 4tree %zu)",
-        ctx->retired_stored, retired_left, backlog_size(txn), for_all_before_touch, for_repnl, for_split, for_cow,
-        for_tree_before_touch);
+        ctx->retired_stored, retired_left, backlog_size(txn), ctx->backlog_adj, enough_before_touch, for_repnl,
+        for_split, for_cow, for_tree_before_touch);
 
   int err = touch_gc(ctx);
   TRACE("== after-touch, backlog %zu, err %d", backlog_size(txn), err);
@@ -23069,12 +23069,12 @@ static int prepare_backlog(MDBX_txn *txn, gcu_t *ctx) {
     cASSERT(&ctx->cursor, backlog_size(txn) >= for_repnl || err != MDBX_SUCCESS);
   }
 
-  while (backlog_size(txn) < for_all_after_touch && err == MDBX_SUCCESS)
+  while (backlog_size(txn) < enough_after_touch && err == MDBX_SUCCESS)
     err = gc_alloc_ex(&ctx->cursor, 0, ALLOC_RESERVE | ALLOC_UNIMPORTANT).err;
 
-  TRACE("<< backlog %zu, err %d, gc: height %u, branch %zu, leaf %zu, large "
+  TRACE("<< backlog %zu, err %d, adj %zu, gc: height %u, branch %zu, leaf %zu, large "
         "%zu, entries %zu",
-        backlog_size(txn), err, txn->dbs[FREE_DBI].height, (size_t)txn->dbs[FREE_DBI].branch_pages,
+        backlog_size(txn), err, ctx->backlog_adj, txn->dbs[FREE_DBI].height, (size_t)txn->dbs[FREE_DBI].branch_pages,
         (size_t)txn->dbs[FREE_DBI].leaf_pages, (size_t)txn->dbs[FREE_DBI].large_pages,
         (size_t)txn->dbs[FREE_DBI].items);
   tASSERT(txn, err != MDBX_NOTFOUND || (txn->flags & txn_gc_drained) != 0);
@@ -23489,6 +23489,7 @@ int gc_update(MDBX_txn *txn, gcu_t *ctx) {
    * But page numbers cannot disappear from txn->tw.retired_pages[]. */
 retry_clean_adj:
   ctx->reserve_adj = 0;
+  ctx->backlog_adj = 0;
 retry:
   ctx->loop += !(ctx->prev_first_unallocated > txn->geo.first_unallocated);
   TRACE(">> restart, loop %u", ctx->loop);
@@ -23503,8 +23504,13 @@ retry:
 
   if (unlikely(ctx->dense || ctx->prev_first_unallocated > txn->geo.first_unallocated)) {
     rc = clean_stored_retired(txn, ctx);
-    if (unlikely(rc != MDBX_SUCCESS))
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      if (rc == MDBX_BACKLOG_DEPLETED) {
+        ctx->backlog_adj += ctx->backlog_adj + 1;
+        goto retry;
+      }
       goto bailout;
+    }
   }
 
   ctx->prev_first_unallocated = txn->geo.first_unallocated;
@@ -23546,8 +23552,13 @@ retry:
           TRACE("%s: cleanup-reclaimed-id [%zu]%" PRIaTXN, dbg_prefix(ctx), ctx->cleaned_slot, ctx->cleaned_id);
           tASSERT(txn, *txn->cursors == &ctx->cursor);
           rc = cursor_del(&ctx->cursor, 0);
-          if (unlikely(rc != MDBX_SUCCESS))
+          if (unlikely(rc != MDBX_SUCCESS)) {
+            if (rc == MDBX_BACKLOG_DEPLETED) {
+              ctx->backlog_adj += ctx->backlog_adj + 1;
+              goto retry;
+            }
             goto bailout;
+          }
         } while (ctx->cleaned_slot < MDBX_PNL_GETSIZE(txn->tw.gc.retxl));
         txl_sort(txn->tw.gc.retxl);
       }
@@ -23585,8 +23596,13 @@ retry:
         TRACE("%s: cleanup-reclaimed-id %" PRIaTXN, dbg_prefix(ctx), ctx->cleaned_id);
         tASSERT(txn, *txn->cursors == &ctx->cursor);
         rc = cursor_del(&ctx->cursor, 0);
-        if (unlikely(rc != MDBX_SUCCESS))
+        if (unlikely(rc != MDBX_SUCCESS)) {
+          if (rc == MDBX_BACKLOG_DEPLETED) {
+            ctx->backlog_adj += ctx->backlog_adj + 1;
+            goto retry;
+          }
           goto bailout;
+        }
       }
     }
 
@@ -23631,8 +23647,13 @@ retry:
     if (ctx->retired_stored < MDBX_PNL_GETSIZE(txn->tw.retired_pages)) {
       /* store retired-list into GC */
       rc = gcu_retired(txn, ctx);
-      if (unlikely(rc != MDBX_SUCCESS))
+      if (unlikely(rc != MDBX_SUCCESS)) {
+        if (rc == MDBX_BACKLOG_DEPLETED) {
+          ctx->backlog_adj += ctx->backlog_adj + 1;
+          goto retry;
+        }
         goto bailout;
+      }
       continue;
     }
 
@@ -23661,6 +23682,7 @@ retry:
         continue;
       if (likely(rc == MDBX_RESULT_TRUE))
         goto retry;
+      eASSERT(env, rc != MDBX_BACKLOG_DEPLETED);
       goto bailout;
     }
     tASSERT(txn, rid_result.err == MDBX_SUCCESS);
@@ -23738,8 +23760,13 @@ retry:
     prepare_backlog(txn, ctx);
     rc = cursor_put(&ctx->cursor, &key, &data, MDBX_RESERVE | MDBX_NOOVERWRITE);
     tASSERT(txn, pnl_check_allocated(txn->tw.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
-    if (unlikely(rc != MDBX_SUCCESS))
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      if (rc == MDBX_BACKLOG_DEPLETED) {
+        ctx->backlog_adj += ctx->backlog_adj + 1;
+        goto retry;
+      }
       goto bailout;
+    }
 
     zeroize_reserved(env, data);
     ctx->reserved += chunk;
@@ -23830,8 +23857,13 @@ retry:
         chunk = left;
       }
       rc = cursor_put(&ctx->cursor, &key, &data, MDBX_CURRENT | MDBX_RESERVE);
-      if (unlikely(rc != MDBX_SUCCESS))
+      if (unlikely(rc != MDBX_SUCCESS)) {
+        if (rc == MDBX_BACKLOG_DEPLETED) {
+          ctx->backlog_adj += ctx->backlog_adj + 1;
+          goto retry;
+        }
         goto bailout;
+      }
       zeroize_reserved(env, data);
 
       if (unlikely(txn->tw.loose_count || ctx->amount != MDBX_PNL_GETSIZE(txn->tw.repnl))) {
@@ -37565,10 +37597,10 @@ __dll_export
         0,
         13,
         10,
-        48,
+        55,
         "", /* pre-release suffix of SemVer
-                                        0.13.10.48 */
-        {"2026-01-17T00:28:51+03:00", "634dea88bd00c8046d1118eb024443675acdd704", "ade27cfc487a70f61421996d2682be46a4d305b5", "v0.13.10-48-gade27cfc"},
+                                        0.13.10.55 */
+        {"2026-01-23T00:10:08+03:00", "c8db16cb900cb846176ee0b37a94eaa557bdeb5d", "0e259437202d086a51ded0ad65f3662cda26b1e9", "v0.13.10-55-g0e259437"},
         sourcery};
 
 __dll_export
