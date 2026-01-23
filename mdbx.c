@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY ca20edfe05b881496cbe6bd6058b8d40e4651ff0e65bbb46039de12d02995bb8_v0_13_10_55_g0e259437
+#define MDBX_BUILD_SOURCERY 65219e578f8fdfa2f2d9f8f65a6010b1d9f9c28e7c9d6b80d78b664660719708_v0_13_10_58_g77f8c54e
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -14327,9 +14327,9 @@ static void histogram_reduce(struct MDBX_chk_histogram *p) {
   p->ranges[min_i].end = p->ranges[min_i + 1].end;
   p->ranges[min_i].amount += p->ranges[min_i + 1].amount;
   p->ranges[min_i].count += p->ranges[min_i + 1].count;
-  if (min_i < last)
+  if (min_i < last - 1)
     // перемещаем хвост
-    memmove(p->ranges + min_i + 1, p->ranges + min_i + 2, (last - min_i) * sizeof(p->ranges[0]));
+    memmove(p->ranges + min_i + 1, p->ranges + min_i + 2, (last - min_i - 1) * sizeof(p->ranges[0]));
   // обнуляем последний элемент и продолжаем
   p->ranges[last].count = 0;
 }
@@ -31861,19 +31861,22 @@ static void iov_callback4dirtypages(iov_ctx_t *ctx, size_t offset, void *data, s
 #ifndef MDBX_FORCE_CHECK_MMAP_COHERENCY
 #define MDBX_FORCE_CHECK_MMAP_COHERENCY 0
 #endif /* MDBX_FORCE_CHECK_MMAP_COHERENCY */
-    if ((MDBX_FORCE_CHECK_MMAP_COHERENCY || ctx->coherency_timestamp != UINT64_MAX) &&
-        unlikely(memcmp(wp, rp, bytes))) {
-      ctx->coherency_timestamp = 0;
-      env->lck->pgops.incoherence.weak =
-          (env->lck->pgops.incoherence.weak >= INT32_MAX) ? INT32_MAX : env->lck->pgops.incoherence.weak + 1;
-      WARNING("catch delayed/non-arrived page %" PRIaPGNO " %s", wp->pgno,
-              "(workaround for incoherent flaw of unified page/buffer cache)");
-      do
-        if (coherency_timeout(&ctx->coherency_timestamp, wp->pgno, env) != MDBX_RESULT_TRUE) {
-          ctx->err = MDBX_PROBLEM;
-          break;
-        }
-      while (unlikely(memcmp(wp, rp, bytes)));
+    if ((MDBX_FORCE_CHECK_MMAP_COHERENCY || unlikely(ctx->coherency_timestamp != UINT64_MAX))) {
+      VALGRIND_MAKE_MEM_DEFINED(wp, bytes);
+      MDBX_ASAN_UNPOISON_MEMORY_REGION(wp, bytes);
+      if (unlikely(memcmp(wp, rp, bytes))) {
+        ctx->coherency_timestamp = 0;
+        env->lck->pgops.incoherence.weak =
+            (env->lck->pgops.incoherence.weak >= INT32_MAX) ? INT32_MAX : env->lck->pgops.incoherence.weak + 1;
+        WARNING("catch delayed/non-arrived page %" PRIaPGNO " %s", wp->pgno,
+                "(workaround for incoherent flaw of unified page/buffer cache)");
+        do
+          if (coherency_timeout(&ctx->coherency_timestamp, wp->pgno, env) != MDBX_RESULT_TRUE) {
+            ctx->err = MDBX_PROBLEM;
+            break;
+          }
+        while (unlikely(memcmp(wp, rp, bytes)));
+      }
     }
   }
 
@@ -37597,10 +37600,10 @@ __dll_export
         0,
         13,
         10,
-        55,
+        58,
         "", /* pre-release suffix of SemVer
-                                        0.13.10.55 */
-        {"2026-01-23T00:10:08+03:00", "c8db16cb900cb846176ee0b37a94eaa557bdeb5d", "0e259437202d086a51ded0ad65f3662cda26b1e9", "v0.13.10-55-g0e259437"},
+                                        0.13.10.58 */
+        {"2026-01-23T21:31:27+03:00", "d48425d4724dafa202f197433d8dbffb85b00ed6", "77f8c54e2a8ef0b1cdd4a055fe04bf1d9e918e4e", "v0.13.10-58-g77f8c54e"},
         sourcery};
 
 __dll_export

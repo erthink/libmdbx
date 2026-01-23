@@ -25,7 +25,7 @@ Important:
  - _libmdbx_ project has changed its code development and distribution model.
    **To get acquainted with important changes and plans, we recommend reading the compact [presentation "libmdbx: successes, obstacles, goals and roadmap"](https://libmdbx.dqdkfa.ru/release/libmdbx-roadmap-HNY2026-english.pdf), which contains important explanations in the form of embedded comments.**
 
- - At a many requests of users, the change log is kept in English.
+ - At a many requests of users, the change log now is kept in English.
 
 Fixes:
 
@@ -44,6 +44,8 @@ Fixes:
  - Added backlog-adjustment trick to avoid extra-growth of DB instead of reclaim GC in a rare specific cases.
    In the 0.14.x version series, this mechanism has been completely updated.
    However, for version 0.13.11, this inelegant modification done in order to reduce the risk of regression.
+
+ - Minor fixed `iov_callback4dirtypages()` for Valgrind/ASAN.
 
 Other:
 
