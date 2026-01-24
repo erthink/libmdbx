@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 65219e578f8fdfa2f2d9f8f65a6010b1d9f9c28e7c9d6b80d78b664660719708_v0_13_10_58_g77f8c54e
+#define MDBX_BUILD_SOURCERY 3ebf5275126ba3f56ca18b556d463984bb894c6b8e5605e53a54ad161f82742a_v0_13_10_62_g644ef70e
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -16304,7 +16304,7 @@ MDBX_cursor *cursor_eot(MDBX_cursor *mc, MDBX_txn *txn, const bool merge) {
   MDBX_cursor *const next = mc->next;
   const unsigned stage = mc->signature;
   MDBX_cursor *const bk = mc->backup;
-  ENSURE(txn->env, stage == cur_signature_live || (stage == cur_signature_wait4eot && bk));
+  ENSURE(txn->env, stage == cur_signature_live || stage == cur_signature_wait4eot);
   tASSERT(txn, mc->txn == txn);
   if (bk) {
     subcur_t *mx = mc->subcur;
@@ -16335,10 +16335,13 @@ MDBX_cursor *cursor_eot(MDBX_cursor *mc, MDBX_txn *txn, const bool merge) {
     bk->signature = 0;
     osal_free(bk);
   } else {
-    ENSURE(mc->txn->env, stage == cur_signature_live);
-    mc->signature = cur_signature_ready4dispose /* Cursor may be reused */;
-    mc->next = mc;
     cursor_drown((cursor_couple_t *)mc);
+    mc->next = mc;
+    if (stage == cur_signature_wait4eot) {
+      mc->signature = 0;
+      osal_free(mc);
+    } else
+      mc->signature = cur_signature_ready4dispose /* Cursor may be reused */;
   }
   return next;
 }
@@ -37600,10 +37603,10 @@ __dll_export
         0,
         13,
         10,
-        58,
+        62,
         "", /* pre-release suffix of SemVer
-                                        0.13.10.58 */
-        {"2026-01-23T21:31:27+03:00", "d48425d4724dafa202f197433d8dbffb85b00ed6", "77f8c54e2a8ef0b1cdd4a055fe04bf1d9e918e4e", "v0.13.10-58-g77f8c54e"},
+                                        0.13.10.62 */
+        {"2026-01-24T13:18:23+03:00", "07fda2b16a19fdb6659b39e6aaff79bdae7d45cf", "644ef70e43da18e33c89eec7a2724ced5f5a58a6", "v0.13.10-62-g644ef70e"},
         sourcery};
 
 __dll_export

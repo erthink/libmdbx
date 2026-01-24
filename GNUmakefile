@@ -294,20 +294,28 @@ TEST_TARGETS += ctest
 TEST_BUILD_TARGETS += cmake-build
 endif
 
-.PHONY: ninja-assertions ninja-debug ninja $(TEST_TARGETS) $(TEST_BUILD_TARGETS) test-ubsan test-asan test-asan test-leak test-assertion test build-test smoke check
+.PHONY: ninja-assertions ninja-debug ninja $(TEST_TARGETS) $(TEST_BUILD_TARGETS) test-ubsan test-asan test-memcheck test-leak test-assertion test build-test smoke check
 test: $(TEST_TARGETS)
 build-test: $(TEST_BUILD_TARGETS)
 
 test-assertion: MDBX_BUILD_OPTIONS += -DMDBX_FORCE_ASSERTIONS=1 -UNDEBUG -DMDBX_DEBUG=0
+test-assertion: CMAKE_OPT += -DMDBX_FORCE_ASSERTIONS=ON -DMDBX_DEBUG=0
 test-assertion: smoke
+
+test-valgrind: test-memcheck
+test-memcheck: CFLAGS_EXTRA += -Ofast -DENABLE_MEMCHECK
+test-memcheck: CMAKE_OPT += -DENABLE_MEMCHECK=ON
+test-memcheck: build-test build-stochastic
+	@echo '  RUNNING `test/stochastic.sh --with-valgrind --loops 2`...'
+	$(QUIET)test/stochastic.sh --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 test-ubsan:
 	@echo '  RE-TEST with `-fsanitize=undefined` option...'
-	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-DENABLE_UBSAN -Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error" test-stochastic
+	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CMAKE_OPT="-DENABLE_UBSAN=ON" CFLAGS_EXTRA="-DENABLE_UBSAN -Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error" build-test test-stochastic
 
 test-asan:
 	@echo '  RE-TEST with `-fsanitize=address` option...'
-	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Os -fsanitize=address" test-stochastic
+	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CMAKE_OPT="-DENABLE_ASAN=ON" CFLAGS_EXTRA="-Os -fsanitize=address" build-test test-stochastic
 
 test-leak:
 	@echo '  RE-TEST with `-fsanitize=leak` option...'
