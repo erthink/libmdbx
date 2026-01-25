@@ -2,7 +2,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 /* clang-format off */
 
-#define MDBX_BUILD_SOURCERY d0c652016ea3e3d314181251772ed3ad35b30d8654a3e0e3f7a1dfc73f6406b4_v0_14_1_326_g72e0af44
+#define MDBX_BUILD_SOURCERY bceb4cffb452beb8b344b66517dbfcc12ae8e80220a05240377f9d076620e4d6_v0_14_1_342_g630b73ee
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -3851,26 +3851,6 @@ MDBX_MAYBE_UNUSED static inline void dxb_sanitize_tail(MDBX_env *env, MDBX_txn *
 }
 #endif /* ENABLE_MEMCHECK || __SANITIZE_ADDRESS__ */
 
-/* txn.c */
-#define TXN_END_NAMES                                                                                                  \
-  {"committed", "pure-commit", "abort", "reset", "fail-begin", "fail-begin-nested", "ousted", nullptr}
-enum {
-  /* txn_end operation number, for logging */
-  TXN_END_COMMITTED /* 0 */,
-  TXN_END_PURE_COMMIT /* 1 */,
-  TXN_END_ABORT /* 2 */,
-  TXN_END_RESET /* 3 */,
-  TXN_END_FAIL_BEGIN /* 4 */,
-  TXN_END_FAIL_BEGIN_NESTED /* 5 */,
-  TXN_END_OUSTED /* 6 */,
-  TXN_END_OPMASK = 0x07 /* mask for txn_end() operation number */,
-
-  TXN_END_UPDATE = 0x10 /* update env state (DBIs) */,
-  TXN_END_FREE = 0x20 /* free txn unless it is env.basal_txn */,
-  TXN_END_SLOT = 0x40 /* release any reader slot if NOSTICKYTHREADS */,
-  TXN_END_LOCK = 0x80 /* release writer mutex */
-};
-
 struct commit_timestamp {
   uint64_t start, prep, gc, audit, write, sync, gc_cpu;
 };
@@ -3881,14 +3861,13 @@ MDBX_INTERNAL int txn_check_badbits_parked(const MDBX_txn *txn, int bad_bits);
 MDBX_INTERNAL void txn_done_cursors(MDBX_txn *txn);
 MDBX_INTERNAL int txn_shadow_cursors(const MDBX_txn *parent, const size_t dbi);
 
-MDBX_INTERNAL MDBX_txn *txn_alloc(const MDBX_txn_flags_t flags, MDBX_env *env);
+MDBX_INTERNAL MDBX_txn *txn_alloc(const unsigned flags, MDBX_env *env);
 MDBX_INTERNAL int txn_abort(MDBX_txn *txn);
 MDBX_INTERNAL int txn_commit(MDBX_txn *txn, struct commit_timestamp *);
-MDBX_INTERNAL int txn_renew(MDBX_txn *txn, unsigned flags);
-MDBX_INTERNAL int txn_end(MDBX_txn *txn, unsigned mode);
 #if !(defined(_WIN32) || defined(_WIN64))
 MDBX_INTERNAL void txn_abort_after_resurrect(MDBX_txn *txn);
 #endif /* Windows */
+MDBX_INTERNAL int txn_setup_primal(MDBX_txn *txn);
 
 MDBX_INTERNAL int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags);
 MDBX_INTERNAL int txn_nested_abort(MDBX_txn *nested);
@@ -3899,16 +3878,16 @@ MDBX_INTERNAL MDBX_txn *txn_basal_create(const size_t max_dbi);
 MDBX_INTERNAL void txn_basal_destroy(MDBX_txn *txn);
 MDBX_INTERNAL int txn_basal_start(MDBX_txn *txn, unsigned flags);
 MDBX_INTERNAL int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts);
-MDBX_INTERNAL int txn_basal_end(MDBX_txn *txn, unsigned mode);
+MDBX_INTERNAL int txn_basal_end(MDBX_txn *txn, bool unlock);
 MDBX_INTERNAL int txn_basal_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability,
                                        struct commit_timestamp *ts);
 
 MDBX_INTERNAL int txn_ro_park(MDBX_txn *txn, bool autounpark);
 MDBX_INTERNAL int txn_ro_unpark(MDBX_txn *txn);
-MDBX_INTERNAL int txn_ro_start(MDBX_txn *txn, unsigned flags);
-MDBX_INTERNAL int txn_ro_end(MDBX_txn *txn, unsigned mode);
+MDBX_INTERNAL int txn_ro_start(MDBX_txn *txn, bool prepare);
 MDBX_INTERNAL int txn_ro_clone(const MDBX_txn *const source, MDBX_txn *const clone);
 MDBX_INTERNAL int txn_ro_reset(MDBX_txn *txn);
+MDBX_INTERNAL void txn_ro_free(MDBX_txn *txn);
 
 /* env.c */
 MDBX_INTERNAL int env_open(MDBX_env *env, mdbx_mode_t mode);
@@ -4499,6 +4478,9 @@ enum dbi_state {
 };
 
 enum txn_flags {
+  txn_ro_flat = MDBX_TXN_RDONLY,
+  txn_ro_nested = UINT32_C(0x0800),
+  txn_ro_both = txn_ro_flat | txn_ro_nested,
   txn_ro_begin_flags = MDBX_TXN_RDONLY | MDBX_TXN_RDONLY_PREPARE,
   txn_rw_begin_flags = MDBX_TXN_NOMETASYNC | MDBX_TXN_NOSYNC | MDBX_TXN_TRY,
   txn_rw_checkpoint = MDBX_TXN_RDONLY_PREPARE & ~MDBX_TXN_RDONLY,
@@ -4828,14 +4810,14 @@ struct MDBX_env {
   osal_ioring_t ioring;
 
 #if defined(_WIN32) || defined(_WIN64)
-  osal_srwlock_t remap_guard;
+  osal_srwlock_t remap_lock;
   /* Workaround for LockFileEx and WriteFile multithread bug */
   CRITICAL_SECTION lck_event_cs;
   CRITICAL_SECTION dxb_event_cs;
   char *pathname_char; /* cache of multi-byte representation of pathname
                              to the DB files */
 #else
-  osal_fastmutex_t remap_guard;
+  osal_fastmutex_t remap_lock;
 #endif
 
   /* ------------------------------------------------- stub for lck-less mode */
@@ -5628,7 +5610,7 @@ static __always_inline int check_txn_anythread(const MDBX_txn *txn, int bad_bits
       return MDBX_EPERM;
 
     if (unlikely(txn->flags & bad_bits)) {
-      if ((bad_bits & MDBX_TXN_RDONLY) && unlikely(txn->flags & MDBX_TXN_RDONLY))
+      if ((bad_bits & txn_ro_both) && unlikely(txn->flags & txn_ro_both))
         return MDBX_EACCESS;
       if ((bad_bits & MDBX_TXN_PARKED) == 0)
         return MDBX_BAD_TXN;
@@ -5646,7 +5628,7 @@ static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
 #if MDBX_TXN_CHECKOWNER
   if (err == MDBX_SUCCESS && (txn->flags & (MDBX_NOSTICKYTHREADS | MDBX_TXN_FINISHED)) != MDBX_NOSTICKYTHREADS &&
       !(bad_bits /* abort/reset/txn-break */ == 0 &&
-        ((txn->flags & (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED)) == (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED))) &&
+        ((txn->flags & (txn_ro_flat | MDBX_TXN_FINISHED)) == (txn_ro_flat | MDBX_TXN_FINISHED))) &&
       unlikely(txn->owner != osal_thread_self()))
     err = txn->owner ? MDBX_THREAD_MISMATCH : MDBX_BAD_TXN;
 #endif /* MDBX_TXN_CHECKOWNER */
@@ -5655,14 +5637,14 @@ static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
 }
 
 static inline int check_txn_rw(const MDBX_txn *txn, int bad_bits) {
-  return check_txn(txn, (bad_bits | MDBX_TXN_RDONLY) & ~MDBX_TXN_PARKED);
+  return check_txn(txn, (bad_bits | txn_ro_both) & ~MDBX_TXN_PARKED);
 }
 
 MDBX_NOTHROW_CONST_FUNCTION static inline txnid_t txn_basis_snapshot(const MDBX_txn *txn) {
-  STATIC_ASSERT(((MDBX_TXN_RDONLY >> ((xMDBX_TXNID_STEP == 2) ? 16 : 17)) & xMDBX_TXNID_STEP) == xMDBX_TXNID_STEP);
+  STATIC_ASSERT(((txn_ro_flat >> ((xMDBX_TXNID_STEP == 2) ? 16 : 17)) & xMDBX_TXNID_STEP) == xMDBX_TXNID_STEP);
   const txnid_t committed_txnid =
       txn->txnid - xMDBX_TXNID_STEP + ((txn->flags >> ((xMDBX_TXNID_STEP == 2) ? 16 : 17)) & xMDBX_TXNID_STEP);
-  tASSERT(txn, committed_txnid == ((txn->flags & MDBX_TXN_RDONLY) ? txn->txnid : txn->txnid - xMDBX_TXNID_STEP));
+  tASSERT(txn, committed_txnid == ((txn->flags & txn_ro_flat) ? txn->txnid : txn->txnid - xMDBX_TXNID_STEP));
   return committed_txnid;
 }
 
@@ -6018,7 +6000,7 @@ static inline int cursor_check_ro(const MDBX_cursor *mc) { return cursor_check(m
 
 /* для записи данных. */
 static inline int cursor_check_rw(const MDBX_cursor *mc) {
-  return cursor_check(mc, (MDBX_TXN_BLOCKED - MDBX_TXN_PARKED) | MDBX_TXN_RDONLY);
+  return cursor_check(mc, (MDBX_TXN_BLOCKED - MDBX_TXN_PARKED) | txn_ro_both);
 }
 
 MDBX_INTERNAL MDBX_cursor *cursor_eot(MDBX_cursor *cursor, MDBX_txn *txn);
@@ -6142,7 +6124,7 @@ MDBX_INTERNAL dpl_t *dpl_reserve(MDBX_txn *txn, size_t size);
 MDBX_INTERNAL __noinline dpl_t *dpl_sort_slowpath(const MDBX_txn *txn);
 
 static inline dpl_t *dpl_sort(const MDBX_txn *txn) {
-  tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
+  tASSERT(txn, (txn->flags & txn_ro_both) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
   dpl_t *dl = txn->wr.dirtylist;
@@ -6168,7 +6150,7 @@ MDBX_NOTHROW_PURE_FUNCTION static inline pgno_t dpl_endpgno(const dpl_t *dl, siz
 }
 
 MDBX_NOTHROW_PURE_FUNCTION static inline bool dpl_intersect(const MDBX_txn *txn, pgno_t pgno, size_t npages) {
-  tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
+  tASSERT(txn, (txn->flags & txn_ro_both) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
   dpl_t *dl = txn->wr.dirtylist;
@@ -6214,7 +6196,7 @@ MDBX_INTERNAL int __must_check_result dpl_append(MDBX_txn *txn, pgno_t pgno, pag
 MDBX_MAYBE_UNUSED MDBX_INTERNAL bool dpl_check(MDBX_txn *txn);
 
 MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t dpl_age(const MDBX_txn *txn, size_t i) {
-  tASSERT(txn, (txn->flags & (MDBX_TXN_RDONLY | MDBX_WRITEMAP)) == 0);
+  tASSERT(txn, (txn->flags & (txn_ro_both | MDBX_WRITEMAP)) == 0);
   const dpl_t *dl = txn->wr.dirtylist;
   assert((intptr_t)i > 0 && i <= dl->length);
   size_t *const ptr = ptr_disp(dl->items[i].ptr, -(ptrdiff_t)sizeof(size_t));
@@ -6578,7 +6560,7 @@ static inline bool spill_intersect(const MDBX_txn *txn, pgno_t pgno, size_t npag
 }
 
 static inline int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0, const size_t need) {
-  tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
+  tASSERT(txn, (txn->flags & txn_ro_both) == 0);
   tASSERT(txn, !m0 || cursor_is_tracked(m0));
 
   const intptr_t wanna_spill_entries = txn->wr.dirtylist ? (need - txn->wr.dirtyroom - txn->wr.loose_count) : 0;
@@ -6704,7 +6686,7 @@ MDBX_INTERNAL int page_retire_ex(MDBX_cursor *mc, const pgno_t pgno, page_t *mp 
 static inline int page_retire(MDBX_cursor *mc, page_t *mp) { return page_retire_ex(mc, mp->pgno, mp, mp->flags); }
 
 static inline void page_wash(MDBX_txn *txn, size_t di, page_t *const mp, const size_t npages) {
-  tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
+  tASSERT(txn, (txn->flags & txn_ro_both) == 0);
   mp->txnid = INVALID_TXNID;
   mp->flags = P_BAD;
 
@@ -8498,7 +8480,7 @@ __cold MDBX_env_flags_t env::operate_parameters::make_flags(bool accede, bool us
     flags |= MDBX_VALIDATION;
 
   if (mode != readonly) {
-    if (options.nested_write_transactions)
+    if (options.nested_transactions)
       flags &= ~MDBX_WRITEMAP;
     if (reclaiming.coalesce)
       flags |= MDBX_COALESCE;
@@ -8545,7 +8527,7 @@ env::reclaiming_options::reclaiming_options(MDBX_env_flags_t flags) noexcept
 
 env::operate_options::operate_options(MDBX_env_flags_t flags) noexcept
     : no_sticky_threads(((flags & (MDBX_NOSTICKYTHREADS | MDBX_EXCLUSIVE)) == MDBX_NOSTICKYTHREADS) ? true : false),
-      nested_write_transactions((flags & (MDBX_WRITEMAP | MDBX_RDONLY)) ? false : true),
+      nested_transactions((flags & (MDBX_WRITEMAP | MDBX_RDONLY)) ? false : true),
       exclusive((flags & MDBX_EXCLUSIVE) ? true : false), disable_readahead((flags & MDBX_NORDAHEAD) ? true : false),
       disable_clear_memory((flags & MDBX_NOMEMINIT) ? true : false) {}
 
@@ -8667,7 +8649,7 @@ __cold env_managed::env_managed(const char *pathname, const operate_parameters &
   setup(op.max_maps, op.max_readers);
   error::success_or_throw(::mdbx_env_open(handle_, pathname, op.make_flags(accede), 0));
 
-  if (op.options.nested_write_transactions && !get_options().nested_write_transactions)
+  if (op.options.nested_transactions && !get_options().nested_transactions)
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
@@ -8679,7 +8661,7 @@ __cold env_managed::env_managed(const char *pathname, const env_managed::create_
   error::success_or_throw(
       ::mdbx_env_open(handle_, pathname, op.make_flags(accede, cp.use_subdirectory), cp.file_mode_bits));
 
-  if (op.options.nested_write_transactions && !get_options().nested_write_transactions)
+  if (op.options.nested_transactions && !get_options().nested_transactions)
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
@@ -8696,7 +8678,7 @@ __cold env_managed::env_managed(const wchar_t *pathname, const operate_parameter
   setup(op.max_maps, op.max_readers);
   error::success_or_throw(::mdbx_env_openW(handle_, pathname, op.make_flags(accede), 0));
 
-  if (op.options.nested_write_transactions && !get_options().nested_write_transactions)
+  if (op.options.nested_transactions && !get_options().nested_transactions)
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
@@ -8708,7 +8690,7 @@ __cold env_managed::env_managed(const wchar_t *pathname, const env_managed::crea
   error::success_or_throw(
       ::mdbx_env_openW(handle_, pathname, op.make_flags(accede, cp.use_subdirectory), cp.file_mode_bits));
 
-  if (op.options.nested_write_transactions && !get_options().nested_write_transactions)
+  if (op.options.nested_transactions && !get_options().nested_transactions)
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
@@ -8731,10 +8713,13 @@ __cold env_managed::env_managed(const MDBX_STD_FILESYSTEM_PATH &pathname, const 
 
 //------------------------------------------------------------------------------
 
-txn_managed txn::start_nested() {
+txn_managed txn::start_nested() { return start_nested(false); }
+
+txn_managed txn::start_nested(bool readonly) {
   MDBX_txn *nested;
   error::throw_on_nullptr(handle_, MDBX_BAD_TXN);
-  error::success_or_throw(::mdbx_txn_begin(mdbx_txn_env(handle_), handle_, MDBX_TXN_READWRITE, &nested));
+  error::success_or_throw(
+      ::mdbx_txn_begin(mdbx_txn_env(handle_), handle_, readonly ? MDBX_TXN_RDONLY : MDBX_TXN_READWRITE, &nested));
   assert(nested != nullptr);
   return txn_managed(nested);
 }
@@ -8766,6 +8751,16 @@ void txn_managed::commit(commit_latency *latency) {
     MDBX_CXX20_LIKELY handle_ = nullptr;
   if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS))
     MDBX_CXX20_UNLIKELY err.throw_exception();
+}
+
+bool txn_managed::checkpoint(commit_latency *latency) {
+  const error err = static_cast<MDBX_error_t>(::mdbx_txn_checkpoint(handle_, MDBX_TXN_NOWEAKING, latency));
+  if (MDBX_UNLIKELY(err.is_failure())) {
+    if (err.code() != MDBX_THREAD_MISMATCH && err.code() != MDBX_EINVAL)
+      handle_ = nullptr;
+    MDBX_CXX20_UNLIKELY err.throw_exception();
+  }
+  return err.is_result_true();
 }
 
 void txn_managed::commit_embark_read() {
@@ -9037,8 +9032,8 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const env::operate_option
     out << delimiter << "no_sticky_threads";
     delimiter = comma;
   }
-  if (it.nested_write_transactions) {
-    out << delimiter << "nested_write_transactions";
+  if (it.nested_transactions) {
+    out << delimiter << "nested_transactions";
     delimiter = comma;
   }
   if (it.exclusive) {
