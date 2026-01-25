@@ -2,7 +2,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 /* clang-format off */
 
-#define MDBX_BUILD_SOURCERY 9e316b99c2dd59a62dfecc0d27aab4fc009eb09071df9580efa6333960118e9d_v0_14_1_315_g009726d3
+#define MDBX_BUILD_SOURCERY d0c652016ea3e3d314181251772ed3ad35b30d8654a3e0e3f7a1dfc73f6406b4_v0_14_1_326_g72e0af44
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -1576,6 +1576,23 @@ typedef union bin128 {
   __anonymous_struct_extension__ struct {
     uint32_t a, b, c, d;
   };
+  __anonymous_struct_extension__ struct {
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    uint64_t l, h;
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    uint64_t h, l;
+#else
+#error "FIXME: Unsupported byte order"
+#endif /* __BYTE_ORDER__ */
+  };
+
+#if defined(__SIZEOF_INT128__)
+#define MDBX_HAVE_NATIVE_U128 1
+  __int128_t i128;
+  __uint128_t u128;
+#else
+#define MDBX_HAVE_NATIVE_U128 0
+#endif
 } bin128_t;
 
 MDBX_INTERNAL bin128_t osal_guid(const MDBX_env *);
@@ -1981,6 +1998,16 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t osal_bswap32
 #else
 #define MDBX_USE_FALLOCATE_CONFIG MDBX_STRINGIFY(MDBX_USE_FALLOCATE)
 #endif /* MDBX_USE_FALLOCATE */
+
+#ifndef MDBX_HISTOGRAM_USING_128BIT
+#if MDBX_WORDBITS >= 64
+#define MDBX_HISTOGRAM_USING_128BIT 1
+#else
+#define MDBX_HISTOGRAM_USING_128BIT 0
+#endif
+#elif !(MDBX_HISTOGRAM_USING_128BIT == 0 || MDBX_HISTOGRAM_USING_128BIT == 1)
+#error MDBX_HISTOGRAM_USING_128BIT must be defined as 0 or 1
+#endif /* MDBX_HISTOGRAM_USING_128BIT */
 
 //------------------------------------------------------------------------------
 
@@ -3110,8 +3137,90 @@ typedef struct ratio2digits_buffer {
   char string[1 + 20 + 1 + 19 + 1];
 } ratio2digits_buffer_t;
 
-char *ratio2digits(const uint64_t v, const uint64_t d, ratio2digits_buffer_t *const buffer, int precision);
-char *ratio2percent(const uint64_t v, const uint64_t d, ratio2digits_buffer_t *const buffer);
+MDBX_INTERNAL char *ratio2digits(const uint64_t v, const uint64_t d, ratio2digits_buffer_t *const buffer,
+                                 int precision);
+MDBX_INTERNAL char *ratio2percent(const uint64_t v, const uint64_t d, ratio2digits_buffer_t *const buffer);
+
+MDBX_INTERNAL bin128_t mul64x64_128_fallback(uint64_t x, uint64_t y);
+
+MDBX_MAYBE_UNUSED static inline bin128_t mul64x64_128(uint64_t x, uint64_t y) {
+  bin128_t r;
+#if MDBX_HAVE_NATIVE_U128 && !MDBX_DEBUG
+  r.u128 = x;
+  r.u128 *= y;
+#else
+  r = mul64x64_128_fallback(x, y);
+#if MDBX_HAVE_NATIVE_U128
+  assert(r.u128 == (__uint128_t)x * (__uint128_t)y);
+#endif
+#endif
+  return r;
+}
+
+MDBX_MAYBE_UNUSED static inline bin128_t u128_add(bin128_t x, bin128_t y) {
+  bin128_t r;
+#if MDBX_HAVE_NATIVE_U128 && !MDBX_DEBUG
+  r.u128 = x.u128 + y.u128;
+#else
+  r.l = x.l + y.l;
+  r.h = x.h + y.h + /* carry */ (r.l < x.l);
+#if MDBX_HAVE_NATIVE_U128
+  assert(r.u128 == x.u128 + y.u128);
+#endif
+#endif
+  return r;
+}
+
+MDBX_MAYBE_UNUSED static inline int u128_cmp(bin128_t x, bin128_t y) {
+  int r;
+#if defined(__SIZEOF_INT128__) && !MDBX_DEBUG
+  r = CMP2INT(x.u128, y.u128);
+#else
+  const uint64_t a = (x.h != y.h) ? x.h : x.l;
+  const uint64_t b = (x.h != y.h) ? y.h : y.l;
+  r = CMP2INT(a, b);
+#if MDBX_HAVE_NATIVE_U128
+  assert(r == CMP2INT(x.u128, y.u128));
+#endif
+#endif
+  return r;
+}
+
+MDBX_MAYBE_UNUSED static inline bool u128_gt(bin128_t x, bin128_t y) {
+  bool r;
+#if defined(__SIZEOF_INT128__) && !MDBX_DEBUG
+  r = x.u128 > y.u128;
+#else
+  r = x.h > y.h || (x.h == y.h && x.l > y.l);
+#if MDBX_HAVE_NATIVE_U128
+  assert(r == (x.u128 > y.u128));
+#endif
+#endif
+  return r;
+}
+
+MDBX_MAYBE_UNUSED static inline bool u128_lt(bin128_t x, bin128_t y) {
+  bool r;
+#if defined(__SIZEOF_INT128__) && !MDBX_DEBUG
+  r = x.u128 < y.u128;
+#else
+  r = x.h < y.h || (x.h == y.h && x.l > y.l);
+#if MDBX_HAVE_NATIVE_U128
+  assert(r == (x.u128 < y.u128));
+#endif
+#endif
+  return r;
+}
+
+MDBX_MAYBE_UNUSED static inline bin128_t u128(uint64_t v) {
+  bin128_t r;
+  r.l = v;
+  r.h = 0;
+#if defined(__SIZEOF_INT128__)
+  assert(r.u128 == v);
+#endif
+  return r;
+}
 
 /* An PNL is an Page Number List, a sorted array of IDs.
  *
@@ -3838,6 +3947,32 @@ MDBX_INTERNAL int coherency_fetch_head(MDBX_txn *txn, const meta_ptr_t head, uin
 MDBX_INTERNAL int coherency_check_written(const MDBX_env *env, const txnid_t txnid, const volatile meta_t *meta,
                                           const intptr_t pgno, uint64_t *timestamp);
 MDBX_INTERNAL int coherency_timeout(uint64_t *timestamp, intptr_t pgno, const MDBX_env *env);
+
+/* histogram.c */
+#define HISTOGRAM_LE0 1
+MDBX_INTERNAL void histogram_acc_ex(const size_t value, struct MDBX_chk_histogram *histogram, unsigned options);
+MDBX_MAYBE_UNUSED static inline void histogram_acc(const size_t value, struct MDBX_chk_histogram *histogram) {
+  histogram_acc_ex(value, histogram, 0);
+}
+MDBX_INTERNAL MDBX_chk_line_t *histogram_dist(MDBX_chk_line_t *line, const struct MDBX_chk_histogram *histogram,
+                                              const char *prefix, const char *first, bool amount);
+MDBX_INTERNAL MDBX_chk_line_t *histogram_print(MDBX_chk_scope_t *scope, MDBX_chk_line_t *line,
+                                               const struct MDBX_chk_histogram *histogram, const char *prefix,
+                                               const char *first, bool amount);
+
+/* print.c */
+MDBX_INTERNAL void chk_line_end(MDBX_chk_line_t *line);
+MDBX_INTERNAL __must_check_result MDBX_chk_line_t *chk_line_begin(MDBX_chk_scope_t *const scope,
+                                                                  enum MDBX_chk_severity severity);
+MDBX_INTERNAL MDBX_chk_line_t *chk_line_feed(MDBX_chk_line_t *line);
+MDBX_INTERNAL MDBX_chk_line_t *chk_flush(MDBX_chk_line_t *line);
+MDBX_INTERNAL size_t chk_print_wanna(MDBX_chk_line_t *line, size_t need);
+MDBX_INTERNAL MDBX_chk_line_t *chk_puts(MDBX_chk_line_t *line, const char *str);
+MDBX_INTERNAL MDBX_chk_line_t *chk_print_va(MDBX_chk_line_t *line, const char *fmt, va_list args);
+MDBX_INTERNAL MDBX_chk_line_t *MDBX_PRINTF_ARGS(2, 3) chk_print(MDBX_chk_line_t *line, const char *fmt, ...);
+MDBX_INTERNAL void chk_println_va(MDBX_chk_scope_t *const scope, enum MDBX_chk_severity severity, const char *fmt,
+                                  va_list args);
+MDBX_INTERNAL void chk_println(MDBX_chk_scope_t *const scope, enum MDBX_chk_severity severity, const char *fmt, ...);
 
 /* Сортированный набор txnid, использующий внутри комбинацию непрерывного интервала и списка.
  * Обеспечивает хранение id записей при переработке, очистку и обновлении GC, включая возврат остатков переработанных
@@ -6644,8 +6779,9 @@ typedef struct walk_tbl {
 
 typedef int walk_func(const size_t pgno, const unsigned number, void *const ctx, const int deep,
                       const walk_tbl_t *table, const size_t page_size, const page_type_t page_type,
-                      const MDBX_error_t err, const size_t nentries, const size_t payload_bytes,
-                      const size_t header_bytes, const size_t unused_bytes, const size_t parent_pgno);
+                      const txnid_t page_txnid, const MDBX_error_t err, const size_t nentries,
+                      const size_t payload_bytes, const size_t header_bytes, const size_t unused_bytes,
+                      const size_t parent_pgno);
 
 typedef enum walk_options { dont_check_keys_ordering = 1 } walk_options_t;
 
