@@ -2,7 +2,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 /* clang-format off */
 
-#define MDBX_BUILD_SOURCERY 6239dfa1e5f9a1c469d552915df86ec98132b53f57772672424d9fd9bf88a839_v0_14_1_299_g6bd18d0f
+#define MDBX_BUILD_SOURCERY 9e316b99c2dd59a62dfecc0d27aab4fc009eb09071df9580efa6333960118e9d_v0_14_1_315_g009726d3
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -1516,7 +1516,7 @@ MDBX_INTERNAL int osal_check_fs_rdonly(mdbx_filehandle_t handle, const pathchar_
 MDBX_INTERNAL int osal_check_fs_incore(mdbx_filehandle_t handle);
 MDBX_INTERNAL int osal_check_fs_local(mdbx_filehandle_t handle, int flags);
 
-MDBX_MAYBE_UNUSED static inline uint32_t osal_getpid(void) {
+MDBX_MAYBE_UNUSED static inline mdbx_pid_t osal_getpid(void) {
   STATIC_ASSERT(sizeof(mdbx_pid_t) <= sizeof(uint32_t));
 #if defined(_WIN32) || defined(_WIN64)
   return GetCurrentProcessId();
@@ -3431,6 +3431,18 @@ MDBX_MAYBE_UNUSED static __always_inline uint32_t atomic_load32(const volatile m
 }
 #endif /* atomic_load32 */
 
+MDBX_MAYBE_UNUSED static __always_inline mdbx_pid_t atomic_load_pid(const volatile mdbx_atomic_uint32_t *p,
+                                                                    enum mdbx_memory_order order) {
+  STATIC_ASSERT(sizeof(mdbx_pid_t) == sizeof(uint32_t));
+  return (mdbx_pid_t)atomic_load32(p, order);
+}
+
+MDBX_MAYBE_UNUSED static __always_inline mdbx_pid_t atomic_store_pid(mdbx_atomic_uint32_t *p, const mdbx_pid_t value,
+                                                                     enum mdbx_memory_order order) {
+  STATIC_ASSERT(sizeof(mdbx_pid_t) == sizeof(uint32_t));
+  return (mdbx_pid_t)atomic_store32(p, value, order);
+}
+
 /*------------------------------------------------------------------------------
  * safe read/write volatile 64-bit fields on 32-bit architectures. */
 
@@ -4570,7 +4582,7 @@ struct MDBX_env {
   uint16_t merge_threshold;   /* pages emptier than this are candidates for merging */
   unsigned max_readers;       /* size of the reader table */
   MDBX_dbi max_dbi;           /* size of the DB table */
-  uint32_t pid;               /* process ID of this env */
+  mdbx_pid_t pid;             /* process ID of this env */
   osal_thread_key_t me_txkey; /* thread-key for readers */
   struct {                    /* path to the DB files */
     pathchar_t *lck, *dxb, *specified;
@@ -4583,9 +4595,9 @@ struct MDBX_env {
   mdbx_atomic_uint32_t *dbi_seqs; /* array of dbi sequence numbers */
   unsigned maxgc_large1page;      /* Number of pgno_t fit in a single large page */
   unsigned maxgc_per_branch;
-  uint32_t registered_reader_pid; /* have liveness lock in reader table */
-  void *userctx;                  /* User-settable context */
-  MDBX_hsr_func *hsr_callback;    /* Callback for kicking laggard readers */
+  mdbx_pid_t registered_reader_pid; /* have liveness lock in reader table */
+  void *userctx;                    /* User-settable context */
+  MDBX_hsr_func *hsr_callback;      /* Callback for kicking laggard readers */
   size_t madv_threshold;
 
   struct {
@@ -6038,8 +6050,10 @@ MDBX_NOTHROW_PURE_FUNCTION static inline bool dpl_intersect(const MDBX_txn *txn,
     bool check = false;
     for (size_t i = 1; i <= dl->length; ++i) {
       const page_t *const dp = dl->items[i].ptr;
-      if (!(dp->pgno /* begin */ >= /* end */ pgno + npages || dpl_endpgno(dl, i) /* end */ <= /* begin */ pgno))
-        check |= true;
+      if (!(dp->pgno /* begin */ >= /* end */ pgno + npages || dpl_endpgno(dl, i) /* end */ <= /* begin */ pgno)) {
+        check = true;
+        break;
+      }
     }
     tASSERT(txn, check == rc);
   }
@@ -6169,7 +6183,7 @@ MDBX_INTERNAL int lck_ipclock_destroy(osal_ipclock_t *ipc);
 
 MDBX_INTERNAL int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor, int global_uniqueness_flag);
 
-MDBX_INTERNAL int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const uint32_t current_pid);
+MDBX_INTERNAL int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const mdbx_pid_t current_pid);
 
 MDBX_INTERNAL int lck_seize(MDBX_env *env);
 
@@ -6587,7 +6601,7 @@ MDBX_INTERNAL size_t page_subleaf2_reserve(const MDBX_env *env, size_t host_page
 #define page_next(mp) (*(page_t **)ptr_disp((mp)->entries, sizeof(void *) - sizeof(uint32_t)))
 
 MDBX_INTERNAL void rthc_ctor(void);
-MDBX_INTERNAL void rthc_dtor(const uint32_t current_pid);
+MDBX_INTERNAL void rthc_dtor(const mdbx_pid_t current_pid);
 MDBX_INTERNAL void rthc_lock(void);
 MDBX_INTERNAL void rthc_unlock(void);
 
@@ -7558,16 +7572,16 @@ __cold void error::throw_exception() const {
 
 bool slice::is_printable(bool disable_utf8) const noexcept {
   enum : byte {
-    LS = 4,                     // shift for UTF8 sequence length
-    P_ = 1 << LS,               // printable ASCII flag
-    X_ = 1 << (LS - 1),         // printable extended ASCII flag
-    N_ = 0,                     // non-printable ASCII
-    second_range_mask = P_ - 1, // mask for range flag
-    r80_BF = 0,                 // flag for UTF8 2nd byte range
-    rA0_BF = 1,                 // flag for UTF8 2nd byte range
-    r80_9F = 2,                 // flag for UTF8 2nd byte range
-    r90_BF = 3,                 // flag for UTF8 2nd byte range
-    r80_8F = 4,                 // flag for UTF8 2nd byte range
+    LS = 4,                // shift for UTF8 sequence length
+    P_ = 1 << LS,          // printable ASCII flag
+    X_ = 1 << (LS - 1),    // printable extended ASCII flag
+    N_ = 0,                // non-printable ASCII
+    r80_BF = 0,            // flag for UTF8 2nd byte range
+    rA0_BF = 1,            // flag for UTF8 2nd byte range
+    r80_9F = 2,            // flag for UTF8 2nd byte range
+    r90_BF = 3,            // flag for UTF8 2nd byte range
+    r80_8F = 4,            // flag for UTF8 2nd byte range
+    second_range_mask = 7, // mask for range flag
 
     // valid utf-8 byte sequences
     // http://www.unicode.org/versions/Unicode6.0.0/ch03.pdf - page 94

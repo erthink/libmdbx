@@ -18,7 +18,7 @@
 /// \copyright SPDX-License-Identifier: Apache-2.0
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
-#define MDBX_BUILD_SOURCERY 6239dfa1e5f9a1c469d552915df86ec98132b53f57772672424d9fd9bf88a839_v0_14_1_299_g6bd18d0f
+#define MDBX_BUILD_SOURCERY 9e316b99c2dd59a62dfecc0d27aab4fc009eb09071df9580efa6333960118e9d_v0_14_1_315_g009726d3
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -1532,7 +1532,7 @@ MDBX_INTERNAL int osal_check_fs_rdonly(mdbx_filehandle_t handle, const pathchar_
 MDBX_INTERNAL int osal_check_fs_incore(mdbx_filehandle_t handle);
 MDBX_INTERNAL int osal_check_fs_local(mdbx_filehandle_t handle, int flags);
 
-MDBX_MAYBE_UNUSED static inline uint32_t osal_getpid(void) {
+MDBX_MAYBE_UNUSED static inline mdbx_pid_t osal_getpid(void) {
   STATIC_ASSERT(sizeof(mdbx_pid_t) <= sizeof(uint32_t));
 #if defined(_WIN32) || defined(_WIN64)
   return GetCurrentProcessId();
