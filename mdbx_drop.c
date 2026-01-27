@@ -18,7 +18,7 @@
 /// \copyright SPDX-License-Identifier: Apache-2.0
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
-#define MDBX_BUILD_SOURCERY bceb4cffb452beb8b344b66517dbfcc12ae8e80220a05240377f9d076620e4d6_v0_14_1_342_g630b73ee
+#define MDBX_BUILD_SOURCERY 2e6b591330e9431502f262744390819261f8a9ae60327479801916deb13ce78a_v0_14_1_347_g34df8a6f
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -2582,7 +2582,7 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_subpage(const
 }
 
 /* The version number for a database's lockfile format. */
-#define MDBX_LOCK_VERSION 6
+#define MDBX_LOCK_VERSION 7
 
 #if MDBX_LOCKING == MDBX_LOCKING_WIN32FILES
 
@@ -2662,8 +2662,7 @@ typedef struct pgops {
     gc_prof_stat_t work;
     /* Затраты на поддержку и обновления самой GC */
     gc_prof_stat_t self;
-    /* Итераций обновления GC,
-     * больше 1 если были повторы/перезапуски */
+    /* Итераций обновления GC, больше 1 если были повторы/перезапуски */
     uint32_t wloops;
     /* Итерации слияния записей GC */
     uint32_t coalescences;
@@ -2673,6 +2672,10 @@ typedef struct pgops {
     uint32_t flushes;
     /* Попытки пнуть тормозящих читателей */
     uint32_t kicks;
+    /* Максимальная замеченная разница между последним и самым старым читаемым MVCC-снимками */
+    uint32_t max_reader_lag;
+    /* Максимальное замеченное количество страниц удерживаемых от переработки из-за чтения старых MVCC-снимков */
+    uint32_t max_retained_pages;
   } gc_prof;
 } pgop_stat_t;
 
@@ -2808,7 +2811,8 @@ typedef struct shared_lck {
   osal_ipclock_t wrt_lock;
 #endif /* MDBX_LOCKING > 0 */
 
-  atomic_txnid_t cached_oldest;
+  atomic_txnid_t cached_oldest_txnid;
+  mdbx_atomic_uint64_t cached_oldest_retired;
 
   /* Timestamp of entering an out-of-sync state. Value is represented in a
    * suitable system-dependent form, for example clock_gettime(CLOCK_BOOTTIME)
@@ -2853,8 +2857,9 @@ typedef struct shared_lck {
 /* Lockfile format signature: version, features and field layout */
 #define MDBX_LOCK_FORMAT                                                                                               \
   (MDBX_LCK_SIGN * 27733 + (unsigned)sizeof(reader_slot_t) * 13 +                                                      \
-   (unsigned)offsetof(reader_slot_t, snapshot_pages_used) * 251 + (unsigned)offsetof(lck_t, cached_oldest) * 83 +      \
-   (unsigned)offsetof(lck_t, rdt_length) * 37 + (unsigned)offsetof(lck_t, rdt) * 29)
+   (unsigned)offsetof(reader_slot_t, snapshot_pages_used) * 251 +                                                      \
+   (unsigned)offsetof(lck_t, cached_oldest_txnid) * 83 + (unsigned)offsetof(lck_t, rdt_length) * 37 +                  \
+   (unsigned)offsetof(lck_t, rdt) * 29)
 #endif /* FLEXIBLE_ARRAY_MEMBERS */
 } lck_t;
 
@@ -3155,7 +3160,7 @@ typedef struct ratio2digits_buffer {
 
 MDBX_INTERNAL char *ratio2digits(const uint64_t v, const uint64_t d, ratio2digits_buffer_t *const buffer,
                                  int precision);
-MDBX_INTERNAL char *ratio2percent(const uint64_t v, const uint64_t d, ratio2digits_buffer_t *const buffer);
+MDBX_INTERNAL char *ratio2percent(uint64_t v, uint64_t d, ratio2digits_buffer_t *buffer);
 
 MDBX_INTERNAL bin128_t mul64x64_128_fallback(uint64_t x, uint64_t y);
 

@@ -4235,6 +4235,10 @@ struct MDBX_commit_latency {
       uint64_t volume;
       uint32_t calls;
     } pnl_merge_work, pnl_merge_self;
+    /** \brief The maximum observed difference between the latest and oldest readed MVCC-snapshots. */
+    uint32_t max_reader_lag;
+    /** \brief The maximum noticed number of pages withheld from reclaimed due to reading old MVCC-snapshots. */
+    uint32_t max_retained_pages;
   } gc_prof;
 };
 #ifndef __cplusplus
