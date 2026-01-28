@@ -1,15 +1,16 @@
 # Copyright (c) 2020-2026 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> ###############################################
 # SPDX-License-Identifier: Apache-2.0
 #
-# Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`,
+# libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
+# open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
+# solutions.  Please visit https://libmdbx.dqdkfa.ru for more information, changelog, documentation, C++ API description
+# and links to the original git repo with the source code.  Questions, feedback and suggestions are welcome to the
+# Telegram' group https://t.me/libmdbx.
+#
+# The libmdbx code will forever remain open and with high-quality free support, as far as the life circumstances of the
+# project participants allow. Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`,
 # BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3NDMyS5wXJgfeMTmJznRi`.
 # Всё будет хорошо!
-
-# libmdbx = { Revised and extended descendant of Symas LMDB. }
-# Please see README.md at https://sourcecraft.dev/dqdkfa/libmdbx
-#
-# Libmdbx is superior to LMDB in terms of features and reliability, not inferior in performance. libmdbx works on Linux,
-# FreeBSD, MacOS X and other systems compliant with POSIX.1-2008, but also support Windows as a complementary platform.
 #
 # The next version is under active non-public development and will be released as MithrilDB and libmithrildb for
 # libraries & packages. Admittedly mythical Mithril is resembling silver but being stronger and lighter than steel.
@@ -62,6 +63,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION.json"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.c"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.c++"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.h"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx-internals.h"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.h++"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_chk.c"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_copy.c"
@@ -758,14 +760,18 @@ endif()
 
 # build mdbx-tools
 if(MDBX_BUILD_TOOLS)
-  set(WINGETOPT_SRC "")
-  if(WIN32)
+  if(MDBX_AMALGAMATED_SOURCE)
+    set(WINGETOPT_SRC ${MDBX_SOURCE_DIR}/mdbx-wingetopt.h)
+  else()
     set(WINGETOPT_SRC ${MDBX_SOURCE_DIR}/tools/wingetopt.c ${MDBX_SOURCE_DIR}/tools/wingetopt.h)
+  endif()
+  if(NOT WIN32)
+    set(WINGETOPT_SRC "")
   endif()
 
   foreach(TOOL chk copy stat dump load drop)
     if(MDBX_AMALGAMATED_SOURCE)
-      add_executable(mdbx_${TOOL} mdbx.h ${MDBX_SOURCE_DIR}/mdbx_${TOOL}.c)
+      add_executable(mdbx_${TOOL} mdbx.h ${MDBX_SOURCE_DIR}/mdbx_${TOOL}.c ${WINGETOPT_SRC})
     else()
       add_executable(mdbx_${TOOL} mdbx.h ${MDBX_SOURCE_DIR}/tools/${TOOL}.c ${WINGETOPT_SRC})
     endif()
