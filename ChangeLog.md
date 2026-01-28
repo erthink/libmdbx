@@ -45,7 +45,7 @@ Fixes:
    In the 0.14.x version series, this mechanism has been completely updated.
    However, for version 0.13.11, this inelegant modification done in order to reduce the risk of regression.
 
- - Minor fixed `iov_callback4dirtypages()` for Valgrind/ASAN.
+ - Minor fixed `iov_callback4dirtypages()` and assertion inside `cursor_put()` to avoid Valgrind/ASAN warnings.
 
  - Fixed cursor(s) finalization after ones explicitly closed in a nested transactions.
 

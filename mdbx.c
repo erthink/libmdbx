@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 3ebf5275126ba3f56ca18b556d463984bb894c6b8e5605e53a54ad161f82742a_v0_13_10_62_g644ef70e
+#define MDBX_BUILD_SOURCERY 7b1a28ab8a09323047bcd7e2bc258e38d199794bae9df6037167024e54f0af9e_v0_13_10_65_ge413d8b7
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -16888,7 +16888,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
       }
     } else {
       csr_t csr =
-          /* olddata may not be updated in case DUPFIX-page of dupfix-table */
+          /* old_data may not be updated in case DUPFIX-page of dupfix-table */
           cursor_seek(mc, (MDBX_val *)key, &old_data, MDBX_SET);
       rc = csr.err;
       exact = csr.exact;
@@ -16901,12 +16901,9 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
           return MDBX_KEYEXIST;
         }
         if (unlikely(mc->flags & z_inner)) {
-          /* nested subtree of DUPSORT-database with the same key,
-           * nothing to update */
-          eASSERT(env, data->iov_len == 0 && (old_data.iov_len == 0 ||
-                                              /* olddata may not be updated in case
-                                                 DUPFIX-page of dupfix-table */
-                                              (mc->tree->flags & MDBX_DUPFIXED)));
+          /* nested subtree of DUPSORT-database with the same key, nothing to update */
+          eASSERT(env, data->iov_len == 0 && (/* old_data may not be updated in case DUPFIX-page of dupfix-table */
+                                              (mc->tree->flags & MDBX_DUPFIXED) || old_data.iov_len == 0));
           return MDBX_SUCCESS;
         }
         if (unlikely(flags & MDBX_ALLDUPS) && inner_pointed(mc)) {
@@ -17458,8 +17455,7 @@ insert_node:;
           if (!is_related(mc, m2) || m2->pg[mc->top] != mp)
             continue;
           if (/* пропускаем незаполненные курсоры, иначе получится что у такого
-                 курсора будет инициализирован вложенный,
-                 что антилогично и бесполезно. */
+                 курсора будет инициализирован вложенный, что антилогично и бесполезно. */
               is_filled(m2) && m2->ki[mc->top] == mc->ki[mc->top]) {
             cASSERT(m2, m2->subcur->cursor.clc == mx->cursor.clc);
             m2->subcur->nested_tree = mx->nested_tree;
@@ -37603,10 +37599,10 @@ __dll_export
         0,
         13,
         10,
-        62,
+        65,
         "", /* pre-release suffix of SemVer
-                                        0.13.10.62 */
-        {"2026-01-24T13:18:23+03:00", "07fda2b16a19fdb6659b39e6aaff79bdae7d45cf", "644ef70e43da18e33c89eec7a2724ced5f5a58a6", "v0.13.10-62-g644ef70e"},
+                                        0.13.10.65 */
+        {"2026-01-29T01:07:25+03:00", "da44a3919220c0c538f1479c08ad985407322c9f", "e413d8b764749d5a402a451320aa6539d59ca2ac", "v0.13.10-65-ge413d8b7"},
         sourcery};
 
 __dll_export
