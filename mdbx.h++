@@ -1,4 +1,5 @@
-﻿/// \file mdbx.h++
+﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-356-gadaf1352 at 2026-01-29T18:08:07+03:00).
+/// \file mdbx.h++
 /// \brief The libmdbx C++ API header file.
 ///
 /// \details _libmdbx_ (aka MDBX) is an extremely fast, compact, powerful, embeddable,

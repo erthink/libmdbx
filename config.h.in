@@ -1,4 +1,5 @@
-/* This is CMake-template for libmdbx's config.h
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-356-gadaf1352 at 2026-01-29T18:08:07+03:00),
+ * it is the template for libmdbx's config.h
  ******************************************************************************/
 
 /* *INDENT-OFF* */
