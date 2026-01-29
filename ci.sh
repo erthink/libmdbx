@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# This script is temporary, is not part of libmdbx, and is used only for CI testing.
+#
+#######################################################################################
 
 function failure() {
 	echo "Oops, $* failed ;(" >&2
