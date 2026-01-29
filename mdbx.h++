@@ -1,4 +1,4 @@
-﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-356-gadaf1352 at 2026-01-29T18:08:07+03:00).
+﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-363-g75544794 at 2026-01-31T11:23:34+03:00).
 /// \file mdbx.h++
 /// \brief The libmdbx C++ API header file.
 ///
@@ -3335,29 +3335,17 @@ public:
   /// Returns environment flags.
   inline MDBX_env_flags_t get_flags() const;
 
-  inline bool is_readonly() const {
-    return (get_flags() & MDBX_RDONLY) != 0;
-  }
+  inline bool is_readonly() const { return (get_flags() & MDBX_RDONLY) != 0; }
 
-  inline bool is_exclusive() const {
-    return (get_flags() & MDBX_EXCLUSIVE) != 0;
-  }
+  inline bool is_exclusive() const { return (get_flags() & MDBX_EXCLUSIVE) != 0; }
 
-  inline bool is_cooperative() const {
-    return !is_exclusive();
-  }
+  inline bool is_cooperative() const { return !is_exclusive(); }
 
-  inline bool is_writemap() const {
-    return (get_flags() & MDBX_WRITEMAP) != 0;
-  }
+  inline bool is_writemap() const { return (get_flags() & MDBX_WRITEMAP) != 0; }
 
-  inline bool is_readwite() const {
-    return !is_readonly();
-  }
+  inline bool is_readwite() const { return !is_readonly(); }
 
-  inline bool is_nested_transactions_available() const {
-    return (get_flags() & (MDBX_WRITEMAP | MDBX_RDONLY)) == 0;
-  }
+  inline bool is_nested_transactions_available() const { return (get_flags() & (MDBX_WRITEMAP | MDBX_RDONLY)) == 0; }
 
   /// \brief Returns the maximum number of threads/reader slots for the environment.
   /// \see extra_runtime_option::max_readers
@@ -4074,47 +4062,52 @@ public:
   ~txn_managed() noexcept;
 
   //----------------------------------------------------------------------------
+  using finalization_latency = MDBX_commit_latency;
 
-  /// \brief Abandon all the operations of the transaction
-  /// instead of saving ones.
+  /// \brief Abandon all the operations of the transaction instead of saving ones.
   void abort();
+  /// \brief Abandon all the operations of the transaction instead of saving ones with collecting latencies information.
+  void abort(finalization_latency *);
+  /// \brief Abandon all the operations of the transaction instead of saving ones with collecting latencies information.
+  void abort(finalization_latency &latency) { return abort(&latency); }
+  /// \brief Abandon all the operations of the transaction instead of saving ones with collecting latencies information.
+  /// \returns latency information of abort stages.
+  finalization_latency abort_get_latency() {
+    finalization_latency result;
+    abort(&result);
+    return result;
+  }
 
   /// \brief Commits all changes of the transaction into a database with collecting latencies information.
   void commit();
-
-  /// \brief Commits all the operations of a transaction into the database and then start read transaction.
-  void commit_embark_read();
-
-  using commit_latency = MDBX_commit_latency;
-
   /// \brief Commits all changes of the transaction into a database with collecting latencies information.
-  void commit(commit_latency *);
-
+  void commit(finalization_latency *);
   /// \brief ommits all changes of the transaction into a database with collecting latencies information.
-  void commit(commit_latency &latency) { return commit(&latency); }
-
+  void commit(finalization_latency &latency) { return commit(&latency); }
   /// \brief Commits all changes of the transaction into a database and return latency information.
   /// \returns latency information of commit stages.
-  commit_latency commit_get_latency() {
-    commit_latency result;
+  finalization_latency commit_get_latency() {
+    finalization_latency result;
     commit(&result);
     return result;
   }
 
   /// \brief Commits all the operations of the transaction and immediately starts next without releasing any locks.
-  bool checkpoint(commit_latency *latency = nullptr);
-
+  bool checkpoint();
   /// \brief Commits all the operations of the transaction and immediately starts next without releasing any locks.
-  bool checkpoint(commit_latency &latency) { return checkpoint(&latency); }
-
+  bool checkpoint(finalization_latency *latency);
+  /// \brief Commits all the operations of the transaction and immediately starts next without releasing any locks.
+  bool checkpoint(finalization_latency &latency) { return checkpoint(&latency); }
   /// \brief Commits all the operations of the transaction and immediately starts next without releasing any locks.
   /// \returns latency information of commit stages.
-  std::pair<bool, commit_latency> checkpoint_get_latency() {
-    commit_latency latency;
+  std::pair<bool, finalization_latency> checkpoint_get_latency() {
+    finalization_latency latency;
     bool result = checkpoint(&latency);
     return std::make_pair(result, latency);
   }
 
+  /// \brief Commits all the operations of a transaction into the database and then start read transaction.
+  void commit_embark_read();
 };
 
 /// \brief Unmanaged cursor.

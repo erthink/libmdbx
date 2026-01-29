@@ -1,4 +1,4 @@
-/** This file is part of the libmdbx amalgamated source code (v0.14.1-356-gadaf1352 at 2026-01-29T18:08:07+03:00).
+/** This file is part of the libmdbx amalgamated source code (v0.14.1-363-g75544794 at 2026-01-31T11:23:34+03:00).
 
 \file mdbx.h
 \brief The libmdbx C API header file.
@@ -4247,21 +4247,23 @@ typedef struct MDBX_commit_latency MDBX_commit_latency;
 #endif
 
 /** \brief Commits all changes of the transaction into a database with collecting latencies information.
- * \see mdbx_txn_commit()
  * \ingroup c_transactions
+ * \see mdbx_txn_commit()
+ * \see mdbx_txn_checkpoint()
  * \warning This function may be changed in future releases. */
 LIBMDBX_API int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency);
 
 /** \brief Commits all the operations of the transaction and immediately starts next without releasing any locks.
- * \see mdbx_txn_commit_ex()
  * \ingroup c_transactions
+ * \see mdbx_txn_commit_ex()
  *
  * \details The function's actions are similar to the sequence of calls \ref mdbx_txn_commit_ex() and
  * then \ref mdbx_txn_begin() if the first one is successful, but without releasing the locks,
  * which ensures that there are no other changes after the changes are committed and the transaction begins.
  *
- * \see mdbx_txn_refresh()
  * \see mdbx_txn_commit_ex()
+ * \see mdbx_txn_checkpoint()
+ * \see mdbx_txn_refresh()
  * \see mdbx_txn_begin()
  *
  * \param [in, out] txn             A transaction handle returned by \ref mdbx_txn_begin().
@@ -4329,7 +4331,17 @@ LIBMDBX_API int mdbx_txn_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_du
  * \retval MDBX_ENOMEM           Out of memory. */
 LIBMDBX_INLINE_API(int, mdbx_txn_commit, (MDBX_txn * txn)) { return mdbx_txn_commit_ex(txn, NULL); }
 
-/** \brief Abandon all the operations of the transaction instead of saving them.
+/** \brief Abandons all the operations of the transaction instead of saving ones with collecting latencies information.
+ * \ingroup c_transactions
+ * \see mdbx_txn_abort()
+ * \see mdbx_txn_refresh()
+ * \see mdbx_txn_reset()
+ * \see mdbx_txn_commit_ex()
+ * \see mdbx_txn_checkpoint()
+ * \warning This function may be changed in future releases. */
+LIBMDBX_API int mdbx_txn_abort_ex(MDBX_txn *txn, MDBX_commit_latency *latency);
+
+/** \brief Abandons all the operations of the transaction instead of saving ones.
  * \ingroup c_transactions
  *
  * The transaction handle is freed. It and its cursors must not be used again
@@ -4349,6 +4361,12 @@ LIBMDBX_INLINE_API(int, mdbx_txn_commit, (MDBX_txn * txn)) { return mdbx_txn_com
  *    \ref mdbx_cursor_renew() until it will be explicitly closed by
  *    \ref mdbx_cursor_close().
  *
+ * \see mdbx_txn_abort_ex()
+ * \see mdbx_txn_checkpoint()
+ * \see mdbx_txn_commit()
+ * \see mdbx_txn_refresh()
+ * \see mdbx_txn_reset()
+ *
  * \param [in] txn  A transaction handle returned by \ref mdbx_txn_begin().
  *
  * \returns A non-zero error value on failure and 0 on success,
@@ -4362,7 +4380,7 @@ LIBMDBX_INLINE_API(int, mdbx_txn_commit, (MDBX_txn * txn)) { return mdbx_txn_com
  * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
  *                               by current thread.
  * \retval MDBX_EINVAL           Transaction handle is NULL. */
-LIBMDBX_API int mdbx_txn_abort(MDBX_txn *txn);
+LIBMDBX_INLINE_API(int, mdbx_txn_abort, (MDBX_txn * txn)) { return mdbx_txn_abort_ex(txn, NULL); }
 
 /** \brief Marks transaction as broken to prevent further operations.
  * \ingroup c_transactions

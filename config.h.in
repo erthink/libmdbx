@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-356-gadaf1352 at 2026-01-29T18:08:07+03:00),
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-363-g75544794 at 2026-01-31T11:23:34+03:00),
  * it is the template for libmdbx's config.h
  ******************************************************************************/
 
@@ -40,6 +40,7 @@
 #cmakedefine01 MDBX_ENABLE_PROFGC
 #cmakedefine01 MDBX_ENABLE_DBI_SPARSE
 #cmakedefine01 MDBX_ENABLE_DBI_LOCKFREE
+#cmakedefine01 MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS
 
 /* Windows */
 /* allowing override MDBX_WITHOUT_MSVC_CRT=ON to build the C++ API in "private" mode only for tests */
