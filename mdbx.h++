@@ -1,4 +1,4 @@
-﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-356-gf2f7280c at 2026-01-29T00:25:31+03:00).
+﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-362-g5570b943 at 2026-01-29T21:38:39+03:00).
 /// \file mdbx.h++
 /// \brief The libmdbx C++ API header file.
 ///
@@ -3335,29 +3335,17 @@ public:
   /// Returns environment flags.
   inline MDBX_env_flags_t get_flags() const;
 
-  inline bool is_readonly() const {
-    return (get_flags() & MDBX_RDONLY) != 0;
-  }
+  inline bool is_readonly() const { return (get_flags() & MDBX_RDONLY) != 0; }
 
-  inline bool is_exclusive() const {
-    return (get_flags() & MDBX_EXCLUSIVE) != 0;
-  }
+  inline bool is_exclusive() const { return (get_flags() & MDBX_EXCLUSIVE) != 0; }
 
-  inline bool is_cooperative() const {
-    return !is_exclusive();
-  }
+  inline bool is_cooperative() const { return !is_exclusive(); }
 
-  inline bool is_writemap() const {
-    return (get_flags() & MDBX_WRITEMAP) != 0;
-  }
+  inline bool is_writemap() const { return (get_flags() & MDBX_WRITEMAP) != 0; }
 
-  inline bool is_readwite() const {
-    return !is_readonly();
-  }
+  inline bool is_readwite() const { return !is_readonly(); }
 
-  inline bool is_nested_transactions_available() const {
-    return (get_flags() & (MDBX_WRITEMAP | MDBX_RDONLY)) == 0;
-  }
+  inline bool is_nested_transactions_available() const { return (get_flags() & (MDBX_WRITEMAP | MDBX_RDONLY)) == 0; }
 
   /// \brief Returns the maximum number of threads/reader slots for the environment.
   /// \see extra_runtime_option::max_readers
@@ -4114,7 +4102,6 @@ public:
     bool result = checkpoint(&latency);
     return std::make_pair(result, latency);
   }
-
 };
 
 /// \brief Unmanaged cursor.

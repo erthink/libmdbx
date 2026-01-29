@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-356-gf2f7280c at 2026-01-29T00:25:31+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-362-g5570b943 at 2026-01-29T21:38:39+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -24,7 +24,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY d665339069a4e71af2a79ea83f679324c96a173127d537b516962dc285eba8a3_v0_14_1_356_gf2f7280c
+#define MDBX_BUILD_SOURCERY d51455c719fb0ba7ead7c10b1cb98a96c07212f41ff16c4aba570b11d13285fb_v0_14_1_362_g5570b943
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -1795,8 +1795,9 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t osal_bswap32
 #error MDBX_DPL_PREALLOC_FOR_RADIXSORT must be defined as 0 or 1
 #endif /* MDBX_DPL_PREALLOC_FOR_RADIXSORT */
 
-/** Controls dirty pages tracking, spilling and persisting in `MDBX_WRITEMAP`
- * mode, i.e. disables in-memory database updating with consequent
+/** Controls dirty pages tracking, spilling and persisting in `MDBX_WRITEMAP`.
+ *
+ * \details In other words, disables in-memory database updating with consequent
  * flush-to-disk/msync syscall.
  *
  * 0/OFF = Don't track dirty pages at all, don't spill ones, and use msync() to
@@ -1816,16 +1817,14 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t osal_bswap32
 #error MDBX_AVOID_MSYNC must be defined as 0 or 1
 #endif /* MDBX_AVOID_MSYNC */
 
-/** Управляет механизмом поддержки разреженных наборов DBI-хендлов для снижения
- * накладных расходов при запуске и обработке транзакций. */
+/** Controls a supporting sparse sets of DBI-handles to reduce transaction startup and processing overhead. */
 #ifndef MDBX_ENABLE_DBI_SPARSE
 #define MDBX_ENABLE_DBI_SPARSE 1
 #elif !(MDBX_ENABLE_DBI_SPARSE == 0 || MDBX_ENABLE_DBI_SPARSE == 1)
 #error MDBX_ENABLE_DBI_SPARSE must be defined as 0 or 1
 #endif /* MDBX_ENABLE_DBI_SPARSE */
 
-/** Управляет механизмом отложенного освобождения и поддержки пути быстрого
- * открытия DBI-хендлов без захвата блокировок. */
+/** Controls support of lock-free opening of DBI-handles and deferred destroying ones. */
 #ifndef MDBX_ENABLE_DBI_LOCKFREE
 #define MDBX_ENABLE_DBI_LOCKFREE 1
 #elif !(MDBX_ENABLE_DBI_LOCKFREE == 0 || MDBX_ENABLE_DBI_LOCKFREE == 1)
@@ -1927,6 +1926,14 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t osal_bswap32
 #elif !(MDBX_ENABLE_NON_READONLY_EXPORT == 0 || MDBX_ENABLE_NON_READONLY_EXPORT == 1)
 #error MDBX_ENABLE_NON_READONLY_EXPORT must be defined as 0 or 1
 #endif /* MDBX_ENABLE_NON_READONLY_EXPORT */
+
+/** Enables fake nested read-only transactions, which are much cheaper but do not restore
+ * the state of cursors in case of transaction abortion. */
+#ifndef MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS
+#define MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS 0
+#elif !(MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS == 0 || MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS == 1)
+#error MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS must be defined as 0 or 1
+#endif /* MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS */
 
 //------------------------------------------------------------------------------
 

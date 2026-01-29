@@ -23,6 +23,10 @@ static void тысяча(const mdbx::path &database_pathname, const mdbx::env::m
     txn.commit();
   }
 
+  const auto prof = env.start_write().commit_get_latency();
+  std::cout << "gc.max_reader_lag: " << prof.gc_prof.max_reader_lag << std::endl;
+  std::cout << "gc.max_retained_pages: " << prof.gc_prof.max_retained_pages << std::endl;
+
   auto info = env.get_info();
 
   // std::cout << "  pgop.newly: " << info.mi_pgop_stat.newly << "\n";
