@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 7b1a28ab8a09323047bcd7e2bc258e38d199794bae9df6037167024e54f0af9e_v0_13_10_65_ge413d8b7
+#define MDBX_BUILD_SOURCERY 6d236a4629aecb37f93c0ac19ed54916c3e4217add0a2dc33da63910a8bf574f_v0_13_10_66_g0171a9de
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -4181,7 +4181,7 @@ enum txn_flags {
   txn_rw_begin_flags = MDBX_TXN_NOMETASYNC | MDBX_TXN_NOSYNC | MDBX_TXN_TRY,
   txn_shrink_allowed = UINT32_C(0x40000000),
   txn_parked = MDBX_TXN_PARKED,
-  txn_gc_drained = 0x40 /* GC was depleted up to oldest reader */,
+  txn_gc_drained = 0x100 /* GC was depleted up to oldest reader */,
   txn_state_flags = MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_DIRTY | MDBX_TXN_SPILLS | MDBX_TXN_HAS_CHILD |
                     MDBX_TXN_INVALID | txn_gc_drained
 };
@@ -37599,10 +37599,10 @@ __dll_export
         0,
         13,
         10,
-        65,
+        66,
         "", /* pre-release suffix of SemVer
-                                        0.13.10.65 */
-        {"2026-01-29T01:07:25+03:00", "da44a3919220c0c538f1479c08ad985407322c9f", "e413d8b764749d5a402a451320aa6539d59ca2ac", "v0.13.10-65-ge413d8b7"},
+                                        0.13.10.66 */
+        {"2026-01-30T13:40:32+03:00", "528a854be52042c3d79f9b063384414276dea8e6", "0171a9de38390a2f514eddc892450d796d91c4bc", "v0.13.10-66-g0171a9de"},
         sourcery};
 
 __dll_export
