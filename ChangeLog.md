@@ -9,7 +9,7 @@ Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`,
 BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3NDMyS5wXJgfeMTmJznRi`.
 Всё будет хорошо!
 
-## v0.13.11 scheduled at 2026-01-30
+## v0.13.11 "A7A5" (just as Stable) at 2026-01-30
 
 The supporting release of a stable branch with bug fixes.
 
@@ -39,7 +39,7 @@ Fixes:
 
  - Fixed extra msync/fsync operations during GC reclaiming in a full database.
 
- - Fixed suboptimal reducing/merging of histogram items in an output of mdbx_chk tool.
+ - Fixed suboptimal reducing/merging of histogram items in an output of the `mdbx_chk` tool.
 
  - Added backlog-adjustment trick to avoid extra-growth of DB instead of reclaim GC in a rare specific cases.
    In the 0.14.x version series, this mechanism has been completely updated.
