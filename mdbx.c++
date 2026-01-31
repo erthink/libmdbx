@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-363-g75544794 at 2026-01-31T11:23:34+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-368-gf7f7e5e2 at 2026-01-31T17:58:57+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -2424,6 +2424,8 @@ void txn_managed::commit() { commit(nullptr); }
 
 bool txn_managed::checkpoint() { return checkpoint(nullptr); }
 
+void txn_managed::commit_embark_read() { commit_embark_read(nullptr); }
+
 void txn_managed::abort(finalization_latency *latency) {
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_abort_ex(handle_, latency));
   if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
@@ -2450,10 +2452,8 @@ bool txn_managed::checkpoint(finalization_latency *latency) {
   return err.is_result_true();
 }
 
-void txn_managed::commit_embark_read() {
-  auto env = handle_->env;
-  commit();
-  error::success_or_throw(::mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &handle_));
+void txn_managed::commit_embark_read(finalization_latency *latency) {
+  error::success_or_throw(::mdbx_txn_commit_embark_read(&handle_, latency));
 }
 
 //------------------------------------------------------------------------------

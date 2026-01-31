@@ -1,4 +1,4 @@
-/** This file is part of the libmdbx amalgamated source code (v0.14.1-363-g75544794 at 2026-01-31T11:23:34+03:00).
+/** This file is part of the libmdbx amalgamated source code (v0.14.1-368-gf7f7e5e2 at 2026-01-31T17:58:57+03:00).
 
 \file mdbx.h
 \brief The libmdbx C API header file.
@@ -4250,19 +4250,19 @@ typedef struct MDBX_commit_latency MDBX_commit_latency;
  * \ingroup c_transactions
  * \see mdbx_txn_commit()
  * \see mdbx_txn_checkpoint()
+ * \see mdbx_txn_commit_embark_read()
  * \warning This function may be changed in future releases. */
 LIBMDBX_API int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency);
 
 /** \brief Commits all the operations of the transaction and immediately starts next without releasing any locks.
  * \ingroup c_transactions
- * \see mdbx_txn_commit_ex()
  *
- * \details The function's actions are similar to the sequence of calls \ref mdbx_txn_commit_ex() and
- * then \ref mdbx_txn_begin() if the first one is successful, but without releasing the locks,
- * which ensures that there are no other changes after the changes are committed and the transaction begins.
+ * \details The function's actions are similar to the sequence of calls \ref mdbx_txn_commit_ex() and then
+ * \ref mdbx_txn_begin(\ref MDBX_TXN_READWRITE) if the first one is successful, but without releasing the locks,
+ * which ensures that there are no other changes after the current changes are committed and the transaction begins.
  *
+ * \see mdbx_txn_commit_embark_read()
  * \see mdbx_txn_commit_ex()
- * \see mdbx_txn_checkpoint()
  * \see mdbx_txn_refresh()
  * \see mdbx_txn_begin()
  *
@@ -4287,6 +4287,38 @@ LIBMDBX_API int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency);
  *
  * \warning This function may be changed in future releases. */
 LIBMDBX_API int mdbx_txn_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, MDBX_commit_latency *latency);
+
+/** \brief Commits all the operations of the transaction and immediately starts read transaction before release locks.
+ * \ingroup c_transactions
+ *
+ * \details The function's actions are similar to the sequence of calls \ref mdbx_txn_commit_ex() and then
+ * \ref mdbx_txn_begin(\ref MDBX_TXN_RDONLY) if the first one is successful, but before release the locks, which
+ * ensures that there are no other changes after the current changes are committed and the read transaction begins.
+ *
+ * \see mdbx_txn_checkpoint()
+ * \see mdbx_txn_commit_ex()
+ * \see mdbx_txn_refresh()
+ * \see mdbx_txn_begin()
+ *
+ * \param [in, out] ptxn         A pointer to the transaction handle returned by \ref mdbx_txn_begin().
+ * \param [out] latency          An optional pointer for getting information of latencies during the commit stages.
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possibilities are:
+ * \retval MDBX_RESULT_TRUE      The transaction does not contain any changes to commit,
+ *                               no actions have been performed.
+ * \retval MDBX_PANIC            A fatal error occurred earlier and
+ *                               the environment must be shut down.
+ * \retval MDBX_BAD_TXN          Unexpected or wrong transaction state.
+ * \retval MDBX_EBADSIGN         Transaction object has invalid signature,
+ *                               e.g. transaction was already terminated
+ *                               or memory was corrupted.
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
+ *                               by current thread.
+ * \retval MDBX_EINVAL           Transaction handle is NULL.
+ *
+ * \warning This function may be changed in future releases. */
+LIBMDBX_API int mdbx_txn_commit_embark_read(MDBX_txn **ptxn, MDBX_commit_latency *latency);
 
 /** \brief Commits all the operations of the transaction into the database.
  * \ingroup c_transactions
@@ -4338,6 +4370,7 @@ LIBMDBX_INLINE_API(int, mdbx_txn_commit, (MDBX_txn * txn)) { return mdbx_txn_com
  * \see mdbx_txn_reset()
  * \see mdbx_txn_commit_ex()
  * \see mdbx_txn_checkpoint()
+ * \see mdbx_txn_commit_embark_read()
  * \warning This function may be changed in future releases. */
 LIBMDBX_API int mdbx_txn_abort_ex(MDBX_txn *txn, MDBX_commit_latency *latency);
 
@@ -4362,6 +4395,7 @@ LIBMDBX_API int mdbx_txn_abort_ex(MDBX_txn *txn, MDBX_commit_latency *latency);
  *    \ref mdbx_cursor_close().
  *
  * \see mdbx_txn_abort_ex()
+ * \see mdbx_txn_commit_embark_read()
  * \see mdbx_txn_checkpoint()
  * \see mdbx_txn_commit()
  * \see mdbx_txn_refresh()
@@ -4547,6 +4581,7 @@ LIBMDBX_API int mdbx_txn_renew(MDBX_txn *txn);
  *
  * \see mdbx_txn_renew()
  * \see mdbx_txn_checkpoint()
+ * \see mdbx_txn_commit_embark_read()
  *
  * \param [in] txn  A transaction handle returned by \ref mdbx_txn_begin().
  *

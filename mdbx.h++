@@ -1,4 +1,4 @@
-﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-363-g75544794 at 2026-01-31T11:23:34+03:00).
+﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-368-gf7f7e5e2 at 2026-01-31T17:58:57+03:00).
 /// \file mdbx.h++
 /// \brief The libmdbx C++ API header file.
 ///
@@ -4108,6 +4108,17 @@ public:
 
   /// \brief Commits all the operations of a transaction into the database and then start read transaction.
   void commit_embark_read();
+  /// \brief Commits all the operations of a transaction into the database and then start read transaction.
+  void commit_embark_read(finalization_latency *latency);
+  /// \brief Commits all the operations of a transaction into the database and then start read transaction.
+  void commit_embark_read(finalization_latency &latency) { return commit_embark_read(&latency); }
+  /// \brief Commits all the operations of a transaction into the database and then start read transaction.
+  /// \returns latency information of commit stages.
+  finalization_latency commit_embark_read_get_latency() {
+    finalization_latency result;
+    commit_embark_read(&result);
+    return result;
+  }
 };
 
 /// \brief Unmanaged cursor.
