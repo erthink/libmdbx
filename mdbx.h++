@@ -1,4 +1,4 @@
-﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-362-g5570b943 at 2026-01-29T21:38:39+03:00).
+﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-367-g369a2e5f at 2026-01-31T12:47:11+03:00).
 /// \file mdbx.h++
 /// \brief The libmdbx C++ API header file.
 ///
@@ -4062,45 +4062,62 @@ public:
   ~txn_managed() noexcept;
 
   //----------------------------------------------------------------------------
+  using finalization_latency = MDBX_commit_latency;
 
-  /// \brief Abandon all the operations of the transaction
-  /// instead of saving ones.
+  /// \brief Abandon all the operations of the transaction instead of saving ones.
   void abort();
+  /// \brief Abandon all the operations of the transaction instead of saving ones with collecting latencies information.
+  void abort(finalization_latency *);
+  /// \brief Abandon all the operations of the transaction instead of saving ones with collecting latencies information.
+  void abort(finalization_latency &latency) { return abort(&latency); }
+  /// \brief Abandon all the operations of the transaction instead of saving ones with collecting latencies information.
+  /// \returns latency information of abort stages.
+  finalization_latency abort_get_latency() {
+    finalization_latency result;
+    abort(&result);
+    return result;
+  }
 
   /// \brief Commits all changes of the transaction into a database with collecting latencies information.
   void commit();
-
-  /// \brief Commits all the operations of a transaction into the database and then start read transaction.
-  void commit_embark_read();
-
-  using commit_latency = MDBX_commit_latency;
-
   /// \brief Commits all changes of the transaction into a database with collecting latencies information.
-  void commit(commit_latency *);
-
+  void commit(finalization_latency *);
   /// \brief ommits all changes of the transaction into a database with collecting latencies information.
-  void commit(commit_latency &latency) { return commit(&latency); }
-
+  void commit(finalization_latency &latency) { return commit(&latency); }
   /// \brief Commits all changes of the transaction into a database and return latency information.
   /// \returns latency information of commit stages.
-  commit_latency commit_get_latency() {
-    commit_latency result;
+  finalization_latency commit_get_latency() {
+    finalization_latency result;
     commit(&result);
     return result;
   }
 
   /// \brief Commits all the operations of the transaction and immediately starts next without releasing any locks.
-  bool checkpoint(commit_latency *latency = nullptr);
-
+  bool checkpoint();
   /// \brief Commits all the operations of the transaction and immediately starts next without releasing any locks.
-  bool checkpoint(commit_latency &latency) { return checkpoint(&latency); }
-
+  bool checkpoint(finalization_latency *latency);
+  /// \brief Commits all the operations of the transaction and immediately starts next without releasing any locks.
+  bool checkpoint(finalization_latency &latency) { return checkpoint(&latency); }
   /// \brief Commits all the operations of the transaction and immediately starts next without releasing any locks.
   /// \returns latency information of commit stages.
-  std::pair<bool, commit_latency> checkpoint_get_latency() {
-    commit_latency latency;
+  std::pair<bool, finalization_latency> checkpoint_get_latency() {
+    finalization_latency latency;
     bool result = checkpoint(&latency);
     return std::make_pair(result, latency);
+  }
+
+  /// \brief Commits all the operations of a transaction into the database and then start read transaction.
+  void commit_embark_read();
+  /// \brief Commits all the operations of a transaction into the database and then start read transaction.
+  void commit_embark_read(finalization_latency *latency);
+  /// \brief Commits all the operations of a transaction into the database and then start read transaction.
+  void commit_embark_read(finalization_latency &latency) { return commit_embark_read(&latency); }
+  /// \brief Commits all the operations of a transaction into the database and then start read transaction.
+  /// \returns latency information of commit stages.
+  finalization_latency commit_embark_read_get_latency() {
+    finalization_latency result;
+    commit_embark_read(&result);
+    return result;
   }
 };
 

@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-362-g5570b943 at 2026-01-29T21:38:39+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-367-g369a2e5f at 2026-01-31T12:47:11+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -1462,7 +1462,7 @@ MDBX_INTERNAL int txn_basal_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening
 
 MDBX_INTERNAL int txn_ro_park(MDBX_txn *txn, bool autounpark);
 MDBX_INTERNAL int txn_ro_unpark(MDBX_txn *txn);
-MDBX_INTERNAL int txn_ro_start(MDBX_txn *txn, bool prepare);
+MDBX_INTERNAL int txn_ro_start(MDBX_txn *txn, bool prepare_only);
 MDBX_INTERNAL int txn_ro_clone(const MDBX_txn *const source, MDBX_txn *const clone);
 MDBX_INTERNAL int txn_ro_reset(MDBX_txn *txn);
 MDBX_INTERNAL void txn_ro_free(MDBX_txn *txn);
@@ -10336,9 +10336,9 @@ static void txn_latency_init(MDBX_commit_latency *latency, struct commit_timesta
   ts->gc_cpu = 0;
 }
 
-static void txn_latency_done(const MDBX_txn *txn, MDBX_commit_latency *latency, struct commit_timestamp *ts) {
+static void txn_latency_done(MDBX_commit_latency *latency, struct commit_timestamp *ts) {
   if (latency) {
-    tASSERT(txn, ts->start);
+    assert(ts->start);
     latency->preparation = (ts->prep > ts->start) ? osal_monotime_to_16dot16(ts->prep - ts->start) : 0;
     latency->gc_wallclock = (ts->gc > ts->prep) ? osal_monotime_to_16dot16(ts->gc - ts->prep) : 0;
     latency->gc_cputime = ts->gc_cpu ? osal_monotime_to_16dot16(ts->gc_cpu) : 0;
@@ -10465,7 +10465,7 @@ int mdbx_txn_abort_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   }
 
   rc = txn_abort(txn, latency);
-  txn_latency_done(txn, latency, &ts);
+  txn_latency_done(latency, &ts);
   return LOG_IFERR(rc);
 }
 
@@ -10657,6 +10657,81 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
   return MDBX_SUCCESS;
 }
 
+int mdbx_txn_commit_embark_read(MDBX_txn **ptxn, MDBX_commit_latency *latency) {
+  struct commit_timestamp ts;
+  txn_latency_init(latency, &ts);
+
+  if (unlikely(!ptxn))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  MDBX_txn *wtxn = *ptxn;
+  int rc = check_txn(wtxn, MDBX_TXN_BLOCKED - MDBX_TXN_PARKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  MDBX_env *const env = wtxn->env;
+  rc = check_env(env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+#if MDBX_TXN_CHECKOWNER
+  if ((wtxn->flags & MDBX_NOSTICKYTHREADS) && wtxn == env->basal_txn && unlikely(wtxn->owner != osal_thread_self())) {
+    mdbx_txn_break(wtxn);
+    return LOG_IFERR(MDBX_THREAD_MISMATCH);
+  }
+#endif /* MDBX_TXN_CHECKOWNER */
+
+  if (unlikely(wtxn->flags & txn_ro_both))
+    goto done;
+
+  if (unlikely(wtxn->nested)) {
+    /* more checks for middle-point committing case */
+    rc = mdbx_txn_commit_ex(wtxn->nested, nullptr);
+    tASSERT(wtxn, !wtxn->nested);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      *ptxn = nullptr;
+      mdbx_txn_abort(wtxn);
+      goto done;
+    }
+  }
+
+  MDBX_txn *rtxn = nullptr;
+  if (wtxn == env->basal_txn) {
+    void *const preserved_context = wtxn->userctx;
+    rc = txn_basal_commit(wtxn, &ts);
+    if (likely(rc == MDBX_SUCCESS)) {
+      rc = txn_basal_end(wtxn, /* завершение транзакции без освобождения блокировки */ false);
+      if (likely(rc == MDBX_SUCCESS)) {
+        rtxn = txn_alloc(txn_ro_flat, env);
+        rc = likely(rtxn) ? txn_ro_start(rtxn, false) : MDBX_ENOMEM;
+      }
+    }
+
+    const int err = txn_basal_end(wtxn, /* освобождение блокировки */ true);
+    if (unlikely(err != MDBX_SUCCESS) && rc == MDBX_SUCCESS)
+      rc = err;
+    if (likely(rc == MDBX_SUCCESS)) {
+      rtxn->userctx = preserved_context;
+      rtxn->signature = txn_signature;
+    } else {
+      txn_ro_free(rtxn);
+      rtxn = nullptr;
+    }
+  } else {
+    rc = txn_nested_checkpoint(wtxn, &ts);
+    if (likely(rc == MDBX_SUCCESS)) {
+      rtxn = wtxn;
+      rtxn->flags |= txn_ro_nested;
+      tASSERT(rtxn, rtxn->env->txn == rtxn);
+    }
+  }
+  *ptxn = rtxn;
+
+done:
+  txn_latency_done(latency, &ts);
+  return LOG_IFERR(rc);
+}
+
 int mdbx_txn_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, MDBX_commit_latency *latency) {
   struct commit_timestamp ts;
   txn_latency_init(latency, &ts);
@@ -10673,6 +10748,23 @@ int mdbx_txn_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, MD
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
+#if MDBX_TXN_CHECKOWNER
+  if ((txn->flags & MDBX_NOSTICKYTHREADS) && txn == env->basal_txn && unlikely(txn->owner != osal_thread_self())) {
+    mdbx_txn_break(txn);
+    return LOG_IFERR(MDBX_THREAD_MISMATCH);
+  }
+#endif /* MDBX_TXN_CHECKOWNER */
+
+  if (unlikely(txn->nested)) {
+    /* more checks for middle-point committing case */
+    rc = mdbx_txn_commit_ex(txn->nested, nullptr);
+    tASSERT(txn, !txn->nested);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      mdbx_txn_abort(txn);
+      goto done;
+    }
+  }
+
   if ((txn->flags & MDBX_TXN_DIRTY) == 0)
     return MDBX_RESULT_TRUE;
 
@@ -10681,14 +10773,11 @@ int mdbx_txn_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, MD
   } else {
     if (unlikely(weakening_durability != MDBX_TXN_NOWEAKING))
       return LOG_IFERR(MDBX_EINVAL);
-    if (unlikely(!txn->parent || txn->parent->nested != txn || txn->parent->env != env)) {
-      ERROR("attempt to commit %s txn %p", "strange nested", __Wpedantic_format_voidptr(txn));
-      return MDBX_PROBLEM;
-    }
     rc = txn_nested_checkpoint(txn, latency ? &ts : nullptr);
   }
 
-  txn_latency_done(txn, latency, &ts);
+done:
+  txn_latency_done(latency, &ts);
   return LOG_IFERR(rc);
 }
 
@@ -10732,7 +10821,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
 
   rc = txn_commit(txn, latency, &ts);
 done:
-  txn_latency_done(txn, latency, &ts);
+  txn_latency_done(latency, &ts);
   return LOG_IFERR(rc);
 }
 
@@ -15649,8 +15738,8 @@ int cursor_check(const MDBX_cursor *mc, int txn_bad_bits) {
     return (txn_bad_bits > MDBX_TXN_FINISHED) ? MDBX_EINVAL : MDBX_SUCCESS;
   }
 
-  /* проверяем что курсор в связном списке для отслеживания, исключение допускается только для read-only операций для
-   * служебных/временных курсоров на стеке. */
+  /* проверяем что курсор в связанном списке для отслеживания,
+   * исключение допускается только для read-only операций для служебных/временных курсоров на стеке. */
   MDBX_MAYBE_UNUSED char stack_top[sizeof(void *)];
   cASSERT(mc, cursor_is_tracked(mc) || (!(txn_bad_bits & txn_ro_flat) && stack_top < (char *)mc &&
                                         (char *)mc - stack_top < (ptrdiff_t)globals.sys_pagesize * 4));
@@ -15663,14 +15752,19 @@ int cursor_check(const MDBX_cursor *mc, int txn_bad_bits) {
     }
 
     if (likely((mc->txn->flags & MDBX_TXN_HAS_CHILD) == 0))
+      /* связанная с курсором транзакций не имеет дочерних, курсор не требует затенения (возможно уже затенён) */
       return likely(!cursor_dbi_changed(mc)) ? MDBX_SUCCESS : MDBX_BAD_DBI;
 
+    /* связанная с курсором транзакция имеет дочернюю, курсор необходимо затенить, либо DBI-хендл не валиден */
     cASSERT(mc, (mc->txn->flags & txn_ro_flat) == 0 && mc->txn != mc->txn->env->txn && mc->txn->env->txn);
     rc = dbi_check(mc->txn->env->txn, cursor_dbi(mc));
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
 
+    /* В результате dbi_check() курсор должен быть затенён */
     cASSERT(mc, (mc->txn->flags & txn_ro_flat) == 0 && mc->txn == mc->txn->env->txn);
+    if (unlikely(mc->txn != mc->txn->env->txn))
+      return MDBX_BAD_TXN;
   }
 
   return MDBX_SUCCESS;
@@ -35133,22 +35227,18 @@ int txn_basal_end(MDBX_txn *txn, bool unlock) {
     dpl_release_shadows(txn);
 
   /* Export or close DBI handles created in this txn */
-  int err = dbi_update(txn, (preserved_flags & (MDBX_TXN_DIRTY | MDBX_TXN_ERROR)) == MDBX_TXN_DIRTY);
-  if (unlikely(err != MDBX_SUCCESS)) {
-    ERROR("unexpected error %d during export the state of dbi-handles to env", err);
-    err = MDBX_PROBLEM;
-  }
-
-  if (likely(unlock) || unlikely(err != MDBX_SUCCESS)) {
+  int rc = (preserved_flags & MDBX_TXN_DIRTY) ? dbi_update(txn, !(preserved_flags & MDBX_TXN_ERROR)) : MDBX_SUCCESS;
+  if (likely(unlock) || unlikely(rc != MDBX_SUCCESS)) {
     /* The writer mutex was locked in mdbx_txn_begin. */
     lck_txn_unlock(env);
   }
-  return err;
+  return rc;
 }
 
 int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
   MDBX_env *const env = txn->env;
   tASSERT(txn, txn == env->basal_txn && !txn->parent && !txn->nested);
+  tASSERT(txn, (txn->flags & MDBX_TXN_ERROR) == 0);
   if (!txn->wr.dirtylist) {
     tASSERT(txn, (txn->flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
   } else {
@@ -35353,14 +35443,17 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
 
 int txn_basal_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, struct commit_timestamp *ts) {
   const unsigned preserved_flags = txn->flags & txn_rw_begin_flags;
+  /* void *const preserved_context = txn->userctx; */
   txn->flags |= weakening_durability & (MDBX_TXN_NOMETASYNC | MDBX_TXN_NOSYNC | MDBX_SYNC_DURABLE);
   int rc = txn_basal_commit(txn, ts);
   if (likely(rc == MDBX_SUCCESS)) {
     rc = txn_basal_end(txn, false);
     if (likely(rc == MDBX_SUCCESS)) {
       rc = txn_basal_start(txn, preserved_flags | txn_rw_checkpoint);
-      if (likely(rc == MDBX_SUCCESS))
+      if (likely(rc == MDBX_SUCCESS)) {
+        /* txn->userctx = preserved_context; */
         return MDBX_SUCCESS;
+      }
     }
   }
 
@@ -35778,13 +35871,13 @@ static int nested_start(MDBX_txn *const nested, MDBX_txn *parent) {
 
   nested->wr.retired_pages = parent->wr.retired_pages;
   parent->wr.retired_pages = (void *)(intptr_t)pnl_size(parent->wr.retired_pages);
-
   nested->cursors[FREE_DBI] = nullptr;
   nested->cursors[MAIN_DBI] = nullptr;
   nested->dbi_state[FREE_DBI] = parent->dbi_state[FREE_DBI] & ~(DBI_FRESH | DBI_CREAT | DBI_DIRTY);
   nested->dbi_state[MAIN_DBI] = parent->dbi_state[MAIN_DBI] & ~(DBI_FRESH | DBI_CREAT | DBI_DIRTY);
-  memset(nested->dbi_state + CORE_DBS, 0, (nested->n_dbi = parent->n_dbi) - CORE_DBS);
   memcpy(nested->dbs, parent->dbs, sizeof(nested->dbs[0]) * CORE_DBS);
+  if ((nested->n_dbi = parent->n_dbi) > CORE_DBS)
+    memset(nested->dbi_state + CORE_DBS, 0, nested->n_dbi - CORE_DBS);
 
   tASSERT(parent, parent->wr.dirtyroom + parent->wr.dirtylist->length ==
                       (parent->parent ? parent->parent->wr.dirtyroom : parent->env->options.dp_limit));
@@ -36026,6 +36119,11 @@ int txn_nested_commit(MDBX_txn *nested, struct commit_timestamp *ts) {
 
 int txn_nested_checkpoint(MDBX_txn *nested, struct commit_timestamp *ts) {
   MDBX_txn *parent = nested->parent;
+  if (unlikely(!parent || parent->nested != nested || parent->env != nested->env)) {
+    ERROR("attempt to commit %s txn %p", "strange nested", __Wpedantic_format_voidptr(nested));
+    return MDBX_PROBLEM;
+  }
+
   unsigned flags = nested->flags & (txn_rw_begin_flags | MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | MDBX_TXN_RDONLY);
   int rc = nested_join(nested, ts);
   if (likely(rc == MDBX_SUCCESS)) {
@@ -36033,6 +36131,7 @@ int txn_nested_checkpoint(MDBX_txn *nested, struct commit_timestamp *ts) {
     nested->wr.loose_count = 0;
     nested->wr.loose_pages = nullptr;
     rc = nested_start(nested, parent);
+    tASSERT(nested, nested->env->txn == nested);
   }
   if (unlikely(rc != MDBX_SUCCESS))
     txn_nested_abort(nested);
@@ -36273,14 +36372,14 @@ static int ro_start_continue(MDBX_txn *txn) {
   return MDBX_SUCCESS;
 }
 
-int txn_ro_start(MDBX_txn *txn, bool prepare) {
+int txn_ro_start(MDBX_txn *txn, bool prepare_only) {
   MDBX_env *const env = txn->env;
   txn->flags = txn_ro_flat | MDBX_TXN_FINISHED | (env->flags & (MDBX_WRITEMAP | MDBX_NOSTICKYTHREADS));
   int err = ro_slot_get(txn);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
-  if (prepare) {
+  if (prepare_only) {
     eASSERT(env, txn->txnid == 0);
     eASSERT(env, txn->owner == 0);
     eASSERT(env, txn->n_dbi == 0);
@@ -37475,10 +37574,10 @@ __dll_export
         0,
         14,
         1,
-        362,
+        367,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.362 */
-        {"2026-01-29T21:38:39+03:00", "bb9de92fecd1c615f02e4126ddcf35f350d01a9b", "5570b94341b4f91b8b06fda922e0f7f0ce73db94", "v0.14.1-362-g5570b943"},
+                                        0.14.1.367 */
+        {"2026-01-31T12:47:11+03:00", "a88a7fdcdba86e690a19bf7a697ea3ae4445385f", "369a2e5f28dc05916d13252627c93029d9101228", "v0.14.1-367-g369a2e5f"},
         sourcery};
 
 __dll_export
