@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-368-gf7f7e5e2 at 2026-01-31T17:58:57+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-375-ga902b6e6 at 2026-02-01T21:08:14+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -977,7 +977,7 @@ enum txn_flags {
   txn_ro_both = txn_ro_flat | txn_ro_nested,
   txn_ro_begin_flags = MDBX_TXN_RDONLY | MDBX_TXN_RDONLY_PREPARE,
   txn_rw_begin_flags = MDBX_TXN_NOMETASYNC | MDBX_TXN_NOSYNC | MDBX_TXN_TRY,
-  txn_rw_checkpoint = MDBX_TXN_RDONLY_PREPARE & ~MDBX_TXN_RDONLY,
+  txn_rw_already_locked = MDBX_TXN_RDONLY_PREPARE & ~MDBX_TXN_RDONLY,
   txn_shrink_allowed = UINT32_C(0x40000000),
   txn_parked = MDBX_TXN_PARKED,
   txn_gc_drained = 0x100 /* GC was depleted up to oldest reader */,
@@ -11018,6 +11018,73 @@ bailout:
       txn_ro_reset(clone);
   }
   return LOG_IFERR(rc);
+}
+
+int mdbx_txn_amend(MDBX_txn *rtxn, MDBX_txn **ptxn, MDBX_txn_flags_t flags, void *context) {
+  if (unlikely(!ptxn))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  if (*ptxn != rtxn)
+    *ptxn = nullptr;
+
+  if (unlikely(flags & ~(txn_rw_begin_flags | MDBX_TXN_RDONLY_PREPARE)))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  int rc = check_txn(rtxn, MDBX_TXN_BLOCKED - MDBX_TXN_PARKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  MDBX_env *const env = rtxn->env;
+  rc = check_env(env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  if (unlikely((rtxn->flags & txn_ro_flat) == 0))
+    return LOG_IFERR(MDBX_BAD_TXN);
+
+  /* avoid recursive deadlock */
+  if (env->txn && env->basal_txn->owner == osal_thread_self())
+    return LOG_IFERR(MDBX_TXN_OVERLAPPING);
+
+  /* first check that there were no new commits */
+  if (recent_committed_txnid(env) != rtxn->txnid)
+    return LOG_IFERR(MDBX_RESULT_TRUE);
+
+  STATIC_ASSERT(MDBX_TXN_TRY != MDBX_TXN_PARKED);
+  if ((uint32_t)(flags & MDBX_TXN_TRY) == (uint32_t)(rtxn->flags & MDBX_TXN_PARKED)) {
+    rc = txn_ro_park(rtxn, true);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
+  }
+  rc = lck_txn_lock(env, (flags & MDBX_TXN_TRY) != 0);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  /* after the lock was acuired we re-check that there were no new commits */
+  if (recent_committed_txnid(env) != rtxn->txnid) {
+    lck_txn_unlock(env);
+    return LOG_IFERR(MDBX_RESULT_TRUE);
+  }
+
+  rc = txn_basal_start(env->basal_txn, (flags & ~MDBX_TXN_RDONLY_PREPARE) | txn_rw_already_locked);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  /* A paranoid check that changes will be made on top of the desired data snapshot */
+  rc = MDBX_RESULT_TRUE;
+  if (txn_basis_snapshot(env->basal_txn) == rtxn->txnid)
+    rc = txn_ro_reset(rtxn);
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    env->basal_txn->flags |= MDBX_TXN_ERROR;
+    txn_basal_end(env->basal_txn, true);
+    return LOG_IFERR(rc);
+  }
+
+  if (!F_ISSET(flags, MDBX_TXN_RDONLY_PREPARE))
+      txn_ro_free(rtxn);
+  env->basal_txn->userctx = context;
+  *ptxn = env->basal_txn;
+  return MDBX_SUCCESS;
 }
 
 struct audit_ctx {
@@ -35100,7 +35167,7 @@ static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
     return MDBX_EPERM;
 #endif /* Windows */
 
-  txn->flags = flags & ~txn_rw_checkpoint;
+  txn->flags = flags & ~txn_rw_already_locked;
   txn->nested = nullptr;
   txn->wr.loose_pages = nullptr;
   txn->wr.loose_count = 0;
@@ -35115,7 +35182,6 @@ static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
   tASSERT(txn, rkl_empty(&txn->wr.gc.ready4reuse));
   tASSERT(txn, rkl_empty(&txn->wr.gc.comeback));
   txn->env->gc.detent = 0;
-  env->txn = txn;
 
   txn->wr.troika = meta_tap(env);
   const meta_ptr_t head = meta_recent(env, &txn->wr.troika);
@@ -35166,16 +35232,17 @@ static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
   tASSERT(txn, txn->cursors[FREE_DBI] == nullptr);
 
   dxb_sanitize_tail(env, txn);
+  env->txn = txn;
   return MDBX_SUCCESS;
 }
 
 int txn_basal_start(MDBX_txn *txn, unsigned flags) {
   tASSERT(txn, (flags & ~(txn_rw_begin_flags | MDBX_TXN_SPILLS | MDBX_WRITEMAP | MDBX_NOSTICKYTHREADS |
-                          txn_rw_checkpoint)) == 0);
+                          txn_rw_already_locked)) == 0);
   MDBX_env *const env = txn->env;
   tASSERT(txn, txn == env->basal_txn);
   flags |= env->flags & (MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP);
-  if ((flags & txn_rw_checkpoint) == 0) {
+  if ((flags & txn_rw_already_locked) == 0) {
     const uintptr_t tid = osal_thread_self();
     if (unlikely(txn->owner == tid ||
                  /* not recovery mode */ env->stuck_meta >= 0))
@@ -35195,7 +35262,7 @@ int txn_basal_start(MDBX_txn *txn, unsigned flags) {
 
   int err = basal_start_locked(txn, flags);
   if (unlikely(err != MDBX_SUCCESS)) {
-    lck_txn_unlock(txn->env);
+    txn_basal_end(txn, true);
     return err;
   }
 
@@ -35449,11 +35516,8 @@ int txn_basal_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, s
   if (likely(rc == MDBX_SUCCESS)) {
     rc = txn_basal_end(txn, false);
     if (likely(rc == MDBX_SUCCESS)) {
-      rc = txn_basal_start(txn, preserved_flags | txn_rw_checkpoint);
-      if (likely(rc == MDBX_SUCCESS)) {
-        /* txn->userctx = preserved_context; */
-        return MDBX_SUCCESS;
-      }
+      /* txn->userctx = preserved_context; */
+      return txn_basal_start(txn, preserved_flags | txn_rw_already_locked);
     }
   }
 
@@ -37574,10 +37638,10 @@ __dll_export
         0,
         14,
         1,
-        368,
+        375,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.368 */
-        {"2026-01-31T17:58:57+03:00", "f706e74bcb562436cfaec40027ebb2aa4acc8b7b", "f7f7e5e2f77a8a3e00b3a8251a0fc697864b8a6f", "v0.14.1-368-gf7f7e5e2"},
+                                        0.14.1.375 */
+        {"2026-02-01T21:08:14+03:00", "bb4e1b142f14a00bf833002aadf119d7b98f8c94", "a902b6e6d612f1cca971c3e0d581c45547d2f020", "v0.14.1-375-ga902b6e6"},
         sourcery};
 
 __dll_export

@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-368-gf7f7e5e2 at 2026-01-31T17:58:57+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-375-ga902b6e6 at 2026-02-01T21:08:14+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -540,7 +540,7 @@ enum txn_flags {
   txn_ro_both = txn_ro_flat | txn_ro_nested,
   txn_ro_begin_flags = MDBX_TXN_RDONLY | MDBX_TXN_RDONLY_PREPARE,
   txn_rw_begin_flags = MDBX_TXN_NOMETASYNC | MDBX_TXN_NOSYNC | MDBX_TXN_TRY,
-  txn_rw_checkpoint = MDBX_TXN_RDONLY_PREPARE & ~MDBX_TXN_RDONLY,
+  txn_rw_already_locked = MDBX_TXN_RDONLY_PREPARE & ~MDBX_TXN_RDONLY,
   txn_shrink_allowed = UINT32_C(0x40000000),
   txn_parked = MDBX_TXN_PARKED,
   txn_gc_drained = 0x100 /* GC was depleted up to oldest reader */,
@@ -2454,6 +2454,11 @@ bool txn_managed::checkpoint(finalization_latency *latency) {
 
 void txn_managed::commit_embark_read(finalization_latency *latency) {
   error::success_or_throw(::mdbx_txn_commit_embark_read(&handle_, latency));
+}
+
+bool txn_managed::amend(bool dont_wait) {
+  return !error::boolean_or_throw(::mdbx_txn_amend(
+      handle_, &handle_, dont_wait ? MDBX_TXN_READWRITE | MDBX_TXN_TRY : MDBX_TXN_READWRITE, handle_->userctx));
 }
 
 //------------------------------------------------------------------------------

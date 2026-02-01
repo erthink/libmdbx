@@ -59,6 +59,7 @@ static bool doit(const mdbx::path &database_pathname) {
   txn.insert(map, buffer::key_from_double(0.1), mdbx::slice("b"));
   txn.insert(map, buffer::key_from_jsonInteger(1), buffer("c"));
   txn.insert(map, mdbx::slice::wrap(uint64_t(0xaBad1dea)), buffer::base58("aBad1dea"));
+  txn.commit_embark_read();
 
   auto cursor = txn.open_cursor(map);
   cursor.to_first();
@@ -66,6 +67,13 @@ static bool doit(const mdbx::path &database_pathname) {
     std::cout << cursor.current() << std::endl;
     cursor.to_next(false);
   }
+
+  txn.amend();
+  txn.commit_embark_read();
+  txn.amend(true);
+  txn.checkpoint();
+  txn.commit_embark_read();
+  txn.amend(false);
 
   if (env.is_nested_transactions_available()) {
     auto nested = txn.start_nested();

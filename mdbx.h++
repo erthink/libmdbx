@@ -1,4 +1,4 @@
-﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-368-gf7f7e5e2 at 2026-01-31T17:58:57+03:00).
+﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-375-ga902b6e6 at 2026-02-01T21:08:14+03:00).
 /// \file mdbx.h++
 /// \brief The libmdbx C++ API header file.
 ///
@@ -4119,6 +4119,10 @@ public:
     commit_embark_read(&result);
     return result;
   }
+
+  /// \brief Starts a writing transaction to amending data in the MVCC-snapshot used by the read-only transaction.
+  /// \returns The `true` if writing transaction successfully started and `false` if read-only one still continue.
+  bool amend(bool dont_wait = false);
 };
 
 /// \brief Unmanaged cursor.
@@ -5610,8 +5614,9 @@ inline txn_managed env::prepare_read() const {
 
 inline txn_managed env::start_write(bool dont_wait) {
   ::MDBX_txn *ptr;
-  error::success_or_throw(::mdbx_txn_begin(handle_, nullptr, dont_wait ? MDBX_TXN_TRY : MDBX_TXN_READWRITE, &ptr));
-  assert(ptr != nullptr);
+  error::success_or_throw(
+      ::mdbx_txn_begin(handle_, nullptr, dont_wait ? MDBX_TXN_READWRITE | MDBX_TXN_TRY : MDBX_TXN_READWRITE, &ptr));
+  assert(ptr != nullptr || dont_wait);
   return txn_managed(ptr);
 }
 
