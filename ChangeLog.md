@@ -44,6 +44,7 @@ BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3N
     - добавлена функция `mdbx_txn_amend()` для изменения данных начиная со снимка данных используемого в заданной транзакции чтения.
     - добавлена поддержка клонирования читающих транзакций посредством `mdbx_txn_clone()`.
     - добавлена поддержка вложенных транзакций только для чтения.
+    - добавлена функция `mdbx_gc_info()` для получения информации о GC, использовании страниц, с возможностью итерирования содержимого GC.
 
  - Поддержка Harmony OS (OHOS).
 
@@ -426,6 +427,58 @@ BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3N
     Перенос в 0.15.x оправдан возможностью переноса функционала дефрагментации в stable-ветку, но посмотри как пойдут дела.
 
 ********************************************************************************
+
+## v0.13.11 "A7A5" (just as Stable) at 2026-01-30
+
+The supporting release of a stable branch with bug fixes.
+
+Appreciations:
+
+ - [Erigon](https://erigon.tech/) for sponsorship.
+ - [Cosmin Apreutesei](https://github.com/capr) for bug reporting.
+ - [Igor Ikonopistsev](https://github.com/ikonopistsev) for [NodeJS bindings](https://github.com/ikonopistsev/mdbxmou).
+ - Anatoly Zhmur for reporting bugs.
+
+Important:
+
+ - _libmdbx_ project has changed its code development and distribution model.
+   **To get acquainted with important changes and plans, we recommend reading the compact [presentation "libmdbx: successes, obstacles, goals and roadmap"](https://libmdbx.dqdkfa.ru/release/libmdbx-roadmap-HNY2026-english.pdf), which contains important explanations in the form of embedded comments.**
+
+ - At a many requests of users, the change log now is kept in English.
+
+Fixes:
+
+ - Fixed using of the identifier `ERROR_UNHANDLED_ERROR`, which is not defined in new versions of Windows SDK.
+
+ - Fixed non-closing of DBI descriptors for tables created in nested transactions when such transactions are aborted.
+
+ - Fixed MSVC warning C4324 for `buffer::silo::bin`.
+
+ - Added workaround for MinGW build failures of dll-enabled C++ API.
+
+ - Fixed extra msync/fsync operations during GC reclaiming in a full database.
+
+ - Fixed suboptimal reducing/merging of histogram items in an output of the `mdbx_chk` tool.
+
+ - Added backlog-adjustment trick to avoid extra-growth of DB instead of reclaim GC in a rare specific cases.
+   In the 0.14.x version series, this mechanism has been completely updated.
+   However, for version 0.13.11, this inelegant modification done in order to reduce the risk of regression.
+
+ - Minor fixed `iov_callback4dirtypages()` and assertion inside `cursor_put()` to avoid Valgrind/ASAN warnings.
+
+ - Fixed cursor(s) finalization after ones explicitly closed in a nested transactions.
+
+Other:
+
+ - Clarification and addition of documentation.
+
+ - Considering extended ASCII as non-printable if UTF8 enabled in C++ API.
+
+ - Using hex dump of `mdbx::slice` instead of base58 in C++ API.
+
+ - Added link to [`mdbxmou`](https://github.com/ikonopistsev/mdbxmou) bindings for NodeJS.
+
+--------------------------------------------------------------------------------
 
 ## v0.13.10 "Блеск Славы" (Gloss of Glory) от 2025-12-17
 

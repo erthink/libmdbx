@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-376-ge2ab238f at 2026-02-02T22:29:25+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-389-gd5175913 at 2026-02-05T17:57:15+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -24,7 +24,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY d24f435602246a5fa75b5957b2fce033f79ccc0e1fa6c99d121d838ffcb256ce_v0_14_1_376_ge2ab238f
+#define MDBX_BUILD_SOURCERY ada3e97b23b38bc24478dd09b1bc2f7430d5b6b731285309c7294921f3d628a2_v0_14_1_389_gd5175913
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -2396,11 +2396,7 @@ typedef struct geo {
     pgno_t now; /* current size of datafile in pages */
     pgno_t end_pgno;
   };
-  union {
-    pgno_t first_unallocated; /* first unused page in the datafile,
-                         but actually the file may be shorter. */
-    pgno_t next_pgno;
-  };
+  pgno_t first_unallocated; /* first unused page in the datafile. */
 } geo_t;
 
 /* Meta page content.
@@ -3328,9 +3324,11 @@ typedef const pgno_t *const_pnl_t;
 #define MDBX_PNL_GRANULATE (1 << MDBX_PNL_GRANULATE_LOG2)
 #define MDBX_PNL_INITIAL (MDBX_PNL_GRANULATE - 2 - MDBX_ASSUME_MALLOC_OVERHEAD / sizeof(pgno_t))
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline size_t pnl_alloclen(const_pnl_t pnl) { return pnl[-1]; }
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline size_t pnl_alloclen(const const_pnl_t pnl) {
+  return pnl[-1];
+}
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline size_t pnl_size(const_pnl_t pnl) { return pnl[0]; }
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline size_t pnl_size(const const_pnl_t pnl) { return pnl[0]; }
 
 MDBX_MAYBE_UNUSED static inline void pnl_setsize(pnl_t pnl, size_t len) {
   assert(len < INT_MAX);
@@ -3370,7 +3368,7 @@ MDBX_INTERNAL pnl_t pnl_alloc(size_t size);
 
 MDBX_INTERNAL void pnl_free(pnl_t pnl);
 
-MDBX_MAYBE_UNUSED MDBX_INTERNAL pnl_t pnl_clone(const pnl_t src);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL pnl_t pnl_clone(const const_pnl_t src);
 
 MDBX_INTERNAL int pnl_reserve(pnl_t __restrict *__restrict ppnl, const size_t wanna);
 
@@ -3406,7 +3404,7 @@ MDBX_INTERNAL int __must_check_result pnl_append_span(__restrict pnl_t *ppnl, pg
 
 MDBX_INTERNAL int __must_check_result pnl_insert_span(__restrict pnl_t *ppnl, pgno_t pgno, size_t n);
 
-MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pnl_search_nochk(const pnl_t pnl, pgno_t pgno);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pnl_search_nochk(const const_pnl_t pnl, pgno_t pgno);
 
 MDBX_INTERNAL void pnl_sort_nochk(pnl_t pnl);
 
@@ -3422,7 +3420,7 @@ MDBX_MAYBE_UNUSED static inline void pnl_sort(pnl_t pnl, size_t limit4check) {
   (void)limit4check;
 }
 
-MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline size_t pnl_search(const pnl_t pnl, pgno_t pgno,
+MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline size_t pnl_search(const const_pnl_t pnl, pgno_t pgno,
                                                                              size_t limit) {
   assert(pnl_check_allocated(pnl, limit));
   if (MDBX_HAVE_CMOV) {
@@ -3440,9 +3438,9 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline size_t pnl_search(con
   return n;
 }
 
-MDBX_INTERNAL size_t pnl_merge(pnl_t dst, const pnl_t src);
+MDBX_INTERNAL size_t pnl_merge(pnl_t dst, const const_pnl_t src);
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pnl_maxspan(const pnl_t pnl);
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pnl_maxspan(const const_pnl_t pnl);
 
 #endif /* !__cplusplus */
 
@@ -3456,21 +3454,3 @@ extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
 #endif
 
 #define MDBX_IS_ERROR(rc) ((rc) != MDBX_RESULT_TRUE && (rc) != MDBX_RESULT_FALSE)
-
-/*----------------------------------------------------------------------------*/
-
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline pgno_t int64pgno(int64_t i64) {
-  if (likely(i64 >= (int64_t)MIN_PAGENO && i64 <= (int64_t)MAX_PAGENO + 1))
-    return (pgno_t)i64;
-  return (i64 < (int64_t)MIN_PAGENO) ? MIN_PAGENO : MAX_PAGENO;
-}
-
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline pgno_t pgno_add(size_t base, size_t augend) {
-  assert(base <= MAX_PAGENO + 1 && augend < MAX_PAGENO);
-  return int64pgno((int64_t)base + (int64_t)augend);
-}
-
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline pgno_t pgno_sub(size_t base, size_t subtrahend) {
-  assert(base >= MIN_PAGENO && base <= MAX_PAGENO + 1 && subtrahend < MAX_PAGENO);
-  return int64pgno((int64_t)base - (int64_t)subtrahend);
-}

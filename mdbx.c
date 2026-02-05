@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-376-ge2ab238f at 2026-02-02T22:29:25+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-389-gd5175913 at 2026-02-05T17:57:15+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -1399,11 +1399,18 @@ MDBX_MAYBE_UNUSED MDBX_INTERNAL pgno_t mvcc_largest_this(MDBX_env *env, pgno_t l
 MDBX_INTERNAL pgno_t mvcc_snapshot_largest(const MDBX_env *env, pgno_t last_used_page);
 MDBX_INTERNAL int mvcc_cleanup_dead(MDBX_env *env, int rlocked, int *dead);
 MDBX_INTERNAL bool mvcc_kick_laggards(MDBX_txn *txn, const txnid_t laggard);
-typedef struct oldest_readed_shapshot_into {
-  txnid_t oldest_txnid, steady_txnid;
-} orsi_t;
 
-MDBX_INTERNAL orsi_t mvcc_shapshot_oldest(const MDBX_txn *const txn);
+typedef struct rw_oldest_readed_shapshot_into {
+  txnid_t oldest_txnid, steady_txnid;
+} orsi_rw_t;
+MDBX_INTERNAL orsi_rw_t mvcc_shapshot_oldest_rw(const MDBX_txn *const txn);
+
+typedef struct ro_oldest_readed_shapshot_into {
+  txnid_t oldest_txnid, thisprocess_oldest_txnid;
+  txnid_t recent_txnid;
+  size_t nreaders;
+} orsi_ro_t;
+MDBX_INTERNAL orsi_ro_t mvcc_shapshot_oldest_ro(const MDBX_txn *const txn, const bool need_thisprocess_oldest);
 
 /* dxb.c */
 MDBX_INTERNAL int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bits);
@@ -2929,6 +2936,16 @@ static inline txnid_t txnid_min(txnid_t a, txnid_t b) { return (a < b) ? a : b; 
 static inline txnid_t txnid_max(txnid_t a, txnid_t b) { return (a > b) ? a : b; }
 
 static inline MDBX_cursor *gc_cursor(MDBX_env *env) { return ptr_disp(env->basal_txn, sizeof(MDBX_txn)); }
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL const char *gc_check_keylen(size_t const key_len);
+MDBX_INTERNAL const char *gc_check_rowdata(const MDBX_txn *const txn, const MDBX_val data);
+
+typedef struct gc_pnl_result {
+  const_pnl_t pnl;
+  int err;
+  const char *reason;
+} glr_t;
+MDBX_INTERNAL glr_t gc_row_pnl(const MDBX_txn *const txn, const MDBX_val data);
 
 MDBX_INTERNAL int lck_setup(MDBX_env *env, mdbx_mode_t mode);
 #if MDBX_LOCKING > MDBX_LOCKING_SYSV
@@ -8083,6 +8100,88 @@ __cold const char *mdbx_ratio2percents(uint64_t value, uint64_t whole, char *buf
     return ratio2percent(value, whole, (ratio2digits_buffer_t *)buffer);
 }
 
+int mdbx_gc_info(MDBX_txn *txn, MDBX_gc_info_t *info, size_t bytes, MDBX_gc_iter_func iter_func, void *iter_ctx) {
+  if (unlikely(!info || bytes != sizeof(MDBX_gc_info_t)))
+    return MDBX_EINVAL;
+  memset(info, 0, sizeof(*info));
+
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  info->pages_total = txn->geo.upper;
+  info->pages_backed = txn->geo.end_pgno;
+  info->pages_allocated = txn->geo.first_unallocated;
+  info->pages_gc += txn->dbs[FREE_DBI].branch_pages;
+  info->pages_gc += txn->dbs[FREE_DBI].leaf_pages;
+  info->pages_gc += txn->dbs[FREE_DBI].large_pages;
+
+  if ((txn->flags & txn_ro_flat) == 0) {
+    const size_t workset = txn->wr.loose_count + pnl_size(txn->wr.repnl);
+    info->gc_reclaimable.pages += workset;
+    info->pages_gc += workset + pnl_size(txn->wr.retired_pages) - /* retired_stored */ 0;
+  }
+
+  cursor_couple_t cx;
+  rc = cursor_init(&cx.outer, txn, FREE_DBI);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  const txnid_t reclaiming_detent = (txn->flags & txn_ro_flat) ? mvcc_shapshot_oldest_ro(txn, false).oldest_txnid
+                                                               : mvcc_shapshot_oldest_rw(txn).oldest_txnid;
+  MDBX_val gc_key, gc_data;
+  rc = outer_first(&cx.outer, &gc_key, &gc_data);
+  if (rc == MDBX_SUCCESS) {
+    cx.inner.cursor.next = txn->cursors[FREE_DBI];
+    txn->cursors[FREE_DBI] = &cx.inner.cursor;
+    for (;;) {
+      if (unlikely(gc_check_keylen(gc_key.iov_len))) {
+        ERROR("%s/%d: %s", "corrupted GC-record", rc = MDBX_CORRUPTED, gc_check_keylen(gc_key.iov_len));
+        break;
+      }
+
+      const glr_t glr = gc_row_pnl(txn, gc_data);
+      if (unlikely(glr.err != MDBX_SUCCESS)) {
+        ERROR("%s/%d: %s", "corrupted GC-record", rc = glr.err, glr.reason);
+        break;
+      }
+
+      const txnid_t id = unaligned_peek_u64(4, gc_key.iov_base);
+      if ((txn->flags & txn_ro_flat) == 0 && gc_is_reclaimed(txn, id))
+        continue;
+
+      const size_t len = pnl_size(glr.pnl);
+      const bool is_reclaimable = id < reclaiming_detent;
+      info->pages_gc += len;
+      if (is_reclaimable)
+        info->gc_reclaimable.pages += len;
+      for (size_t span, i = 1; i <= len; i += span) {
+        const size_t pgno = glr.pnl[i];
+        span = 1;
+        while (i + span <= len && MDBX_PNL_CONTIGUOUS(pgno, glr.pnl[i + span], span))
+          ++span;
+        if (is_reclaimable) {
+          histogram_acc(span, &info->gc_reclaimable.span_histogram);
+          histogram_acc(pgno, &info->gc_reclaimable.pgno_distribution);
+        }
+        if (iter_func) {
+          rc = iter_func(iter_ctx, txn, id, pgno, span, is_reclaimable);
+          if (rc != MDBX_RESULT_FALSE)
+            break;
+        }
+      }
+
+      rc = outer_next(&cx.outer, &gc_key, &gc_data, MDBX_NEXT);
+      if (rc != MDBX_SUCCESS) {
+        rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
+        break;
+      }
+    }
+    txn->cursors[FREE_DBI] = cx.outer.next;
+  }
+  return LOG_IFERR(rc);
+}
+
 static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
                                      MDBX_cache_entry_t *entry);
 
@@ -11081,7 +11180,7 @@ int mdbx_txn_amend(MDBX_txn *rtxn, MDBX_txn **ptxn, MDBX_txn_flags_t flags, void
   }
 
   if (!F_ISSET(flags, MDBX_TXN_RDONLY_PREPARE))
-      txn_ro_free(rtxn);
+    txn_ro_free(rtxn);
   env->basal_txn->userctx = context;
   *ptxn = env->basal_txn;
   return MDBX_SUCCESS;
@@ -11833,6 +11932,10 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
                             : SIZE_MAX;
     histogram_acc_ex((age < SIZE_MAX) ? age : SIZE_MAX - 1, &usr->result.histogram_page_age, HISTOGRAM_LE0);
     histogram_acc_ex((age < SIZE_MAX) ? age : SIZE_MAX - 1, &tbl->histogram.page_age, HISTOGRAM_LE0);
+
+    histogram_acc(pgno, &tbl->histogram.pgno);
+    if (tbl->id != FREE_DBI)
+      histogram_acc(pgno, &usr->result.histogram_pgno_payload);
   }
 
   int height = deep + 1;
@@ -12116,6 +12219,11 @@ __cold static int chk_tree(MDBX_chk_scope_t *const scope) {
                                   "1", false);
           }
           histogram_dist(chk_line_feed(line), &tbl->histogram.page_age, "pages age distribution", "dirty", false);
+          chk_line_end(line);
+        }
+        if (tbl->histogram.pgno.count) {
+          line = chk_line_begin(inner, (tbl->id != FREE_DBI) ? MDBX_chk_verbose : MDBX_chk_info);
+          histogram_dist(line, &tbl->histogram.pgno, "pgno distribution", "bad", false);
           chk_line_end(line);
         }
       }
@@ -12467,19 +12575,20 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t 
   assert(tbl == &chk->table_gc);
   (void)tbl;
   const char *bad = "";
-  pgno_t *iptr = data->iov_base;
 
   if (key->iov_len != sizeof(txnid_t))
     chk_object_issue(scope, "entry", record_number, "wrong txn-id size", "key-size %" PRIuSIZE, key->iov_len);
   else {
-    txnid_t txnid;
-    memcpy(&txnid, key->iov_base, sizeof(txnid));
+    const txnid_t txnid = unaligned_peek_u64(4, key->iov_base);
     if (txnid < 1 || txnid > usr->txn->txnid)
       chk_object_issue(scope, "entry", record_number, "wrong txn-id", "%" PRIaTXN, txnid);
     else {
+      const const_pnl_t pnl = data->iov_base;
       if (data->iov_len < sizeof(pgno_t) || data->iov_len % sizeof(pgno_t))
-        chk_object_issue(scope, "entry", txnid, "wrong idl size", "%" PRIuPTR, data->iov_len);
-      size_t number = (data->iov_len >= sizeof(pgno_t)) ? *iptr++ : 0;
+        chk_object_issue(scope, "entry", txnid, "wrong pnl size", "%" PRIuPTR, data->iov_len);
+      if ((size_t)data->iov_base % sizeof(pgno_t))
+        chk_object_issue(scope, "entry", txnid, "invalid pnl alignment", "%" PRIuPTR, (size_t)data->iov_base);
+      size_t number = (data->iov_len >= sizeof(pgno_t) && (size_t)data->iov_base % sizeof(pgno_t) == 0) ? *pnl : 0;
       if (number > PAGELIST_LIMIT)
         chk_object_issue(scope, "entry", txnid, "wrong idl length", "%" PRIuPTR, number);
       else if ((number + 1) * sizeof(pgno_t) > data->iov_len) {
@@ -12499,9 +12608,12 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t 
         usr->result.reclaimable_pages += number;
 
       size_t prev = MDBX_PNL_ASCENDING ? NUM_METAS - 1 : usr->txn->geo.first_unallocated;
-      size_t span = 1;
-      for (size_t i = 0; i < number; ++i) {
-        const size_t pgno = iptr[i];
+      for (size_t i = 1; i <= number; ++i) {
+        const size_t pgno = pnl[i];
+        histogram_acc(pgno, (chk->envinfo.mi_latter_reader_txnid > txnid)
+                                ? /* account reclaimable as GC-related*/ &tbl->histogram.pgno
+                                : &usr->result.histogram_pgno_retained);
+
         if (pgno < NUM_METAS)
           chk_object_issue(scope, "entry", txnid, "wrong idl entry", "pgno %" PRIuSIZE " < meta-pages %u", pgno,
                            NUM_METAS);
@@ -12512,7 +12624,7 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t 
           chk_object_issue(scope, "entry", txnid, "wrong idl entry", "pgno %" PRIuSIZE " > alloc-pages %" PRIuSIZE,
                            pgno, usr->result.alloc_pages - 1);
         else {
-          if (MDBX_PNL_DISORDERED(prev, pgno)) {
+          if (unlikely(MDBX_PNL_DISORDERED(prev, pgno))) {
             bad = " [bad sequence]";
             chk_object_issue(scope, "entry", txnid, "bad sequence", "%" PRIuSIZE " %c [%" PRIuSIZE "].%" PRIuSIZE, prev,
                              (prev == pgno) ? '=' : (MDBX_PNL_ASCENDING ? '>' : '<'), i, pgno);
@@ -12529,20 +12641,16 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t 
           }
         }
         prev = pgno;
-        while (i + span < number &&
-               iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pgno, span) : pgno_sub(pgno, span)))
-          ++span;
       }
       if (tbl->cookie) {
         chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_details),
                                "transaction %" PRIaTXN ", %" PRIuSIZE " pages, maxspan %" PRIuSIZE "%s", txnid, number,
-                               span, bad));
-        for (size_t i = 0; i < number; i += span) {
-          const size_t pgno = iptr[i];
-          for (span = 1; i + span < number &&
-                         iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pgno, span) : pgno_sub(pgno, span));
-               ++span)
-            ;
+                               pnl_maxspan(pnl), bad));
+        for (size_t span, i = 1; i <= number; i += span) {
+          const size_t pgno = pnl[i];
+          span = 1;
+          while (i + span <= number && MDBX_PNL_CONTIGUOUS(pgno, pnl[i + span], span))
+            ++span;
           histogram_acc(span, &tbl->histogram.nested_height_or_gc_span_length);
           MDBX_chk_line_t *line = chk_line_begin(scope, MDBX_chk_extra);
           if (line) {
@@ -12770,10 +12878,18 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
       usr->result.kv_tree_problems = usr->result.tree_problems;
     if (usr->result.histogram_page_age.count) {
       line = chk_line_begin(scope, MDBX_chk_info);
-      if (line) {
-        histogram_dist(line, &usr->result.histogram_page_age, "pages age distribution", "dirty", false);
-        chk_line_end(line);
-      }
+      histogram_dist(line, &usr->result.histogram_page_age, "pages age distribution", "dirty", false);
+      chk_line_end(line);
+    }
+    if (usr->result.histogram_pgno_payload.count) {
+      line = chk_line_begin(scope, MDBX_chk_info);
+      histogram_dist(line, &usr->result.histogram_pgno_payload, "payload pgno distribution", "bad", false);
+      chk_line_end(line);
+    }
+    if (usr->result.histogram_pgno_retained.count) {
+      line = chk_line_begin(scope, MDBX_chk_info);
+      histogram_dist(line, &usr->result.histogram_pgno_retained, "retained pgno distribution", "bad", false);
+      chk_line_end(line);
     }
     chk_scope_restore(scope, err);
   }
@@ -12789,11 +12905,8 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
     if (likely(!err))
       err = chk_db(usr->scope, FREE_DBI, &chk->table_gc, chk_handle_gc);
     line = chk_line_begin(scope, MDBX_chk_info);
-    if (line) {
-      histogram_print(scope, line, &chk->table_gc.histogram.nested_height_or_gc_span_length, "span(s)", "single",
-                      false);
-      chk_line_end(line);
-    }
+    histogram_print(scope, line, &chk->table_gc.histogram.nested_height_or_gc_span_length, "span(s)", "single", false);
+    chk_line_end(line);
     if (usr->result.problems_gc == 0 && (chk->flags & MDBX_CHK_SKIP_BTREE_TRAVERSAL) == 0) {
       const size_t used_pages = usr->result.alloc_pages - usr->result.gc_pages;
       if (usr->result.processed_pages != used_pages)
@@ -19853,7 +19966,36 @@ bailout:
 
 static txnid_t shapshot_oldest_force_rescan(MDBX_txn *const txn) {
   atomic_store32(&txn->env->lck->rdt_refresh_flag, true, mo_AcquireRelease);
-  return mvcc_shapshot_oldest(txn).oldest_txnid;
+  return mvcc_shapshot_oldest_rw(txn).oldest_txnid;
+}
+
+const char *gc_check_keylen(size_t const key_len) {
+  return likely(key_len == sizeof(txnid_t)) ? nullptr : "invalid GC key-length";
+}
+
+const char *gc_check_rowdata(const MDBX_txn *const txn, const MDBX_val data) {
+  if (unlikely(data.iov_len % sizeof(pgno_t) || data.iov_len < sizeof(pgno_t)))
+    return "invalid length of GC-record";
+  if (unlikely((size_t)data.iov_base % sizeof(pgno_t)))
+    return "invalid alignment of GC-record";
+
+  const const_pnl_t pnl = data.iov_base;
+  if (unlikely(data.iov_len < MDBX_PNL_SIZEOF(pnl))) {
+    return "trimmed GC-record";
+  }
+  if (unlikely(!pnl_check(pnl, txn->geo.first_unallocated)))
+    return "wrong GC-record";
+
+  return /* no error */ nullptr;
+}
+
+glr_t gc_row_pnl(const MDBX_txn *const txn, const MDBX_val data) {
+  glr_t result = {.pnl = (const pgno_t *)data.iov_base, .err = MDBX_SUCCESS, .reason = gc_check_rowdata(txn, data)};
+  if (unlikely(result.reason)) {
+    ERROR("%s/%d: %s", "MDBX_CORRUPTED", result.err = MDBX_CORRUPTED, result.reason);
+    result.pnl = nullptr;
+  }
+  return result;
 }
 
 pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) {
@@ -19989,9 +20131,8 @@ next_gc:
     }
     goto depleted_gc;
   }
-  if (unlikely(key.iov_len != sizeof(txnid_t))) {
-    ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid GC key-length");
-    ret.err = MDBX_CORRUPTED;
+  if (unlikely(gc_check_keylen(key.iov_len))) {
+    ERROR("%s/%d: %s", "corrupted GC-record", ret.err = MDBX_CORRUPTED, gc_check_keylen(key.iov_len));
     goto fail;
   }
 
@@ -20009,21 +20150,19 @@ next_gc:
   }
   txn->flags &= ~txn_gc_drained;
 
-  /* Reading next GC record */
+  /* Reading GC record */
   MDBX_val data;
   page_t *const mp = gc->pg[gc->top];
   if (unlikely((ret.err = node_read(gc, page_node(mp, gc->ki[gc->top]), &data, mp)) != MDBX_SUCCESS))
     goto fail;
 
-  pgno_t *gc_pnl = (pgno_t *)data.iov_base;
-  if (unlikely(data.iov_len % sizeof(pgno_t) || data.iov_len < MDBX_PNL_SIZEOF(gc_pnl) ||
-               (MDBX_UNALIGNED_OK < sizeof(pgno_t) && (size_t)data.iov_base % sizeof(pgno_t)) ||
-               !pnl_check(gc_pnl, txn->geo.first_unallocated))) {
-    ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid length/align of GC-record");
-    ret.err = MDBX_CORRUPTED;
+  const glr_t glr = gc_row_pnl(txn, data);
+  if (unlikely(glr.err != MDBX_SUCCESS)) {
+    ERROR("%s/%d: %s", "corrupted GC-record", ret.err = glr.err, glr.reason);
     goto fail;
   }
 
+  const pgno_t *const gc_pnl = glr.pnl;
   const size_t gc_len = pnl_size(gc_pnl);
   TRACE("gc-read: id #%" PRIaTXN " len %zu, re-list will %zu ", id, gc_len, gc_len + pnl_size(txn->wr.repnl));
 
@@ -25249,18 +25388,52 @@ bsr_t mvcc_bind_slot(MDBX_env *env) {
   return result;
 }
 
-__hot orsi_t mvcc_shapshot_oldest(const MDBX_txn *const txn) {
-  const uint32_t nothing_changed = MDBX_STRING_TETRAD("None");
+#define NOTHING_CHANGED_SIGNATURE MDBX_STRING_TETRAD("None")
+
+MDBX_MAYBE_UNUSED __hot orsi_ro_t mvcc_shapshot_oldest_ro(const MDBX_txn *const txn,
+                                                          const bool need_thisprocess_oldest) {
+  const uint32_t nothing_changed_signature = NOTHING_CHANGED_SIGNATURE;
+  tASSERT(txn, (txn->flags & txn_ro_flat) != 0);
+  orsi_ro_t result;
+  lck_t *const lck = txn->env->lck;
+  result.nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
+  result.thisprocess_oldest_txnid = result.oldest_txnid = result.recent_txnid = recent_committed_txnid(txn->env);
+
+  if (!need_thisprocess_oldest &&
+      nothing_changed_signature == atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease)) {
+    result.oldest_txnid = atomic_load64(&lck->cached_oldest_txnid, mo_AcquireRelease);
+    if (nothing_changed_signature == atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease))
+      return result;
+  }
+
+  for (size_t i = 0; i < result.nreaders; ++i) {
+    const mdbx_pid_t pid = atomic_load_pid(&lck->rdt[i].pid, mo_AcquireRelease);
+    if (!pid)
+      continue;
+
+    jitter4testing(true);
+    const txnid_t reader_txnid = safe64_read(&lck->rdt[i].txnid);
+    result.oldest_txnid = (result.oldest_txnid > reader_txnid) ? reader_txnid : result.oldest_txnid;
+    if (pid == txn->env->registered_reader_pid && result.thisprocess_oldest_txnid > reader_txnid)
+      result.thisprocess_oldest_txnid = reader_txnid;
+  }
+
+  return result;
+}
+
+__hot orsi_rw_t mvcc_shapshot_oldest_rw(const MDBX_txn *const txn) {
+  const uint32_t nothing_changed_signature = NOTHING_CHANGED_SIGNATURE;
+  tASSERT(txn, (txn->flags & txn_ro_flat) == 0);
   lck_t *const lck = txn->env->lck;
   uint64_t oldest_retired_pages = lck->cached_oldest_retired.weak;
   const txnid_t prev_oldest = atomic_load64(&lck->cached_oldest_txnid, mo_AcquireRelease);
   const meta_ptr_t steady = meta_prefer_steady(txn->env, &txn->wr.troika);
-  orsi_t result = {.steady_txnid = steady.txnid, .oldest_txnid = prev_oldest};
+  orsi_rw_t result = {.steady_txnid = steady.txnid, .oldest_txnid = prev_oldest};
   tASSERT(txn, steady.txnid <= txn->env->basal_txn->txnid);
   tASSERT(txn, steady.txnid >= prev_oldest);
 
-  while (nothing_changed != atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease)) {
-    lck->rdt_refresh_flag.weak = nothing_changed;
+  while (nothing_changed_signature != atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease)) {
+    lck->rdt_refresh_flag.weak = nothing_changed_signature;
     jitter4testing(false);
     const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
     result.oldest_txnid = result.steady_txnid;
@@ -25268,7 +25441,7 @@ __hot orsi_t mvcc_shapshot_oldest(const MDBX_txn *const txn) {
 
     for (size_t i = 0; i < snap_nreaders; ++i) {
     retry:;
-      const uint32_t pid = atomic_load_pid(&lck->rdt[i].pid, mo_AcquireRelease);
+      const mdbx_pid_t pid = atomic_load_pid(&lck->rdt[i].pid, mo_AcquireRelease);
       if (!pid)
         continue;
       jitter4testing(true);
@@ -25282,10 +25455,10 @@ __hot orsi_t mvcc_shapshot_oldest(const MDBX_txn *const txn) {
       }
 
       if (unlikely(reader_txnid < prev_oldest)) {
-        if (unlikely(nothing_changed == atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease)) &&
+        if (unlikely(nothing_changed_signature == atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease)) &&
             safe64_reset_compare(&lck->rdt[i].txnid, reader_txnid)) {
-          NOTICE("kick stuck reader[%zu of %zu].pid_%u %" PRIaTXN " < prev-oldest %" PRIaTXN ", steady-txn %" PRIaTXN,
-                 i, snap_nreaders, pid, reader_txnid, prev_oldest, steady.txnid);
+          NOTICE("kick stuck reader[%zu of %zu].pid_%zu %" PRIaTXN " < prev-oldest %" PRIaTXN ", steady-txn %" PRIaTXN,
+                 i, snap_nreaders, (size_t)pid, reader_txnid, prev_oldest, steady.txnid);
         }
         continue;
       }
@@ -25496,12 +25669,12 @@ __cold bool mvcc_kick_laggards(MDBX_txn *txn, const txnid_t straggler) {
   osal_memory_fence(mo_AcquireRelease, false);
   MDBX_env *const env = txn->env;
   MDBX_hsr_func *const callback = env->hsr_callback;
-  orsi_t orsi;
+  orsi_rw_t orsi;
   bool notify_eof_of_loop = false;
   int retry = 0;
   do {
     env->lck->rdt_refresh_flag.weak = /* force refresh */ true;
-    orsi = mvcc_shapshot_oldest(txn);
+    orsi = mvcc_shapshot_oldest_rw(txn);
     eASSERT(env, orsi.oldest_txnid < env->basal_txn->txnid);
     eASSERT(env, orsi.oldest_txnid >= straggler);
     eASSERT(env, orsi.oldest_txnid >= env->lck->cached_oldest_txnid.weak);
@@ -30988,7 +31161,7 @@ void pnl_free(pnl_t pnl) {
     osal_free(pnl - 1);
 }
 
-pnl_t pnl_clone(const pnl_t src) {
+pnl_t pnl_clone(const const_pnl_t src) {
   pnl_t pl = pnl_alloc(pnl_alloclen(src));
   if (likely(pl))
     memcpy(pl, src, MDBX_PNL_SIZEOF(src));
@@ -31151,7 +31324,7 @@ static __always_inline void pnl_merge_inner(pgno_t *__restrict dst, const pgno_t
   } while (likely(src_b > src_b_detent));
 }
 
-__hot size_t pnl_merge(pnl_t dst, const pnl_t src) {
+__hot size_t pnl_merge(pnl_t dst, const const_pnl_t src) {
   assert(pnl_check_allocated(dst, MAX_PAGENO + 1));
   assert(pnl_check(src, MAX_PAGENO + 1));
   const size_t src_len = pnl_size(src);
@@ -31195,7 +31368,7 @@ __hot __noinline void pnl_sort_nochk(pnl_t pnl) {
 
 SEARCH_IMPL(pgno_bsearch, pgno_t, pgno_t, MDBX_PNL_ORDERED)
 
-__hot __noinline size_t pnl_search_nochk(const pnl_t pnl, pgno_t pgno) {
+__hot __noinline size_t pnl_search_nochk(const const_pnl_t pnl, pgno_t pgno) {
   const pgno_t *begin = MDBX_PNL_BEGIN(pnl);
   const pgno_t *it = pgno_bsearch(begin, pnl_size(pnl), pgno);
   const pgno_t *end = begin + pnl_size(pnl);
@@ -31207,7 +31380,7 @@ __hot __noinline size_t pnl_search_nochk(const pnl_t pnl, pgno_t pgno) {
   return it - begin + 1;
 }
 
-size_t pnl_maxspan(const pnl_t pnl) {
+size_t pnl_maxspan(const const_pnl_t pnl) {
   size_t len = pnl_size(pnl);
   if (len > 1) {
     size_t span = 1, left = len - span;
@@ -36705,7 +36878,7 @@ pgop_stat_t *txn_latency_gcprof(const MDBX_env *env, MDBX_commit_latency *latenc
 }
 
 __hot bool txn_gc_detent(const MDBX_txn *const txn) {
-  const txnid_t detent = mvcc_shapshot_oldest(txn).oldest_txnid;
+  const txnid_t detent = mvcc_shapshot_oldest_rw(txn).oldest_txnid;
   if (likely(detent == txn->env->gc.detent))
     return false;
 
@@ -37638,10 +37811,10 @@ __dll_export
         0,
         14,
         1,
-        376,
+        389,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.376 */
-        {"2026-02-02T22:29:25+03:00", "7543b751d370647a1b4c8b306dd9fde120b64c9c", "e2ab238f6a7bbe0e2f2face9e57b46edae0cbc50", "v0.14.1-376-ge2ab238f"},
+                                        0.14.1.389 */
+        {"2026-02-05T17:57:15+03:00", "3d97f9bfc5a342d9ce60bc137b2e4b64ae862566", "d517591324ccdc3d48750374ff65f5ef03cb1fdd", "v0.14.1-389-gd5175913"},
         sourcery};
 
 __dll_export
