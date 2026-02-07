@@ -1,4 +1,4 @@
-﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-389-gd5175913 at 2026-02-05T17:57:15+03:00).
+﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-396-g9a6d94ec at 2026-02-07T22:23:25+03:00).
 /// \file mdbx.h++
 /// \brief The libmdbx C++ API header file.
 ///
@@ -602,6 +602,7 @@ MDBX_DECLARE_EXCEPTION(duplicated_lck_file);
 MDBX_DECLARE_EXCEPTION(dangling_map_id);
 MDBX_DECLARE_EXCEPTION(transaction_ousted);
 MDBX_DECLARE_EXCEPTION(mvcc_retarded);
+MDBX_DECLARE_EXCEPTION(laggard_reader);
 #undef MDBX_DECLARE_EXCEPTION
 
 [[noreturn]] LIBMDBX_API void throw_too_small_target_buffer();

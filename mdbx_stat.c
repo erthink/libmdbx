@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-389-gd5175913 at 2026-02-05T17:57:15+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-396-g9a6d94ec at 2026-02-07T22:23:25+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -80,15 +80,18 @@ static int reader_list_func(void *ctx, int num, int slot, mdbx_pid_t pid, mdbx_t
   (void)ctx;
   if (num == 1)
     printf("Reader Table\n"
-           "   #\tslot\t%6s %*s %20s %10s %13s %13s\n",
+           "   #\tslot\t%10s %*s %20s %10s %13s %13s\n",
            "pid", (int)sizeof(size_t) * 2, "thread", "txnid", "lag", "used", "retained");
 
-  if (thread < (mdbx_tid_t)((intptr_t)MDBX_TID_TXN_OUSTED))
-    printf(" %3d)\t[%d]\t%6" PRIdSIZE " %*" PRIxPTR, num, slot, (size_t)pid, (int)sizeof(size_t) * 2,
-           (uintptr_t)thread);
+  char thread_buf[32], *thread_str;
+  if (thread == (mdbx_tid_t)((uintptr_t)MDBX_TID_TXN_OUSTED))
+    thread_str = "ousted";
+  else if (thread == (mdbx_tid_t)((uintptr_t)MDBX_TID_TXN_PARKED))
+    thread_str = "parked";
   else
-    printf(" %3d)\t[%d]\t%6" PRIdSIZE " %sed", num, slot, (size_t)pid,
-           (thread == (mdbx_tid_t)((uintptr_t)MDBX_TID_TXN_PARKED)) ? "park" : "oust");
+    snprintf(thread_str = thread_buf, sizeof(thread_buf), "%" PRIxPTR, (uintptr_t)thread);
+
+  printf(" %3d)\t[%d]\t%10" PRIdSIZE " %*s", num, slot, (size_t)pid, (int)sizeof(size_t) * 2, thread_str);
 
   if (txnid)
     printf(" %20" PRIu64 " %10" PRIu64 " %12.1fM %12.1fM\n", txnid, lag, bytes_used / 1048576.0,
@@ -423,6 +426,10 @@ int main(int argc, char *argv[]) {
     }
     print_pages_percentage("GC|retained", gc_retained, info.pages_backed, info.pages_total);
     print_pages_percentage("Available", available_pages, info.pages_backed, info.pages_total);
+    if (info.max_retained_pages || info.max_reader_lag) {
+      printf("  max reader lag %zu\n", info.max_reader_lag);
+      printf("  max retained pages %zu\n", info.max_retained_pages);
+    }
   }
 
   rc = mdbx_dbi_open(txn, table, MDBX_DB_ACCEDE, &dbi);

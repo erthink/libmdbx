@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-389-gd5175913 at 2026-02-05T17:57:15+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-396-g9a6d94ec at 2026-02-07T22:23:25+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -2002,11 +2002,11 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t bytes_ceil2sp_pgno(const MDBX_en
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pgno_ceil2sp_bytes(const MDBX_env *env, size_t pgno);
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL pgno_t pgno_ceil2sp_pgno(const MDBX_env *env, size_t pgno);
 
-/* align to system allocation granularity */
-MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t bytes_ceil2ag_bytes(const MDBX_env *env, size_t bytes);
-MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t bytes_ceil2ag_pgno(const MDBX_env *env, size_t bytes);
-MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pgno_ceil2ag_bytes(const MDBX_env *env, size_t pgno);
-MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL pgno_t pgno_ceil2ag_pgno(const MDBX_env *env, size_t pgno);
+/* align to system allocation granularityor page size (MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY) */
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t bytes_ceil2os_bytes(const MDBX_env *env, size_t bytes);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t bytes_ceil2os_pgno(const MDBX_env *env, size_t bytes);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pgno_ceil2os_bytes(const MDBX_env *env, size_t pgno);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL pgno_t pgno_ceil2os_pgno(const MDBX_env *env, size_t pgno);
 
 MDBX_NOTHROW_PURE_FUNCTION static inline pgno_t largechunk_npages(const MDBX_env *env, size_t bytes) {
   return bytes2pgno(env, PAGEHDRSZ - 1 + bytes) + 1;
@@ -4080,7 +4080,7 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn, MDBX_warmup
     const troika_t troika = meta_tap(env);
     used_pgno = meta_recent(env, &troika).ptr_v->geometry.first_unallocated;
   }
-  const size_t used_range = pgno_ceil2sp_bytes(env, used_pgno);
+  const size_t used_range = pgno_ceil2os_bytes(env, used_pgno);
   const pgno_t mlock_pgno = bytes2pgno(env, used_range);
 
   int rc = MDBX_SUCCESS;
@@ -4766,7 +4766,7 @@ __cold static void compacting_fixup_meta(MDBX_env *env, meta_t *meta) {
     meta->geometry.now = meta->geometry.first_unallocated;
     const size_t aligner = pv2pages(meta->geometry.grow_pv ? meta->geometry.grow_pv : meta->geometry.shrink_pv);
     if (aligner) {
-      const pgno_t aligned = pgno_ceil2sp_pgno(env, meta->geometry.first_unallocated + aligner -
+      const pgno_t aligned = pgno_ceil2os_pgno(env, meta->geometry.first_unallocated + aligner -
                                                         meta->geometry.first_unallocated % aligner);
       meta->geometry.now = aligned;
     }
@@ -4995,7 +4995,7 @@ __cold static int copy_asis(MDBX_env *env, MDBX_txn *txn, mdbx_filehandle_t fd, 
 #endif /* MDBX_USE_COPYFILERANGE */
 
   /* Copy the data */
-  const size_t whole_size = pgno_ceil2sp_bytes(env, txn->geo.end_pgno);
+  const size_t whole_size = pgno_ceil2os_bytes(env, txn->geo.end_pgno);
   const size_t used_size = pgno2bytes(env, txn->geo.first_unallocated);
   while (rc == MDBX_SUCCESS && offset < used_size) {
     if (flags & MDBX_CP_THROTTLE_MVCC) {
@@ -5107,7 +5107,7 @@ __cold static int copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd, MDBX_copy_flags_t
 
   MDBX_env *const env = txn->env;
   const size_t buffer_size =
-      pgno_ceil2sp_bytes(env, NUM_METAS) +
+      pgno_ceil2os_bytes(env, NUM_METAS) +
       ceil_powerof2(((flags & MDBX_CP_COMPACT) ? 2 * (size_t)MDBX_ENVCOPY_WRITEBUF : (size_t)MDBX_ENVCOPY_WRITEBUF),
                     globals.sys_pagesize);
 
@@ -7468,17 +7468,18 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
 
     const geo_t *const geo = env->txn ? &env->txn->geo : &meta_recent(env, &env->basal_txn->wr.troika).ptr_c->geometry;
     if (size_lower < 0)
-      size_lower = pgno2bytes(env, geo->lower);
+      size_lower =
+          MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY ? pgno_ceil2os_bytes(env, geo->lower) : pgno2bytes(env, geo->lower);
     if (size_now < 0)
-      size_now = pgno_ceil2sp_bytes(env, geo->now);
+      size_now = pgno_ceil2os_bytes(env, geo->now);
     if (size_upper < 0)
-      size_upper = pgno_ceil2sp_bytes(env, geo->upper);
+      size_upper = pgno_ceil2os_bytes(env, geo->upper);
     if (growth_step < 0)
       growth_step = pgno2bytes(env, pv2pages(geo->grow_pv));
     if (shrink_threshold < 0)
       shrink_threshold = pgno2bytes(env, pv2pages(geo->shrink_pv));
 
-    const size_t usedbytes = pgno_ceil2sp_bytes(env, mvcc_snapshot_largest(env, geo->first_unallocated));
+    const size_t usedbytes = pgno_ceil2os_bytes(env, mvcc_snapshot_largest(env, geo->first_unallocated));
     if ((size_t)size_upper < usedbytes) {
       rc = MDBX_MAP_FULL;
       goto bailout;
@@ -8112,6 +8113,17 @@ int mdbx_gc_info(MDBX_txn *txn, MDBX_gc_info_t *info, size_t bytes, MDBX_gc_iter
   info->pages_total = txn->geo.upper;
   info->pages_backed = txn->geo.end_pgno;
   info->pages_allocated = txn->geo.first_unallocated;
+
+  const volatile lck_t *const lck = txn->env->lck;
+  if (lck) {
+    do {
+      info->max_reader_lag = lck->pgops.gc_prof.max_reader_lag;
+      info->max_retained_pages = lck->pgops.gc_prof.max_retained_pages;
+      osal_memory_fence(mo_AcquireRelease, false);
+    } while (unlikely(info->max_reader_lag != lck->pgops.gc_prof.max_reader_lag ||
+                      info->max_retained_pages != lck->pgops.gc_prof.max_retained_pages));
+  }
+
   info->pages_gc += txn->dbs[FREE_DBI].branch_pages;
   info->pages_gc += txn->dbs[FREE_DBI].leaf_pages;
   info->pages_gc += txn->dbs[FREE_DBI].large_pages;
@@ -8955,6 +8967,9 @@ __cold const char *mdbx_liberr2str(int errnum) {
            " of recycling old MVCC snapshots";
   case MDBX_MVCC_RETARDED:
     return "MDBX_MVCC_RETARDED: MVCC snapshot used by parked transaction was bygone";
+  case MDBX_LAGGARD_READER:
+    return "An operation cannot continue because a lagging reader is interfering with the"
+           " reclaiming of GC and old MVCC-snapshots";
   default:
     return nullptr;
   }
@@ -9210,7 +9225,7 @@ void env_options_adjust_defaults(MDBX_env *env) {
                                                           : basis >> factor;
   threshold =
       (threshold < env->geo_in_bytes.shrink || !env->geo_in_bytes.shrink) ? threshold : env->geo_in_bytes.shrink;
-  env->madv_threshold = bytes2pgno(env, bytes_ceil2sp_bytes(env, threshold));
+  env->madv_threshold = bytes_ceil2os_pgno(env, threshold);
 }
 
 //------------------------------------------------------------------------------
@@ -10797,7 +10812,7 @@ int mdbx_txn_commit_embark_read(MDBX_txn **ptxn, MDBX_commit_latency *latency) {
   MDBX_txn *rtxn = nullptr;
   if (wtxn == env->basal_txn) {
     void *const preserved_context = wtxn->userctx;
-    rc = txn_basal_commit(wtxn, &ts);
+    rc = txn_basal_commit(wtxn, latency ? &ts : nullptr);
     if (likely(rc == MDBX_SUCCESS)) {
       rc = txn_basal_end(wtxn, /* завершение транзакции без освобождения блокировки */ false);
       if (likely(rc == MDBX_SUCCESS)) {
@@ -10817,7 +10832,7 @@ int mdbx_txn_commit_embark_read(MDBX_txn **ptxn, MDBX_commit_latency *latency) {
       rtxn = nullptr;
     }
   } else {
-    rc = txn_nested_checkpoint(wtxn, &ts);
+    rc = txn_nested_checkpoint(wtxn, latency ? &ts : nullptr);
     if (likely(rc == MDBX_SUCCESS)) {
       rtxn = wtxn;
       rtxn->flags |= txn_ro_nested;
@@ -10918,7 +10933,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     }
   }
 
-  rc = txn_commit(txn, latency, &ts);
+  rc = txn_commit(txn, latency, latency ? &ts : nullptr);
 done:
   txn_latency_done(latency, &ts);
   return LOG_IFERR(rc);
@@ -13187,21 +13202,24 @@ MDBX_NOTHROW_PURE_FUNCTION pgno_t pgno_ceil2sp_pgno(const MDBX_env *env, size_t 
   return bytes2pgno(env, pgno_ceil2sp_bytes(env, pgno));
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION size_t bytes_ceil2ag_bytes(const MDBX_env *env, size_t bytes) {
-  return ceil_powerof2(bytes,
-                       (env->ps > globals.sys_allocation_granularity) ? env->ps : globals.sys_allocation_granularity);
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION size_t bytes_ceil2os_bytes(const MDBX_env *env, size_t bytes) {
+  const size_t sys_unit =
+      MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY ? globals.sys_allocation_granularity : globals.sys_pagesize;
+  return ceil_powerof2(bytes, (env->ps > sys_unit) ? env->ps : sys_unit);
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION size_t bytes_ceil2ag_pgno(const MDBX_env *env, size_t bytes) {
-  return bytes2pgno(env, bytes_ceil2ag_bytes(env, bytes));
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION size_t bytes_ceil2os_pgno(const MDBX_env *env, size_t bytes) {
+  return bytes2pgno(env, bytes_ceil2os_bytes(env, bytes));
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION size_t pgno_ceil2ag_bytes(const MDBX_env *env, size_t pgno) {
-  return ceil_powerof2(pgno2bytes(env, pgno), globals.sys_allocation_granularity);
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION size_t pgno_ceil2os_bytes(const MDBX_env *env, size_t pgno) {
+  const size_t sys_unit =
+      MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY ? globals.sys_allocation_granularity : globals.sys_pagesize;
+  return ceil_powerof2(pgno2bytes(env, pgno), sys_unit);
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION pgno_t pgno_ceil2ag_pgno(const MDBX_env *env, size_t pgno) {
-  return bytes2pgno(env, pgno_ceil2ag_bytes(env, pgno));
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION pgno_t pgno_ceil2os_pgno(const MDBX_env *env, size_t pgno) {
+  return bytes2pgno(env, pgno_ceil2os_bytes(env, pgno));
 }
 
 /*----------------------------------------------------------------------------*/
@@ -17351,8 +17369,8 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno, const pgno_t 
      * by other process. Avoids remapping until it necessary. */
     limit_pgno = prev_limit_pgno;
   }
-  const size_t limit_bytes = pgno_ceil2sp_bytes(env, limit_pgno);
-  const size_t size_bytes = pgno_ceil2sp_bytes(env, size_pgno);
+  const size_t limit_bytes = pgno_ceil2os_bytes(env, limit_pgno);
+  const size_t size_bytes = pgno_ceil2os_bytes(env, size_pgno);
   const void *const prev_map = env->dxb_mmap.base;
 
   VERBOSE("resize(env-flags 0x%x, mode %d) datafile/mapping: "
@@ -17616,10 +17634,10 @@ __cold int dxb_set_readahead(const MDBX_env *env, const pgno_t edge, const bool 
   const bool toggle = force_whole || ((enable ^ env->lck->readahead_anchor) & 1) || !env->lck->readahead_anchor;
   const pgno_t prev_edge = env->lck->readahead_anchor >> 1;
   const size_t limit = env->dxb_mmap.limit;
-  size_t offset = toggle ? 0 : pgno_ceil2sp_bytes(env, (prev_edge < edge) ? prev_edge : edge);
+  size_t offset = toggle ? 0 : pgno_ceil2os_bytes(env, (prev_edge < edge) ? prev_edge : edge);
   offset = (offset < limit) ? offset : limit;
 
-  size_t length = pgno_ceil2sp_bytes(env, (prev_edge < edge) ? edge : prev_edge);
+  size_t length = pgno_ceil2os_bytes(env, (prev_edge < edge) ? edge : prev_edge);
   length = (length < limit) ? length : limit;
   length -= offset;
 
@@ -17805,10 +17823,10 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
      *  - upper or lower limit changes
      *  - shrink threshold or growth step
      * But ignore change just a 'now/current' size. */
-    if (bytes_ceil2sp_bytes(env, env->geo_in_bytes.upper) != pgno2bytes(env, header.geometry.upper) ||
-        bytes_ceil2sp_bytes(env, env->geo_in_bytes.lower) != pgno2bytes(env, header.geometry.lower) ||
-        bytes_ceil2sp_bytes(env, env->geo_in_bytes.shrink) != pgno2bytes(env, pv2pages(header.geometry.shrink_pv)) ||
-        bytes_ceil2sp_bytes(env, env->geo_in_bytes.grow) != pgno2bytes(env, pv2pages(header.geometry.grow_pv))) {
+    if (bytes_ceil2os_bytes(env, env->geo_in_bytes.upper) != pgno2bytes(env, header.geometry.upper) ||
+        bytes_ceil2os_bytes(env, env->geo_in_bytes.lower) != pgno2bytes(env, header.geometry.lower) ||
+        bytes_ceil2os_bytes(env, env->geo_in_bytes.shrink) != pgno2bytes(env, pv2pages(header.geometry.shrink_pv)) ||
+        bytes_ceil2os_bytes(env, env->geo_in_bytes.grow) != pgno2bytes(env, pv2pages(header.geometry.grow_pv))) {
 
       if (env->geo_in_bytes.shrink && env->geo_in_bytes.now > used_bytes)
         /* pre-shrink if enabled */
@@ -17824,12 +17842,12 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
       }
 
       /* altering fields to match geometry given from user */
-      expected_filesize = pgno_ceil2sp_bytes(env, header.geometry.now);
-      header.geometry.now = bytes_ceil2sp_pgno(env, env->geo_in_bytes.now);
-      header.geometry.lower = bytes_ceil2sp_pgno(env, env->geo_in_bytes.lower);
-      header.geometry.upper = bytes_ceil2sp_pgno(env, env->geo_in_bytes.upper);
-      header.geometry.grow_pv = pages2pv(bytes_ceil2sp_pgno(env, env->geo_in_bytes.grow));
-      header.geometry.shrink_pv = pages2pv(bytes_ceil2sp_pgno(env, env->geo_in_bytes.shrink));
+      expected_filesize = pgno_ceil2os_bytes(env, header.geometry.now);
+      header.geometry.now = bytes_ceil2os_pgno(env, env->geo_in_bytes.now);
+      header.geometry.lower = bytes_ceil2os_pgno(env, env->geo_in_bytes.lower);
+      header.geometry.upper = bytes_ceil2os_pgno(env, env->geo_in_bytes.upper);
+      header.geometry.grow_pv = pages2pv(bytes_ceil2os_pgno(env, env->geo_in_bytes.grow));
+      header.geometry.shrink_pv = pages2pv(bytes_ceil2os_pgno(env, env->geo_in_bytes.shrink));
 
       VERBOSE("amending: root %" PRIaPGNO "/%" PRIaPGNO ", geo %" PRIaPGNO "/%" PRIaPGNO "-%" PRIaPGNO "/%" PRIaPGNO
               " +%u -%u, txn_id %" PRIaTXN ", %s",
@@ -17838,19 +17856,18 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
               pv2pages(header.geometry.shrink_pv), unaligned_peek_u64(4, header.txnid_a), durable_caption(&header));
     } else {
       /* fetch back 'now/current' size, since it was ignored during comparison and may differ. */
-      env->geo_in_bytes.now = pgno_ceil2sp_bytes(env, header.geometry.now);
+      env->geo_in_bytes.now = pgno_ceil2os_bytes(env, header.geometry.now);
     }
     ENSURE(env, header.geometry.now >= header.geometry.first_unallocated);
   } else {
     /* geo-params are not pre-configured by user, get current values from the meta. */
-    env->geo_in_bytes.now = pgno_ceil2sp_bytes(env, header.geometry.now);
-    env->geo_in_bytes.lower = pgno_ceil2sp_bytes(env, header.geometry.lower);
-    env->geo_in_bytes.upper = pgno_ceil2sp_bytes(env, header.geometry.upper);
-    env->geo_in_bytes.grow = pgno_ceil2sp_bytes(env, pv2pages(header.geometry.grow_pv));
-    env->geo_in_bytes.shrink = pgno_ceil2sp_bytes(env, pv2pages(header.geometry.shrink_pv));
+    env->geo_in_bytes.now = pgno_ceil2os_bytes(env, header.geometry.now);
+    env->geo_in_bytes.lower = pgno_ceil2os_bytes(env, header.geometry.lower);
+    env->geo_in_bytes.upper = pgno_ceil2os_bytes(env, header.geometry.upper);
+    env->geo_in_bytes.grow = pgno_ceil2os_bytes(env, pv2pages(header.geometry.grow_pv));
+    env->geo_in_bytes.shrink = pgno_ceil2os_bytes(env, pv2pages(header.geometry.shrink_pv));
   }
 
-  ENSURE(env, pgno_ceil2ag_bytes(env, header.geometry.now) == env->geo_in_bytes.now);
   ENSURE(env, env->geo_in_bytes.now >= used_bytes);
   if (!expected_filesize)
     expected_filesize = env->geo_in_bytes.now;
@@ -17904,7 +17921,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
 #endif /* MADV_DONTDUMP */
 #if defined(MADV_DODUMP)
   if (globals.runtime_flags & MDBX_DBG_DUMP) {
-    const size_t meta_length_aligned2os = pgno_ceil2sp_bytes(env, NUM_METAS);
+    const size_t meta_length_aligned2os = pgno_ceil2os_bytes(env, NUM_METAS);
     err = madvise(env->dxb_mmap.base, meta_length_aligned2os, MADV_DODUMP) ? ignore_enosys_and_eagain(errno)
                                                                            : MDBX_SUCCESS;
     if (unlikely(MDBX_IS_ERROR(err)))
@@ -18229,15 +18246,15 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
 #endif /* ENABLE_MEMCHECK || __SANITIZE_ADDRESS__ */
 
 #if defined(MADV_DONTNEED) || defined(POSIX_MADV_DONTNEED)
-      const size_t discard_edge_pgno = pgno_ceil2sp_pgno(env, largest_pgno);
+      const size_t discard_edge_pgno = pgno_ceil2os_pgno(env, largest_pgno);
       if (prev_discarded_pgno >= discard_edge_pgno + env->madv_threshold) {
-        const size_t prev_discarded_bytes = pgno_ceil2sp_bytes(env, prev_discarded_pgno);
+        const size_t prev_discarded_bytes = pgno_ceil2os_bytes(env, prev_discarded_pgno);
         const size_t discard_edge_bytes = pgno2bytes(env, discard_edge_pgno);
         /* из-за выравнивания prev_discarded_bytes и discard_edge_bytes
          * могут быть равны */
         if (prev_discarded_bytes > discard_edge_bytes) {
           NOTICE("shrink-MADV_%s %zu..%zu", "DONTNEED", discard_edge_pgno, prev_discarded_pgno);
-          munlock_after(env, discard_edge_pgno, bytes_ceil2sp_bytes(env, env->dxb_mmap.current));
+          munlock_after(env, discard_edge_pgno, bytes_ceil2os_bytes(env, env->dxb_mmap.current));
           const uint32_t munlocks_before = atomic_load32(&env->lck->mlcnt[1], mo_Relaxed);
 #if defined(MADV_DONTNEED)
           int advise = MADV_DONTNEED;
@@ -18284,7 +18301,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
               pending->geometry.grow_pv ? /* grow_step */ pv2pages(pending->geometry.grow_pv) : shrink_step;
           const pgno_t with_stockpile_gap = largest_pgno + stockpile_gap;
           const pgno_t aligned =
-              pgno_ceil2sp_pgno(env, (size_t)with_stockpile_gap + aligner - with_stockpile_gap % aligner);
+              pgno_ceil2os_pgno(env, (size_t)with_stockpile_gap + aligner - with_stockpile_gap % aligner);
           const pgno_t bottom = (aligned > pending->geometry.lower) ? aligned : pending->geometry.lower;
           if (pending->geometry.now > bottom) {
             if (TROIKA_HAVE_STEADY(troika))
@@ -20437,7 +20454,7 @@ no_gc:
 
   eASSERT(env, newnext > txn->geo.end_pgno);
   const size_t grow_step = pv2pages(txn->geo.grow_pv);
-  size_t aligned = pgno_ceil2sp_pgno(env, (pgno_t)(newnext + grow_step - newnext % grow_step));
+  size_t aligned = pgno_ceil2os_pgno(env, (pgno_t)(newnext + grow_step - newnext % grow_step));
 
   if (aligned > txn->geo.upper)
     aligned = txn->geo.upper;
@@ -37811,10 +37828,10 @@ __dll_export
         0,
         14,
         1,
-        389,
+        396,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.389 */
-        {"2026-02-05T17:57:15+03:00", "3d97f9bfc5a342d9ce60bc137b2e4b64ae862566", "d517591324ccdc3d48750374ff65f5ef03cb1fdd", "v0.14.1-389-gd5175913"},
+                                        0.14.1.396 */
+        {"2026-02-07T22:23:25+03:00", "34c2da455d5b1aa8c633761b8e8f6886d9ffa83a", "9a6d94ec6180d9aa65a5328d57357ecf49098f1c", "v0.14.1-396-g9a6d94ec"},
         sourcery};
 
 __dll_export
