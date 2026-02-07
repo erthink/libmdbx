@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-389-gd5175913 at 2026-02-05T17:57:15+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-396-g9a6d94ec at 2026-02-07T22:23:25+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -24,7 +24,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY ada3e97b23b38bc24478dd09b1bc2f7430d5b6b731285309c7294921f3d628a2_v0_14_1_389_gd5175913
+#define MDBX_BUILD_SOURCERY e954e765df2bcb8c41aacbf1c507d7b7630cd5a45dd13ff36585bde3002dbdc8_v0_14_1_396_g9a6d94ec
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -1934,6 +1934,20 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t osal_bswap32
 #elif !(MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS == 0 || MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS == 1)
 #error MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS must be defined as 0 or 1
 #endif /* MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS */
+
+/** Forces rounding size of memory mapped regions and files to system allocation granularity rather to system page size.
+ *
+ * \details In most operating systems, RAM is allocated in larger chunks consisting of several pages.
+ * Thus, rounding up to the size of the system page, rather than the actual size of the block used
+ * for memory allocation, does not save resources, but only hides what is really happening.
+ * On the other hand, system allocation granularity may depend not only on the type of operating system,
+ * but also on the version, settings, and amount of available resources (RAM), so increasing the rounding
+ * unit may lead to doubtful and unexpected behavior for the user. */
+#ifndef MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY
+#define MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY 0
+#elif !(MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY == 0 || MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY == 1)
+#error MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY must be defined as 0 or 1
+#endif /* MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY */
 
 //------------------------------------------------------------------------------
 

@@ -1,4 +1,4 @@
-/** This file is part of the libmdbx amalgamated source code (v0.14.1-389-gd5175913 at 2026-02-05T17:57:15+03:00).
+/** This file is part of the libmdbx amalgamated source code (v0.14.1-396-g9a6d94ec at 2026-02-07T22:23:25+03:00).
 
 \file mdbx.h
 \brief The libmdbx C API header file.
@@ -1981,8 +1981,12 @@ typedef enum MDBX_error {
   /** MVCC snapshot used by parked transaction was bygone. */
   MDBX_MVCC_RETARDED = -30410,
 
+  /** An operation cannot continue because a lagging reader is interfering
+   *  with the reclaiming of GC and old MVCC-snapshots. */
+  MDBX_LAGGARD_READER = -30409,
+
   /* The last of MDBX-added error codes */
-  MDBX_LAST_ADDED_ERRCODE = MDBX_MVCC_RETARDED,
+  MDBX_LAST_ADDED_ERRCODE = MDBX_LAGGARD_READER,
 
 #if defined(_WIN32) || defined(_WIN64)
   MDBX_ENODATA = ERROR_HANDLE_EOF,
@@ -7175,6 +7179,8 @@ typedef struct MDBX_gc_info {
         span_histogram; /**< Histogram of the spans length of a sequence(s) adjacent reclaimable pages */
     struct MDBX_chk_histogram pgno_distribution; /**< Distribution of a reclaimable pages over the file of a database */
   } gc_reclaimable;
+  size_t max_reader_lag;
+  size_t max_retained_pages;
 } MDBX_gc_info_t;
 
 /** \brief Provides information of Garbage Collection and page usage.
@@ -7202,7 +7208,7 @@ typedef struct MDBX_gc_info {
  * \param [in] iter_func    A custom callback function with the signature \ref MDBX_gc_iter_func,
  *                          which will be called for each span.
  *
- * \param [in] iter_ctx     A pointer to some context that will be passed to the `func()` function as it is.
+ * \param [in] iter_ctx     A pointer to some context that will be passed to the `iter_func()` function as it is.
  *
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:

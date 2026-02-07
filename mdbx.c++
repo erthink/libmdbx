@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-389-gd5175913 at 2026-02-05T17:57:15+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-396-g9a6d94ec at 2026-02-07T22:23:25+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -1277,6 +1277,7 @@ DEFINE_EXCEPTION(duplicated_lck_file)
 DEFINE_EXCEPTION(dangling_map_id)
 DEFINE_EXCEPTION(transaction_ousted)
 DEFINE_EXCEPTION(mvcc_retarded)
+DEFINE_EXCEPTION(laggard_reader)
 #undef DEFINE_EXCEPTION
 
 __cold const char *error::what() const noexcept {
@@ -1367,6 +1368,7 @@ __cold void error::throw_exception() const {
     CASE_EXCEPTION(dangling_map_id, MDBX_DANGLING_DBI);
     CASE_EXCEPTION(transaction_ousted, MDBX_OUSTED);
     CASE_EXCEPTION(mvcc_retarded, MDBX_MVCC_RETARDED);
+    CASE_EXCEPTION(laggard_reader, MDBX_LAGGARD_READER);
 #undef CASE_EXCEPTION
   default:
     if (is_mdbx_error())
