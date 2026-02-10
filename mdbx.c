@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 90c8567c0f319539000cf161230c67f127fd9cbcb5d35ad5b3b076b78b5dc48d_v0_13_11_0_gb862eb08
+#define MDBX_BUILD_SOURCERY 325012261a90567f0152ec730e7893fe9bcc6383850df1859ce3edf84d8b8183_v0_13_11_2_g46d79155
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -13834,11 +13834,11 @@ typedef struct MDBX_chk_internal {
   bool got_break;
   bool write_locked;
   uint8_t scope_depth;
+  pgno_t last_nested_root;
 
   MDBX_chk_table_t table_gc, table_main;
   int16_t *pagemap;
   MDBX_chk_table_t *last_lookup;
-  const void *last_nested;
   MDBX_chk_scope_t scope_stack[12];
   MDBX_chk_table_t *table[MDBX_MAX_DBI + CORE_DBS];
 
@@ -14526,8 +14526,7 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
                        chk_v2a(chk, &tbl->name), tbl->flags, deep);
       nested = nullptr;
     }
-  } else
-    chk->last_nested = nullptr;
+  }
 
   const char *pagetype_caption;
   bool branch = false;
@@ -14580,9 +14579,9 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
     } else {
       pagetype_caption = (pagetype == page_leaf) ? "nested-leaf" : "nested-leaf-dupfix";
       tbl->pages.nested_leaf += 1;
-      if (chk->last_nested != nested) {
+      if (chk->last_nested_root != nested->root) {
         histogram_acc(height, &tbl->histogram.nested_tree);
-        chk->last_nested = nested;
+        chk->last_nested_root = nested->root;
       }
       if (height != nested->height)
         chk_object_issue(scope, "page", pgno, "wrong nested-tree height", "actual %i != %i dupsort-node %s", height,
@@ -37599,10 +37598,10 @@ __dll_export
         0,
         13,
         11,
-        0,
+        2,
         "", /* pre-release suffix of SemVer
-                                        0.13.11 */
-        {"2026-01-30T16:04:44+03:00", "34a88ae65e76bbf3b9bcb0c2106dec18d2c067da", "b862eb08b77eccd4b8e8367a3276ffdea0d73de5", "v0.13.11-0-gb862eb08"},
+                                        0.13.11.2 */
+        {"2026-02-10T13:30:58+03:00", "6c6246e4db75b4380b96067073d2ce2449a500d6", "46d791550891efc04c1cbfb73af8fcdef0ac7b05", "v0.13.11-2-g46d79155"},
         sourcery};
 
 __dll_export

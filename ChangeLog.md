@@ -9,6 +9,20 @@ Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`,
 BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3NDMyS5wXJgfeMTmJznRi`.
 Всё будет хорошо!
 
+## v0.13.12 at a release engineering stage
+
+The supporting release of a stable branch with bug fixes.
+
+Appreciations:
+
+ - [Erigon](https://erigon.tech/) for sponsorship.
+
+Fixes:
+
+ - Fixed the counting of nested trees in the `mdbx_chk` tool for a multi-values/dupsort hives (backport).
+
+--------------------------------------------------------------------------------
+
 ## v0.13.11 "A7A5" (just as Stable) at 2026-01-30
 
 The supporting release of a stable branch with bug fixes.
