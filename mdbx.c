@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-396-g9a6d94ec at 2026-02-07T22:23:25+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-404-g2ed89b6e at 2026-02-10T17:18:11+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -465,6 +465,7 @@ typedef struct MDBX_rkl {
 #ifndef __cplusplus
 
 MDBX_MAYBE_UNUSED MDBX_INTERNAL void rkl_init(rkl_t *rkl);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL int rkl_reserve(rkl_t *rkl, size_t wanna_size);
 MDBX_MAYBE_UNUSED MDBX_INTERNAL void rkl_clear(rkl_t *rkl);
 MDBX_MAYBE_UNUSED static inline void rkl_clear_and_shrink(rkl_t *rkl) { rkl_clear(rkl); /* TODO */ }
 MDBX_MAYBE_UNUSED MDBX_INTERNAL void rkl_destroy(rkl_t *rkl);
@@ -1504,6 +1505,7 @@ MDBX_INTERNAL int __must_check_result tbl_create(MDBX_txn *txn, MDBX_cursor *mc,
 MDBX_INTERNAL int __must_check_result tbl_setup(const MDBX_env *env, volatile kvx_t *const kvx, const tree_t *const db);
 MDBX_INTERNAL int __must_check_result tbl_refresh(MDBX_txn *txn, size_t dbi);
 MDBX_INTERNAL int __must_check_result tbl_purge(MDBX_cursor *mc);
+MDBX_INTERNAL int __must_check_result tbl_stat_summary(const MDBX_txn *txn, MDBX_stat *st);
 
 /* coherency.c */
 MDBX_INTERNAL bool coherency_check_meta(const MDBX_env *env, const volatile meta_t *meta, bool report);
@@ -2931,12 +2933,17 @@ static inline bool gc_is_reclaimed(const MDBX_txn *txn, const txnid_t id) {
   return rkl_contain(&txn->wr.gc.reclaimed, id) || rkl_contain(&txn->wr.gc.comeback, id);
 }
 
+MDBX_NOTHROW_PURE_FUNCTION static inline bool gc_may_clean_reclaimed(const MDBX_txn *txn) {
+  return pnl_size(txn->wr.repnl) + txn->wr.loose_count + (txn->geo.end_pgno - txn->geo.first_unallocated) >
+         txn->dbs[FREE_DBI].height * 2u + 3u;
+}
+
 static inline txnid_t txnid_min(txnid_t a, txnid_t b) { return (a < b) ? a : b; }
 
 static inline txnid_t txnid_max(txnid_t a, txnid_t b) { return (a > b) ? a : b; }
 
-static inline MDBX_cursor *gc_cursor(MDBX_env *env) { return ptr_disp(env->basal_txn, sizeof(MDBX_txn)); }
-
+MDBX_INTERNAL MDBX_cursor *gc_cursor_init(MDBX_txn *txn);
+MDBX_INTERNAL int gc_merge_loose(MDBX_txn *txn);
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL const char *gc_check_keylen(size_t const key_len);
 MDBX_INTERNAL const char *gc_check_rowdata(const MDBX_txn *const txn, const MDBX_val data);
 
@@ -7807,108 +7814,39 @@ __cold int mdbx_env_sync_ex(MDBX_env *env, bool force, bool nonblock) {
   return LOG_IFERR(env_sync(env, force, nonblock));
 }
 
-/*----------------------------------------------------------------------------*/
-
-static void stat_add(const tree_t *db, MDBX_stat *const st, const size_t bytes) {
-  st->ms_depth += db->height;
-  st->ms_branch_pages += db->branch_pages;
-  st->ms_leaf_pages += db->leaf_pages;
-  st->ms_overflow_pages += db->large_pages;
-  st->ms_entries += db->items;
-  if (likely(bytes >= offsetof(MDBX_stat, ms_mod_txnid) + sizeof(st->ms_mod_txnid)))
-    st->ms_mod_txnid = (st->ms_mod_txnid > db->mod_txnid) ? st->ms_mod_txnid : db->mod_txnid;
-}
-
-static int stat_acc(const MDBX_txn *txn, MDBX_stat *st, size_t bytes) {
-  memset(st, 0, bytes);
-
-  int err = check_txn(txn, MDBX_TXN_BLOCKED);
-  if (unlikely(err != MDBX_SUCCESS))
-    return err;
-
-  cursor_couple_t cx;
-  err = cursor_init(&cx.outer, (MDBX_txn *)txn, MAIN_DBI);
-  if (unlikely(err != MDBX_SUCCESS))
-    return err;
-
-  const MDBX_env *const env = txn->env;
-  st->ms_psize = env->ps;
-  TXN_FOREACH_DBI_FROM(txn, dbi,
-                       /* assuming GC is internal and not subject for accounting */ MAIN_DBI) {
-    if ((txn->dbi_state[dbi] & (DBI_VALID | DBI_STALE)) == DBI_VALID)
-      stat_add(txn->dbs + dbi, st, bytes);
-  }
-
-  if (!(txn->dbs[MAIN_DBI].flags & MDBX_DUPSORT) && txn->dbs[MAIN_DBI].items /* TODO: use `md_subs` field */) {
-
-    /* scan and account not opened named tables */
-    err = tree_search(&cx.outer, nullptr, Z_FIRST);
-    while (err == MDBX_SUCCESS) {
-      const page_t *mp = cx.outer.pg[cx.outer.top];
-      for (size_t i = 0; i < page_numkeys(mp); i++) {
-        const node_t *node = page_node(mp, i);
-        if (node_flags(node) != N_TREE)
-          continue;
-        if (unlikely(node_ds(node) != sizeof(tree_t))) {
-          ERROR("%s/%d: %s %zu", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid table node size", node_ds(node));
-          return MDBX_CORRUPTED;
-        }
-
-        /* skip opened and already accounted */
-        const MDBX_val name = {node_key(node), node_ks(node)};
-        TXN_FOREACH_DBI_USER(txn, dbi) {
-          if ((txn->dbi_state[dbi] & (DBI_VALID | DBI_STALE)) == DBI_VALID &&
-              env->kvs[MAIN_DBI].clc.k.cmp(&name, &env->kvs[dbi].name) == 0) {
-            node = nullptr;
-            break;
-          }
-        }
-
-        if (node) {
-          tree_t db;
-          memcpy(&db, node_data(node), sizeof(db));
-          stat_add(&db, st, bytes);
-        }
-      }
-      err = cursor_sibling_right(&cx.outer);
-    }
-    if (unlikely(err != MDBX_NOTFOUND))
-      return err;
-  }
-
-  return MDBX_SUCCESS;
-}
-
 __cold int mdbx_env_stat_ex(const MDBX_env *env, const MDBX_txn *txn, MDBX_stat *dest, size_t bytes) {
   if (unlikely(!dest))
     return LOG_IFERR(MDBX_EINVAL);
-  const size_t size_before_modtxnid = offsetof(MDBX_stat, ms_mod_txnid);
-  if (unlikely(bytes != sizeof(MDBX_stat)) && bytes != size_before_modtxnid)
+
+  if (unlikely(bytes != sizeof(MDBX_stat)))
     return LOG_IFERR(MDBX_EINVAL);
 
   if (likely(txn)) {
     if (env && unlikely(txn->env != env))
       return LOG_IFERR(MDBX_EINVAL);
-    return LOG_IFERR(stat_acc(txn, dest, bytes));
+    int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
+
+    return LOG_IFERR(tbl_stat_summary(txn, dest));
   }
 
-  int err = check_env(env, true);
-  if (unlikely(err != MDBX_SUCCESS))
-    return LOG_IFERR(err);
+  int rc = check_env(env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
 
   MDBX_txn *txn_owned = env_owned_wrtxn(env);
   if (txn_owned)
     /* inside write-txn */
-    return LOG_IFERR(stat_acc(txn_owned, dest, bytes));
+    return LOG_IFERR(tbl_stat_summary(txn_owned, dest));
 
-  err = mdbx_txn_begin((MDBX_env *)env, nullptr, MDBX_TXN_RDONLY, &txn_owned);
-  if (unlikely(err != MDBX_SUCCESS))
-    return LOG_IFERR(err);
+  rc = mdbx_txn_begin((MDBX_env *)env, nullptr, MDBX_TXN_RDONLY, &txn_owned);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
 
-  const int rc = stat_acc(txn_owned, dest, bytes);
-  err = mdbx_txn_abort(txn_owned);
-  if (unlikely(err != MDBX_SUCCESS))
-    return LOG_IFERR(err);
+  rc = tbl_stat_summary(txn_owned, dest);
+  int err = txn_abort(txn_owned, nullptr);
+  rc = (rc == MDBX_SUCCESS && err != rc) ? err : rc;
   return LOG_IFERR(rc);
 }
 
@@ -8168,10 +8106,8 @@ int mdbx_gc_info(MDBX_txn *txn, MDBX_gc_info_t *info, size_t bytes, MDBX_gc_iter
       if (is_reclaimable)
         info->gc_reclaimable.pages += len;
       for (size_t span, i = 1; i <= len; i += span) {
+        span = pnl_scan_span(glr.pnl, i);
         const size_t pgno = glr.pnl[i];
-        span = 1;
-        while (i + span <= len && MDBX_PNL_CONTIGUOUS(pgno, glr.pnl[i + span], span))
-          ++span;
         if (is_reclaimable) {
           histogram_acc(span, &info->gc_reclaimable.span_histogram);
           histogram_acc(pgno, &info->gc_reclaimable.pgno_distribution);
@@ -11319,11 +11255,11 @@ typedef struct MDBX_chk_internal {
   bool got_break;
   bool write_locked;
   uint8_t scope_depth;
+  pgno_t last_nested_root;
 
   MDBX_chk_table_t table_gc, table_main;
   int16_t *pagemap;
   MDBX_chk_table_t *last_lookup;
-  const void *last_nested;
   MDBX_chk_scope_t scope_stack[12];
   MDBX_chk_table_t *table[MDBX_MAX_DBI + CORE_DBS];
 
@@ -11965,8 +11901,7 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
                        chk_v2a(chk, &tbl->name), tbl->flags, deep);
       nested = nullptr;
     }
-  } else
-    chk->last_nested = nullptr;
+  }
 
   const char *pagetype_caption;
   bool branch = false;
@@ -12026,9 +11961,9 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
       pagetype_caption = (pagetype == page_leaf) ? "nested-leaf" : "nested-leaf-dupfix";
       tbl->pages.nested_leaf += 1;
       density = &tbl->histogram.large_or_nested_density;
-      if (chk->last_nested != nested) {
+      if (chk->last_nested_root != nested->root) {
         histogram_acc(height, &tbl->histogram.nested_height_or_gc_span_length);
-        chk->last_nested = nested;
+        chk->last_nested_root = nested->root;
       }
       if (height != nested->height)
         chk_object_issue(scope, "page", pgno, "wrong nested-tree height", "actual %i != %i dupsort-node %s, parent %zu",
@@ -12662,10 +12597,8 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t 
                                "transaction %" PRIaTXN ", %" PRIuSIZE " pages, maxspan %" PRIuSIZE "%s", txnid, number,
                                pnl_maxspan(pnl), bad));
         for (size_t span, i = 1; i <= number; i += span) {
+          span = pnl_scan_span(pnl, i);
           const size_t pgno = pnl[i];
-          span = 1;
-          while (i + span <= number && MDBX_PNL_CONTIGUOUS(pgno, pnl[i + span], span))
-            ++span;
           histogram_acc(span, &tbl->histogram.nested_height_or_gc_span_length);
           MDBX_chk_line_t *line = chk_line_begin(scope, MDBX_chk_extra);
           if (line) {
@@ -20015,6 +19948,15 @@ glr_t gc_row_pnl(const MDBX_txn *const txn, const MDBX_val data) {
   return result;
 }
 
+MDBX_cursor *gc_cursor_init(MDBX_txn *txn) {
+  MDBX_cursor *gc = ptr_disp(txn->env->basal_txn, sizeof(MDBX_txn));
+  gc->txn = txn;
+  gc->tree = txn->dbs;
+  gc->dbi_state = txn->dbi_state;
+  gc->top_and_flags = z_fresh_mark;
+  return gc;
+}
+
 pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) {
   pgr_t ret;
   MDBX_txn *const txn = mc->txn;
@@ -20091,16 +20033,11 @@ pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) 
       txn->wr.prefault_write_activated = false;
   }
 
-  MDBX_cursor *const gc = gc_cursor(env);
-  gc->txn = txn;
-  gc->tree = txn->dbs;
-  gc->dbi_state = txn->dbi_state;
-  gc->top_and_flags = z_fresh_mark;
-
+  MDBX_cursor *const gc = gc_cursor_init(txn);
 retry_gc_refresh_detent:
   txn_gc_detent(txn);
 retry_gc_have_detent:
-  if (unlikely(txn->env->gc.detent >= txn->txnid)) {
+  if (unlikely(txn->env->gc.detent > txn_basis_snapshot(txn))) {
     FATAL("unexpected/invalid gc-detent %" PRIaTXN " for current-txnid %" PRIaTXN, txn->env->gc.detent, txn->txnid);
     ret.err = MDBX_PROBLEM;
     goto fail;
@@ -20110,7 +20047,7 @@ retry_gc_have_detent:
   MDBX_cursor_op op = MDBX_FIRST;
   if (flags & ALLOC_LIFO) {
     /* Begin lookup backward from oldest reader */
-    id = txn->env->gc.detent;
+    id = txn->env->gc.detent + 1;
     op = MDBX_SET_RANGE;
   } else {
     /* Continue lookup forward from last-reclaimed */
@@ -20118,7 +20055,7 @@ retry_gc_have_detent:
     if (id) {
       id += 1;
       op = MDBX_SET_RANGE;
-      if (id >= txn->env->gc.detent)
+      if (id > txn->env->gc.detent)
         goto depleted_gc;
     }
   }
@@ -20135,7 +20072,7 @@ next_gc:
   MDBX_val key;
   key.iov_base = &id;
   key.iov_len = sizeof(id);
-#endif
+#endif /* _MSC_VER */
 
   /* Seek first/next GC record */
   ret.err = cursor_ops(gc, &key, nullptr, op);
@@ -20156,10 +20093,10 @@ next_gc:
   id = unaligned_peek_u64(4, key.iov_base);
   if (flags & ALLOC_LIFO) {
     op = MDBX_PREV;
-    if (id >= txn->env->gc.detent || gc_is_reclaimed(txn, id))
+    if (id > txn->env->gc.detent || gc_is_reclaimed(txn, id))
       goto next_gc;
   } else {
-    if (unlikely(id >= txn->env->gc.detent))
+    if (unlikely(id > txn->env->gc.detent))
       goto depleted_gc;
     op = MDBX_NEXT;
     if (gc_is_reclaimed(txn, id))
@@ -20278,8 +20215,7 @@ next_gc:
   eASSERT(env, op == MDBX_PREV || op == MDBX_NEXT);
   rkl_t *rkl = &txn->wr.gc.reclaimed;
   const char *rkl_name = "reclaimed";
-  if (mc->dbi_state != txn->dbi_state &&
-      (MDBX_DEBUG > 0 || pnl_size(txn->wr.repnl) > (size_t)gc->tree->height + gc->tree->height + 3)) {
+  if (mc->dbi_state != txn->dbi_state && (MDBX_DEBUG > 0 || gc_may_clean_reclaimed(txn))) {
     gc->next = txn->cursors[FREE_DBI];
     txn->cursors[FREE_DBI] = gc;
     ret.err = cursor_del(gc, 0);
@@ -20422,7 +20358,7 @@ depleted_gc:
     goto done;
   }
 
-  if (txn->txnid - txn->env->gc.detent > xMDBX_TXNID_STEP && mvcc_kick_laggards(txn, txn->env->gc.detent))
+  if (txn_basis_snapshot(txn) > txn->env->gc.detent && mvcc_kick_laggards(txn, txn->env->gc.detent))
     goto retry_gc_refresh_detent;
 
   //---------------------------------------------------------------------------
@@ -20656,13 +20592,13 @@ MDBX_MAYBE_UNUSED static void dbg_dump_ids(gcu_t *ctx) {
         err = gc_peekid(&key, &id);
         if (unlikely(err == MDBX_SUCCESS)) {
           dbg_id(ctx, id);
-          if (id >= couple.outer.txn->env->gc.detent)
+          if (id > couple.outer.txn->env->gc.detent)
             break;
           err = outer_next(&couple.outer, &key, nullptr, MDBX_NEXT);
         }
       }
       dbg_id(ctx, 0);
-      DEBUG_EXTRA_PRINT("%s\n", (id >= couple.outer.txn->env->gc.detent) ? "..." : "");
+      DEBUG_EXTRA_PRINT("%s\n", (id > couple.outer.txn->env->gc.detent) ? "..." : "");
     } else
       DEBUG_EXTRA_PRINT("%s\n", " empty");
 
@@ -20857,13 +20793,13 @@ static int gc_prepare_stockpile4retired(MDBX_txn *txn, gcu_t *ctx) {
   return gc_prepare_stockpile(txn, ctx, for_retired);
 }
 
-static int gc_merge_loose(MDBX_txn *txn, gcu_t *ctx) {
+int gc_merge_loose(MDBX_txn *txn) {
   tASSERT(txn, txn->wr.loose_count > 0);
   /* Return loose page numbers to wr.repnl, though usually none are left at this point.
    * The pages themselves remain in dirtylist. */
   if (unlikely(!(txn->dbi_state[FREE_DBI] & DBI_DIRTY)) && txn->wr.loose_count < 3 + (unsigned)txn->dbs->height * 2) {
     /* Put loose page numbers in wr.retired_pages, since unreasonable to return ones to wr.repnl. */
-    TRACE("%s: merge %zu loose-pages into %s-pages", dbg_prefix(ctx), txn->wr.loose_count, "retired");
+    TRACE("merge %zu loose-pages into %s-pages", txn->wr.loose_count, "retired");
     int err = pnl_need(&txn->wr.retired_pages, txn->wr.loose_count);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
@@ -20874,7 +20810,7 @@ static int gc_merge_loose(MDBX_txn *txn, gcu_t *ctx) {
     }
   } else {
     /* Room for loose pages + temp PNL with same */
-    TRACE("%s: merge %zu loose-pages into %s-pages", dbg_prefix(ctx), txn->wr.loose_count, "reclaimed");
+    TRACE("merge %zu loose-pages into %s-pages", txn->wr.loose_count, "reclaimed");
     int err = pnl_need(&txn->wr.repnl, 2 * txn->wr.loose_count + 2);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
@@ -20912,7 +20848,7 @@ static int gc_merge_loose(MDBX_txn *txn, gcu_t *ctx) {
           page_shadow_release(txn->env, dp, 1);
       }
     }
-    TRACE("%s: filtered-out loose-pages from %zu -> %zu dirty-pages", dbg_prefix(ctx), dl->length, w);
+    TRACE("filtered-out loose-pages from %zu -> %zu dirty-pages", dl->length, w);
     tASSERT(txn, txn->wr.loose_count == dl->length - w);
     dl->sorted -= sorted_out;
     tASSERT(txn, dl->sorted <= w);
@@ -21099,7 +21035,7 @@ static inline int gc_clear_returned(MDBX_txn *txn, gcu_t *ctx) {
 }
 
 static int gc_push_sequel(MDBX_txn *txn, gcu_t *ctx, txnid_t id) {
-  tASSERT(txn, id > 0 && id < txn->env->gc.detent);
+  tASSERT(txn, id > 0 && id <= txn->env->gc.detent);
   tASSERT(txn, !rkl_contain(&txn->wr.gc.comeback, id) && !rkl_contain(&txn->wr.gc.ready4reuse, id));
   TRACE("id %" PRIaTXN ", return-left %zi", id, ctx->return_left);
   int err = rkl_push(&ctx->sequel, id);
@@ -22024,7 +21960,7 @@ retry:
 
     if (txn->wr.loose_pages) {
       /* merge loose pages into the reclaimed- either retired-list */
-      err = gc_merge_loose(txn, ctx);
+      err = gc_merge_loose(txn);
       if (unlikely(err != MDBX_SUCCESS)) {
         if (err == MDBX_RESULT_TRUE)
           continue;
@@ -31718,6 +31654,10 @@ static int rkl_resize(rkl_t *rkl, size_t wanna_size) {
   return MDBX_SUCCESS;
 }
 
+int rkl_reserve(rkl_t *rkl, size_t wanna_size) {
+  return (wanna_size > rkl->list_limit) ? rkl_resize(rkl, wanna_size) : MDBX_SUCCESS;
+}
+
 int rkl_copy(const rkl_t *src, rkl_t *dst) {
   assert(rkl_check(src));
   rkl_init(dst);
@@ -33399,6 +33339,72 @@ int tbl_purge(MDBX_cursor *mc) {
     const size_t dbi = cursor_dbi(mc);
     for (mc = mc->txn->cursors[dbi]; mc; mc = mc->next)
       be_poor(mc);
+  }
+
+  return MDBX_SUCCESS;
+}
+
+/*----------------------------------------------------------------------------*/
+
+static void tbl_stat_add(const tree_t *db, MDBX_stat *const st) {
+  st->ms_depth += db->height;
+  st->ms_branch_pages += db->branch_pages;
+  st->ms_leaf_pages += db->leaf_pages;
+  st->ms_overflow_pages += db->large_pages;
+  st->ms_entries += db->items;
+  st->ms_mod_txnid = (st->ms_mod_txnid > db->mod_txnid) ? st->ms_mod_txnid : db->mod_txnid;
+}
+
+int tbl_stat_summary(const MDBX_txn *txn, MDBX_stat *st) {
+  memset(st, 0, sizeof(MDBX_stat));
+
+  const MDBX_env *const env = txn->env;
+  st->ms_psize = env->ps;
+  size_t done = 0;
+  TXN_FOREACH_DBI_FROM(txn, dbi,
+                       /* assuming GC is internal and not subject for accounting */ MAIN_DBI) {
+    if ((txn->dbi_state[dbi] & (DBI_VALID | DBI_STALE)) == DBI_VALID) {
+      done += 1;
+      tbl_stat_add(txn->dbs + dbi, st);
+    }
+  }
+
+  if ((txn->dbs[MAIN_DBI].flags & MDBX_DUPSORT) == 0 &&
+      done < txn->dbs[MAIN_DBI].items /* TODO: use `md_subs` field */ + /* MainDB */ 1) {
+    cursor_couple_t cx;
+    int err = cursor_init(&cx.outer, (MDBX_txn *)txn, MAIN_DBI);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+
+    /* scan and account not opened named tables */
+    err = tree_search(&cx.outer, nullptr, Z_FIRST);
+    while (err == MDBX_SUCCESS) {
+      const page_t *mp = cx.outer.pg[cx.outer.top];
+      for (size_t i = 0; i < page_numkeys(mp); i++) {
+        const node_t *const node = page_node(mp, i);
+        if (node_flags(node) != N_TREE)
+          continue;
+        if (unlikely(node_ds(node) != sizeof(tree_t))) {
+          ERROR("%s/%d: %s %zu", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid table node size", node_ds(node));
+          return MDBX_CORRUPTED;
+        }
+
+        /* skip opened and already accounted */
+        const MDBX_val name = {node_key(node), node_ks(node)};
+        TXN_FOREACH_DBI_USER(txn, dbi)
+        if ((txn->dbi_state[dbi] & (DBI_VALID | DBI_STALE)) == DBI_VALID &&
+            env->kvs[MAIN_DBI].clc.k.cmp(&name, &env->kvs[dbi].name) == 0)
+          goto next;
+
+        tree_t db;
+        memcpy(&db, node_data(node), sizeof(db));
+        tbl_stat_add(&db, st);
+      }
+    next:
+      err = cursor_sibling_right(&cx.outer);
+    }
+    if (unlikely(err != MDBX_NOTFOUND))
+      return err;
   }
 
   return MDBX_SUCCESS;
@@ -37828,10 +37834,10 @@ __dll_export
         0,
         14,
         1,
-        396,
+        404,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.396 */
-        {"2026-02-07T22:23:25+03:00", "34c2da455d5b1aa8c633761b8e8f6886d9ffa83a", "9a6d94ec6180d9aa65a5328d57357ecf49098f1c", "v0.14.1-396-g9a6d94ec"},
+                                        0.14.1.404 */
+        {"2026-02-10T17:18:11+03:00", "0875d78810b7a65e9f93114ba13f96ad96506697", "2ed89b6ed8e8aec31f78344299d41f9dca993ca6", "v0.14.1-404-g2ed89b6e"},
         sourcery};
 
 __dll_export

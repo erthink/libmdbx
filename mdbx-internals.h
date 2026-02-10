@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-396-g9a6d94ec at 2026-02-07T22:23:25+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-404-g2ed89b6e at 2026-02-10T17:18:11+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -24,7 +24,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY e954e765df2bcb8c41aacbf1c507d7b7630cd5a45dd13ff36585bde3002dbdc8_v0_14_1_396_g9a6d94ec
+#define MDBX_BUILD_SOURCERY b5b59d95cd848efe0a65ab0f2d6cb9e990eee3fc556a094ba47684f6189b8b0e_v0_14_1_404_g2ed89b6e
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -3455,6 +3455,15 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline size_t pnl_search(con
 MDBX_INTERNAL size_t pnl_merge(pnl_t dst, const const_pnl_t src);
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pnl_maxspan(const const_pnl_t pnl);
+
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline size_t pnl_scan_span(const const_pnl_t pnl,
+                                                                                const size_t from) {
+  size_t span = 1;
+  assert(from > 0 && from <= pnl_size(pnl));
+  while (from + span <= pnl_size(pnl) && MDBX_PNL_CONTIGUOUS(pnl[from], pnl[from + span], span))
+    ++span;
+  return span;
+}
 
 #endif /* !__cplusplus */
 
