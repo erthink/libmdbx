@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-404-g2ed89b6e at 2026-02-10T17:18:11+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-422-g6c4ca7da at 2026-02-15T14:49:30+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -887,7 +887,10 @@ enum signatures {
 /* An dirty-page list item is an pgno/pointer pair. */
 struct dp {
   page_t *ptr;
-  pgno_t pgno, npages;
+  pgno_t pgno;
+#if MDBX_DPL_CACHE_NPAGES
+  pgno_t npages;
+#endif /* MDBX_DPL_CACHE_NPAGES */
 };
 
 enum dpl_rules {
@@ -1483,6 +1486,7 @@ MDBX_INTERNAL int env_close(MDBX_env *env, bool resurrect_after_fork);
 MDBX_INTERNAL MDBX_txn *env_owned_wrtxn(const MDBX_env *env);
 MDBX_INTERNAL int __must_check_result env_page_auxbuffer(MDBX_env *env);
 MDBX_INTERNAL unsigned env_setup_pagesize(MDBX_env *env, const size_t pagesize);
+MDBX_INTERNAL bool env_is_page_incore(MDBX_env *const env, pgno_t pgno);
 
 /* api-opt.c */
 MDBX_INTERNAL void env_options_init(MDBX_env *env);
@@ -2743,7 +2747,9 @@ static inline size_t dpl_setlen(dpl_t *dl, size_t len) {
   dl->length = len;
   dl->items[len + 1].ptr = (page_t *)&dpl_stub_pageE;
   dl->items[len + 1].pgno = P_INVALID;
+#if MDBX_DPL_CACHE_NPAGES
   dl->items[len + 1].npages = 1;
+#endif /* MDBX_DPL_CACHE_NPAGES */
   return len;
 }
 
@@ -2758,7 +2764,9 @@ static inline void dpl_clear(dpl_t *dl) {
   dl->pages_including_loose = 0;
   dl->items[0].ptr = (page_t *)&dpl_stub_pageB;
   dl->items[0].pgno = 0;
+#if MDBX_DPL_CACHE_NPAGES
   dl->items[0].npages = 1;
+#endif /* MDBX_DPL_CACHE_NPAGES */
   assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
 }
 
@@ -2766,7 +2774,7 @@ MDBX_INTERNAL int __must_check_result dpl_alloc(MDBX_txn *txn);
 
 MDBX_INTERNAL void dpl_free(MDBX_txn *txn);
 
-MDBX_INTERNAL dpl_t *dpl_reserve(MDBX_txn *txn, size_t size);
+MDBX_INTERNAL dpl_t *dpl_resize(MDBX_txn *txn, size_t size);
 
 MDBX_INTERNAL __noinline dpl_t *dpl_sort_slowpath(const MDBX_txn *txn);
 
@@ -2785,11 +2793,18 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL __noinline size_t dpl_search(const MDBX
 
 MDBX_MAYBE_UNUSED MDBX_INTERNAL const page_t *debug_dpl_find(const MDBX_txn *txn, const pgno_t pgno);
 
+MDBX_NOTHROW_PURE_FUNCTION static inline unsigned dp_npages(const dp_t *dp) {
+#if MDBX_DPL_CACHE_NPAGES
+  assert(likely((dp->ptr->flags & P_LARGE) == 0) ? 1 : dp->ptr->pages == dp->npages);
+  return dp->npages;
+#else
+  return likely((dp->ptr->flags & P_LARGE) == 0) ? 1 : dp->ptr->pages;
+#endif /* MDBX_DPL_CACHE_NPAGES */
+}
+
 MDBX_NOTHROW_PURE_FUNCTION static inline unsigned dpl_npages(const dpl_t *dl, size_t i) {
   assert(0 <= (intptr_t)i && i <= dl->length);
-  unsigned n = dl->items[i].npages;
-  assert(n == (is_largepage(dl->items[i].ptr) ? dl->items[i].ptr->pages : 1));
-  return n;
+  return dp_npages(dl->items + i);
 }
 
 MDBX_NOTHROW_PURE_FUNCTION static inline pgno_t dpl_endpgno(const dpl_t *dl, size_t i) {
@@ -2863,6 +2878,31 @@ MDBX_INTERNAL void dpl_sift(MDBX_txn *const txn, pnl_t pl, const bool spilled);
 
 MDBX_INTERNAL void dpl_release_shadows(MDBX_txn *txn);
 
+typedef struct defrag_map_item {
+  pgno_t pgno;
+  pgno_t parent;
+  pgno_t mapped;
+  pgno_t npages;
+} dm_t;
+
+typedef struct defrag_map_list {
+  unsigned length;
+  unsigned limit;
+  dm_t items[1];
+} dml_t;
+
+MDBX_MAYBE_UNUSED MDBX_INTERNAL dml_t *dml_alloc(size_t size);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL void dml_sort(dml_t *);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL dm_t *dml_search(dml_t *, pgno_t key);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL dm_t *dml_append(dml_t **pdml, pgno_t key);
+
+MDBX_MAYBE_UNUSED static inline void dml_free(dml_t **pdml) {
+  if (likely(*pdml)) {
+    osal_free(*pdml);
+    *pdml = nullptr;
+  }
+}
+
 /* Гистограмма решения нарезки фрагментов для ситуации нехватки идентификаторов/слотов. */
 typedef struct gc_dense_histogram {
   /* Размер массива одновременно задаёт максимальный размер последовательностей,
@@ -2913,6 +2953,7 @@ MDBX_INTERNAL void gc_put_destroy(gcu_t *ctx);
 #define ALLOC_COALESCE 4    /* внутреннее состояние/флажок */
 #define ALLOC_SHOULD_SCAN 8 /* внутреннее состояние/флажок */
 #define ALLOC_LIFO 16       /* внутреннее состояние/флажок */
+#define ALLOC_EXACTLY 32
 
 MDBX_INTERNAL pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags);
 
@@ -2928,6 +2969,7 @@ MDBX_NOTHROW_PURE_FUNCTION static inline size_t gc_chunk_bytes(const size_t chun
 }
 
 MDBX_INTERNAL bool gc_repnl_has_span(const MDBX_txn *txn, const size_t num);
+MDBX_INTERNAL pgno_t gc_repnl_get_sequence(MDBX_txn *txn, const size_t num, uint8_t flags);
 
 static inline bool gc_is_reclaimed(const MDBX_txn *txn, const txnid_t id) {
   return rkl_contain(&txn->wr.gc.reclaimed, id) || rkl_contain(&txn->wr.gc.comeback, id);
@@ -3299,6 +3341,8 @@ static inline int __must_check_result page_get(const MDBX_cursor *mc, const pgno
   return ret.err;
 }
 
+MDBX_INTERNAL pgr_t page_get_unchecked(MDBX_txn *const txn, const pgno_t pgno, const txnid_t front);
+
 /*----------------------------------------------------------------------------*/
 
 MDBX_INTERNAL int __must_check_result page_dirty(MDBX_txn *txn, page_t *mp, size_t npages);
@@ -3421,26 +3465,26 @@ typedef struct walk_tbl {
   tree_t *internal, *nested;
 } walk_tbl_t;
 
-typedef int walk_func(const size_t pgno, const unsigned number, void *const ctx, const int deep,
+typedef int walk_func(const size_t pgno, const unsigned number, void *const ctx, const unsigned deep,
                       const walk_tbl_t *table, const size_t page_size, const page_type_t page_type,
                       const txnid_t page_txnid, const MDBX_error_t err, const size_t nentries,
                       const size_t payload_bytes, const size_t header_bytes, const size_t unused_bytes,
                       const size_t parent_pgno);
 
-typedef enum walk_options { dont_check_keys_ordering = 1 } walk_options_t;
+typedef enum walk_options { dont_check_keys_ordering = 1, dont_walk_GC = 2, dont_walk_MAIN = 4 } walk_options_t;
 
 MDBX_INTERNAL int walk_pages(MDBX_txn *txn, walk_func *visitor, void *user, walk_options_t options);
 
 typedef struct walk_ctx {
   void *userctx;
   walk_options_t options;
-  int deep;
+  unsigned deep;
   walk_func *visitor;
   MDBX_txn *txn;
   MDBX_cursor *cursor;
 } walk_ctx_t;
 
-MDBX_INTERNAL int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl);
+MDBX_INTERNAL int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl, pgno_t parent_page);
 
 #define MDBX_RADIXSORT_THRESHOLD 142
 
@@ -6476,7 +6520,7 @@ __cold static intptr_t reasonable_db_maxsize(void) {
     intptr_t pagesize, total_ram_pages;
     if (unlikely(mdbx_get_sysraminfo(&pagesize, &total_ram_pages, nullptr) != MDBX_SUCCESS))
       /* the 32-bit limit is good enough for fallback */
-      return cached_result = MAX_MAPSIZE32;
+      return cached_result = MAX_MAPSIZE32 / 4;
 
 #if defined(__SANITIZE_ADDRESS__)
     total_ram_pages >>= 4;
@@ -6484,8 +6528,8 @@ __cold static intptr_t reasonable_db_maxsize(void) {
     if (RUNNING_ON_VALGRIND)
       total_ram_pages >>= 4;
 
-    if (unlikely((size_t)total_ram_pages * 2 > MAX_MAPSIZE / (size_t)pagesize))
-      return cached_result = MAX_MAPSIZE;
+    if (unlikely((size_t)total_ram_pages > MAX_MAPSIZE / (size_t)pagesize))
+      return cached_result = MAX_MAPSIZE / 2;
     assert(MAX_MAPSIZE >= (size_t)(total_ram_pages * pagesize * 2));
 
     /* Suggesting should not be more than golden ratio of the size of RAM. */
@@ -6496,7 +6540,7 @@ __cold static intptr_t reasonable_db_maxsize(void) {
       const size_t floor = floor_powerof2(cached_result, unit);
       const size_t ceil = ceil_powerof2(cached_result, unit);
       const size_t threshold = (size_t)cached_result >> 4;
-      const bool down = cached_result - floor < ceil - cached_result || ceil > MAX_MAPSIZE;
+      const bool down = cached_result - floor < ceil - cached_result || ceil > MAX_MAPSIZE / 4;
       if (threshold < (down ? cached_result - floor : ceil - cached_result))
         break;
       cached_result = down ? floor : ceil;
@@ -11851,7 +11895,7 @@ __cold static void chk_verbose_meta(MDBX_chk_scope_t *const scope, const unsigne
   }
 }
 
-__cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *const ctx, const int deep,
+__cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *const ctx, const unsigned deep,
                                 const walk_tbl_t *tbl_info, const size_t page_size, const page_type_t pagetype,
                                 const txnid_t page_txnid, const MDBX_error_t page_err, const size_t nentries,
                                 const size_t payload_bytes, const size_t header_bytes, const size_t unused_bytes,
@@ -16667,6 +16711,102 @@ __cold const tree_t *dbi_dig(const MDBX_txn *txn, const size_t dbi, tree_t *fall
 
 int dbi_close_release(MDBX_env *env, MDBX_dbi dbi) { return dbi_defer_release(env, dbi_close_locked(env, dbi)); }
 
+static inline size_t dml_size2bytes(ptrdiff_t size) {
+  assert(size >= CURSOR_STACK_SIZE && (size_t)size <= PAGELIST_LIMIT);
+#if MDBX_DML_PREALLOC_FOR_RADIXSORT
+  size += size;
+#endif /* MDBX_DML_PREALLOC_FOR_RADIXSORT */
+  STATIC_ASSERT(MDBX_ASSUME_MALLOC_OVERHEAD + sizeof(dml_t) +
+                    (PAGELIST_LIMIT * (MDBX_DML_PREALLOC_FOR_RADIXSORT + 1)) * sizeof(dm_t) +
+                    MDBX_PNL_GRANULATE * sizeof(void *) * 2 <
+                SIZE_MAX / 4 * 3);
+  size_t bytes = ceil_powerof2(MDBX_ASSUME_MALLOC_OVERHEAD + sizeof(dml_t) + size * sizeof(dm_t),
+                               MDBX_PNL_GRANULATE * sizeof(void *) * 2) -
+                 MDBX_ASSUME_MALLOC_OVERHEAD;
+  return bytes;
+}
+
+static inline size_t dml_bytes2size(const ptrdiff_t bytes) {
+  size_t size = (bytes - sizeof(dml_t)) / sizeof(dm_t);
+#if MDBX_DML_PREALLOC_FOR_RADIXSORT
+  size >>= 1;
+#endif /* MDBX_DML_PREALLOC_FOR_RADIXSORT */
+  assert(size > CURSOR_STACK_SIZE && size <= PAGELIST_LIMIT + MDBX_PNL_GRANULATE);
+  return size;
+}
+
+__cold dml_t *dml_alloc(size_t size) {
+  size_t bytes = dml_size2bytes((size < PAGELIST_LIMIT) ? size : PAGELIST_LIMIT);
+  dml_t *const dml = osal_malloc(bytes);
+  if (likely(dml)) {
+    dml->length = 0;
+#ifdef osal_malloc_usable_size
+    bytes = osal_malloc_usable_size(dml);
+#endif /* osal_malloc_usable_size */
+    dml->limit = dml_bytes2size(bytes);
+  }
+  return dml;
+}
+
+static __cold dml_t *dml_extend(dml_t *dml) {
+  if (!dml)
+    return dml_alloc(MDBX_PNL_INITIAL);
+  if (unlikely(dml->limit == PAGELIST_LIMIT))
+    return nullptr;
+  size_t size = (dml->limit < MDBX_PNL_INITIAL * 42) ? dml->limit + dml->limit : dml->limit + dml->limit / 2;
+  size_t bytes = dml_size2bytes((size < PAGELIST_LIMIT) ? size : PAGELIST_LIMIT);
+  dml = osal_realloc(dml, bytes);
+  if (likely(dml)) {
+#ifdef osal_malloc_usable_size
+    bytes = osal_malloc_usable_size(dml);
+#endif /* osal_malloc_usable_size */
+    dml->limit = dml_bytes2size(bytes);
+  }
+  return dml;
+}
+
+dm_t *dml_append(dml_t **pdml, pgno_t key) {
+  dml_t *dml = *pdml;
+  assert(!dml || dml->length <= dml->limit);
+  if (unlikely(!dml || dml->length == dml->limit)) {
+    dml = dml_extend(dml);
+    if (unlikely(!dml))
+      return nullptr;
+  }
+  dm_t *dm = &dml->items[dml->length++];
+  dm->pgno = key;
+  dm->parent = 0;
+  dm->mapped = 0;
+  dm->npages = 0;
+  return dm;
+}
+
+#define MDBX_DML_EXTRACT_KEY(ptr) (P_INVALID - (ptr)->pgno)
+RADIXSORT_IMPL(dm, dm_t, MDBX_DML_EXTRACT_KEY, MDBX_DML_PREALLOC_FOR_RADIXSORT, 0)
+
+#define DM_SORT_CMP(first, last) ((first).pgno > (last).pgno)
+SORT_IMPL(dm_sort, false, dm_t, DM_SORT_CMP)
+
+void dml_sort(dml_t *dml) {
+  if (likely(dml->length < MDBX_RADIXSORT_THRESHOLD) || unlikely(!dm_radixsort(dml->items, dml->length)))
+    dm_sort(dml->items, dml->items + dml->length);
+}
+
+#define DM_SEARCH_CMP(dm, page) ((dm).pgno > (page))
+SEARCH_IMPL(dm_bsearch, dm_t, pgno_t, DM_SEARCH_CMP)
+
+dm_t *dml_search(dml_t *dml, pgno_t pgno) {
+  const dm_t *const begin = dml->items;
+  const dm_t *const it = dm_bsearch(begin, dml->length, pgno);
+  const dm_t *const end = begin + dml->length;
+  assert(it >= begin && it <= end);
+  if (it != begin)
+    assert(DM_SEARCH_CMP(it[-1], pgno));
+  if (it != end)
+    assert(!DM_SEARCH_CMP(it[0], pgno));
+  return (dm_t *)it;
+}
+
 static inline size_t dpl_size2bytes(ptrdiff_t size) {
   assert(size >= CURSOR_STACK_SIZE && (size_t)size <= PAGELIST_LIMIT);
 #if MDBX_DPL_PREALLOC_FOR_RADIXSORT
@@ -16698,7 +16838,7 @@ void dpl_free(MDBX_txn *txn) {
   }
 }
 
-dpl_t *dpl_reserve(MDBX_txn *txn, size_t size) {
+dpl_t *dpl_resize(MDBX_txn *txn, size_t size) {
   tASSERT(txn, (txn->flags & txn_ro_flat) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
@@ -16728,7 +16868,7 @@ int dpl_alloc(MDBX_txn *txn) {
     txn->wr.dirtylist->sorted = txn->wr.dirtylist->length = 0;
 #endif /* asertions enabled */
   if (unlikely(!txn->wr.dirtylist || txn->wr.dirtylist->detent < wanna || txn->wr.dirtylist->detent > wanna + wanna) &&
-      unlikely(!dpl_reserve(txn, wanna)))
+      unlikely(!dpl_resize(txn, wanna)))
     return MDBX_ENOMEM;
 
   /* LY: wr.dirtylist не может быть nullptr, так как либо уже выделен, либо будет выделен в dpl_reserve(). */
@@ -16879,7 +17019,11 @@ void dpl_remove_ex(const MDBX_txn *txn, size_t i, size_t npages) {
 int __must_check_result dpl_append(MDBX_txn *txn, pgno_t pgno, page_t *page, size_t npages) {
   tASSERT(txn, (txn->flags & txn_ro_both) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
+#if MDBX_DPL_CACHE_NPAGES
   const dp_t dp = {page, pgno, (pgno_t)npages};
+#else
+  const dp_t dp = {page, pgno};
+#endif /* MDBX_DPL_CACHE_NPAGES */
   if ((txn->flags & MDBX_WRITEMAP) == 0) {
     size_t *const ptr = ptr_disp(page, -(ptrdiff_t)sizeof(size_t));
     *ptr = txn->wr.dirtylru;
@@ -16904,7 +17048,7 @@ int __must_check_result dpl_append(MDBX_txn *txn, pgno_t pgno, page_t *page, siz
       return MDBX_TXN_FULL;
     }
     const size_t size = (dl->detent < MDBX_PNL_INITIAL * 42) ? dl->detent + dl->detent : dl->detent + dl->detent / 2;
-    dl = dpl_reserve(txn, size);
+    dl = dpl_resize(txn, size);
     if (unlikely(!dl))
       return MDBX_ENOMEM;
     tASSERT(txn, dl->length < dl->detent);
@@ -16960,7 +17104,9 @@ int __must_check_result dpl_append(MDBX_txn *txn, pgno_t pgno, page_t *page, siz
 #else
     i[1].ptr = i->ptr;
     i[1].pgno = i->pgno;
+#if MDBX_DPL_CACHE_NPAGES
     i[1].npages = i->npages;
+#endif /* MDBX_DPL_CACHE_NPAGES */
 #endif
       --i;
     }
@@ -19161,7 +19307,7 @@ static bool mincore_fetch(MDBX_env *const env, const size_t unit_begin) {
 }
 #endif /* MDBX_USE_MINCORE */
 
-MDBX_MAYBE_UNUSED static inline bool mincore_probe(MDBX_env *const env, const pgno_t pgno) {
+bool env_is_page_incore(MDBX_env *const env, const pgno_t pgno) {
 #if MDBX_USE_MINCORE
   const size_t offset_aligned = floor_powerof2(pgno2bytes(env, pgno), globals.sys_pagesize);
   const unsigned unit_log2 = (env->ps2ln > globals.sys_pagesize_ln2) ? env->ps2ln : globals.sys_pagesize_ln2;
@@ -19760,47 +19906,67 @@ __hot static pgno_t repnl_get_single(MDBX_txn *txn) {
 #else
   /* перемещать хвост не нужно, просто усекам список */
   pnl_setsize(txn->wr.repnl, len - 1);
-#endif
+#endif /* MDBX_PNL_ASCENDING */
   return pgno;
 }
 
-__hot static pgno_t repnl_get_sequence(MDBX_txn *txn, const size_t num, uint8_t flags) {
+__hot pgno_t gc_repnl_get_sequence(MDBX_txn *txn, const size_t num, uint8_t flags) {
   const size_t len = pnl_size(txn->wr.repnl);
   pgno_t *edge = MDBX_PNL_EDGE(txn->wr.repnl);
   assert(len >= num && num > 1);
   const size_t seq = num - 1;
 #if !MDBX_PNL_ASCENDING
-  if (edge[-(ptrdiff_t)seq] - *edge == seq) {
-    if (unlikely(flags & ALLOC_RESERVE))
-      return P_INVALID;
-    assert(edge == scan4range_checker(txn->wr.repnl, seq));
-    /* перемещать хвост не нужно, просто усекам список */
-    pnl_setsize(txn->wr.repnl, len - num);
+  if (edge[-(ptrdiff_t)seq] - *edge == seq &&
+      (likely((flags & ALLOC_EXACTLY) == 0) || len == num || edge[-(ptrdiff_t)num] - *edge != num)) {
+    if (likely((flags & ALLOC_RESERVE) == 0)) {
+      assert(edge == scan4range_checker(txn->wr.repnl, seq));
+      /* перемещать хвост не нужно, просто усекам список */
+      pnl_setsize(txn->wr.repnl, len - num);
+    }
     return *edge;
   }
-#endif
+#endif /* !MDBX_PNL_ASCENDING */
   pgno_t *target = scan4seq_impl(edge, len, seq);
   assert(target == scan4range_checker(txn->wr.repnl, seq));
-  if (target) {
-    if (unlikely(flags & ALLOC_RESERVE))
-      return P_INVALID;
+  while (target) {
+    if (unlikely(flags & ALLOC_EXACTLY) && len > num) {
+      const ptrdiff_t step = MDBX_PNL_ASCENDING ? -1 : 1;
+      if (target[step] - target[0] == 1) {
+        /* последовательность продолжается, пропускаем её */
+        size_t left =
+            MDBX_PNL_ASCENDING ? target - &MDBX_PNL_FIRST(txn->wr.repnl) : &MDBX_PNL_LAST(txn->wr.repnl) - target;
+        do {
+          target += step;
+          if (--left < num)
+            /* осталось меньше чем нужно, последовательности целевой длины быть не может */
+            return 0;
+        } while (target[step] - target[0] == 1);
+        /* продолжаем поиск дальше */
+        target = scan4seq_impl(target, left, seq);
+        continue;
+      }
+      /* найденая последовательность ровно необхожимой длины */
+    }
     const pgno_t pgno = *target;
-    /* вырезаем найденную последовательность с перемещением хвоста */
-    pnl_setsize(txn->wr.repnl, len - num);
+    if (likely((flags & ALLOC_RESERVE) == 0)) {
+      /* вырезаем найденную последовательность с перемещением хвоста */
+      pnl_setsize(txn->wr.repnl, len - num);
 #if MDBX_PNL_ASCENDING
-    for (const pgno_t *const end = txn->wr.repnl + len - num; target <= end; ++target)
-      *target = target[num];
+      for (const pgno_t *const end = txn->wr.repnl + len - num; target <= end; ++target)
+        *target = target[num];
 #else
-    for (const pgno_t *const end = txn->wr.repnl + len; ++target <= end;)
-      target[-(ptrdiff_t)num] = *target;
-#endif
+      for (const pgno_t *const end = txn->wr.repnl + len; ++target <= end;)
+        target[-(ptrdiff_t)num] = *target;
+#endif /* MDBX_PNL_ASCENDING */
+    }
     return pgno;
   }
   return 0;
 }
 
 bool gc_repnl_has_span(const MDBX_txn *txn, const size_t num) {
-  return (num > 1) ? repnl_get_sequence((MDBX_txn *)txn, num, ALLOC_RESERVE) != 0 : !MDBX_PNL_IS_EMPTY(txn->wr.repnl);
+  return (num > 1) ? gc_repnl_get_sequence((MDBX_txn *)txn, num, ALLOC_RESERVE) != 0
+                   : !MDBX_PNL_IS_EMPTY(txn->wr.repnl);
 }
 
 static inline pgr_t page_alloc_finalize(MDBX_env *const env, MDBX_txn *const txn, const MDBX_cursor *const mc,
@@ -19848,7 +20014,7 @@ static inline pgr_t page_alloc_finalize(MDBX_env *const env, MDBX_txn *const txn
       void *const pattern = ptr_disp(env->page_auxbuf, need_clean ? env->ps : env->ps * 2);
       size_t file_offset = pgno2bytes(env, pgno);
       if (likely(num == 1)) {
-        if (!mincore_probe(env, pgno)) {
+        if (!env_is_page_incore(env, pgno)) {
           osal_pwrite(env->lazy_fd, pattern, env->ps, file_offset);
 #if MDBX_ENABLE_PGOP_STAT
           env->lck->pgops.prefault.weak += 1;
@@ -19859,7 +20025,7 @@ static inline pgr_t page_alloc_finalize(MDBX_env *const env, MDBX_txn *const txn
         struct iovec iov[MDBX_AUXILARY_IOV_MAX];
         size_t n = 0, cleared = 0;
         for (size_t i = 0; i < num; ++i) {
-          if (!mincore_probe(env, pgno + (pgno_t)i)) {
+          if (!env_is_page_incore(env, pgno + (pgno_t)i)) {
             ++cleared;
             iov[n].iov_len = env->ps;
             iov[n].iov_base = pattern;
@@ -19993,7 +20159,7 @@ pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) 
     if (pnl_size(txn->wr.repnl) >= num) {
       eASSERT(env, MDBX_PNL_LAST(txn->wr.repnl) < txn->geo.first_unallocated &&
                        MDBX_PNL_FIRST(txn->wr.repnl) < txn->geo.first_unallocated);
-      pgno = repnl_get_sequence(txn, num, flags);
+      pgno = gc_repnl_get_sequence(txn, num, flags);
       if (likely(pgno))
         goto done;
     }
@@ -20147,7 +20313,7 @@ next_gc:
           pgno = (flags & ALLOC_RESERVE) ? P_INVALID : repnl_get_single(txn);
           goto done;
         }
-        pgno = repnl_get_sequence(txn, num, flags);
+        pgno = gc_repnl_get_sequence(txn, num, flags);
         if (likely(pgno))
           goto done;
       }
@@ -20267,7 +20433,7 @@ scan:
       pgno = repnl_get_single(txn);
       goto done;
     }
-    pgno = repnl_get_sequence(txn, num, flags);
+    pgno = gc_repnl_get_sequence(txn, num, flags);
     if (likely(pgno))
       goto done;
   }
@@ -30094,9 +30260,7 @@ __cold static __noinline pgr_t check_page_complete(const uint16_t ILL, page_t *p
   return r;
 }
 
-static __always_inline pgr_t page_get_inline(const uint16_t ILL, const MDBX_cursor *const mc, const pgno_t pgno,
-                                             const txnid_t front) {
-  MDBX_txn *const txn = mc->txn;
+__hot pgr_t page_get_unchecked(MDBX_txn *const txn, const pgno_t pgno, const txnid_t front) {
   tASSERT(txn, front <= txn->front_txnid);
 
   pgr_t r;
@@ -30104,8 +30268,6 @@ static __always_inline pgr_t page_get_inline(const uint16_t ILL, const MDBX_curs
     ERROR("page #%" PRIaPGNO " beyond next-pgno", pgno);
     r.page = nullptr;
     r.err = MDBX_PAGE_NOTFOUND;
-  bailout:
-    txn->flags |= MDBX_TXN_ERROR;
     return r;
   }
 
@@ -30114,10 +30276,8 @@ static __always_inline pgr_t page_get_inline(const uint16_t ILL, const MDBX_curs
   if ((txn->flags & (txn_ro_flat | MDBX_WRITEMAP)) == 0) {
     const MDBX_txn *spiller = txn;
     do {
-      /* Spilled pages were dirtied in this txn and flushed
-       * because the dirty list got full. Bring this page
-       * back in from the map (but don't unspill it here,
-       * leave that unless page_touch happens again). */
+      /* Spilled pages were dirtied in this txn and flushed because the dirty list got full. Bring this page back in
+       * from the map (but don't unspill it here, * leave that unless page_touch happens again). */
       if (unlikely(spiller->flags & MDBX_TXN_SPILLS) && spill_search(spiller, pgno))
         break;
 
@@ -30134,23 +30294,34 @@ static __always_inline pgr_t page_get_inline(const uint16_t ILL, const MDBX_curs
     } while (unlikely(spiller));
   }
 
-  if (unlikely(r.page->pgno != pgno)) {
+  r.err = MDBX_SUCCESS;
+  if (unlikely(r.page->pgno != pgno))
     r.err = bad_page(r.page, "pgno mismatch (%" PRIaPGNO ") != expected (%" PRIaPGNO ")\n", r.page->pgno, pgno);
-    goto bailout;
+
+  TRACE("page %u, %p, err %d", pgno, __Wpedantic_format_voidptr(r.page), r.err);
+  return r;
+}
+
+static __always_inline pgr_t page_get_inline(const uint16_t ILL, const MDBX_cursor *const mc, const pgno_t pgno,
+                                             const txnid_t front) {
+  MDBX_txn *const txn = mc->txn;
+  tASSERT(txn, front <= txn->front_txnid);
+
+  pgr_t r = page_get_unchecked(mc->txn, pgno, front);
+  if (likely(r.err == MDBX_SUCCESS)) {
+    if (likely(mc->checking & z_pagecheck) == 0) {
+#if MDBX_DISABLE_VALIDATION
+      return r;
+#else
+      r.err = check_page_header(ILL, r.page, txn, front);
+      if (likely(r.err == MDBX_SUCCESS))
+        return r;
+#endif /* MDBX_DISABLE_VALIDATION */
+    } else
+      return check_page_complete(ILL, r.page, mc, front);
   }
 
-  TRACE("dbi %zu, mc %p, page %u, %p", cursor_dbi(mc), __Wpedantic_format_voidptr(mc), pgno,
-        __Wpedantic_format_voidptr(r.page));
-  if (unlikely(mc->checking & z_pagecheck))
-    return check_page_complete(ILL, r.page, mc, front);
-
-#if MDBX_DISABLE_VALIDATION
-  r.err = MDBX_SUCCESS;
-#else
-  r.err = check_page_header(ILL, r.page, txn, front);
-  if (unlikely(r.err != MDBX_SUCCESS))
-    goto bailout;
-#endif /* MDBX_DISABLE_VALIDATION */
+  txn->flags |= MDBX_TXN_ERROR;
   return r;
 }
 
@@ -31141,6 +31312,11 @@ void pnl_shrink(pnl_t __restrict *__restrict ppnl) {
 }
 
 int pnl_reserve(pnl_t __restrict *__restrict ppnl, const size_t wanna) {
+  if (unlikely(!*ppnl)) {
+    *ppnl = pnl_alloc(wanna);
+    return *ppnl ? MDBX_SUCCESS : MDBX_ENOMEM;
+  }
+
   const size_t allocated = pnl_alloclen(*ppnl);
   assert(pnl_size(*ppnl) <= PAGELIST_LIMIT && pnl_alloclen(*ppnl) >= pnl_size(*ppnl));
   if (unlikely(allocated >= wanna))
@@ -31346,6 +31522,57 @@ size_t pnl_maxspan(const const_pnl_t pnl) {
     len = span;
   }
   return len;
+}
+
+__hot pgno_t pnl_get_best_sequence(const pnl_t pnl, size_t seq, pgno_t defrag_detent) {
+  size_t best_pos = 0;
+  size_t best_extra = MAX_PAGENO;
+
+#if MDBX_PNL_ASCENDING
+#error "FIXME"
+#else
+  size_t len = pnl_size(pnl);
+  for (size_t span, i = len; i >= seq && pnl[i] < defrag_detent; i -= span) {
+    for (span = 1; i - span > 0 && MDBX_PNL_CONTIGUOUS(pnl[i - span], pnl[i], span); ++span)
+      ;
+    if (span >= seq) {
+      size_t extra = span - seq;
+      if (extra < best_extra) {
+        best_pos = i;
+        best_extra = extra;
+        if (best_extra == 0)
+          break;
+      }
+    }
+  }
+
+  pgno_t pgno = 0;
+  if (best_pos) {
+    pgno = pnl[best_pos + seq - 1];
+    VERBOSE("seq %zu => %u", seq, pgno);
+    /* вырезаем с перемещением хвоста */
+    pnl_setsize(pnl, len -= seq);
+    for (size_t i = best_pos; i <= len; ++i)
+      pnl[i] = pnl[i + seq];
+  }
+#endif /* MDBX_PNL_ASCENDING */
+  return pgno;
+}
+
+pgno_t pnl_crop_tail_sequence(const pnl_t pnl) {
+  size_t len = pnl_size(pnl);
+  assert(len > 0);
+#if MDBX_PNL_ASCENDING
+#error "FIXME"
+#else
+  size_t span = 1;
+  while (1 + span <= pnl_size(pnl) && MDBX_PNL_CONTIGUOUS(pnl[1], pnl[1 + span], span))
+    ++span;
+  pnl_setsize(pnl, len -= span);
+  for (size_t i = 1; i <= len; ++i)
+    pnl[i] = pnl[i + span];
+#endif /* MDBX_PNL_ASCENDING */
+  return span;
 }
 
 #if MDBX_ENABLE_REFUND
@@ -33057,7 +33284,7 @@ __cold int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, const intp
     const unsigned prio = spill_prio(txn, i, reciprocal);
     size_t *const ptr = ptr_disp(dl->items[i].ptr, -(ptrdiff_t)sizeof(size_t));
     TRACE("page %" PRIaPGNO ", lru %zu, is_multi %c, npages %u, age %u of %u, prio %u", dl->items[i].pgno, *ptr,
-          (dl->items[i].npages > 1) ? 'Y' : 'N', dpl_npages(dl, i), dpl_age(txn, i), age_max, prio);
+          (dpl_npages(dl, i) > 1) ? 'Y' : 'N', dpl_npages(dl, i), dpl_age(txn, i), age_max, prio);
     if (prio < 256) {
       radix_entries[prio] += 1;
       spillable_entries += 1;
@@ -36285,7 +36512,7 @@ static int nested_join(MDBX_txn *nested, struct commit_timestamp *ts) {
     }
 
     if (unlikely(nested->wr.dirtylist->length + parent->wr.dirtylist->length > parent->wr.dirtylist->detent &&
-                 !dpl_reserve(parent, nested->wr.dirtylist->length + parent->wr.dirtylist->length))) {
+                 !dpl_resize(parent, nested->wr.dirtylist->length + parent->wr.dirtylist->length))) {
       return MDBX_ENOMEM;
     }
   }
@@ -37448,25 +37675,13 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
       align_bytes += (node_key_size + node_data_size) & 1;
       break;
 
-    case N_BIG /* long data on the large/overflow page */: {
-      const pgno_t large_pgno = node_largedata_pgno(node);
-      const size_t over_payload = node_data_size;
-      const size_t over_header = PAGEHDRSZ;
-
+    case N_BIG /* long data on the large/overflow page */:
       assert(err == MDBX_SUCCESS);
-      pgr_t lp = page_get_large(ctx->cursor, large_pgno, mp->txnid);
-      const size_t npages = ((err = lp.err) == MDBX_SUCCESS) ? lp.page->pages : 1;
-      const size_t pagesize = pgno2bytes(ctx->txn->env, npages);
-      const size_t over_unused = pagesize - over_payload - over_header;
-      const int rc = ctx->visitor(large_pgno, npages, ctx->userctx, ctx->deep, tbl, pagesize, page_large,
-                                  lp.page->txnid, err, 1, over_payload, over_header, over_unused, pgno);
-      if (unlikely(rc != MDBX_SUCCESS))
-        return (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
       payload_size += sizeof(pgno_t);
       align_bytes += node_key_size & 1;
-    } break;
+      break;
 
-    case N_TREE /* sub-db */: {
+    case N_TREE /* sub-db */:
       if (unlikely(node_data_size != sizeof(tree_t))) {
         ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid table node size", (unsigned)node_data_size);
         assert(err == MDBX_CORRUPTED);
@@ -37474,7 +37689,7 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
       }
       header_size += node_data_size;
       align_bytes += (node_key_size + node_data_size) & 1;
-    } break;
+      break;
 
     case N_TREE | N_DUP /* dupsorted sub-tree */:
       if (unlikely(node_data_size != sizeof(tree_t))) {
@@ -37508,29 +37723,27 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
       size_t subpayload_size = 0;
       size_t subalign_bytes = 0;
 
-      for (size_t ii = 0; err == MDBX_SUCCESS && ii < nsubkeys; ++ii) {
-        if (subtype == page_sub_dupfix_leaf) {
-          /* DUPFIX pages have no entries[] or node headers */
-          subpayload_size += sp->dupfix_ksize;
-        } else {
-          assert(subtype == page_sub_leaf);
-          const node_t *subnode = page_node(sp, ii);
-          const size_t subnode_size = node_ks(subnode) + node_ds(subnode);
-          subheader_size += NODESIZE;
-          subpayload_size += subnode_size;
-          subalign_bytes += subnode_size & 1;
-          if (unlikely(node_flags(subnode) != 0)) {
-            ERROR("%s/%d: %s 0x%x", "MDBX_CORRUPTED", MDBX_CORRUPTED, "unexpected sub-node flags", node_flags(subnode));
-            assert(err == MDBX_CORRUPTED);
-            err = MDBX_CORRUPTED;
+      if (err == MDBX_SUCCESS)
+        for (size_t ii = 0; ii < nsubkeys; ++ii) {
+          if (subtype == page_sub_dupfix_leaf) {
+            /* DUPFIX pages have no entries[] or node headers */
+            subpayload_size += sp->dupfix_ksize;
+          } else {
+            assert(subtype == page_sub_leaf);
+            const node_t *subnode = page_node(sp, ii);
+            const size_t subnode_size = node_ks(subnode) + node_ds(subnode);
+            subheader_size += NODESIZE;
+            subpayload_size += subnode_size;
+            subalign_bytes += subnode_size & 1;
+            if (unlikely(node_flags(subnode) != 0)) {
+              ERROR("%s/%d: %s 0x%x", "MDBX_CORRUPTED", MDBX_CORRUPTED, "unexpected sub-node flags",
+                    node_flags(subnode));
+              assert(err == MDBX_CORRUPTED);
+              err = MDBX_CORRUPTED;
+            }
           }
         }
-      }
 
-      const int rc = ctx->visitor(pgno, 0, ctx->userctx, ctx->deep + 1, tbl, node_data_size, subtype, sp->txnid, err,
-                                  nsubkeys, subpayload_size, subheader_size, subunused_size + subalign_bytes, pgno);
-      if (unlikely(rc != MDBX_SUCCESS))
-        return (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
       header_size += subheader_size;
       unused_size += subunused_size;
       payload_size += subpayload_size;
@@ -37544,8 +37757,8 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
     }
   }
 
-  const int rc = ctx->visitor(pgno, 1, ctx->userctx, ctx->deep, tbl, ctx->txn->env->ps, type, mp->txnid, err, nentries,
-                              payload_size, header_size, unused_size + align_bytes, parent_pgno);
+  int rc = ctx->visitor(pgno, 1, ctx->userctx, ctx->deep, tbl, ctx->txn->env->ps, type, mp->txnid, err, nentries,
+                        payload_size, header_size, unused_size + align_bytes, parent_pgno);
   if (unlikely(rc != MDBX_SUCCESS))
     return (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
 
@@ -37567,14 +37780,31 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
       continue;
     }
 
+    const size_t node_data_size = node_ds(node);
     assert(type == page_leaf);
     switch (node_flags(node)) {
     default:
       continue;
 
+    case N_BIG /* long data on the large/overflow page */: {
+      const pgno_t large_pgno = node_largedata_pgno(node);
+      const size_t over_payload = node_data_size;
+      const size_t over_header = PAGEHDRSZ;
+
+      assert(err == MDBX_SUCCESS);
+      pgr_t lp = page_get_large(ctx->cursor, large_pgno, mp->txnid);
+      const size_t npages = ((err = lp.err) == MDBX_SUCCESS) ? lp.page->pages : 1;
+      const size_t pagesize = pgno2bytes(ctx->txn->env, npages);
+      const size_t over_unused = pagesize - over_payload - over_header;
+      rc = ctx->visitor(large_pgno, npages, ctx->userctx, ctx->deep + 1, tbl, pagesize, page_large, lp.page->txnid, err,
+                        1, over_payload, over_header, over_unused, pgno);
+      if (unlikely(rc != MDBX_SUCCESS))
+        return (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
+    } break;
+
     case N_TREE /* sub-db */:
-      if (unlikely(node_ds(node) != sizeof(tree_t))) {
-        ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid sub-tree node size", (unsigned)node_ds(node));
+      if (unlikely(node_data_size != sizeof(tree_t))) {
+        ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid sub-tree node size", (unsigned)node_data_size);
         assert(err == MDBX_CORRUPTED);
         err = MDBX_CORRUPTED;
       } else {
@@ -37584,15 +37814,15 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
         table.internal = &aligned_db;
         assert(err == MDBX_SUCCESS);
         ctx->deep += 1;
-        err = walk_tbl(ctx, &table);
+        err = walk_tbl(ctx, &table, pgno);
         ctx->deep -= 1;
       }
       break;
 
     case N_TREE | N_DUP /* dupsorted sub-tree */:
-      if (unlikely(node_ds(node) != sizeof(tree_t))) {
+      if (unlikely(node_data_size != sizeof(tree_t))) {
         ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid dupsort sub-tree node size",
-              (unsigned)node_ds(node));
+              (unsigned)node_data_size);
         assert(err == MDBX_CORRUPTED);
         err = MDBX_CORRUPTED;
       } else {
@@ -37605,7 +37835,7 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
           ctx->cursor = &ctx->cursor->subcur->cursor;
           ctx->deep += 1;
           tbl->nested = &aligned_db;
-          err = walk_pgno(ctx, tbl, aligned_db.root, mp->txnid, 0);
+          err = walk_pgno(ctx, tbl, aligned_db.root, mp->txnid, pgno);
           tbl->nested = nullptr;
           ctx->deep -= 1;
           subcur_t *inner_xcursor = container_of(ctx->cursor, subcur_t, cursor);
@@ -37614,13 +37844,60 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
         }
       }
       break;
+
+    case N_DUP /* short sub-page */:
+      if (unlikely(node_data_size <= PAGEHDRSZ || (node_data_size & 1))) {
+        ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid sub-page node size", (unsigned)node_data_size);
+        assert(err == MDBX_CORRUPTED);
+        err = MDBX_CORRUPTED;
+      } else {
+        const page_t *const sp = node_data(node);
+        const page_type_t subtype = walk_subpage_type(sp);
+        const size_t nsubkeys = page_numkeys(sp);
+        if (unlikely(subtype == page_sub_broken)) {
+          ERROR("%s/%d: %s 0x%x", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid sub-page flags", sp->flags);
+          assert(err == MDBX_CORRUPTED);
+          err = MDBX_CORRUPTED;
+        }
+
+        size_t subheader_size = is_dupfix_leaf(sp) ? PAGEHDRSZ : PAGEHDRSZ + sp->lower;
+        size_t subunused_size = page_room(sp);
+        size_t subpayload_size = 0;
+        size_t subalign_bytes = 0;
+
+        for (size_t ii = 0; err == MDBX_SUCCESS && ii < nsubkeys; ++ii) {
+          if (subtype == page_sub_dupfix_leaf) {
+            /* DUPFIX pages have no entries[] or node headers */
+            subpayload_size += sp->dupfix_ksize;
+          } else {
+            assert(subtype == page_sub_leaf);
+            const node_t *subnode = page_node(sp, ii);
+            const size_t subnode_size = node_ks(subnode) + node_ds(subnode);
+            subheader_size += NODESIZE;
+            subpayload_size += subnode_size;
+            subalign_bytes += subnode_size & 1;
+            if (unlikely(node_flags(subnode) != 0)) {
+              ERROR("%s/%d: %s 0x%x", "MDBX_CORRUPTED", MDBX_CORRUPTED, "unexpected sub-node flags",
+                    node_flags(subnode));
+              assert(err == MDBX_CORRUPTED);
+              err = MDBX_CORRUPTED;
+            }
+          }
+        }
+
+        rc = ctx->visitor(pgno, 0, ctx->userctx, ctx->deep + 1, tbl, node_data_size, subtype, sp->txnid, err, nsubkeys,
+                          subpayload_size, subheader_size, subunused_size + subalign_bytes, pgno);
+        if (unlikely(rc != MDBX_SUCCESS))
+          return (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
+      }
+      break;
     }
   }
 
   return MDBX_SUCCESS;
 }
 
-__cold int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl) {
+__cold int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl, pgno_t parent_page) {
   tree_t *const db = tbl->internal;
   if (unlikely(db->root == P_INVALID))
     return MDBX_SUCCESS; /* empty db */
@@ -37637,7 +37914,7 @@ __cold int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl) {
   couple.outer.next = ctx->cursor;
   couple.outer.top_and_flags = z_disable_tree_search_fastpath;
   ctx->cursor = &couple.outer;
-  rc = walk_pgno(ctx, tbl, db->root, db->mod_txnid ? db->mod_txnid : ctx->txn->txnid, 0);
+  rc = walk_pgno(ctx, tbl, db->root, db->mod_txnid ? db->mod_txnid : ctx->txn->txnid, parent_page);
   ctx->cursor = couple.outer.next;
   return rc;
 }
@@ -37649,11 +37926,12 @@ __cold int walk_pages(MDBX_txn *txn, walk_func *visitor, void *user, walk_option
 
   walk_ctx_t ctx = {.txn = txn, .userctx = user, .visitor = visitor, .options = options};
   walk_tbl_t tbl = {.name = {.iov_base = MDBX_CHK_GC}, .internal = &txn->dbs[FREE_DBI]};
-  rc = walk_tbl(&ctx, &tbl);
-  if (!MDBX_IS_ERROR(rc)) {
+  if ((options & dont_walk_GC) == 0)
+    rc = walk_tbl(&ctx, &tbl, 0);
+  if ((options & dont_walk_MAIN) == 0 && !MDBX_IS_ERROR(rc)) {
     tbl.name.iov_base = MDBX_CHK_MAIN;
     tbl.internal = &txn->dbs[MAIN_DBI];
-    rc = walk_tbl(&ctx, &tbl);
+    rc = walk_tbl(&ctx, &tbl, 0);
   }
   return rc;
 }
@@ -37834,10 +38112,10 @@ __dll_export
         0,
         14,
         1,
-        404,
+        422,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.404 */
-        {"2026-02-10T17:18:11+03:00", "0875d78810b7a65e9f93114ba13f96ad96506697", "2ed89b6ed8e8aec31f78344299d41f9dca993ca6", "v0.14.1-404-g2ed89b6e"},
+                                        0.14.1.422 */
+        {"2026-02-15T14:49:30+03:00", "285842e755158de08980bcb1eb7d42b1f2d03450", "6c4ca7da7544eb6cc677d455f31d68e46aff081d", "v0.14.1-422-g6c4ca7da"},
         sourcery};
 
 __dll_export
