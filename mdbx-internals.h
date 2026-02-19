@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-404-g2ed89b6e at 2026-02-10T17:18:11+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-424-g7a1ad8c0 at 2026-02-19T22:58:29+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -24,7 +24,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY b5b59d95cd848efe0a65ab0f2d6cb9e990eee3fc556a094ba47684f6189b8b0e_v0_14_1_404_g2ed89b6e
+#define MDBX_BUILD_SOURCERY bc9c8e55c3eeb4fa270c9533abe1a5ab986f8f1f49ba25dcf1c228498e456ed2_v0_14_1_424_g7a1ad8c0
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -1795,6 +1795,22 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t osal_bswap32
 #error MDBX_DPL_PREALLOC_FOR_RADIXSORT must be defined as 0 or 1
 #endif /* MDBX_DPL_PREALLOC_FOR_RADIXSORT */
 
+#ifndef MDBX_DML_PREALLOC_FOR_RADIXSORT
+#define MDBX_DML_PREALLOC_FOR_RADIXSORT 1
+#elif !(MDBX_DML_PREALLOC_FOR_RADIXSORT == 0 || MDBX_DML_PREALLOC_FOR_RADIXSORT == 1)
+#error MDBX_DML_PREALLOC_FOR_RADIXSORT must be defined as 0 or 1
+#endif /* MDBX_DML_PREALLOC_FOR_RADIXSORT */
+
+#ifndef MDBX_DPL_CACHE_NPAGES
+#if MDBX_WORDBITS >= 64
+#define MDBX_DPL_CACHE_NPAGES 1
+#else
+#define MDBX_DPL_CACHE_NPAGES 0
+#endif
+#elif !(MDBX_DPL_CACHE_NPAGES == 0 || MDBX_DPL_CACHE_NPAGES == 1)
+#error MDBX_DPL_CACHE_NPAGES must be defined as 0 or 1
+#endif /* MDBX_DPL_CACHE_NPAGES */
+
 /** Controls dirty pages tracking, spilling and persisting in `MDBX_WRITEMAP`.
  *
  * \details In other words, disables in-memory database updating with consequent
@@ -3330,7 +3346,7 @@ typedef const pgno_t *const_pnl_t;
 #define MDBX_PNL_LEAST(pl) MDBX_PNL_LAST(pl)
 #define MDBX_PNL_MOST(pl) MDBX_PNL_FIRST(pl)
 #define MDBX_PNL_CONTIGUOUS(prev, next, span) (((prev) - (next)) == (span))
-#endif
+#endif /* MDBX_PNL_ASCENDING */
 
 #ifndef __cplusplus
 
@@ -3386,11 +3402,15 @@ MDBX_MAYBE_UNUSED MDBX_INTERNAL pnl_t pnl_clone(const const_pnl_t src);
 
 MDBX_INTERNAL int pnl_reserve(pnl_t __restrict *__restrict ppnl, const size_t wanna);
 
-MDBX_MAYBE_UNUSED static inline int __must_check_result pnl_need(pnl_t __restrict *__restrict ppnl, size_t num) {
-  assert(pnl_size(*ppnl) <= PAGELIST_LIMIT && pnl_alloclen(*ppnl) >= pnl_size(*ppnl));
-  assert(num <= PAGELIST_LIMIT);
-  const size_t wanna = pnl_size(*ppnl) + num;
-  return likely(pnl_alloclen(*ppnl) >= wanna) ? MDBX_SUCCESS : pnl_reserve(ppnl, wanna);
+MDBX_MAYBE_UNUSED static inline int __must_check_result pnl_need(pnl_t __restrict *__restrict ppnl, size_t more) {
+  if (likely(*ppnl)) {
+    assert(pnl_size(*ppnl) <= PAGELIST_LIMIT && pnl_alloclen(*ppnl) >= pnl_size(*ppnl));
+    assert(more <= PAGELIST_LIMIT);
+    more += pnl_size(*ppnl);
+    if (likely(pnl_alloclen(*ppnl) >= more))
+      return MDBX_SUCCESS;
+  }
+  return pnl_reserve(ppnl, more);
 }
 
 MDBX_MAYBE_UNUSED static inline void pnl_append_prereserved(__restrict pnl_t pnl, pgno_t pgno) {
@@ -3452,6 +3472,22 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline size_t pnl_search(con
   return n;
 }
 
+MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline bool pnl_contains(const const_pnl_t pnl, pgno_t pgno,
+                                                                             size_t limit) {
+  size_t n = pnl_search(pnl, pgno, limit);
+  return n > 0 && n <= pnl_size(pnl) && pnl[n] == pgno;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline bool pnl_contains_span(const const_pnl_t pnl, pgno_t pgno,
+                                                                                  pgno_t span) {
+  size_t n = pnl_search_nochk(pnl, pgno);
+#if MDBX_PNL_ASCENDING
+#error "FIXME"
+#else
+  return n >= span && pnl[n] == pgno && MDBX_PNL_CONTIGUOUS(pnl[n - span + 1], pnl[n], span - 1);
+#endif /* MDBX_PNL_ASCENDING */
+}
+
 MDBX_INTERNAL size_t pnl_merge(pnl_t dst, const const_pnl_t src);
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pnl_maxspan(const const_pnl_t pnl);
@@ -3464,6 +3500,10 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline size_t pnl_scan_span(
     ++span;
   return span;
 }
+
+MDBX_MAYBE_UNUSED MDBX_INTERNAL pgno_t pnl_get_best_sequence(const pnl_t pnl, const size_t span,
+                                                             const pgno_t defrag_detent);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL pgno_t pnl_crop_tail_sequence(const pnl_t pnl);
 
 #endif /* !__cplusplus */
 

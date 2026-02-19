@@ -1,4 +1,4 @@
-﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-404-g2ed89b6e at 2026-02-10T17:18:11+03:00).
+﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-424-g7a1ad8c0 at 2026-02-19T22:58:29+03:00).
 /// \file mdbx.h++
 /// \brief The libmdbx C++ API header file.
 ///
@@ -442,11 +442,15 @@ namespace filesystem = ::std::filesystem;
 
 #ifdef MDBX_STD_FILESYSTEM_PATH
 using path = MDBX_STD_FILESYSTEM_PATH;
+using path_string = MDBX_STD_FILESYSTEM_PATH::string_type;
 #elif defined(_WIN32) || defined(_WIN64)
 using path = ::std::wstring;
+using path_string = path;
 #else
 using path = ::std::string;
+using path_string = path;
 #endif /* mdbx::path */
+using path_char = path_string::value_type;
 
 #if defined(__SIZEOF_INT128__) || (defined(_INTEGRAL_MAX_BITS) && _INTEGRAL_MAX_BITS >= 128)
 #ifndef MDBX_U128_TYPE
@@ -3331,7 +3335,7 @@ public:
   inline filehandle get_filehandle() const;
 
   /// \brief Return the path that was used for opening the environment.
-  path get_path() const;
+  const path_char* get_path() const;
 
   /// Returns environment flags.
   inline MDBX_env_flags_t get_flags() const;

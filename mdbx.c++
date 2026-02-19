@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-404-g2ed89b6e at 2026-02-10T17:18:11+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-424-g7a1ad8c0 at 2026-02-19T22:58:29+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -449,7 +449,10 @@ enum signatures {
 /* An dirty-page list item is an pgno/pointer pair. */
 struct dp {
   page_t *ptr;
-  pgno_t pgno, npages;
+  pgno_t pgno;
+#if MDBX_DPL_CACHE_NPAGES
+  pgno_t npages;
+#endif /* MDBX_DPL_CACHE_NPAGES */
 };
 
 enum dpl_rules {
@@ -2263,18 +2266,18 @@ __cold env &env::copy(const MDBX_STD_FILESYSTEM_PATH &destination, bool compacti
 }
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 
-__cold path env::get_path() const {
+__cold const mdbx::path_char *env::get_path() const {
 #if defined(_WIN32) || defined(_WIN64)
   const wchar_t *c_wstr = nullptr;
   error::success_or_throw(::mdbx_env_get_pathW(handle_, &c_wstr));
   static_assert(sizeof(path::value_type) == sizeof(wchar_t), "Oops");
-  return path(c_wstr);
+  return c_wstr;
 #else
   const char *c_str = nullptr;
   error::success_or_throw(::mdbx_env_get_path(handle_, &c_str));
   static_assert(sizeof(path::value_type) == sizeof(char), "Oops");
-  return path(c_str);
-#endif
+  return c_str;
+#endif /* Windows */
 }
 
 __cold bool env::remove(const char *pathname, const remove_mode mode) {
