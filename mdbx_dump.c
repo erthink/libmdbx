@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-424-g7a1ad8c0 at 2026-02-19T22:58:29+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-428-g6569bd09 at 2026-02-24T16:49:25+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -121,10 +121,10 @@ static int dump_tbl(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
   if (mode & GLOBAL) {
     mode -= GLOBAL;
     if (info.mi_geo.upper != info.mi_geo.lower)
-      printf("geometry=l%" PRIu64 ",c%" PRIu64 ",u%" PRIu64 ",s%" PRIu64 ",g%" PRIu64 "\n", info.mi_geo.lower,
-             info.mi_geo.current, info.mi_geo.upper, info.mi_geo.shrink, info.mi_geo.grow);
+      printf("geometry=l%" PRIu64 ",u%" PRIu64 ",s%" PRIu64 ",g%" PRIu64 "\n", info.mi_geo.lower, info.mi_geo.upper,
+             info.mi_geo.shrink, info.mi_geo.grow);
     printf("mapsize=%" PRIu64 "\n", info.mi_geo.upper);
-    printf("maxreaders=%u\n", info.mi_maxreaders);
+    /* printf("maxreaders=%u\n", info.mi_maxreaders); */
 
     MDBX_canary canary;
     rc = mdbx_canary_get(txn, &canary);

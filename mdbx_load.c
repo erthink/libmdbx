@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-424-g7a1ad8c0 at 2026-02-19T22:58:29+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-428-g6569bd09 at 2026-02-24T16:49:25+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -301,6 +301,9 @@ static int readhdr(void) {
                   "%s: line %" PRIiSIZE ": ignore values %s"
                   " for '%s' in non-global context\n",
                   prog, lineno, str, "geometry");
+      } else if (sscanf(str, "l%" PRIu64 ",u%" PRIu64 ",s%" PRIu64 ",g%" PRIu64, &envinfo.mi_geo.lower,
+                        &envinfo.mi_geo.upper, &envinfo.mi_geo.shrink, &envinfo.mi_geo.grow) == 4) {
+        envinfo.mi_geo.current = (uint64_t)INT64_C(-1);
       } else if (sscanf(str, "l%" PRIu64 ",c%" PRIu64 ",u%" PRIu64 ",s%" PRIu64 ",g%" PRIu64, &envinfo.mi_geo.lower,
                         &envinfo.mi_geo.current, &envinfo.mi_geo.upper, &envinfo.mi_geo.shrink,
                         &envinfo.mi_geo.grow) != 5) {
@@ -402,8 +405,9 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
   if (c == ' ')
     return (ungetc(c, stdin) == c) ? MDBX_SUCCESS : (errno ? errno : EOF);
 
-  *(char *)buf->iov_base = c;
-  if (fgets((char *)buf->iov_base + 1, (int)buf->iov_len - 1, stdin) == nullptr)
+  ((char *)buf->iov_base)[0] = c;
+  ((char *)buf->iov_base)[1] = 0;
+  if (c != '\n' && fgets((char *)buf->iov_base + 1, (int)buf->iov_len - 1, stdin) == nullptr)
     return errno ? errno : EOF;
   lineno++;
 
@@ -628,29 +632,27 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (envinfo.mi_geo.current | envinfo.mi_mapsize) {
-    if (envinfo.mi_geo.current) {
-      err = mdbx_env_set_geometry(env, (intptr_t)envinfo.mi_geo.lower, (intptr_t)envinfo.mi_geo.current,
-                                  (intptr_t)envinfo.mi_geo.upper, (intptr_t)envinfo.mi_geo.shrink,
-                                  (intptr_t)envinfo.mi_geo.grow,
-                                  envinfo.mi_dxb_pagesize ? (intptr_t)envinfo.mi_dxb_pagesize : -1);
-    } else {
-      if (envinfo.mi_mapsize > MAX_MAPSIZE) {
-        if (!quiet)
-          fprintf(stderr,
-                  "Database size is too large for current system (mapsize=%" PRIu64
-                  " is great than system-limit %zu)\n",
-                  envinfo.mi_mapsize, (size_t)MAX_MAPSIZE);
-        goto bailout;
-      }
-      err = mdbx_env_set_geometry(env, (intptr_t)envinfo.mi_mapsize, (intptr_t)envinfo.mi_mapsize,
-                                  (intptr_t)envinfo.mi_mapsize, 0, 0,
-                                  envinfo.mi_dxb_pagesize ? (intptr_t)envinfo.mi_dxb_pagesize : -1);
-    }
-    if (unlikely(err != MDBX_SUCCESS)) {
-      error("mdbx_env_set_geometry", err);
+  err = MDBX_SUCCESS;
+  if (envinfo.mi_geo.lower | envinfo.mi_geo.upper | envinfo.mi_geo.shrink | envinfo.mi_geo.grow) {
+    err = mdbx_env_set_geometry(env, (intptr_t)envinfo.mi_geo.lower, (intptr_t)envinfo.mi_geo.current,
+                                (intptr_t)envinfo.mi_geo.upper, (intptr_t)envinfo.mi_geo.grow,
+                                (intptr_t)envinfo.mi_geo.shrink,
+                                envinfo.mi_dxb_pagesize ? (intptr_t)envinfo.mi_dxb_pagesize : -1);
+  } else if (envinfo.mi_mapsize) {
+    if (envinfo.mi_mapsize > MAX_MAPSIZE) {
+      if (!quiet)
+        fprintf(stderr,
+                "Database size is too large for current system (mapsize=%" PRIu64 " is great than system-limit %zu)\n",
+                envinfo.mi_mapsize, (size_t)MAX_MAPSIZE);
       goto bailout;
     }
+    err = mdbx_env_set_geometry(env, (intptr_t)envinfo.mi_mapsize, (intptr_t)envinfo.mi_mapsize,
+                                (intptr_t)envinfo.mi_mapsize, 0, 0,
+                                envinfo.mi_dxb_pagesize ? (intptr_t)envinfo.mi_dxb_pagesize : -1);
+  }
+  if (unlikely(err != MDBX_SUCCESS)) {
+    error("mdbx_env_set_geometry", err);
+    goto bailout;
   }
 
   err = mdbx_env_open(env, envname, envflags, 0664);
