@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-428-g6569bd09 at 2026-02-24T16:49:25+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-444-g391bf6cd at 2026-03-04T00:16:49+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -479,8 +479,8 @@ struct dpl {
 
 /* Comparing/ordering and length constraints */
 typedef struct clc {
-  MDBX_cmp_func *cmp; /* comparator */
-  size_t lmin, lmax;  /* min/max length constraints */
+  MDBX_cmp_func cmp; /* comparator */
+  size_t lmin, lmax; /* min/max length constraints */
 } clc_t;
 
 /* Вспомогательная информация о table.
@@ -775,7 +775,7 @@ struct MDBX_env {
   unsigned maxgc_per_branch;
   mdbx_pid_t registered_reader_pid; /* have liveness lock in reader table */
   void *userctx;                    /* User-settable context */
-  MDBX_hsr_func *hsr_callback;      /* Callback for kicking laggard readers */
+  MDBX_hsr_func hsr_callback;       /* Callback for kicking laggard readers */
   size_t madv_threshold;
 
   struct {
@@ -840,7 +840,7 @@ struct MDBX_env {
   /* -------------------------------------------------------------- debugging */
 
 #if MDBX_DEBUG
-  MDBX_assert_func *assert_func; /*  Callback for assertion failures */
+  MDBX_assert_func assert_func; /*  Callback for assertion failures */
 #endif
 #ifdef ENABLE_MEMCHECK
   int valgrind_handle;

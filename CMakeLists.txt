@@ -71,6 +71,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION.json"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_load.c"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_stat.c"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_drop.c"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_defrag.c"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ntdll.def"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/config.h.in")
   set(MDBX_AMALGAMATED_SOURCE TRUE)
@@ -461,8 +462,8 @@ endif()
 
 add_option(MDBX INSTALL_STATIC "Build and install libmdbx for static linking" OFF)
 add_option(MDBX BUILD_SHARED_LIBRARY "Build libmdbx as shared library (DLL)" ${BUILD_SHARED_LIBS})
-add_option(MDBX BUILD_TOOLS "Build MDBX tools (mdbx_chk/stat/dump/load/copy/drop)" ${MDBX_BUILD_TOOLS_DEFAULT})
-cmake_dependent_option(MDBX_INSTALL_MANPAGES "Install man-pages for MDBX tools (mdbx_chk/stat/dump/load/copy)" ON
+add_option(MDBX BUILD_TOOLS "Build MDBX tools (mdbx_chk/stat/dump/load/copy/defrag/drop)" ${MDBX_BUILD_TOOLS_DEFAULT})
+cmake_dependent_option(MDBX_INSTALL_MANPAGES "Install man-pages for MDBX tools (mdbx_chk/stat/dump/load/copy/defrag/drop)" ON
                        MDBX_BUILD_TOOLS OFF)
 add_option(MDBX TXN_CHECKOWNER "Checking transaction matches the calling thread inside libmdbx's API" ON)
 add_option(MDBX ENV_CHECKPID "Checking PID inside libmdbx's API against reuse DB environment after the fork()" AUTO)
@@ -771,7 +772,7 @@ if(MDBX_BUILD_TOOLS)
     set(WINGETOPT_SRC "")
   endif()
 
-  foreach(TOOL chk copy stat dump load drop)
+  foreach(TOOL chk copy stat dump load drop defrag)
     if(MDBX_AMALGAMATED_SOURCE)
       add_executable(mdbx_${TOOL} mdbx.h ${MDBX_SOURCE_DIR}/mdbx_${TOOL}.c ${WINGETOPT_SRC})
     else()
@@ -827,7 +828,7 @@ if(MDBX_BUILD_TOOLS)
   if(NOT DEFINED MDBX_TOOLS_INSTALL_DESTINATION)
     set(MDBX_TOOLS_INSTALL_DESTINATION ${CMAKE_INSTALL_BINDIR})
   endif()
-  install(TARGETS mdbx_chk mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_drop
+  install(TARGETS mdbx_chk mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_drop mdbx_defrag
           RUNTIME DESTINATION ${MDBX_TOOLS_INSTALL_DESTINATION} COMPONENT runtime)
   if(MDBX_INSTALL_MANPAGES)
     if(NOT DEFINED MDBX_MAN_INSTALL_DESTINATION)

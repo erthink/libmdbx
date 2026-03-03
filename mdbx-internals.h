@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-428-g6569bd09 at 2026-02-24T16:49:25+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-444-g391bf6cd at 2026-03-04T00:16:49+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -24,7 +24,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY e1b0e3d3dfd6db79e6b76995f4387eded3f83975b0c552b3c5fe9e16f563f21e_v0_14_1_428_g6569bd09
+#define MDBX_BUILD_SOURCERY 988096054e6a0140cccb5e623b6936300e7069037bdf744255487007909359be_v0_14_1_444_g391bf6cd
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -441,6 +441,7 @@ __extern_C key_t ftok(const char *, int);
 
 /* После подгрузки windows.h, чтобы избежать проблем со сборкой MINGW и т.п. */
 #include <excpt.h>
+#include <io.h>
 #include <tlhelp32.h>
 
 #else /*----------------------------------------------------------------------*/
@@ -2938,8 +2939,8 @@ typedef struct shared_lck {
 
 union logger_union {
   void *ptr;
-  MDBX_debug_func *fmt;
-  MDBX_debug_func_nofmt *nofmt;
+  MDBX_debug_func fmt;
+  MDBX_debug_func_nofmt nofmt;
 };
 
 struct libmdbx_globals {
@@ -3335,6 +3336,7 @@ typedef const pgno_t *const_pnl_t;
 #if MDBX_PNL_ASCENDING
 #define MDBX_PNL_ORDERED(first, last) ((first) < (last))
 #define MDBX_PNL_DISORDERED(first, last) ((first) >= (last))
+#define MDBX_PNL_REVERSED(first, last) ((first) > (last))
 #define MDBX_PNL_EDGE(pl) ((pl) + 1)
 #define MDBX_PNL_LEAST(pl) MDBX_PNL_FIRST(pl)
 #define MDBX_PNL_MOST(pl) MDBX_PNL_LAST(pl)
@@ -3342,6 +3344,7 @@ typedef const pgno_t *const_pnl_t;
 #else
 #define MDBX_PNL_ORDERED(first, last) ((first) > (last))
 #define MDBX_PNL_DISORDERED(first, last) ((first) <= (last))
+#define MDBX_PNL_REVERSED(first, last) ((first) < (last))
 #define MDBX_PNL_EDGE(pl) ((pl) + pnl_size(pl))
 #define MDBX_PNL_LEAST(pl) MDBX_PNL_LAST(pl)
 #define MDBX_PNL_MOST(pl) MDBX_PNL_FIRST(pl)
@@ -3364,6 +3367,8 @@ MDBX_MAYBE_UNUSED static inline void pnl_setsize(pnl_t pnl, size_t len) {
   assert(len < INT_MAX);
   pnl[0] = (pgno_t)len;
 }
+
+MDBX_MAYBE_UNUSED static inline void pnl_clear(pnl_t pnl) { pnl_setsize(pnl, 0); }
 
 #define MDBX_PNL_SIZEOF(pl) ((pnl_size(pl) + 1) * sizeof(pgno_t))
 #define MDBX_PNL_IS_EMPTY(pl) (pnl_size(pl) == 0)
@@ -3436,6 +3441,8 @@ MDBX_INTERNAL int __must_check_result spill_append_span(__restrict pnl_t *ppnl, 
 
 MDBX_INTERNAL int __must_check_result pnl_append_span(__restrict pnl_t *ppnl, pgno_t pgno, size_t n);
 
+MDBX_INTERNAL int __must_check_result pnl_append_pnl(__restrict pnl_t *ppnl, const const_pnl_t src);
+
 MDBX_INTERNAL int __must_check_result pnl_insert_span(__restrict pnl_t *ppnl, pgno_t pgno, size_t n);
 
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pnl_search_nochk(const const_pnl_t pnl, pgno_t pgno);
@@ -3472,10 +3479,14 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline size_t pnl_search(con
   return n;
 }
 
-MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline bool pnl_contains(const const_pnl_t pnl, pgno_t pgno,
-                                                                             size_t limit) {
-  size_t n = pnl_search(pnl, pgno, limit);
-  return n > 0 && n <= pnl_size(pnl) && pnl[n] == pgno;
+MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline size_t pnl_search_exact(const const_pnl_t pnl, pgno_t pgno) {
+  size_t n = pnl_search_nochk(pnl, pgno);
+  return (n <= pnl_size(pnl) && pnl[n] == pgno) ? n : 0;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline bool pnl_contains(const const_pnl_t pnl, pgno_t pgno) {
+  size_t n = pnl_search_nochk(pnl, pgno);
+  return n <= pnl_size(pnl) && pnl[n] == pgno;
 }
 
 MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline bool pnl_contains_span(const const_pnl_t pnl, pgno_t pgno,
@@ -3504,6 +3515,13 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline size_t pnl_scan_span(
 MDBX_MAYBE_UNUSED MDBX_INTERNAL pgno_t pnl_get_best_sequence(const pnl_t pnl, const size_t span,
                                                              const pgno_t defrag_detent);
 MDBX_MAYBE_UNUSED MDBX_INTERNAL pgno_t pnl_crop_tail_sequence(const pnl_t pnl);
+
+MDBX_MAYBE_UNUSED MDBX_INTERNAL void pnl_cut(pnl_t pnl, size_t pos, size_t len);
+
+MDBX_MAYBE_UNUSED MDBX_INTERNAL void pnl_sift(pnl_t pnl, const const_pnl_t filter_out);
+
+MDBX_MAYBE_UNUSED MDBX_INTERNAL int pnl_cut_range(__restrict pnl_t pnl, __restrict pnl_t *const pdest,
+                                                  pgno_t range_begin, pgno_t range_end);
 
 #endif /* !__cplusplus */
 

@@ -1,0 +1,292 @@
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-444-g391bf6cd at 2026-03-04T00:16:49+03:00).
+ *
+ * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
+ * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
+ * solutions.  Please visit https://libmdbx.dqdkfa.ru for more information, changelog, documentation, C++ API description
+ * and links to the original git repo with the source code.  Questions, feedback and suggestions are welcome to the
+ * Telegram' group https://t.me/libmdbx.
+ *
+ * The libmdbx code will forever remain open and with high-quality free support, as far as the life circumstances of the
+ * project participants allow. Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`,
+ * BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3NDMyS5wXJgfeMTmJznRi`.
+ * Всё будет хорошо!
+ *
+ * For ease of use and to eliminate potential limitations in both distribution and obstacles in technology development,
+ * libmdbx is distributed as an amalgamated source code starting at the end of 2025.  The source code of the tests, as
+ * well as the internal documentation, will be available only to the team directly involved in the development.
+ *
+ * Copyright 2015-2026 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * For notes about the license change, credits and acknowledgments, please refer to the COPYRIGHT file. */
+
+/* clang-format off */
+
+#define xMDBX_TOOLS /* Avoid using internal eASSERT(), etc */
+#include "mdbx-internals.h"
+
+#if defined(_WIN32) || defined(_WIN64)
+
+/* Bit of madness for Windows console */
+#define mdbx_strerror mdbx_strerror_ANSI2OEM
+#define mdbx_strerror_r mdbx_strerror_r_ANSI2OEM
+
+#include "mdbx-wingetopt.h"
+
+static volatile BOOL user_break;
+static BOOL WINAPI ConsoleBreakHandlerRoutine(DWORD dwCtrlType) {
+  (void)dwCtrlType;
+  user_break = 1;
+  return true;
+}
+
+#else /* WINDOWS */
+
+static volatile sig_atomic_t user_break;
+static void signal_handler(int sig) {
+  (void)sig;
+  user_break = 1;
+}
+
+#endif /* !WINDOWS */
+
+static void usage(const char *progname) {
+  fprintf(stderr,
+          "usage: %s [-V] [-q] [-c] [-d] [-p] [-u|U] db_pathname\n"
+          "  -V\t\tprint version and exit\n"
+          "  -v\t\tmore verbose, could be repeated for extra details from debug-enabled  builds\n"
+          "  -q\t\tbe quiet\n"
+          "  -c\t\tforce cooperative mode (don't try exclusive)\n"
+          "  -u\t\twarmup database before defragmenting\n"
+          "  -U\t\twarmup and try lock database pages in memory before defragmenting\n"
+          "  db_pathname\tpath to the database\n",
+          progname);
+  exit(EXIT_FAILURE);
+}
+
+MDBX_log_level_t verbosity = MDBX_LOG_NOTICE;
+bool quiet = false;
+bool is_console = true;
+static unsigned progress_dots;
+
+static void logger(MDBX_log_level_t level, const char *function, int line, const char *fmt, va_list args) {
+  static const char *const prefixes[] = {
+      "!!!fatal: ",   // 0 fatal
+      " ! ",          // 1 error
+      " ~ ",          // 2 warning
+      "   ",          // 3 notice
+      "   // ",       // 4 verbose
+      "   //// ",     // 5 verbose
+      "   ////// ",   // 6 verbose
+      "   //////// ", // 7 verbose
+  };
+  if (!quiet && level < MDBX_LOG_DEBUG) {
+    if (progress_dots) {
+      putchar(' ');
+      putchar('\n');
+      progress_dots = 0;
+      if (level <= MDBX_LOG_NOTICE)
+        fflush(nullptr);
+    }
+    FILE *out = (level < MDBX_LOG_NOTICE) ? stderr : stdout;
+    if (function && line)
+      fprintf(out, "%s", prefixes[level]);
+    vfprintf(out, fmt, args);
+    if (level <= MDBX_LOG_NOTICE)
+      fflush(nullptr);
+  }
+}
+
+static void defrag_report_progress(const MDBX_defrag_result_t *progress, unsigned dots) {
+  if (!quiet) {
+    if (progress->cycles == 0)
+      printf("\r - loading the b-tree structure: %u.%u%%", progress->rough_estimation_cycle_progress_permille / 10,
+             progress->rough_estimation_cycle_progress_permille % 10);
+    else
+      printf("\r - cycle %u: %u.%u%%, shrinked %zi, moved %zu, scheduled %zu, retained %zu, left %zu", progress->cycles,
+             progress->rough_estimation_cycle_progress_permille / 10,
+             progress->rough_estimation_cycle_progress_permille % 10, progress->pages_shrinked, progress->pages_moved,
+             progress->pages_scheduled, progress->pages_retained, progress->pages_left);
+    for (unsigned i = 0; i < 3 || (i < dots / 8 && i < 64); ++i)
+      putchar('.');
+    if (is_console) {
+      static char карусель[] = "\\|/-\\|/-";
+      putchar(карусель[(progress->spent_time_16dot16 >> 13) % (ARRAY_LENGTH(карусель) - 1)]);
+      putchar('\b');
+    }
+    fflush(nullptr);
+  }
+}
+
+static const char *stop_reason(const MDBX_defrag_result_t *progress) {
+  if (progress->stopping_reasons & MDBX_defrag_error)
+    return "error";
+  if (progress->stopping_reasons & MDBX_defrag_user_break)
+    return "user break";
+  if (progress->stopping_reasons & MDBX_defrag_laggard_reader)
+    return "laggard reader";
+  if (progress->stopping_reasons & MDBX_defrag_time_limit)
+    return "time limit reached";
+  if (progress->stopping_reasons & MDBX_defrag_enough_theshold)
+    return "enough theshold";
+  if (progress->stopping_reasons & MDBX_defrag_large_chunk)
+    return "large chunk";
+  return "done";
+}
+
+static int defrag_notify(void *ctx, const MDBX_defrag_result_t *progress) {
+  (void)ctx;
+  if (!quiet) {
+    static MDBX_defrag_result_t last_progress = {.cycles = UINT32_MAX};
+    static uint32_t last_report_spenttime;
+    bool refresh = progress->spent_time_16dot16 - last_report_spenttime > 65536 / 8;
+    if (last_progress.cycles != progress->cycles) {
+      if (progress_dots) {
+        defrag_report_progress(&last_progress, progress_dots);
+        printf(" %s\n", stop_reason(&last_progress));
+        fflush(nullptr);
+      }
+      progress_dots = 0;
+      refresh = true;
+    }
+
+    if (refresh) {
+      last_report_spenttime = progress->spent_time_16dot16;
+      defrag_report_progress(progress, ++progress_dots);
+      fflush(nullptr);
+    }
+    last_progress = *progress;
+  }
+  return user_break ? MDBX_RESULT_TRUE : MDBX_RESULT_FALSE;
+}
+
+int main(int argc, char *argv[]) {
+  int rc;
+  MDBX_env *env = nullptr;
+  const char *const progname = argv[0];
+  bool warmup = false;
+  MDBX_env_flags_t env_flags = MDBX_ENV_DEFAULTS | MDBX_EXCLUSIVE;
+  MDBX_warmup_flags_t warmup_flags = MDBX_warmup_default;
+
+  if (argc < 2)
+    usage(progname);
+
+  for (int i; (i = getopt(argc, argv,
+                          "uU"
+                          "V"
+                          "v"
+                          "q"
+                          "c")) != EOF;) {
+    switch (i) {
+    case 'V':
+      printf("mdbx_defarg version %d.%d.%d.%d\n"
+             " - source: %s %s, commit %s, tree %s\n"
+             " - anchor: %s\n"
+             " - build: %s for %s by %s\n"
+             " - flags: %s\n"
+             " - options: %s\n",
+             mdbx_version.major, mdbx_version.minor, mdbx_version.patch, mdbx_version.tweak, mdbx_version.git.describe,
+             mdbx_version.git.datetime, mdbx_version.git.commit, mdbx_version.git.tree, mdbx_sourcery_anchor,
+             mdbx_build.datetime, mdbx_build.target, mdbx_build.compiler, mdbx_build.flags, mdbx_build.options);
+      return EXIT_SUCCESS;
+    case 'v':
+      if (++verbosity > 9)
+        usage(progname);
+      break;
+    case 'q':
+      quiet = true;
+      break;
+    case 'c':
+      env_flags = (env_flags & ~MDBX_EXCLUSIVE) | MDBX_ACCEDE;
+      break;
+    case 'u':
+      warmup = true;
+      break;
+    case 'U':
+      warmup = true;
+      warmup_flags = MDBX_warmup_force | MDBX_warmup_touchlimit | MDBX_warmup_lock;
+      break;
+    default:
+      usage(progname);
+    }
+  }
+
+  if (optind != argc - 1)
+    usage(progname);
+
+#if defined(_WIN32) || defined(_WIN64)
+  SetConsoleCtrlHandler(ConsoleBreakHandlerRoutine, true);
+  is_console = _isatty(_fileno(stdout)) != 0;
+#else
+  is_console = isatty(fileno(stdout)) == 1;
+#ifdef SIGPIPE
+  signal(SIGPIPE, signal_handler);
+#endif
+#ifdef SIGHUP
+  signal(SIGHUP, signal_handler);
+#endif
+  signal(SIGINT, signal_handler);
+  signal(SIGTERM, signal_handler);
+#endif /* !WINDOWS */
+
+  const char *const db_pathname = argv[optind];
+  if (!quiet) {
+    fprintf(stdout, "mdbx_defrag %s (%s, T-%s)\nRunning for %s...\n", mdbx_version.git.describe,
+            mdbx_version.git.datetime, mdbx_version.git.tree, db_pathname);
+    if (verbosity > MDBX_LOG_VERBOSE && !MDBX_DEBUG)
+      printf("Verbosity level %u exposures only to"
+             " a debug/extra-logging-enabled builds (with NDEBUG undefined"
+             " or MDBX_DEBUG > 0)\n",
+             verbosity);
+    mdbx_setup_debug(verbosity, MDBX_DBG_DONTCHANGE, logger);
+    fflush(nullptr);
+  }
+
+  const char *act = "opening environment";
+  rc = mdbx_env_create(&env);
+  if (rc == MDBX_SUCCESS)
+    rc = mdbx_env_open(env, db_pathname, env_flags, 0);
+  if ((env_flags & MDBX_EXCLUSIVE) && (rc == MDBX_BUSY ||
+#if defined(_WIN32) || defined(_WIN64)
+                                       rc == ERROR_LOCK_VIOLATION || rc == ERROR_SHARING_VIOLATION
+#else
+                                       rc == EBUSY || rc == EAGAIN
+#endif
+                                       )) {
+    env_flags = (env_flags & ~MDBX_EXCLUSIVE) | MDBX_ACCEDE;
+    rc = mdbx_env_open(env, db_pathname, env_flags, 0);
+  }
+
+  if (rc == MDBX_SUCCESS && warmup) {
+    act = "warming up";
+    rc = mdbx_env_warmup(env, nullptr, warmup_flags, 3600 * 65536);
+  }
+
+  if (!MDBX_IS_ERROR(rc)) {
+    MDBX_defrag_result_t result;
+    act = "defragmenting";
+    rc = mdbx_env_defrag(env, 0, 0, 0, 0, -1, 0, defrag_notify, nullptr, &result);
+    defrag_notify(nullptr, &result);
+    if (progress_dots) {
+      defrag_report_progress(&result, progress_dots);
+      printf(" %s\n", stop_reason(&result));
+    }
+    if (!quiet && !MDBX_IS_ERROR(rc)) {
+      char took_buffer[42];
+      printf("Defragmentation %s: shrinked %zi pages, %u passes, moved %zu pages, stopping reasons bits 0x%x,"
+             " took %s seconds\n",
+             (rc == MDBX_SUCCESS) ? "done" : "incomplete", result.pages_shrinked, result.cycles, result.pages_moved,
+             result.stopping_reasons,
+             mdbx_ratio2digits(result.spent_time_16dot16, 65536, 3, took_buffer, sizeof(took_buffer)));
+    }
+  }
+
+  if (!quiet && MDBX_IS_ERROR(rc)) {
+    fflush(nullptr);
+    fprintf(stderr, "%s: %s failed, error %d (%s)\n", progname, act, rc, mdbx_strerror(rc));
+  }
+
+  mdbx_env_close(env);
+  fflush(nullptr);
+  return MDBX_IS_ERROR(rc) ? EXIT_FAILURE : EXIT_SUCCESS;
+}

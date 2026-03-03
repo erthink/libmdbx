@@ -1,4 +1,4 @@
-﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-428-g6569bd09 at 2026-02-24T16:49:25+03:00).
+﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-444-g57e92996 at 2026-03-04T00:13:51+03:00).
 /// \file mdbx.h++
 /// \brief The libmdbx C++ API header file.
 ///
@@ -2950,7 +2950,7 @@ struct LIBMDBX_API_TYPE map_handle {
   };
 };
 
-using comparator = ::MDBX_cmp_func *;
+using comparator = ::MDBX_cmp_func;
 inline comparator default_comparator(key_mode mode) noexcept {
   return ::mdbx_get_keycmp(static_cast<MDBX_db_flags_t>(mode));
 }
@@ -3572,13 +3572,13 @@ public:
   ///    transaction;
   ///
   /// \see long-lived-read
-  inline env &set_HandleSlowReaders(MDBX_hsr_func *);
+  inline env &set_HandleSlowReaders(MDBX_hsr_func);
 
   /// \brief Returns the current Handle-Slow-Readers callback used to resolve
   /// database full/overflow issue due to a reader(s) which prevents the old
   /// data from being recycled.
   /// \see set_HandleSlowReaders()
-  inline MDBX_hsr_func *get_HandleSlowReaders() const noexcept;
+  inline MDBX_hsr_func get_HandleSlowReaders() const noexcept;
 
   /// \brief Starts read (read-only) transaction.
   inline txn_managed start_read() const;
@@ -5596,12 +5596,12 @@ inline unsigned env::check_readers() {
   return static_cast<unsigned>(dead_count);
 }
 
-inline env &env::set_HandleSlowReaders(MDBX_hsr_func *cb) {
+inline env &env::set_HandleSlowReaders(MDBX_hsr_func cb) {
   error::success_or_throw(::mdbx_env_set_hsr(handle_, cb));
   return *this;
 }
 
-inline MDBX_hsr_func *env::get_HandleSlowReaders() const noexcept { return ::mdbx_env_get_hsr(handle_); }
+inline MDBX_hsr_func env::get_HandleSlowReaders() const noexcept { return ::mdbx_env_get_hsr(handle_); }
 
 inline txn_managed env::start_read() const {
   ::MDBX_txn *ptr;
