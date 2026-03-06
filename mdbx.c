@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-444-g391bf6cd at 2026-03-04T00:16:49+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-449-ga2319c94 at 2026-03-06T22:09:32+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -2863,21 +2863,11 @@ MDBX_INTERNAL void txn_dpl_clear(MDBX_txn *txn);
 typedef struct defrag_arc {
   pgno_t key_or_pgno;
   pgno_t parent;
-  pgno_t mapped;
-  pgno_t npages_and_gc_flag;
+  pgno_t mapped : 31;
+  bool engaged : 1;
+  pgno_t npages : 31;
+  bool gc : 1;
 } da_t;
-
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline pgno_t arc_npages(const da_t *arc) {
-  return arc->npages_and_gc_flag >> 1;
-}
-
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool arc_is_gc(const da_t *arc) {
-  return arc->npages_and_gc_flag & 1;
-}
-
-MDBX_MAYBE_UNUSED static inline void arc_set_npages_and_gc(da_t *arc, pgno_t npages, bool is_gc) {
-  arc->npages_and_gc_flag = (npages << 1) + (is_gc ? 1 : 0);
-}
 
 typedef struct defrag_map_list {
   size_t length;
@@ -3018,12 +3008,12 @@ typedef struct defract_context {
   size_t progress_counter;
   uint8_t wallclock_trottle;
   uint8_t stumble_retry;
+  uint8_t stopping_reasons;
   unsigned cycle;
   size_t total_pages_moved;
   size_t payload_pages;
   pgno_t largepage_max, largepage_amountleft, largepage_count;
   pgno_t summary_depth;
-  volatile uint32_t stopping_reasons;
   void *user_ctx;
   MDBX_defrag_notify_func user_callback;
 
@@ -3034,7 +3024,7 @@ typedef struct defract_context {
 #if MDBX_DEBUG || MDBX_FORCE_ASSERTIONS
   pnl_t repnl_clone;
 #endif /* MDBX_DEBUG || MDBX_FORCE_ASSERTIONS */
-  pgno_t defrag_atleast, defrag_enough, before_defrag;
+  pgno_t defrag_atleast, defrag_enough, before_defrag, last_allocated;
   pgno_t gc_tree_pages, gc_retained_pages;
   uint64_t start_timestamp;
   uint64_t wallclock_atleast;
@@ -3052,8 +3042,7 @@ MDBX_INTERNAL void defrag_destroy(dfc_t *dfc);
 MDBX_INTERNAL int defrag_cycle(dfc_t *dfc);
 MDBX_INTERNAL bool defrag_should_continue(dfc_t *dfc, size_t progress_increment);
 MDBX_INTERNAL uint64_t defrag_score(dfc_t *dfc, size_t allocated_pages);
-MDBX_INTERNAL uint64_t defrag_result(const dfc_t *dfc, const intptr_t pages_allocated, MDBX_defrag_result_t *out,
-                                     uint64_t now_cache);
+MDBX_INTERNAL uint64_t defrag_result(dfc_t *dfc, MDBX_defrag_result_t *out, uint64_t now_cache);
 
 MDBX_INTERNAL int lck_setup(MDBX_env *env, mdbx_mode_t mode);
 #if MDBX_LOCKING > MDBX_LOCKING_SYSV
@@ -8283,13 +8272,13 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
   dfc.user_ctx = ctx;
   dfc.user_callback = progress_callback;
 
-  pgno_t snap_allocated_pages = 0;
-  while ((size_t)acceptable_backlash + dfc.payload_pages < txn->geo.first_unallocated &&
-         defrag_should_continue(&dfc, 0)) {
+  while ((size_t)acceptable_backlash + dfc.payload_pages < txn->geo.first_unallocated) {
+    if (!defrag_should_continue(&dfc, 0))
+      goto skip;
+
     const pgno_t prev_stumble = dfc.stumble_pgno;
     rc = defrag_cycle(&dfc);
 
-    snap_allocated_pages = txn->geo.first_unallocated;
 #if MDBX_DEBUG || MDBX_FORCE_ASSERTIONS
     pnl_free(dfc.repnl_clone);
     dfc.repnl_clone = nullptr;
@@ -8330,10 +8319,9 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
 
   if (txn && txn->userctx == &dfc) {
     if ((txn->flags & MDBX_TXN_ERROR) == 0) {
-      snap_allocated_pages = txn->geo.first_unallocated;
-      if (defrag_score(&dfc, snap_allocated_pages) > dfc.cycle_initial_score) {
+      if (defrag_score(&dfc, dfc.last_allocated = txn->geo.first_unallocated) > dfc.cycle_initial_score) {
         rc = txn_basal_commit(txn, nullptr);
-        snap_allocated_pages = txn->geo.first_unallocated;
+        dfc.last_allocated = txn->geo.first_unallocated;
       }
     }
     dfc.txn = nullptr;
@@ -8341,15 +8329,20 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
     rc = (err != MDBX_SUCCESS && !MDBX_IS_ERROR(rc)) ? err : rc;
   }
 
-  if (result)
-    defrag_result(&dfc, snap_allocated_pages, result, 0);
+  defrag_should_continue(&dfc, 0);
+skip:
+
+  if (result) {
+    defrag_result(&dfc, result, 0);
+    result->pages_moved = dfc.total_pages_moved;
+  }
 
   defrag_destroy(&dfc);
 
   if (!MDBX_IS_ERROR(rc)) {
     if (dfc.stopping_reasons)
       rc = (dfc.stopping_reasons == MDBX_defrag_laggard_reader) ? MDBX_LAGGARD_READER : MDBX_RESULT_TRUE;
-    if (snap_allocated_pages <= dfc.defrag_enough)
+    if (dfc.last_allocated <= dfc.defrag_enough)
       rc = MDBX_SUCCESS;
   }
   return LOG_IFERR(rc);
@@ -16901,17 +16894,19 @@ int dbi_close_release(MDBX_env *env, MDBX_dbi dbi) { return dbi_defer_release(en
 
 static uint64_t defrag_now(uint64_t now_cache) { return now_cache ? now_cache : osal_monotime(); }
 
-uint64_t defrag_result(const dfc_t *dfc, const intptr_t pages_allocated, MDBX_defrag_result_t *out,
+uint64_t defrag_result(dfc_t *dfc, MDBX_defrag_result_t *out,
                        uint64_t now_cache) {
   memset(out, 0, sizeof(*out));
-  out->pages_shrinked = dfc->before_defrag - pages_allocated;
-  out->pages_moved = dfc->total_pages_moved + dfc->cycle_pages_moved;
+  if (dfc->txn)
+    dfc->last_allocated = dfc->txn->geo.first_unallocated;
+  out->pages_shrinked = dfc->before_defrag - dfc->last_allocated;
+  out->pages_moved = dfc->cycle_pages_moved;
   out->pages_scheduled = dfc->cycle_pages_scheduled;
   out->pages_retained = dfc->gc_retained_pages;
   if (dfc->stopor)
     out->pages_retained += dfc->gc_tree_pages;
 
-  intptr_t pages_left = pages_allocated - (dfc->payload_pages + out->pages_retained);
+  intptr_t pages_left = dfc->last_allocated - (dfc->payload_pages + out->pages_retained);
   out->pages_left = (pages_left > 0) ? pages_left : 0;
   out->pages_whole = dfc->before_defrag;
 
@@ -16935,7 +16930,7 @@ uint64_t defrag_result(const dfc_t *dfc, const intptr_t pages_allocated, MDBX_de
 static bool defrag_notify(dfc_t *dfc, uint64_t now_cache) {
   if (dfc->user_callback) {
     MDBX_defrag_result_t progress;
-    /* now_cache = */ defrag_result(dfc, dfc->txn->geo.first_unallocated, &progress, now_cache);
+    /* now_cache = */ defrag_result(dfc, &progress, now_cache);
     if (dfc->user_callback(dfc->user_ctx, &progress) != MDBX_SUCCESS) {
       dfc->stopping_reasons |= MDBX_defrag_user_break;
       return false;
@@ -16948,11 +16943,11 @@ static void defrag_stumble(dfc_t *dfc, const da_t *at, const char *reason_prefix
                            const char *reason_suffix) {
   if (dfc->stumble_pgno < at->key_or_pgno) {
     dfc->stumble_pgno = at->key_or_pgno;
-    dfc->stumble_span = arc_npages(at);
+    dfc->stumble_span = at->npages;
   }
   NOTICE("defragmentation cycle %u (moved %+i pages, %+i scheduled), stumbled on the page/chunk %" PRIaPGNO
          "[%u], because %s%zi%s.",
-         dfc->cycle, dfc->cycle_pages_moved, dfc->cycle_pages_scheduled, at->key_or_pgno, arc_npages(at), reason_prefix,
+         dfc->cycle, dfc->cycle_pages_moved, dfc->cycle_pages_scheduled, at->key_or_pgno, at->npages, reason_prefix,
          reason_value, reason_suffix);
   defrag_notify(dfc, 0);
 }
@@ -16971,10 +16966,10 @@ bool defrag_should_continue(dfc_t *dfc, size_t progress_increment) {
     return false;
 
   uint64_t now_cache = 0;
-  if (dfc->defrag_atleast < dfc->txn->geo.first_unallocated)
+  if (dfc->defrag_atleast < (dfc->txn ? dfc->txn->geo.first_unallocated : dfc->before_defrag))
     return defrag_progcess(dfc, progress_increment, now_cache);
 
-  if (dfc->defrag_enough > dfc->txn->geo.first_unallocated) {
+  if (dfc->defrag_enough > (dfc->txn ? dfc->txn->geo.first_unallocated : dfc->before_defrag)) {
     if (dfc->wallclock_atleast && (now_cache = defrag_now(now_cache)) >= dfc->wallclock_atleast) {
       dfc->stopping_reasons |= MDBX_defrag_enough_theshold;
       return false;
@@ -17156,7 +17151,8 @@ static int defrag_puch_arc(dfc_t *const dfc, pgno_t parent, pgno_t page, unsigne
   da_t *arc = dml_append(&dfc->arcs, page);
   if (likely(arc)) {
     arc->parent = parent;
-    arc_set_npages_and_gc(arc, npages, is_gc);
+    arc->npages = npages;
+    arc->gc = !!is_gc;
     return MDBX_SUCCESS;
   } else
     return MDBX_ENOMEM;
@@ -17322,9 +17318,9 @@ static int defrag_fixup_page(dfc_t *dfc, page_t *dst, pgno_t pgno) {
 
 static int defrag_move(dfc_t *dfc, da_t *arc) {
   MDBX_txn *const txn = dfc->txn;
-  assert(arc->key_or_pgno >= NUM_METAS && arc->mapped >= NUM_METAS && arc_npages(arc) > 0);
-  assert(arc->key_or_pgno + arc_npages(arc) <= txn->geo.first_unallocated);
-  assert(arc->mapped + arc_npages(arc) <= dfc->defrag_edge);
+  assert(arc->key_or_pgno >= NUM_METAS && arc->mapped >= NUM_METAS && arc->npages > 0);
+  assert(arc->key_or_pgno + arc->npages <= txn->geo.first_unallocated);
+  assert((size_t)arc->mapped + (size_t)arc->npages <= dfc->defrag_edge);
   int err;
 
   /* Нужно скопировать содержимое страницы в новое место, а также поправить ссылку на перемещённую страницу в
@@ -17339,7 +17335,7 @@ static int defrag_move(dfc_t *dfc, da_t *arc) {
    * как в обоих случаях равно количеству дочерних страниц. Кроме этого, последовательная обработка dfc->track приведет
    * к более упоряченному чтению и записи страниц. */
 
-  const size_t npages = arc_npages(arc);
+  const size_t npages = arc->npages;
   const size_t di = ((txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC) ? txn_dpl_exist(txn, arc->key_or_pgno) : 0;
   if (di) {
     page_t *dst = txn->wr.dirtylist->items[di].ptr;
@@ -17391,6 +17387,7 @@ static int defrag_move(dfc_t *dfc, da_t *arc) {
       return err;
   }
 
+  DEBUG("moved %u pages %u -> %u", arc->npages, arc->key_or_pgno, arc->mapped);
   dfc->cycle_pages_moved += npages;
   if (unlikely(npages > 1)) {
     MDBX_env *env = txn->env;
@@ -17445,15 +17442,15 @@ static pgno_t defrag_repnl_get(dfc_t *dfc, size_t npages) {
   return 0;
 }
 
-static int defrag_remap(dfc_t *dfc, da_t *arc, pgno_t assigned) {
+static int defrag_schedule(dfc_t *dfc, da_t *arc, pgno_t assigned) {
   da_t *stack_of_parents[CURSOR_STACK_SIZE * 2];
   size_t depth = 0;
-  const size_t npages = arc_npages(arc);
+  const size_t npages = arc->npages;
 
   assert(dfc->remapped_edge < dfc->defrag_enough);
   for (da_t *chain = arc; chain->parent;) {
     chain = dml_search_exact(dfc->arcs, chain->parent);
-    assert(chain && arc_npages(chain) == 1);
+    assert(chain && chain->npages == 1);
     if (chain->mapped)
       break;
 
@@ -17462,7 +17459,7 @@ static int defrag_remap(dfc_t *dfc, da_t *arc, pgno_t assigned) {
     if (!chain->mapped)
       goto bailout;
 
-    assert(arc->mapped + 1 <= dfc->defrag_enough);
+    assert((size_t)arc->mapped + 1 <= dfc->defrag_enough);
     stack_of_parents[depth++] = chain;
   }
 
@@ -17480,13 +17477,14 @@ static int defrag_remap(dfc_t *dfc, da_t *arc, pgno_t assigned) {
     }
     if (dfc->remapped_edge < arc->mapped)
       dfc->remapped_edge = arc->mapped + npages - 1;
-    while (depth > 0) {
-      da_t *chain = stack_of_parents[--depth];
+    for (size_t i = 0; i < depth; ++i) {
+      da_t *chain = stack_of_parents[i];
       if (dfc->remapped_edge < chain->mapped)
         dfc->remapped_edge = chain->mapped;
     }
     if (likely(dfc->remapped_edge < dfc->retreat_edge)) {
       dfc->cycle_pages_scheduled += npages + depth;
+      DEBUG("scheduled %zu+%zu=%zu pages %u -> %u", npages, depth, npages + depth, arc->key_or_pgno, arc->mapped);
       return MDBX_SUCCESS;
     }
   }
@@ -17534,16 +17532,9 @@ __hot __noinline static unsigned defrag_move_cost(dfc_t *dfc, pgno_t pgno, pgno_
   if (!arc)
     return pnl_contains(dfc->txn->wr.repnl, pgno) ? 0 : INT_MAX;
   if (arc->mapped)
-    /* Необходимо допеределать:
-     *  - необходимо отличать страницы скопированные как родительские и перемещённые при формировании предыдущих
-     *    последовательностей в этом цикле дефрагментации;
-     *  - страницы скопированные как родительские можно и желательно использоваться для формирования
-     *    последовательностей, но при этом нельзя опираться на них дважды при формировании последовательностей.
-     *
-     * Пока просто пропускаем их. */
-    return INT_MAX;
+    return arc->engaged ? INT_MAX : 0;
 
-  size_t npages = arc_npages(arc);
+  size_t npages = arc->npages;
   size_t cost = npages;
   if (npages > 1) {
     if (npages >= span)
@@ -17620,14 +17611,15 @@ __hot static int defrag_provide_span(dfc_t *const dfc, const size_t npages) {
 
   /* Теперь сортируем вынутое из repnl и подготавливаем перемещение используемых страниц. */
   const size_t repnl_before = pnl_size(pnl);
+  size_t payoff = 0;
   for (pgno_t pgno = best_begin + npages; --pgno >= best_begin;) {
     if (!pnl_contains(dfc->temp, pgno)) {
       da_t *arc = dml_search_exact(dfc->arcs, pgno);
       assert(arc != nullptr);
-      if (unlikely(!arc || arc_npages(arc) >= npages))
+      if (unlikely(!arc || arc->npages >= npages))
         return MDBX_PROBLEM;
       if (!arc->mapped) {
-        int rc = defrag_remap(dfc, arc, 0);
+        int rc = defrag_schedule(dfc, arc, 0);
         if (rc != MDBX_SUCCESS) {
           int err = pnl_append_pnl(&dfc->txn->wr.repnl, dfc->temp);
           assert(!err);
@@ -17636,7 +17628,11 @@ __hot static int defrag_provide_span(dfc_t *const dfc, const size_t npages) {
           pnl_sort(dfc->txn->wr.repnl, dfc->txn->geo.first_unallocated);
           return rc;
         }
+      } else {
+        assert(!arc->engaged);
+        payoff += 1;
       }
+      arc->engaged = 1;
     }
   }
 
@@ -17648,8 +17644,9 @@ __hot static int defrag_provide_span(dfc_t *const dfc, const size_t npages) {
   const size_t moves = repnl_before - pnl_size(pnl);
   VERBOSE("prepared lp-span %zu, at %zu, %zu moves, %zu repnl", npages, best_begin, moves, pnl_size(dfc->temp));
   assert(pnl_size(dfc->temp) <= npages);
-  assert(moves + pnl_size(dfc->temp) >= npages);
-  assert(moves || npages == pnl_size(dfc->temp));
+  assert(moves + payoff + pnl_size(dfc->temp) >= npages);
+  assert(moves + payoff || npages == pnl_size(dfc->temp));
+  (void)payoff;
   return MDBX_SUCCESS;
 }
 
@@ -17658,6 +17655,8 @@ int defrag_cycle(dfc_t *dfc) {
   dfc->stopping_reasons &= ~MDBX_defrag_large_chunk;
   if (dfc->cycle) {
     dfc->progress_counter = 0;
+    dfc->cycle_pages_scheduled = 0;
+    dfc->cycle_pages_moved = 0;
     dfc->cycle += 1;
   }
   defrag_progcess(dfc, 0, 0);
@@ -17739,7 +17738,7 @@ int defrag_cycle(dfc_t *dfc) {
     da_t *w = begin;
     for (da_t *r = begin; r != end; ++r) {
       /* Корректируем номера страниц по результатам перемещения и удаляем/пропускаем элементы связанные с GC. */
-      if (!arc_is_gc(r)) {
+      if (!r->gc) {
         if (r->mapped) {
           if (dfc->stumble_pgno == r->key_or_pgno) {
             dfc->stumble_pgno = 0;
@@ -17748,12 +17747,11 @@ int defrag_cycle(dfc_t *dfc) {
           if (dfc->lp_backlog == r->key_or_pgno)
             dfc->lp_backlog = 0;
           r->key_or_pgno = r->mapped;
+          r->mapped = 0;
+          r->engaged = 0;
         }
-        w->key_or_pgno = r->key_or_pgno;
-        w->parent = r->parent;
-        w->mapped = 0;
-        w->npages_and_gc_flag = r->npages_and_gc_flag;
-        const size_t npages = arc_npages(w);
+        *w = *r;
+        const size_t npages = w->npages;
         if (npages > 1 && w->key_or_pgno >= dfc->defrag_enough) {
           dfc->largepage_count += 1;
           dfc->largepage_amountleft += npages;
@@ -17787,6 +17785,7 @@ int defrag_cycle(dfc_t *dfc) {
     dfc->cycle = 1;
     defrag_progcess(dfc, 0, 0);
   }
+  assert(dfc->cycle_pages_scheduled == 0 && dfc->cycle_pages_moved == 0);
 
   /* После сортировки в начале массива dfc->arcs[] располагается некоторое количество пар целевая-родительская
    * номеров страниц, из которых необходимо переместить данные. Перемещать содержимое страниц есть смысл пока
@@ -17831,11 +17830,11 @@ int defrag_cycle(dfc_t *dfc) {
     lp = dml_search_exact(dfc->arcs, dfc->lp_backlog);
     assert(lp != nullptr);
     if (lp) {
-      size_t npages = arc_npages(lp);
+      size_t npages = lp->npages;
       assert(npages > 1);
       pgno_t pgno = pnl_get_best_sequence(dfc->txn->wr.repnl, npages, dfc->defrag_enough);
       if (pgno) {
-        int err = defrag_remap(dfc, lp, pgno);
+        int err = defrag_schedule(dfc, lp, pgno);
         if (err == MDBX_SUCCESS)
           lp = nullptr;
         else if (err != MDBX_RESULT_TRUE)
@@ -17854,7 +17853,7 @@ int defrag_cycle(dfc_t *dfc) {
       break;
     }
 
-    if (dfc->defrag_edge - arc_npages(i) != i->key_or_pgno) {
+    if (dfc->defrag_edge - i->npages != i->key_or_pgno) {
       const pgno_t tail = dfc->defrag_edge - 1;
       if (most_retired == tail) {
         defrag_stumble(dfc, i, "the adjacent page ", most_retired, " is in the retired list");
@@ -17874,16 +17873,16 @@ int defrag_cycle(dfc_t *dfc) {
     }
 
     if (!i->mapped) {
-      int err = defrag_remap(dfc, i, 0);
+      int err = defrag_schedule(dfc, i, 0);
       if (unlikely(err != MDBX_SUCCESS)) {
         assert((i->mapped != 0) == (err == MDBX_SUCCESS));
         if (unlikely(err != MDBX_RESULT_TRUE))
           return err;
-        lp = (arc_npages(i) > 1) ? i : nullptr;
+        lp = (i->npages > 1) ? i : nullptr;
         break;
       }
     }
-    VERBOSE("turn-%s %+i, %u => %u", "move", arc_npages(i), dfc->defrag_edge, i->key_or_pgno);
+    VERBOSE("turn-%s %+i, %u => %u", "move", i->npages, dfc->defrag_edge, i->key_or_pgno);
     dfc->defrag_edge = i->key_or_pgno;
 
     if (pnl_size(txn->wr.repnl) > 0 && MDBX_PNL_MOST(txn->wr.repnl) == dfc->defrag_edge - 1) {
@@ -17919,7 +17918,7 @@ int defrag_cycle(dfc_t *dfc) {
          pnl_size(dfc->txn->wr.repnl) > dfc->largepage_amountleft && i->key_or_pgno > dfc->remapped_edge &&
          i->key_or_pgno > MDBX_PNL_LEAST(dfc->txn->wr.repnl);
          ++i) {
-      const size_t npages = arc_npages(i);
+      const size_t npages = i->npages;
       if (!defrag_should_continue(dfc, npages))
         return MDBX_RESULT_TRUE;
       if (i->mapped || npages == 1)
@@ -17929,7 +17928,7 @@ int defrag_cycle(dfc_t *dfc) {
       if (i != lp) {
         pgno_t pgno = pnl_get_best_sequence(dfc->txn->wr.repnl, npages, dfc->defrag_enough);
         if (pgno) {
-          int err = defrag_remap(dfc, i, pgno);
+          int err = defrag_schedule(dfc, i, pgno);
           if (unlikely(err != MDBX_SUCCESS)) {
             if (err == MDBX_RESULT_TRUE)
               break;
@@ -17969,10 +17968,10 @@ int defrag_cycle(dfc_t *dfc) {
       rc = defrag_move(dfc, i);
       if (unlikely(rc != MDBX_SUCCESS))
         break;
-      rc = pnl_append_span(&txn->wr.retired_pages, i->key_or_pgno, arc_npages(i));
+      rc = pnl_append_span(&txn->wr.retired_pages, i->key_or_pgno, i->npages);
       if (unlikely(rc != MDBX_SUCCESS))
         break;
-      if (!defrag_should_continue(dfc, arc_npages(i)) && (dfc->stopping_reasons & MDBX_defrag_user_break) != 0) {
+      if (!defrag_should_continue(dfc, i->npages) && (dfc->stopping_reasons & MDBX_defrag_user_break) != 0) {
         rc = MDBX_RESULT_TRUE;
         break;
       }
@@ -17983,10 +17982,9 @@ int defrag_cycle(dfc_t *dfc) {
     return rc;
   }
 
+  assert(dfc->cycle_pages_scheduled == dfc->cycle_pages_moved);
   if (dfc->cycle_pages_moved) {
     dfc->total_pages_moved += dfc->cycle_pages_moved;
-    dfc->cycle_pages_scheduled = 0;
-    dfc->cycle_pages_moved = 0;
     TXN_FOREACH_DBI_ALL(txn, dbi) {
       if ((txn->dbi_state[dbi] & (DBI_VALID | DBI_LINDO | DBI_STALE)) == (DBI_VALID | DBI_LINDO) &&
           txn->dbs[dbi].root != P_INVALID) {
@@ -18037,6 +18035,7 @@ int defrag_init(dfc_t *dfc, MDBX_txn *txn, size_t defrag_atleast_pages, size_t s
 
   dfc->txn = txn;
   dfc->before_defrag = txn->geo.first_unallocated;
+  dfc->last_allocated = dfc->before_defrag;
   if (limit_spend_wallclock_16dot16)
     dfc->wallclock_detent = dfc->start_timestamp + osal_16dot16_to_monotime(limit_spend_wallclock_16dot16);
   if (spend_atleast_wallclock_16dot16)
@@ -18181,11 +18180,9 @@ da_t *dml_append(dml_t **pdml, pgno_t key) {
     *pdml = dml;
   }
   assert(dml->length < dml->limit);
-  da_t *dm = &dml->items[dml->length++];
-  dm->key_or_pgno = key;
-  dm->parent = 0;
-  dm->mapped = 0;
-  dm->npages_and_gc_flag = 0;
+
+  da_t *dm = &dml->items[dml->length++], init = {.key_or_pgno = key};
+  *dm = init;
   return dm;
 }
 
@@ -39671,10 +39668,10 @@ __dll_export
         0,
         14,
         1,
-        444,
+        449,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.444 */
-        {"2026-03-04T00:16:49+03:00", "6fcb222225bbe15d702f98cfe7a14c55d3dc2e1b", "391bf6cd532af7345f27affc05f467cfb94623cc", "v0.14.1-444-g391bf6cd"},
+                                        0.14.1.449 */
+        {"2026-03-06T22:09:32+03:00", "722d2f848a0f79d9bec0116ca398f146b041f3ed", "a2319c949e5a2fc30ea7a36432dd7faeb248b94f", "v0.14.1-449-ga2319c94"},
         sourcery};
 
 __dll_export
