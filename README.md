@@ -17,11 +17,11 @@ _libmdbx_ is an extremely fast, compact, powerful, embedded, transactional [key-
 
 6. Supports Linux, Windows, MacOS, Harmony, Android, iOS, FreeBSD, DragonFly, Solaris, OpenSolaris, OpenIndiana, NetBSD, OpenBSD and other systems compliant with **POSIX.1-2008**.
 
-7. **Compact and friendly for fully embedding**. Only ≈25KLOC of `C11`, ≈64K x86 binary code of core, no internal threads neither server process(es), but implements a simplified variant of the [Berkeley DB](https://en.wikipedia.org/wiki/Berkeley_DB) and [dbm](https://en.wikipedia.org/wiki/DBM_(computing)) API.
+7. **Compact and friendly for fully embedding**. Just a few flat source code files. Here no internal threads nor server process(es), but implements core part of the [Berkeley DB](https://en.wikipedia.org/wiki/Berkeley_DB) API with many powerful extensions.
 
 <!-- section-end -->
 
-Historically, _libmdbx_ is a deeply revised and extended descendant of the legendary [Lightning Memory-Mapped Database](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database). _libmdbx_ inherits all benefits from _LMDB_, but resolves some issues and adds [a set of improvements](#improvements-beyond-lmdb).
+Historically, _libmdbx_ is a deeply revised and extended descendant of the legendary [Lightning Memory-Mapped Database](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database). _libmdbx_ inherits all benefits from _LMDB_, but resolves some issues and adds [a large set of improvements](#improvements-beyond-lmdb).
 
 [![Telergam: Support | Discussions | News](https://img.shields.io/endpoint?color=scarlet&logo=telegram&label=Support%20%7C%20Discussions%20%7C%20News&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Flibmdbx)](https://t.me/libmdbx)
 
@@ -128,25 +128,23 @@ $ cc --version
 
 - Ultra-efficient support for [multimaps](https://en.wikipedia.org/wiki/Multimap). Multi-values sorted, searchable and iterable. Keys stored without duplication.
 
-- Data is [memory-mapped](https://en.wikipedia.org/wiki/Memory-mapped_file) and accessible directly/zero-copy. Traversal of database records is extremely-fast.
+- Data is [memory-mapped](https://en.wikipedia.org/wiki/Memory-mapped_file) and accessible directly/zero-copy. In-memory fullscan of database records is extremely-fast.
 
 - Transactions for readers and writers, ones do not block others.
 
-- Writes are strongly serialized. No transaction conflicts nor deadlocks.
+- No transaction conflicts nor deadlocks since writes are strongly serialized.
 
 - Readers are [non-blocking](https://en.wikipedia.org/wiki/Non-blocking_algorithm), notwithstanding [snapshot isolation](https://en.wikipedia.org/wiki/Snapshot_isolation).
 
-- Nested write transactions.
-
 - Reads scale linearly across CPUs.
 
-- Continuous zero-overhead database compactification.
+- Both explicit defragmentation and continuous zero-overhead database compactification.
 
 - Automatic on-the-fly database size adjustment.
 
-- Customizable database page size.
-
 - `Olog(N)` cost of lookup, insert, update, and delete operations by virtue of [B+ tree characteristics](https://en.wikipedia.org/wiki/B%2B_tree#Characteristics).
+
+- Improbably fast and robust get(key) operations [accelerated by shareable lockfree cache](https://libmdbx.dqdkfa.ru/group__c__crud.html#ga5bfb583bf2c5d5676ffddb466e789353).
 
 - Online hot backup.
 
@@ -154,7 +152,9 @@ $ cc --version
 
 - No [WAL](https://en.wikipedia.org/wiki/Write-ahead_logging) nor any transaction journal. No crash recovery needed. No maintenance is required.
 
-- No internal cache and/or memory management, all done by basic OS services.
+- Flexible transaction API with support for nested transactions.
+
+- Customizable database page size.
 
 ## Limitations
 
@@ -190,7 +190,7 @@ For now please refer to [chapter of "BoltDB comparison with other databases"](ht
  - no issues with moving a cursor(s) after the deletion;
  - _libmdbx_ provides zero-overhead database compactification, so a database file could be shrinked/truncated in particular cases;
  - excluding disk I/O time _libmdbx_ could be ≈3 times faster than BoltDB and up to 10-100K times faster than both BoltDB and LMDB in particular extreme cases;
- - _libmdbx_ provides more features compared to BoltDB and/or LMDB.
+ - _libmdbx_ provides extra more features compared to BoltDB and/or LMDB.
 
 <!-- section-end -->
 <!-- section-begin improvements -->
