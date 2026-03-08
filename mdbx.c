@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-449-ga2319c94 at 2026-03-06T22:09:32+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-453-ga529b6d0 at 2026-03-08T20:32:09+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -1463,6 +1463,7 @@ MDBX_INTERNAL int txn_nested_create(MDBX_txn *parent, bool readonly);
 MDBX_INTERNAL int txn_nested_abort(MDBX_txn *txn);
 MDBX_INTERNAL int txn_nested_commit(MDBX_txn *txn, struct commit_timestamp *ts);
 MDBX_INTERNAL int txn_nested_checkpoint(MDBX_txn *txn, struct commit_timestamp *ts);
+MDBX_INTERNAL int txn_nested_rollback(MDBX_txn *txn);
 MDBX_INTERNAL MDBX_txn *txn_nested_fakero_begin(MDBX_txn *parent);
 MDBX_INTERNAL int txn_nested_fakero_end(MDBX_txn *txn);
 
@@ -1473,6 +1474,7 @@ MDBX_INTERNAL int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts);
 MDBX_INTERNAL int txn_basal_end(MDBX_txn *txn, bool unlock);
 MDBX_INTERNAL int txn_basal_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability,
                                        struct commit_timestamp *ts);
+MDBX_INTERNAL int txn_basal_rollback(MDBX_txn *txn);
 MDBX_INTERNAL int txn_basal_update_tbl_roots(MDBX_txn *txn);
 
 MDBX_INTERNAL int txn_ro_park(MDBX_txn *txn, bool autounpark);
@@ -3033,6 +3035,10 @@ typedef struct defract_context {
 
   txnid_t stopor;
   struct gc_reclaiming_obstacle gc_obstacle;
+  struct cache_item {
+    pgno_t pgno;
+    unsigned cost;
+  } cache_cost[64];
 } dfc_t;
 
 MDBX_INTERNAL int defrag_init(dfc_t *dfc, MDBX_txn *txn, size_t defrag_atleast_pages,
@@ -11288,6 +11294,28 @@ bailout:
   return LOG_IFERR(rc);
 }
 
+int mdbx_txn_rollback(MDBX_txn *txn) {
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR - MDBX_TXN_PARKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  txn->flags |= /* avoid merge cursors' state */ MDBX_TXN_ERROR;
+  if (txn->flags & txn_may_have_cursors)
+    txn_done_cursors(txn);
+
+  if (likely(txn->flags & txn_ro_flat) == 0) {
+    if (!txn->parent)
+      return LOG_IFERR(txn_basal_rollback(txn));
+    else
+      return LOG_IFERR(txn_nested_rollback(txn));
+  }
+
+  rc = txn_ro_reset(txn);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+  return LOG_IFERR(txn_ro_start(txn, false));
+}
+
 int mdbx_txn_amend(MDBX_txn *rtxn, MDBX_txn **ptxn, MDBX_txn_flags_t flags, void *context) {
   if (unlikely(!ptxn))
     return LOG_IFERR(MDBX_EINVAL);
@@ -16894,8 +16922,7 @@ int dbi_close_release(MDBX_env *env, MDBX_dbi dbi) { return dbi_defer_release(en
 
 static uint64_t defrag_now(uint64_t now_cache) { return now_cache ? now_cache : osal_monotime(); }
 
-uint64_t defrag_result(dfc_t *dfc, MDBX_defrag_result_t *out,
-                       uint64_t now_cache) {
+uint64_t defrag_result(dfc_t *dfc, MDBX_defrag_result_t *out, uint64_t now_cache) {
   memset(out, 0, sizeof(*out));
   if (dfc->txn)
     dfc->last_allocated = dfc->txn->geo.first_unallocated;
@@ -17524,7 +17551,7 @@ bailout:
   return MDBX_RESULT_TRUE;
 }
 
-__hot __noinline static unsigned defrag_move_cost(dfc_t *dfc, pgno_t pgno, pgno_t span) {
+__hot __noinline static unsigned defrag_move_cost_uncached(dfc_t *dfc, pgno_t pgno, pgno_t span) {
   if (pgno < NUM_METAS || pgno >= dfc->retreat_edge)
     return INT_MAX;
 
@@ -17551,6 +17578,14 @@ __hot __noinline static unsigned defrag_move_cost(dfc_t *dfc, pgno_t pgno, pgno_
   return cost;
 }
 
+static inline unsigned defrag_move_cost(dfc_t *dfc, pgno_t pgno, pgno_t span) {
+  struct cache_item *cache = &dfc->cache_cost[pgno % ARRAY_LENGTH(dfc->cache_cost)];
+  if (cache->pgno == pgno)
+    return cache->cost;
+  cache->pgno = pgno;
+  return cache->cost = defrag_move_cost_uncached(dfc, pgno, span);
+}
+
 __hot static int defrag_provide_span(dfc_t *const dfc, const size_t npages) {
   assert(npages > 1);
   const pnl_t pnl = dfc->txn->wr.repnl;
@@ -17559,6 +17594,7 @@ __hot static int defrag_provide_span(dfc_t *const dfc, const size_t npages) {
   if (len < npages)
     return MDBX_RESULT_TRUE;
 
+  memset(dfc->cache_cost, 0, sizeof(dfc->cache_cost));
   size_t best_begin = MAX_PAGENO, best_cost = len;
 #if MDBX_PNL_ASCENDING
 #error "FIXME"
@@ -37500,6 +37536,16 @@ int txn_basal_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, s
   return (err == MDBX_SUCCESS) ? rc : err;
 }
 
+int txn_basal_rollback(MDBX_txn *txn) {
+  const unsigned preserved_flags = txn->flags & txn_rw_begin_flags;
+  /* void *const preserved_context = txn->userctx; */
+  int rc = txn_basal_end(txn, false);
+  if (likely(rc == MDBX_SUCCESS))
+    /* txn->userctx = preserved_context; */
+    rc = txn_basal_start(txn, preserved_flags | txn_rw_already_locked);
+  return rc;
+}
+
 /* Merge pageset of the nested transaction into parent */
 static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const size_t parent_retired_len) {
   tASSERT(nested, (nested->flags & MDBX_WRITEMAP) == 0);
@@ -37958,6 +38004,7 @@ int txn_nested_create(MDBX_txn *parent, bool readonly) {
 
 static int nested_undo(MDBX_txn *nested) {
   tASSERT(nested, !nested->nested && !(nested->flags & MDBX_TXN_HAS_CHILD));
+  tASSERT(nested, rkl_empty(&nested->wr.gc.comeback));
   if (nested->flags & txn_may_have_cursors)
     txn_done_cursors(nested);
   if (nested->flags & MDBX_TXN_DIRTY)
@@ -38039,6 +38086,7 @@ static int nested_join(MDBX_txn *nested, struct commit_timestamp *ts) {
   eASSERT(env, txn_dpl_check(nested));
   tASSERT(nested, pnl_check_allocated(nested->wr.repnl, nested->geo.first_unallocated - MDBX_ENABLE_REFUND));
   tASSERT(nested, memcmp(&nested->wr.troika, &parent->wr.troika, sizeof(troika_t)) == 0);
+  tASSERT(nested, rkl_empty(&nested->wr.gc.comeback));
 
   //-------------------------------------------------------------------------
   // Preserve space for page lists in the parent transaction.
@@ -38158,7 +38206,7 @@ int txn_nested_commit(MDBX_txn *nested, struct commit_timestamp *ts) {
 int txn_nested_checkpoint(MDBX_txn *nested, struct commit_timestamp *ts) {
   MDBX_txn *parent = nested->parent;
   if (unlikely(!parent || parent->nested != nested || parent->env != nested->env)) {
-    ERROR("attempt to commit %s txn %p", "strange nested", __Wpedantic_format_voidptr(nested));
+    ERROR("attempt to %s %s txn %p", "commit", "strange nested", __Wpedantic_format_voidptr(nested));
     return MDBX_PROBLEM;
   }
 
@@ -38192,6 +38240,31 @@ int txn_nested_fakero_end(MDBX_txn *nested) {
   nested->userctx = nested->wr.preserve_parent_userctx;
   nested->flags -= txn_ro_nested;
   return MDBX_SUCCESS;
+}
+
+int txn_nested_rollback(MDBX_txn *nested) {
+  tASSERT(nested, nested->flags & txn_ro_nested);
+  tASSERT(nested, rkl_empty(&nested->wr.gc.comeback));
+  MDBX_txn *parent = nested->parent;
+  if (unlikely(!parent || parent->nested != nested || parent->env != nested->env)) {
+    ERROR("attempt to %s %s txn %p", "rollback", "strange nested", __Wpedantic_format_voidptr(nested));
+    return MDBX_PROBLEM;
+  }
+
+  if (unlikely(F_ISSET(nested->flags, txn_ro_nested | MDBX_TXN_DIRTY))) {
+    ERROR("unable to %s %s txn %p", "rollback", "dirty nested fake-readonly", __Wpedantic_format_voidptr(nested));
+    return MDBX_BAD_TXN;
+  }
+
+  const unsigned preserved_flags = nested->flags & txn_ro_nested;
+  int rc = nested_undo(nested);
+  if (likely(rc == MDBX_SUCCESS))
+    rc = nested_start(nested, parent);
+  if (likely(rc == MDBX_SUCCESS))
+    nested->flags |= preserved_flags;
+  else
+    txn_nested_abort(nested);
+  return rc;
 }
 
 static inline mdbx_pid_t ro_slot_pid(const reader_slot_t *slot) { return slot->pid.weak; }
@@ -39668,10 +39741,10 @@ __dll_export
         0,
         14,
         1,
-        449,
+        453,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.449 */
-        {"2026-03-06T22:09:32+03:00", "722d2f848a0f79d9bec0116ca398f146b041f3ed", "a2319c949e5a2fc30ea7a36432dd7faeb248b94f", "v0.14.1-449-ga2319c94"},
+                                        0.14.1.453 */
+        {"2026-03-08T20:32:09+03:00", "1d75989481133843e97103dabd0f5dfa8d7481ac", "a529b6d02d5e628738207dc39331c9186d164f88", "v0.14.1-453-ga529b6d0"},
         sourcery};
 
 __dll_export

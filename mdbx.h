@@ -1,4 +1,4 @@
-/** This file is part of the libmdbx amalgamated source code (v0.14.1-449-ga2319c94 at 2026-03-06T22:09:32+03:00).
+/** This file is part of the libmdbx amalgamated source code (v0.14.1-453-ga529b6d0 at 2026-03-08T20:32:09+03:00).
 
 \file mdbx.h
 \brief The libmdbx C API header file.
@@ -4197,6 +4197,7 @@ typedef struct MDBX_commit_latency MDBX_commit_latency;
  * \see mdbx_txn_begin_ex()
  * \see mdbx_txn_abort()
  * \see mdbx_txn_abort_ex()
+ * \see mdbx_txn_rollback()
  *
  * If the current thread is not eligible to manage the transaction then
  * the \ref MDBX_THREAD_MISMATCH error will returned. Otherwise the transaction
@@ -4252,6 +4253,7 @@ LIBMDBX_API int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency);
  * \see mdbx_txn_commit_ex()
  * \see mdbx_txn_refresh()
  * \see mdbx_txn_begin()
+ * \see mdbx_txn_rollback()
  *
  * \param [in, out] txn             A transaction handle returned by \ref mdbx_txn_begin().
  * \param [in] weakening_durability Additional flags to weaken durability for committing changes.
@@ -4331,6 +4333,7 @@ LIBMDBX_API int mdbx_txn_commit_embark_read(MDBX_txn **ptxn, MDBX_commit_latency
  *
  * \see mdbx_txn_commit_embark_read()
  * \see mdbx_txn_checkpoint()
+ * \see mdbx_txn_rollback()
  * \see mdbx_txn_commit_ex()
  * \see mdbx_txn_refresh()
  * \see mdbx_txn_begin_ex()
@@ -4376,11 +4379,39 @@ LIBMDBX_API int mdbx_txn_commit_embark_read(MDBX_txn **ptxn, MDBX_commit_latency
  * \warning This function may be changed in future releases. */
 LIBMDBX_API int mdbx_txn_amend(MDBX_txn *read_txn, MDBX_txn **ptr_write_txn, MDBX_txn_flags_t flags, void *context);
 
+/** \brief Rolls back all uncommitted changes within the write transaction and keeps it running.
+ * \ingroup c_transactions
+ *
+ * Aborts and then restarts the transaction, rolling back all uncommitted changes.
+ * If the current thread is not eligible to manage the transaction then
+ * the \ref MDBX_THREAD_MISMATCH error will returned.
+ *
+ * \param [in] txn  A transaction handle returned by \ref mdbx_txn_begin().
+ *
+ * \returns A non-zero error value on failure and 0 on success, some possibilities are:
+ * \retval MDBX_RESULT_TRUE      A more recent MVCC-snapshot has been committed after reading transaction
+ *                               was started and data cannot be amended based on the desired data snapshot,
+ *                               no actions have been performed.
+ * \retval MDBX_TXN_OVERLAPPING  The current thread is already executing a write transaction.
+ * \retval MDBX_PANIC            A fatal error occurred earlier and
+ *                               the environment must be shut down.
+ * \retval MDBX_BAD_TXN          Unexpected or wrong transaction state.
+ * \retval MDBX_EBADSIGN         Transaction object has invalid signature,
+ *                               e.g. transaction was already terminated
+ *                               or memory was corrupted.
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
+ *                               by current thread.
+ * \retval MDBX_EINVAL           Transaction handle is NULL.
+ *
+ * \warning This function may be changed in future releases. */
+LIBMDBX_API int mdbx_txn_rollback(MDBX_txn *txn);
+
 /** \brief Commits all the operations of the transaction into the database.
  * \ingroup c_transactions
  *
  * \see mdbx_txn_commit_embark_read()
  * \see mdbx_txn_checkpoint()
+ * \see mdbx_txn_rollback()
  * \see mdbx_txn_commit_ex()
  * \see mdbx_txn_refresh()
  * \see mdbx_txn_begin_ex()
@@ -4435,6 +4466,7 @@ LIBMDBX_INLINE_API(int, mdbx_txn_commit, (MDBX_txn * txn)) { return mdbx_txn_com
  * \see mdbx_txn_commit_ex()
  * \see mdbx_txn_checkpoint()
  * \see mdbx_txn_commit_embark_read()
+ * \see mdbx_txn_rollback()
  * \see mdbx_txn_amend()
  * \warning This function may be changed in future releases. */
 LIBMDBX_API int mdbx_txn_abort_ex(MDBX_txn *txn, MDBX_commit_latency *latency);
@@ -4466,6 +4498,7 @@ LIBMDBX_API int mdbx_txn_abort_ex(MDBX_txn *txn, MDBX_commit_latency *latency);
  * \see mdbx_txn_commit()
  * \see mdbx_txn_refresh()
  * \see mdbx_txn_reset()
+ * \see mdbx_txn_rollback()
  *
  * \param [in] txn  A transaction handle returned by \ref mdbx_txn_begin().
  *
