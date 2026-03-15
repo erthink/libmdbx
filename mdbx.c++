@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-453-ga529b6d0 at 2026-03-08T20:32:09+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-463-g63aa88be at 2026-03-15T18:44:37+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -788,7 +788,8 @@ struct MDBX_env {
     uint8_t spill_max_denominator;
     uint8_t spill_min_denominator;
     uint8_t spill_parent4child_denominator;
-    unsigned merge_threshold_16dot16_percent;
+    uint16_t merge_threshold_dot16;
+    uint16_t split_reserve_dot16;
 #if !(defined(_WIN32) || defined(_WIN64))
     unsigned writethrough_threshold;
 #endif /* Windows */
