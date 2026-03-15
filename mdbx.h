@@ -1,4 +1,4 @@
-/** This file is part of the libmdbx amalgamated source code (v0.14.1-453-ga529b6d0 at 2026-03-08T20:32:09+03:00).
+/** This file is part of the libmdbx amalgamated source code (v0.14.1-463-g63aa88be at 2026-03-15T18:44:37+03:00).
 
 \file mdbx.h
 \brief The libmdbx C API header file.
@@ -2287,7 +2287,7 @@ typedef enum MDBX_option {
    * to 50% (half empty page) which corresponds to the range from 8192 and
    * to 32768 in units respectively.
    * \see MDBX_opt_prefer_waf_insteadof_balance */
-  MDBX_opt_merge_threshold_16dot16_percent,
+  MDBX_opt_merge_threshold,
 
   /** \brief Controls the choosing between use write-through disk writes and
    * usual ones with followed flush by the `fdatasync()` syscall.
@@ -2297,9 +2297,9 @@ typedef enum MDBX_option {
    * the flush-to-disk.
    *
    * Basically for N chunks the latency/cost of write-through is:
-   *  latency = N * (emit + round-trip-to-storage + storage-execution);
+   *  latency = N * (emit_cost + round-trip-to-storage + storage-execution);
    * And for serie of lazy writes with flush is:
-   *  latency = N * (emit + storage-execution) + flush + round-trip-to-storage.
+   *  latency = N * (emit_cost + storage-execution) + flush_cost + round-trip-to-storage.
    *
    * So, for large N and/or noteable round-trip-to-storage the write+flush
    * approach is win. But for small N and/or near-zero NVMe-like latency
@@ -2345,7 +2345,7 @@ typedef enum MDBX_option {
    * of modified and written-to-filesystem pages.
    *
    * \details After deletion operations, pages containing less than the minimum number of keys, or those emptied before
-   * \ref MDBX_opt_merge_threshold_16dot16_percent, must be merged with one of the neighboring ones. If a pages to the
+   * \ref MDBX_opt_merge_threshold, must be merged with one of the neighboring ones. If a pages to the
    * right and left of the current one are both "dirty" (it were modified during the transaction and must be written to
    * filesystem) or both are "clean" (it were not changed in the current transaction), then the less populated page is
    * always chosen as the target for merging. When only one of the neighboring ones is "dirty" and the other is "clean",
@@ -2360,10 +2360,10 @@ typedef enum MDBX_option {
    *    INCREASE the number of modified pages and the amount of writing to filesystem when the current transaction is
    *    committed, but on average it will REDUCE the unevenness of pages filling/density.
    *
-   * \see MDBX_opt_merge_threshold_16dot16_percent */
+   * \see MDBX_opt_merge_threshold */
   MDBX_opt_prefer_waf_insteadof_balance,
 
-  /** \brief Specifies, in % of a usual page, the maximum size of nested pages used to accommodate a small number of
+  /** \brief Specifies the maximum size of nested pages used to accommodate a small number of
    * multi-values associated with a single key.
    *
    * Using nested pages, instead of putting values on separate pages of a nested tree, allows to reduce the amount of
@@ -2373,16 +2373,18 @@ typedef enum MDBX_option {
    * increases the height of a main tree. In addition, changing data on nested pages requires additional copies, so the
    * cost may be higher in many scenarios.
    *
-   * min 12.5% (8192), max 100% (65535), default = 100% */
+   * The option value is specified in units of 1/65536 of the page size: minimal 0% (0), maximal 100% (65535),
+   * default is 100% (65355). */
   MDBX_opt_subpage_limit,
 
-  /** \brief Sets the minimum amount of free space on a leaf page in %, in the absence of which the nested pages are
+  /** \brief Sets the minimum amount of free space on a leaf page in the absence of which the nested pages are
    * placed in a separate tree.
    *
-   * min 0, max 100% (65535), default = 0 */
+   * The option value is specified in units of 1/65536 of the page size: minimal 0, maximal 100% (65535),
+   * default is 0. */
   MDBX_opt_subpage_room_threshold,
 
-  /** \brief Sets the minimum amount of free space on the main page in %, if available, to reserve space in the subpage.
+  /** \brief Sets the minimum amount of free space on the main page, if available, to reserve space in the subpage.
    *
    * If there is not enough free space on a leaf page, then the nested page will be the minimum size. In turn, if there
    * is no reserve in the nested page, each addition of elements to it will require the reform of a leaf page with
@@ -2392,13 +2394,37 @@ typedef enum MDBX_option {
    * as indexing. But it reduces the density of data placement, respectively, it increases the volume of databases and
    * I/O operations.
    *
-   * min 0, max 100% (65535), default = 42% (27525) */
+   * The option value is specified in units of 1/65536 of the page size: minimal 0, maximal 100% (65535),
+   * default is 42% (27525). */
   MDBX_opt_subpage_reserve_prereq,
 
-  /** \brief Sets, as a % of a usual page, the limit for reserving space on nested pages.
+  /** \brief Sets the limit for reserving space on nested pages.
    *
-   * min 0, max 100% (65535), default = 4.2% (2753) */
-  MDBX_opt_subpage_reserve_limit
+   * The option value is specified in units of 1/65536 of the page size: minimal 0, maximal 100% (65535),
+   * default is 4.2% (2753). */
+  MDBX_opt_subpage_reserve_limit,
+
+  /** \brief Sets the space reservation in 1/65536 of page size when splitting page along the edge.
+   *
+   * By default, pages are split along the edges when multiple entries are inserted strictly in ascending or descending
+   * (in reverse) order, as this leads to dense page filling in the case of mass ordered inserts and, consequently, to a
+   * smaller increase in the size of the database. For example, when loading data from a dump or an ordered external
+   * source, the most dense filling of the pages and the minimum size of the database will be ensured.
+   * However, with such dense padding, any subsequent inserts will require splitting pages immediately, which will lead
+   * to a doubling of ones, an increase in database size, and a decrease in performance. In other words, initially dense
+   * padding greatly slows down subsequent inserts, as it requires splitting each database page.
+   *
+   * This option allows you to set additional space in % of the page size, which will be reserved when splitting the
+   * page, which helps to smooth out the effect described above of slowing down subsequent inserts:
+   *  - with the minimum/zero value, the most densely filled pages will be formed during a mass ordered inserts;
+   *  - with the maximum/32768 (means the 50% reservation), a pages will be split in the middle, not on the edge.
+   *
+   * Thus this option also allows to minor manage the trade-off between volume and balance of the b-tree forming while
+   * inserting data.
+   *
+   * The option value is specified in units of 1/65536 of the page size: minimal 0, maximal 50% (32768),
+   * default is 0. */
+  MDBX_opt_split_reserve
 } MDBX_option_t;
 
 /** \brief Sets the value of a extra runtime options for an environment.

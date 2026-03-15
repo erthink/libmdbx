@@ -284,7 +284,8 @@ Historically, _libmdbx_ is a deeply revised and extended descendant of the [Ligh
 
 Since 2017 _libmdbx_ is used in [Fast Positive Tables](https://gitflic.ru/project/erthink/libfpta), and until 2025 development was funded by [Positive Technologies](https://www.ptsecurity.com). Since 2020 _libmdbx_ is used in Ethereum: [Erigon](https://github.com/erigontech/erigon), [Akula](https://github.com/akula-bft/akula), [Silkworm](https://github.com/erigontech/silkworm), [Reth](https://github.com/paradigmxyz/reth), etc.
 
-On 2022-04-15 the Github administration, without any warning nor explanation, deleted _libmdbx_ along with a lot of other projects, simultaneously blocking access for many developers. Therefore on 2022-04-21 I have migrated to a reliable trusted infrastructure. The origin for now is at [SourceCraft](https://sourcecraft.dev/dqdkfa/libmdbx) with backup at [ABF by ROSA Лаб](https://abf.rosalinux.ru/erthink/libmdbx). For the same reason ~~Github~~ is blacklisted forever.
+On 2022-04-15 the Github administration, without any warning nor explanation, deleted _libmdbx_ along with a lot of other projects, simultaneously blocking access for many developers. Therefore on 2022-04-21 I have migrated to a reliable trusted infrastructure.
+The origin for now is at [SourceCraft](https://sourcecraft.dev/dqdkfa/libmdbx) and ~~Github~~ is blacklisted forever to play this role.
 
 Since May 2024 and version 0.13 _libmdbx_ was re-licensed under Apache-2.0 license. Please refer to the [`COPYRIGHT` file](https://sourcecraft.dev/dqdkfa/libmdbx/blob/raw?file=COPYRIGHT) for license change explanations.
 
@@ -304,7 +305,8 @@ Usage
 
 Since December 2025 _libmdbx_ is available only in an amalgamated source code form like [SQLite](https://www.sqlite.org/amalgamation.html), without additional dependencies and internal resources needed only for development of _libmdbx_ itself. Packages support for common Linux distributions is planned in the future, since release the version `1.0`.
 
-The source code is available on [SourceCraft](https://sourcecraft.dev/dqdkfa/libmdbx) and mirrors on [abf.io](https://abf.io/erthink/libmdbx), [Gitflic](https://gitflic.ru/project/erthink/libmdbx) and [Github](https://github.com/erthink/libmdbx). Please use the `stable` branch or the latest release for production environment through stagging and the `master` branch for development a derivative projects.
+The source code is available on [SourceCraft](https://sourcecraft.dev/dqdkfa/libmdbx) and mirrors on [AltSpace](https://altlinux.space/DQDKFA.RU/libmdbx.git), [Github](https://github.com/erthink/libmdbx), [abf.io](https://abf.io/erthink/libmdbx) and [GitFlic](https://gitflic.ru/project/erthink/libmdbx).
+Please use the `stable` branch or the latest release for production environment through stagging and the `master` branch for development a derivative projects.
 
 ## Building and Testing
 

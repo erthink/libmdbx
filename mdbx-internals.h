@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-453-ga529b6d0 at 2026-03-08T20:32:09+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-463-g63aa88be at 2026-03-15T18:44:37+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -24,7 +24,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY a21e2e56d1f7e0e3b639be630fc6ddc90c1352abb5e8900d3e2cb154bdba53d5_v0_14_1_453_ga529b6d0
+#define MDBX_BUILD_SOURCERY 59b73764005720ea3d10f9b320c1fd67975e9e0ca8db3d7479dda357d009c79d_v0_14_1_463_g63aa88be
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -3173,6 +3173,33 @@ MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline size_t branchless_ab
   assert(value > INT_MIN);
   const size_t expanded_sign = (size_t)(value >> (sizeof(value) * CHAR_BIT - 1));
   return ((size_t)value + expanded_sign) ^ expanded_sign;
+}
+
+MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline intptr_t max_signed(intptr_t a, intptr_t b) {
+  return (a > b) ? a : b;
+}
+
+MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline intptr_t min_signed(intptr_t a, intptr_t b) {
+  return (a < b) ? a : b;
+}
+
+MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline intptr_t clamp_signed(intptr_t v, intptr_t min,
+                                                                                  intptr_t max) {
+  assert(min <= max);
+  return min_signed(max_signed(v, min), max);
+}
+
+MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline size_t max_unsigned(size_t a, size_t b) {
+  return (a > b) ? a : b;
+}
+
+MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline size_t min_unsigned(size_t a, size_t b) {
+  return (a < b) ? a : b;
+}
+
+MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline size_t clamp_unsigned(size_t v, size_t min, size_t max) {
+  assert(min <= max);
+  return min_unsigned(max_unsigned(v, min), max);
 }
 
 MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline bool is_powerof2(size_t x) { return (x & (x - 1)) == 0; }
