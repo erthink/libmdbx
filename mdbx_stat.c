@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-466-gbe4fae7f at 2026-03-16T16:49:35+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-469-gebb8b55f at 2026-03-16T19:34:46+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -55,7 +55,7 @@ static void print_stat(const MDBX_stat *ms) {
   printf("  Tree depth: %u\n", ms->ms_depth);
   printf("  Branch pages: %" PRIu64 "\n", ms->ms_branch_pages);
   printf("  Leaf pages: %" PRIu64 "\n", ms->ms_leaf_pages);
-  printf("  Overflow pages: %" PRIu64 "\n", ms->ms_overflow_pages);
+  printf("  Large/Overflow pages: %" PRIu64 "\n", ms->ms_overflow_pages);
   printf("  Entries: %" PRIu64 "\n", ms->ms_entries);
 }
 

@@ -19,6 +19,7 @@ BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3N
 Благодарности:
 
  - [Erigon](https://erigon.tech/) за спонсорство.
+ - Проект "AntiPublic" за спонсорство.
  - [Артёму Воротникову](https://github.com/vorot93) за сообщение об ошибках и тестировании [призязок для Rust](https://github.com/vorot93/libmdbx-rs).
  - [Stefan de Konink](https://github.com/skinkie) for fixing [Python bindings](https://github.com/wtdcode/mdbx-py) and documentation improvement.
  - [Cosmin Apreutesei](https://github.com/capr) за сообщение об ошибках и тестирование.
@@ -65,6 +66,8 @@ BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3N
 
  - В статистику транзакции добавлено количество операций получения/загрузки страниц, что позволяет количественно оценивать объем работы с курсорами и эффективность различных подходов индексирования и поиска данных.
    Сбор соответствующей статистики контролируется дополнительной опцией сборки `MDBX_ENABLE_PGET_STAT`.
+
+ - В утилиту `mdbx_load` добавлены опции командной строки `-b number`, `-B megabytes`, `-d percent` и `-G geometry` позволяющие задавать размер пакетных вставок, ограничивать объем транзакций, задавать желаемую плотность заполнения страниц и переопределять геометрию БД при загрузке данных из дампа.
 
 Исправления:
 

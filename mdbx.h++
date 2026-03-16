@@ -1,4 +1,4 @@
-﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-466-gbe4fae7f at 2026-03-16T16:49:35+03:00).
+﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-469-gebb8b55f at 2026-03-16T19:34:46+03:00).
 /// \file mdbx.h++
 /// \brief The libmdbx C++ API header file.
 ///
@@ -3335,7 +3335,7 @@ public:
   inline filehandle get_filehandle() const;
 
   /// \brief Return the path that was used for opening the environment.
-  const path_char* get_path() const;
+  const path_char *get_path() const;
 
   /// Returns environment flags.
   inline MDBX_env_flags_t get_flags() const;
