@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-464-gbf4b4db7 at 2026-03-15T20:30:51+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-466-gbe4fae7f at 2026-03-16T16:49:35+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -1032,6 +1032,11 @@ struct MDBX_txn {
 
   /* User-settable context */
   void *userctx;
+
+#if MDBX_ENABLE_PGET_STAT
+  /* Counter of page get operations */
+  uint64_t ops_pget;
+#endif /* MDBX_ENABLE_PGET_STAT */
 
   union {
     struct {
@@ -7373,7 +7378,6 @@ __must_check_result static int env_info_snap(const MDBX_env *env, const MDBX_txn
   out->mi_bootid.current.y = globals.bootid.y;
   out->mi_mode = env->lck_mmap.lck ? lck->envmode.weak : env->flags;
 
-#if MDBX_ENABLE_PGOP_STAT
   out->mi_pgop_stat.newly = atomic_load64(&lck->pgops.newly, mo_Relaxed);
   out->mi_pgop_stat.cow = atomic_load64(&lck->pgops.cow, mo_Relaxed);
   out->mi_pgop_stat.clone = atomic_load64(&lck->pgops.clone, mo_Relaxed);
@@ -7386,9 +7390,6 @@ __must_check_result static int env_info_snap(const MDBX_env *env, const MDBX_txn
   out->mi_pgop_stat.mincore = atomic_load64(&lck->pgops.mincore, mo_Relaxed);
   out->mi_pgop_stat.msync = atomic_load64(&lck->pgops.msync, mo_Relaxed);
   out->mi_pgop_stat.fsync = atomic_load64(&lck->pgops.fsync, mo_Relaxed);
-#else
-  memset(&out->mi_pgop_stat, 0, sizeof(out->mi_pgop_stat));
-#endif /* MDBX_ENABLE_PGOP_STAT*/
 
   txnid_t overall_latter_reader_txnid = out->mi_recent_txnid;
   txnid_t self_latter_reader_txnid = overall_latter_reader_txnid;
@@ -11133,6 +11134,13 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
 
   info->txn_id = txn->txnid;
   info->txn_space_used = pgno2bytes(env, txn->geo.first_unallocated);
+  info->txn_pget =
+#if MDBX_ENABLE_PGET_STAT
+      txn->ops_pget
+#else
+      0
+#endif /* MDBX_ENABLE_PGET_STAT */
+      ;
 
   if (txn->flags & txn_ro_flat) {
     meta_ptr_t head;
@@ -14827,10 +14835,8 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
             err = page_dirty(mc->txn, lp.page = np, ovpages);
             if (unlikely(err != MDBX_SUCCESS))
               return err;
-
-#if MDBX_ENABLE_PGOP_STAT
-            mc->txn->env->lck->pgops.clone.weak += ovpages;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+            if (MDBX_ENABLE_PGOP_STAT)
+              mc->txn->env->lck->pgops.clone.weak += ovpages;
             cASSERT(mc, txn_dpl_check(mc->txn));
           }
         }
@@ -18806,16 +18812,14 @@ void txn_dpl_clear(MDBX_txn *txn) {
 }
 
 int dxb_msync(const MDBX_env *env, size_t length_pages, enum osal_syncmode_bits mode_bits) {
-#if MDBX_ENABLE_PGOP_STAT
-  env->lck->pgops.msync.weak += (MDBX_MMAP_NEEDS_JOLT || mode_bits > MDBX_SYNC_NONE);
-#endif /* MDBX_ENABLE_PGOP_STAT */
+  if (MDBX_ENABLE_PGOP_STAT)
+    env->lck->pgops.msync.weak += (MDBX_MMAP_NEEDS_JOLT || mode_bits > MDBX_SYNC_NONE);
   return osal_msync(&env->dxb_mmap, pgno_ceil2sp_bytes(env, length_pages), mode_bits);
 }
 
 int dxb_fsync(const MDBX_env *env, enum osal_syncmode_bits mode_bits) {
-#if MDBX_ENABLE_PGOP_STAT
-  env->lck->pgops.fsync.weak += (mode_bits > MDBX_SYNC_NONE);
-#endif /* MDBX_ENABLE_PGOP_STAT */
+  if (MDBX_ENABLE_PGOP_STAT)
+    env->lck->pgops.fsync.weak += (mode_bits > MDBX_SYNC_NONE);
   return osal_fsync(env->lazy_fd, mode_bits);
 }
 
@@ -20048,9 +20052,8 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
         /* sync meta-pages */
         rc = dxb_msync(env, NUM_METAS, (flags & MDBX_NOMETASYNC) ? MDBX_SYNC_NONE : MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
       else {
-#if MDBX_ENABLE_PGOP_STAT
-        env->lck->pgops.wops.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+        if (MDBX_ENABLE_PGOP_STAT)
+          env->lck->pgops.wops.weak += 1;
         const page_t *page = payload2page(target);
         rc = osal_pwrite(env->fd4meta, page, env->ps, ptr_dist(page, env->dxb_mmap.base));
         if (likely(rc == MDBX_SUCCESS)) {
@@ -20063,9 +20066,8 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
         goto fail;
     }
   } else {
-#if MDBX_ENABLE_PGOP_STAT
-    env->lck->pgops.wops.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+    if (MDBX_ENABLE_PGOP_STAT)
+      env->lck->pgops.wops.weak += 1;
     const meta_t undo_meta = *target;
     eASSERT(env, pending->trees.gc.flags == MDBX_INTEGERKEY);
     eASSERT(env, check_table_flags(pending->trees.main.flags));
@@ -20242,9 +20244,7 @@ retry:;
 
   if (!txn_owned) {
     if (!should_unlock) {
-#if MDBX_ENABLE_PGOP_STAT
       unsigned wops = 0;
-#endif /* MDBX_ENABLE_PGOP_STAT */
 
       int err;
       /* pre-sync to avoid latency for writer */
@@ -20273,9 +20273,7 @@ retry:;
         if (unlikely(err != MDBX_SUCCESS))
           return err;
 
-#if MDBX_ENABLE_PGOP_STAT
         wops = 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
         /* pre-sync done */
         rc = MDBX_SUCCESS /* means "some data was synced" */;
       }
@@ -20285,9 +20283,8 @@ retry:;
         return err;
 
       should_unlock = true;
-#if MDBX_ENABLE_PGOP_STAT
-      env->lck->pgops.wops.weak += wops;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+      if (MDBX_ENABLE_PGOP_STAT)
+        env->lck->pgops.wops.weak += wops;
       env->basal_txn->wr.troika = meta_tap(env);
       eASSERT(env, !env->txn && !env->basal_txn->nested);
       goto retry;
@@ -20783,9 +20780,9 @@ static bool mincore_fetch(MDBX_env *const env, const size_t unit_begin) {
     pages = length >> globals.sys_pagesize_ln2;
   }
 
-#if MDBX_ENABLE_PGOP_STAT
-  env->lck->pgops.mincore.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+  if (MDBX_ENABLE_PGOP_STAT)
+    env->lck->pgops.mincore.weak += 1;
+
   uint8_t *const vector = alloca(pages);
   if (unlikely(mincore(ptr_disp(env->dxb_mmap.base, offset), length, (void *)vector))) {
     NOTICE("mincore(+%zu, %zu), err %d", offset, length, errno);
@@ -21527,9 +21524,8 @@ static inline pgr_t page_alloc_finalize(MDBX_env *const env, MDBX_txn *const txn
       if (likely(num == 1)) {
         if (!env_is_page_incore(env, pgno)) {
           osal_pwrite(env->lazy_fd, pattern, env->ps, file_offset);
-#if MDBX_ENABLE_PGOP_STAT
-          env->lck->pgops.prefault.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+          if (MDBX_ENABLE_PGOP_STAT)
+            env->lck->pgops.prefault.weak += 1;
           need_clean = false;
         }
       } else {
@@ -21542,9 +21538,8 @@ static inline pgr_t page_alloc_finalize(MDBX_env *const env, MDBX_txn *const txn
             iov[n].iov_base = pattern;
             if (unlikely(++n == MDBX_AUXILARY_IOV_MAX)) {
               osal_pwritev(env->lazy_fd, iov, MDBX_AUXILARY_IOV_MAX, file_offset);
-#if MDBX_ENABLE_PGOP_STAT
-              env->lck->pgops.prefault.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+              if (MDBX_ENABLE_PGOP_STAT)
+                env->lck->pgops.prefault.weak += 1;
               file_offset += pgno2bytes(env, MDBX_AUXILARY_IOV_MAX);
               n = 0;
             }
@@ -21552,9 +21547,8 @@ static inline pgr_t page_alloc_finalize(MDBX_env *const env, MDBX_txn *const txn
         }
         if (likely(n > 0)) {
           osal_pwritev(env->lazy_fd, iov, n, file_offset);
-#if MDBX_ENABLE_PGOP_STAT
-          env->lck->pgops.prefault.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+          if (MDBX_ENABLE_PGOP_STAT)
+            env->lck->pgops.prefault.weak += 1;
         }
         if (cleared == num)
           need_clean = false;
@@ -24092,6 +24086,7 @@ __dll_export
     " MDBX_USE_MINCORE=" MDBX_STRINGIFY(MDBX_USE_MINCORE)
     " MDBX_ENABLE_PGOP_STAT=" MDBX_STRINGIFY(MDBX_ENABLE_PGOP_STAT)
     " MDBX_ENABLE_PROFGC=" MDBX_STRINGIFY(MDBX_ENABLE_PROFGC)
+    " MDBX_ENABLE_PGET_STAT=" MDBX_STRINGIFY(MDBX_ENABLE_PGET_STAT)
 #if MDBX_DISABLE_VALIDATION
     " MDBX_DISABLE_VALIDATION=YES"
 #endif /* MDBX_DISABLE_VALIDATION */
@@ -26002,9 +25997,7 @@ __cold static int lck_setup_locked(MDBX_env *env) {
     jitter4testing(false);
     lck->magic_and_version = MDBX_LOCK_MAGIC;
     lck->os_and_format = MDBX_LOCK_FORMAT;
-#if MDBX_ENABLE_PGOP_STAT
     lck->pgops.wops.weak = 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
     err = osal_msync(&env->lck_mmap, (size_t)size, MDBX_SYNC_DATA | MDBX_SYNC_SIZE);
     if (unlikely(err != MDBX_SUCCESS)) {
       ERROR("initial-%s for lck-file failed, err %d", "msync/fsync", err);
@@ -26547,9 +26540,8 @@ static int meta_unsteady(MDBX_env *env, const txnid_t inclusive_upto, const pgno
     bytes = env->ps;
   }
 
-#if MDBX_ENABLE_PGOP_STAT
-  env->lck->pgops.wops.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+  if (MDBX_ENABLE_PGOP_STAT)
+    env->lck->pgops.wops.weak += 1;
   int err = osal_pwrite(env->fd4meta, ptr, bytes, offset);
   return likely(err == MDBX_SUCCESS) ? MDBX_RESULT_TRUE : err;
 }
@@ -26590,9 +26582,8 @@ int meta_sync(const MDBX_env *env, const meta_ptr_t head) {
     if (!MDBX_AVOID_MSYNC)
       rc = dxb_msync(env, NUM_METAS, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
     else {
-#if MDBX_ENABLE_PGOP_STAT
-      env->lck->pgops.wops.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+      if (MDBX_ENABLE_PGOP_STAT)
+        env->lck->pgops.wops.weak += 1;
       const page_t *page = payload2page(head.ptr_c);
       rc = osal_pwrite(env->fd4meta, page, env->ps, ptr_dist(page, env->dxb_mmap.base));
       if (likely(rc == MDBX_SUCCESS) && env->fd4meta == env->lazy_fd)
@@ -26711,9 +26702,8 @@ __cold int __must_check_result meta_override(MDBX_env *env, size_t target, txnid
   }
 
   if (env->flags & MDBX_WRITEMAP) {
-#if MDBX_ENABLE_PGOP_STAT
-    env->lck->pgops.msync.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+    if (MDBX_ENABLE_PGOP_STAT)
+      env->lck->pgops.msync.weak += 1;
     rc = dxb_msync(env, model->geometry.first_unallocated, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
@@ -26724,9 +26714,8 @@ __cold int __must_check_result meta_override(MDBX_env *env, size_t target, txnid
     osal_flush_incoherent_cpu_writeback();
     rc = dxb_msync(env, target + 1, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
   } else {
-#if MDBX_ENABLE_PGOP_STAT
-    env->lck->pgops.wops.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+    if (MDBX_ENABLE_PGOP_STAT)
+      env->lck->pgops.wops.weak += 1;
     rc = osal_pwrite(env->fd4meta, page, env->ps, pgno2bytes(env, target));
     if (rc == MDBX_SUCCESS && env->fd4meta == env->lazy_fd)
       rc = dxb_fsync(env, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
@@ -31808,6 +31797,11 @@ __hot pgr_t page_get_unchecked(MDBX_txn *const txn, const pgno_t pgno, const txn
 
   eASSERT(txn->env, ((txn->flags ^ txn->env->flags) & MDBX_WRITEMAP) == 0);
   r.page = pgno2page(txn->env, pgno);
+
+#if MDBX_ENABLE_PGET_STAT
+  txn->ops_pget += 1;
+#endif /* MDBX_ENABLE_PGET_STAT */
+
   if ((txn->flags & (txn_ro_flat | MDBX_WRITEMAP)) == 0) {
     const MDBX_txn *spiller = txn;
     do {
@@ -32000,9 +31994,8 @@ static void iov_complete(iov_ctx_t *ctx) {
 int iov_write(iov_ctx_t *ctx) {
   eASSERT(ctx->env, !iov_empty(ctx));
   osal_ioring_write_result_t r = osal_ioring_write(ctx->ior, ctx->fd);
-#if MDBX_ENABLE_PGOP_STAT
-  ctx->env->lck->pgops.wops.weak += r.wops;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+  if (MDBX_ENABLE_PGOP_STAT)
+    ctx->env->lck->pgops.wops.weak += r.wops;
   ctx->err = r.err;
   if (unlikely(ctx->err != MDBX_SUCCESS))
     ERROR("Write error: %s", mdbx_strerror(ctx->err));
@@ -32075,10 +32068,8 @@ pgr_t page_new(MDBX_cursor *mc, const unsigned flags) {
   ret.page->flags = (uint16_t)flags;
   cASSERT(mc, *cursor_dbi_state(mc) & DBI_DIRTY);
   cASSERT(mc, mc->txn->flags & MDBX_TXN_DIRTY);
-#if MDBX_ENABLE_PGOP_STAT
-  mc->txn->env->lck->pgops.newly.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-
+  if (MDBX_ENABLE_PGOP_STAT)
+    mc->txn->env->lck->pgops.newly.weak += 1;
   STATIC_ASSERT(P_BRANCH == 1);
   const unsigned is_branch = flags & P_BRANCH;
 
@@ -32103,10 +32094,8 @@ pgr_t page_new_large(MDBX_cursor *mc, const size_t npages) {
   ret.page->flags = P_LARGE;
   cASSERT(mc, *cursor_dbi_state(mc) & DBI_DIRTY);
   cASSERT(mc, mc->txn->flags & MDBX_TXN_DIRTY);
-#if MDBX_ENABLE_PGOP_STAT
-  mc->txn->env->lck->pgops.newly.weak += npages;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-
+  if (MDBX_ENABLE_PGOP_STAT)
+    mc->txn->env->lck->pgops.newly.weak += npages;
   mc->tree->large_pages += (pgno_t)npages;
   ret.page->pages = (pgno_t)npages;
   cASSERT(mc, !(mc->flags & z_inner));
@@ -32180,9 +32169,8 @@ __cold pgr_t __must_check_result page_unspill(MDBX_txn *const txn, const page_t 
     ret.err = page_dirty(txn, ret.page, npages);
     if (unlikely(ret.err != MDBX_SUCCESS))
       return ret;
-#if MDBX_ENABLE_PGOP_STAT
-    txn->env->lck->pgops.unspill.weak += npages;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+    if (MDBX_ENABLE_PGOP_STAT)
+      txn->env->lck->pgops.unspill.weak += npages;
     ret.page->flags |= (scan == txn) ? 0 : P_SPILLED;
     ret.err = MDBX_SUCCESS;
     return ret;
@@ -32206,9 +32194,8 @@ __hot int page_touch_modifable(MDBX_txn *txn, const page_t *const mp) {
     tASSERT(txn, (txn->flags & MDBX_WRITEMAP));
     tASSERT(txn, n > 0 && n <= txn->wr.dirtylist->length + 1);
     VERBOSE("unspill page %" PRIaPGNO, mp->pgno);
-#if MDBX_ENABLE_PGOP_STAT
-    txn->env->lck->pgops.unspill.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+    if (MDBX_ENABLE_PGOP_STAT)
+      txn->env->lck->pgops.unspill.weak += 1;
     return page_dirty(txn, (page_t *)mp, 1);
   }
 
@@ -32257,9 +32244,8 @@ __hot int page_touch_unmodifable(MDBX_txn *txn, MDBX_cursor *mc, const page_t *c
       mc->tree->root = pgno;
     }
 
-#if MDBX_ENABLE_PGOP_STAT
-    txn->env->lck->pgops.cow.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+    if (MDBX_ENABLE_PGOP_STAT)
+      txn->env->lck->pgops.cow.weak += 1;
     page_copy(np, mp, txn->env->ps);
     np->pgno = pgno;
     np->txnid = txn->front_txnid;
@@ -32297,9 +32283,8 @@ __hot int page_touch_unmodifable(MDBX_txn *txn, MDBX_cursor *mc, const page_t *c
     if (unlikely(rc != MDBX_SUCCESS))
       goto fail;
 
-#if MDBX_ENABLE_PGOP_STAT
-    txn->env->lck->pgops.clone.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+    if (MDBX_ENABLE_PGOP_STAT)
+      txn->env->lck->pgops.clone.weak += 1;
   }
 
 done:
@@ -33357,9 +33342,8 @@ done:
       if (!(node_flags(node) & N_BIG))
         newdata->iov_base = node_data(node);
     }
-#if MDBX_ENABLE_PGOP_STAT
-    env->lck->pgops.split.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+    if (MDBX_ENABLE_PGOP_STAT)
+      env->lck->pgops.split.weak += 1;
   } else {
     mc->txn->flags |= MDBX_TXN_ERROR;
     be_poor(mc);
@@ -35214,9 +35198,8 @@ pnl_t spill_purge(MDBX_txn *txn) {
 
 static int spill_page(MDBX_txn *txn, iov_ctx_t *ctx, page_t *dp, const size_t npages) {
   tASSERT(txn, !(txn->flags & MDBX_WRITEMAP));
-#if MDBX_ENABLE_PGOP_STAT
-  txn->env->lck->pgops.spill.weak += npages;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+  if (MDBX_ENABLE_PGOP_STAT)
+    txn->env->lck->pgops.spill.weak += npages;
   const pgno_t pgno = dp->pgno;
   int err = iov_page(txn, ctx, dp, npages);
   if (likely(err == MDBX_SUCCESS))
@@ -36392,10 +36375,8 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
 
   cASSERT(cdst, cdst->tree->items > 0);
   cASSERT(cdst, cdst->top + 1 <= cdst->tree->height);
-
-#if MDBX_ENABLE_PGOP_STAT
-  cdst->txn->env->lck->pgops.merge.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+  if (MDBX_ENABLE_PGOP_STAT)
+    cdst->txn->env->lck->pgops.merge.weak += 1;
 
   if (is_leaf(cdst->pg[cdst->top])) {
     /* LY: don't touch cursor if top-page is a LEAF */
@@ -37175,6 +37156,9 @@ static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
   tASSERT(txn, rkl_empty(&txn->wr.gc.ready4reuse));
   tASSERT(txn, rkl_empty(&txn->wr.gc.comeback));
   txn->env->gc.detent = 0;
+#if MDBX_ENABLE_PGET_STAT
+  txn->ops_pget = 0;
+#endif /* MDBX_ENABLE_PGET_STAT */
 
   txn->wr.troika = meta_tap(env);
   const meta_ptr_t head = meta_recent(env, &txn->wr.troika);
@@ -37921,6 +37905,9 @@ static int nested_start(MDBX_txn *const nested, MDBX_txn *parent) {
 #endif /* MDBX_ENABLE_REFUND */
   nested->wr.dirtyroom = parent->wr.dirtyroom;
   nested->wr.dirtylru = parent->wr.dirtylru;
+#if MDBX_ENABLE_PGET_STAT
+  nested->ops_pget = 0;
+#endif /* MDBX_ENABLE_PGET_STAT */
 
   txn_dpl_sort(parent);
   if (parent->wr.spilled.list)
@@ -39728,10 +39715,10 @@ __dll_export
         0,
         14,
         1,
-        464,
+        466,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.464 */
-        {"2026-03-15T20:30:51+03:00", "4131b9b415b41b4189104705ddb065fecf84f1d5", "bf4b4db7cb07fd763ad28447f3bffd9e0df7d465", "v0.14.1-464-gbf4b4db7"},
+                                        0.14.1.466 */
+        {"2026-03-16T16:49:35+03:00", "e8d5ff968df24fffb9a12451e9c73900ddfbb091", "be4fae7f050596e9035a027f983dc57768660ce0", "v0.14.1-466-gbe4fae7f"},
         sourcery};
 
 __dll_export

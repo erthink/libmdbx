@@ -507,9 +507,9 @@ mark_as_advanced(MDBX_DISABLE_VALIDATION)
 add_option(MDBX ENABLE_REFUND "Zerocost auto-compactification during write-transactions" ON)
 add_option(MDBX ENABLE_BIGFOOT
            "Chunking long list of retired pages during huge transactions commit to avoid use sequences of pages" ON)
-add_option(MDBX ENABLE_PGOP_STAT "Gathering statistics for page operations" ON)
+add_option(MDBX ENABLE_PGOP_STAT "Gathering statistics on pages modification operations" ON)
 add_option(MDBX ENABLE_PROFGC "Profiling of GC search and updates" OFF)
-mark_as_advanced(MDBX_ENABLE_PROFGC)
+add_option(MDBX ENABLE_PGET_STAT "Gathering the number of page get operations for each transaction" ON)
 add_option(MDBX ENABLE_DBI_SPARSE
            "Support for sparse sets of DBI handles to reduce overhead when starting and processing transactions" ON)
 add_option(MDBX ENABLE_DBI_LOCKFREE "Support for deferred releasing and a lockfree path to quickly open DBI handles" ON)

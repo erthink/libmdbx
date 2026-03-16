@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-464-gbf4b4db7 at 2026-03-15T20:30:51+03:00),
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-466-gbe4fae7f at 2026-03-16T16:49:35+03:00),
  * it is the template for libmdbx's config.h
  ******************************************************************************/
 
@@ -37,6 +37,7 @@
 #cmakedefine01 MDBX_ENABLE_REFUND
 #cmakedefine01 MDBX_ENABLE_BIGFOOT
 #cmakedefine01 MDBX_ENABLE_PGOP_STAT
+#cmakedefine01 MDBX_ENABLE_PGET_STAT
 #cmakedefine01 MDBX_ENABLE_PROFGC
 #cmakedefine01 MDBX_ENABLE_DBI_SPARSE
 #cmakedefine01 MDBX_ENABLE_DBI_LOCKFREE

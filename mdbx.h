@@ -1,4 +1,4 @@
-/** This file is part of the libmdbx amalgamated source code (v0.14.1-464-gbf4b4db7 at 2026-03-15T20:30:51+03:00).
+/** This file is part of the libmdbx amalgamated source code (v0.14.1-466-gbe4fae7f at 2026-03-16T16:49:35+03:00).
 
 \file mdbx.h
 \brief The libmdbx C API header file.
@@ -4068,6 +4068,10 @@ struct MDBX_txn_info {
      For WRITE transaction: The summarized size of the dirty database
      pages that generated during this transaction. */
   uint64_t txn_space_dirty;
+
+  /** Number of page get operations within this transaction
+     if corresponding statistics enabled via \ref MDBX_ENABLE_PGET_STAT build option. */
+  uint64_t txn_pget;
 };
 #ifndef __cplusplus
 /** \ingroup c_statinfo */

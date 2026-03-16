@@ -22,10 +22,10 @@ In development
  - Extended example of using the C++ API, which can also be used as a simple smoke-test.
  - Ultra-fast deletion of consecutive elements by cutting off b-tree branches.
  - add CLI-options to mdbx_defrag and mdbx_load.
- - Optional page-get and operation statistics for cursors.
 
 Done
 ----
+ - Optional page-get operation statistics for transactions.
  - digging/refactoring/optimizing page splitting and tree rebalance.
  - Явная уплотнение/дефрагментация и mdbx_defrag.
  - get-cached API.

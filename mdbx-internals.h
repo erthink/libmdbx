@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-464-gbf4b4db7 at 2026-03-15T20:30:51+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-466-gbe4fae7f at 2026-03-16T16:49:35+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -24,7 +24,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 13c9f0578ba76f66d28f7f746104aa6320d48d2235bbfb06b4a1f0503011cd92_v0_14_1_464_gbf4b4db7
+#define MDBX_BUILD_SOURCERY 1a7cc2be0b9022ab6c5446f8fdc0c5524d204ed02c4882a335e5d59ecd7de891_v0_14_1_466_gbe4fae7f
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -1748,12 +1748,19 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t osal_bswap32
 #error MDBX_ENABLE_PROFGC must be defined as 0 or 1
 #endif /* MDBX_ENABLE_PROFGC */
 
-/** Controls gathering statistics for page operations. */
+/** Controls the collection of statistics on pages modification operations. */
 #ifndef MDBX_ENABLE_PGOP_STAT
 #define MDBX_ENABLE_PGOP_STAT 1
 #elif !(MDBX_ENABLE_PGOP_STAT == 0 || MDBX_ENABLE_PGOP_STAT == 1)
 #error MDBX_ENABLE_PGOP_STAT must be defined as 0 or 1
 #endif /* MDBX_ENABLE_PGOP_STAT */
+
+/** Controls the collection of statistics on pages access operations for each transaction. */
+#ifndef MDBX_ENABLE_PGET_STAT
+#define MDBX_ENABLE_PGET_STAT 1
+#elif !(MDBX_ENABLE_PGET_STAT == 0 || MDBX_ENABLE_PGET_STAT == 1)
+#error MDBX_ENABLE_PGET_STAT must be defined as 0 or 1
+#endif /* MDBX_ENABLE_PGET_STAT */
 
 /** Controls using Unix' mincore() to determine whether DB-pages
  * are resident in memory. */

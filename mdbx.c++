@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-464-gbf4b4db7 at 2026-03-15T20:30:51+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-466-gbe4fae7f at 2026-03-16T16:49:35+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -594,6 +594,11 @@ struct MDBX_txn {
 
   /* User-settable context */
   void *userctx;
+
+#if MDBX_ENABLE_PGET_STAT
+  /* Counter of page get operations */
+  uint64_t ops_pget;
+#endif /* MDBX_ENABLE_PGET_STAT */
 
   union {
     struct {
