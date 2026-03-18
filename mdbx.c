@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-472-g46c2205e at 2026-03-18T12:10:38+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-473-g79d02de6 at 2026-03-19T02:14:19+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -18922,7 +18922,7 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
   if (dest->pagesize == 0 ||
       (env->stuck_meta < 0 && !(meta_is_steady(dest) || meta_weak_acceptable(env, dest, lck_exclusive)))) {
     ERROR("%s", "no usable meta-pages, database is corrupted");
-    if (rc == MDBX_SUCCESS) {
+    if (!MDBX_IS_ERROR(rc)) {
       /* TODO: try to restore the database by fully checking b-tree structure
        * for the each meta page, if the corresponding option was given */
       return MDBX_CORRUPTED;
@@ -39715,10 +39715,10 @@ __dll_export
         0,
         14,
         1,
-        472,
+        473,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.472 */
-        {"2026-03-18T12:10:38+03:00", "82604a83a370839bc75cf7f018558e33f53fcdc6", "46c2205e8d2d51b1e74ee20b3e130f84b26f714e", "v0.14.1-472-g46c2205e"},
+                                        0.14.1.473 */
+        {"2026-03-19T02:14:19+03:00", "30d66c066c5a790698bf3c7a841786bda056d75c", "79d02de667adc242a8cb0e6e3cc2496e895cf023", "v0.14.1-473-g79d02de6"},
         sourcery};
 
 __dll_export
