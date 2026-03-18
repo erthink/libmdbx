@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-469-gebb8b55f at 2026-03-16T19:34:46+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-472-g46c2205e at 2026-03-18T12:10:38+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -8186,8 +8186,8 @@ __cold int mdbx_gc_info(MDBX_txn *txn, MDBX_gc_info_t *info, size_t bytes, MDBX_
   MDBX_val gc_key, gc_data;
   rc = outer_first(&cx.outer, &gc_key, &gc_data);
   if (rc == MDBX_SUCCESS) {
-    cx.inner.cursor.next = txn->cursors[FREE_DBI];
-    txn->cursors[FREE_DBI] = &cx.inner.cursor;
+    cx.outer.next = txn->cursors[FREE_DBI];
+    txn->cursors[FREE_DBI] = &cx.outer;
     for (;;) {
       if (unlikely(gc_check_keylen(gc_key.iov_len))) {
         ERROR("%s/%d: %s", "corrupted GC-record", rc = MDBX_CORRUPTED, gc_check_keylen(gc_key.iov_len));
@@ -17047,8 +17047,8 @@ bool defrag_should_continue(dfc_t *dfc, size_t progress_increment) {
   if (dfc->defrag_atleast < (dfc->txn ? dfc->txn->geo.first_unallocated : dfc->before_defrag))
     return defrag_progcess(dfc, progress_increment, now_cache);
 
-  if (dfc->defrag_enough > (dfc->txn ? dfc->txn->geo.first_unallocated : dfc->before_defrag)) {
-    if (dfc->wallclock_atleast && (now_cache = defrag_now(now_cache)) >= dfc->wallclock_atleast) {
+  if (dfc->defrag_enough >= (dfc->txn ? dfc->txn->geo.first_unallocated : dfc->before_defrag)) {
+    if (!dfc->wallclock_atleast || (now_cache = defrag_now(now_cache)) >= dfc->wallclock_atleast) {
       dfc->stopping_reasons |= MDBX_defrag_enough_theshold;
       return false;
     }
@@ -17603,7 +17603,7 @@ bailout:
 }
 
 __hot __noinline static unsigned defrag_move_cost_uncached(dfc_t *dfc, pgno_t pgno, pgno_t span) {
-  if (pgno < NUM_METAS || pgno >= dfc->retreat_edge)
+  if (pgno < NUM_METAS || pgno + span >= dfc->retreat_edge)
     return INT_MAX;
 
   da_t *arc = dml_search_exact(dfc->arcs, pgno);
@@ -17931,7 +17931,7 @@ int defrag_cycle(dfc_t *dfc) {
   }
 
   for (da_t *i = begin;
-       i != end && i->key_or_pgno > dfc->retreat_edge && dfc->cycle_pages_scheduled < dfc->move_batch_size && !lp;
+       i != end && i->key_or_pgno >= dfc->retreat_edge && dfc->cycle_pages_scheduled < dfc->move_batch_size && !lp;
        ++i) {
     if (i->key_or_pgno < dfc->remapped_edge) {
       defrag_stumble(dfc, i,
@@ -18105,12 +18105,13 @@ void defrag_destroy(dfc_t *dfc) {
   dfc->lp_reserve = nullptr;
 }
 
-int defrag_init(dfc_t *dfc, MDBX_txn *txn, size_t defrag_atleast_pages, size_t spend_atleast_wallclock_16dot16,
-                size_t defrag_enough_pages, size_t limit_spend_wallclock_16dot16, intptr_t preferred_move_batch_size) {
+int defrag_init(dfc_t *dfc, MDBX_txn *txn, size_t defrag_atleast_pages, size_t spend_atleast_wallclock_dot16,
+                size_t defrag_enough_pages, size_t limit_spend_wallclock_dot16, intptr_t preferred_move_batch_size) {
   memset(dfc, 0, sizeof(*dfc));
+  dfc->start_timestamp = osal_monotime();
   if (preferred_move_batch_size < 0) {
     preferred_move_batch_size = 0;
-    if (limit_spend_wallclock_16dot16) {
+    if (limit_spend_wallclock_dot16) {
       /* TODO: подстроить размер (возможно динамически на каждом цикле) так, чтобы время записи порции не превышало
        * 5-10% от таймаута. */
       preferred_move_batch_size = bytes2pgno(txn->env, 64 * MEGABYTE);
@@ -18123,11 +18124,10 @@ int defrag_init(dfc_t *dfc, MDBX_txn *txn, size_t defrag_atleast_pages, size_t s
   dfc->txn = txn;
   dfc->before_defrag = txn->geo.first_unallocated;
   dfc->last_allocated = dfc->before_defrag;
-  if (limit_spend_wallclock_16dot16)
-    dfc->wallclock_detent = dfc->start_timestamp + osal_16dot16_to_monotime(limit_spend_wallclock_16dot16);
-  if (spend_atleast_wallclock_16dot16)
-    dfc->wallclock_atleast = dfc->start_timestamp + osal_16dot16_to_monotime(spend_atleast_wallclock_16dot16);
-  dfc->start_timestamp = osal_monotime();
+  if (limit_spend_wallclock_dot16)
+    dfc->wallclock_detent = dfc->start_timestamp + osal_16dot16_to_monotime(limit_spend_wallclock_dot16);
+  if (spend_atleast_wallclock_dot16)
+    dfc->wallclock_atleast = dfc->start_timestamp + osal_16dot16_to_monotime(spend_atleast_wallclock_dot16);
 
   /* Загружаем информацию о всех таблицах. */
   MDBX_stat stat;
@@ -39715,10 +39715,10 @@ __dll_export
         0,
         14,
         1,
-        469,
+        472,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.469 */
-        {"2026-03-16T19:34:46+03:00", "36eacd884db34b00d365f924a999b70205003f71", "ebb8b55fd86b3974559efa01b2e3495b13d66ee9", "v0.14.1-469-gebb8b55f"},
+                                        0.14.1.472 */
+        {"2026-03-18T12:10:38+03:00", "82604a83a370839bc75cf7f018558e33f53fcdc6", "46c2205e8d2d51b1e74ee20b3e130f84b26f714e", "v0.14.1-472-g46c2205e"},
         sourcery};
 
 __dll_export
