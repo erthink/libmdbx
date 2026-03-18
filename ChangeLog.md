@@ -16,14 +16,15 @@ The supporting release of a stable branch with bug fixes.
 Appreciations:
 
  - [Erigon](https://erigon.tech/) for sponsorship.
+ - [@Segwaz](https://github.com/Segwaz) for fuzzing and bug reporing.
 
 Fixes:
 
  - Fixed the counting of nested trees in the `mdbx_chk` tool for a multi-values/dupsort hives (backport).
 
- - Fixed handling a zero-length values in the `mdbx_load` utility.
+ - Fixed swapping the shrink/growth parameters in a DB-geometry in the `mdbx_load` utility (backport).
 
- - Fixed swapping the shrink/growth parameters in a DB-geometry in the `mdbx_load` utility.
+ - Fixed `SIGSEGV` in the case when all meta pages are not entirely usable (backport).
 
 Other:
 

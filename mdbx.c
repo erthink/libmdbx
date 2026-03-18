@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY a71776ebae64d84fa8949df55b55268a5861a3c2428e0ff1c4a168ae1837df2f_v0_13_11_5_gf6cf8d3f
+#define MDBX_BUILD_SOURCERY 8dbfc8a5af5ce8a83983586b2d8f88f4740984f5e9cf8594298f94a1aaf9003b_v0_13_11_8_g7b53a155
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -19770,7 +19770,7 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
   if (dest->pagesize == 0 ||
       (env->stuck_meta < 0 && !(meta_is_steady(dest) || meta_weak_acceptable(env, dest, lck_exclusive)))) {
     ERROR("%s", "no usable meta-pages, database is corrupted");
-    if (rc == MDBX_SUCCESS) {
+    if (!MDBX_IS_ERROR(rc)) {
       /* TODO: try to restore the database by fully checking b-tree structure
        * for the each meta page, if the corresponding option was given */
       return MDBX_CORRUPTED;
@@ -35232,18 +35232,17 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *const ne
 
   cASSERT(mc, !is_branch(mp) || newindx > 0);
   MDBX_val sepkey = {nullptr, 0};
-  /* It is reasonable and possible to split the page at the begin */
+  /* It is reasonable and possible to split the page at the begin? */
   if (unlikely(newindx < minkeys)) {
     split_indx = minkeys;
     if (newindx == 0 && !(naf & MDBX_SPLIT_REPLACE)) {
       split_indx = 0;
-      /* Checking for ability of splitting by the left-side insertion
-       * of a pure page with the new key */
-      for (intptr_t i = 0; i < mc->top; ++i)
+      /* Checking for ability of splitting by the left-side insertion of a pure page with the new key. */
+      for (intptr_t i = mc->top; --i >= 0;)
         if (mc->ki[i]) {
           sepkey = get_key(page_node(mc->pg[i], mc->ki[i]));
-          if (mc->clc->k.cmp(newkey, &sepkey) >= 0)
-            split_indx = minkeys;
+          eASSERT(env, mc->clc->k.cmp(newkey, &sepkey) >= 0);
+          split_indx = minkeys;
           break;
         }
       if (split_indx == 0) {
@@ -37598,10 +37597,10 @@ __dll_export
         0,
         13,
         11,
-        5,
+        8,
         "", /* pre-release suffix of SemVer
-                                        0.13.11.5 */
-        {"2026-02-24T19:38:49+03:00", "567ee2bfa4636aa1bc4bcd7ba38ce1e2f0c35455", "f6cf8d3f670a165cd1494f49cd1e6e35ab323670", "v0.13.11-5-gf6cf8d3f"},
+                                        0.13.11.8 */
+        {"2026-03-19T02:57:06+03:00", "d72043bf2aca1a731ddb5242cd9ae8bda8054e25", "7b53a155438c660670cc7054b1ce7fc5a874c028", "v0.13.11-8-g7b53a155"},
         sourcery};
 
 __dll_export
