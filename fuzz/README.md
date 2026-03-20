@@ -60,6 +60,8 @@ Run it with the testcase:
 ~~~sh
 ./fuzz_raw_db_format crash-XXXXXX
 ~~~
+
+Debug output can be seen by setting MDBX_DEBUG in fuzz.h.
 ~~~
 ~~~
 
