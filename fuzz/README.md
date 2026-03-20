@@ -1,6 +1,7 @@
 # OSS-Fuzz Integration – Local Testing Guide
 
 This guide explains how to build, run, and test fuzzers locally using OSS-Fuzz.
+Fuzzers and seed generator can be built using `make all` in `fuzz` directory.
 
 ## Prerequisites
 
@@ -10,7 +11,7 @@ This guide explains how to build, run, and test fuzzers locally using OSS-Fuzz.
 - Clang
 
 ~~~ sh
-git clone https://github.com/Segwaz/oss-fuzz.git -b libmdbx
+git clone https://github.com/Segwaz/oss-fuzz.git -b libdbmx
 cd oss-fuzz
 ~~~
 
