@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-473-g79d02de6 at 2026-03-19T02:14:19+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-477-g051b7437 at 2026-03-20T06:30:27+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -3007,6 +3007,7 @@ typedef struct defract_context {
   dml_t *arcs;
   pnl_t lp_reserve;
   pnl_t temp;
+  pgno_t cycle_preprogress;
   pgno_t cycle_pages_scheduled;
   pgno_t cycle_pages_moved;
   pgno_t stumble_pgno, stumble_span, lp_backlog;
@@ -3020,12 +3021,12 @@ typedef struct defract_context {
   uint8_t stumble_retry;
   uint8_t stopping_reasons;
   unsigned cycle;
-  size_t total_pages_moved;
-  size_t payload_pages;
+  pgno_t payload_pages;
   pgno_t largepage_max, largepage_amountleft, largepage_count;
   pgno_t summary_depth;
   void *user_ctx;
   MDBX_defrag_notify_func user_callback;
+  size_t total_pages_moved;
 
   pgno_t walk_stack[32];
   pgno_t walk_cutoff;
@@ -3054,7 +3055,16 @@ MDBX_INTERNAL int defrag_init(dfc_t *dfc, MDBX_txn *txn, size_t defrag_atleast_p
                               size_t limit_spend_wallclock_16dot16, intptr_t preferred_move_batch_size);
 MDBX_INTERNAL void defrag_destroy(dfc_t *dfc);
 MDBX_INTERNAL int defrag_cycle(dfc_t *dfc);
-MDBX_INTERNAL bool defrag_should_continue(dfc_t *dfc, size_t progress_increment);
+MDBX_INTERNAL void defrag_milestone(dfc_t *dfc);
+
+MDBX_MAYBE_UNUSED static inline bool defrag_discontinued(const dfc_t *dfc) {
+  return dfc->stopping_reasons >= MDBX_defrag_discontinued;
+}
+
+MDBX_MAYBE_UNUSED static inline bool defrag_aborted(const dfc_t *dfc) {
+  return dfc->stopping_reasons >= MDBX_defrag_aborted;
+}
+
 MDBX_INTERNAL uint64_t defrag_score(dfc_t *dfc, size_t allocated_pages);
 MDBX_INTERNAL uint64_t defrag_result(dfc_t *dfc, MDBX_defrag_result_t *out, uint64_t now_cache);
 
@@ -8234,14 +8244,14 @@ __cold int mdbx_gc_info(MDBX_txn *txn, MDBX_gc_info_t *info, size_t bytes, MDBX_
   return LOG_IFERR(rc);
 }
 
-__cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atleast_16dot16, size_t defrag_enough,
-                           size_t time_limit_16dot16, intptr_t acceptable_backlash, intptr_t preferred_batch,
+__cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atleast_dot16, size_t defrag_enough,
+                           size_t time_limit_dot16, intptr_t acceptable_backlash, intptr_t preferred_batch,
                            MDBX_defrag_notify_func progress_callback, void *ctx, MDBX_defrag_result_t *result) {
   if (result)
     memset(result, 0, sizeof(*result));
   if (unlikely(defrag_enough < defrag_atleast) && defrag_enough)
     return LOG_IFERR(MDBX_EINVAL);
-  if (unlikely(time_limit_16dot16 < time_atleast_16dot16) && time_limit_16dot16)
+  if (unlikely(time_limit_dot16 < time_atleast_dot16) && time_limit_dot16)
     return LOG_IFERR(MDBX_EINVAL);
   if (unlikely(!progress_callback && ctx))
     return LOG_IFERR(MDBX_EINVAL);
@@ -8275,17 +8285,14 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
     acceptable_backlash = ((size_t)acceptable_backlash < txn->env->maxgc_large1page) ? (size_t)acceptable_backlash
                                                                                      : txn->env->maxgc_large1page;
 
-  rc = defrag_init(&dfc, txn, defrag_atleast, time_atleast_16dot16, defrag_enough, time_limit_16dot16, preferred_batch);
+  rc = defrag_init(&dfc, txn, defrag_atleast, time_atleast_dot16, defrag_enough, time_limit_dot16, preferred_batch);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
   dfc.user_ctx = ctx;
   dfc.user_callback = progress_callback;
 
-  while ((size_t)acceptable_backlash + dfc.payload_pages < txn->geo.first_unallocated) {
-    if (!defrag_should_continue(&dfc, 0))
-      goto skip;
-
+  while ((size_t)acceptable_backlash + dfc.payload_pages < txn->geo.first_unallocated && !defrag_discontinued(&dfc)) {
     const pgno_t prev_stumble = dfc.stumble_pgno;
     rc = defrag_cycle(&dfc);
 
@@ -8339,8 +8346,7 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
     rc = (err != MDBX_SUCCESS && !MDBX_IS_ERROR(rc)) ? err : rc;
   }
 
-  defrag_should_continue(&dfc, 0);
-skip:
+  defrag_milestone(&dfc);
 
   if (result) {
     defrag_result(&dfc, result, 0);
@@ -16988,10 +16994,19 @@ uint64_t defrag_result(dfc_t *dfc, MDBX_defrag_result_t *out, uint64_t now_cache
   out->pages_left = (pages_left > 0) ? pages_left : 0;
   out->pages_whole = dfc->before_defrag;
 
-  size_t denominator = dfc->cycle ? dfc->arcs->length + out->pages_left : out->pages_whole - dfc->walk_cutoff;
-  out->rough_estimation_cycle_progress_permille = (size_t)(dfc->progress_counter * UINT64_C(1000) / (1 + denominator));
-  if (out->rough_estimation_cycle_progress_permille > 1000)
-    out->rough_estimation_cycle_progress_permille = 1000;
+  size_t denominator = (dfc->txn ? dfc->txn->dbs[FREE_DBI].items + rkl_len(&dfc->txn->wr.gc.ready4reuse) : 0) +
+                       (dfc->cycle ? (dfc->last_allocated - dfc->payload_pages) * 2 + dfc->cycle_preprogress
+                                   : out->pages_whole - NUM_METAS);
+  out->rough_estimation_cycle_progress_permille =
+      (dfc->progress_counter < denominator) ? (unsigned)(dfc->progress_counter * UINT64_C(1000) / denominator) : 1000;
+
+  if (MDBX_DEBUG && dfc->progress_counter > denominator && dfc->txn) {
+    WARNING("progress_counter %zu > denominator %zu | gc-items %" PRIu64 ", rkl-ready4reuse %zu | "
+            "last_allocated %u, "
+            "payload_pages %u, cycle_pages_scheduled %u | pages_whole %zu, walk_cutoff %u",
+            dfc->progress_counter, denominator, dfc->txn->dbs[FREE_DBI].items, rkl_len(&dfc->txn->wr.gc.ready4reuse),
+            dfc->last_allocated, dfc->payload_pages, dfc->cycle_pages_scheduled, out->pages_whole, dfc->walk_cutoff);
+  }
 
   out->obstructed_pgno = dfc->stumble_pgno;
   out->obstructed_span = dfc->stumble_pgno ? dfc->stumble_span : 0;
@@ -17000,21 +17015,23 @@ uint64_t defrag_result(dfc_t *dfc, MDBX_defrag_result_t *out, uint64_t now_cache
   out->obstructor_pid = dfc->gc_obstacle.pid;
   out->cycles = dfc->cycle;
   out->stopping_reasons = dfc->stopping_reasons;
-  out->spent_time_16dot16 =
+  out->spent_time_dot16 =
       osal_monotime_to_16dot16_noUnderflow((now_cache = defrag_now(now_cache)) - dfc->start_timestamp);
   return now_cache;
 }
 
-static bool defrag_notify(dfc_t *dfc, uint64_t now_cache) {
+static bool defrag_gc_empty(const dfc_t *dfc) { return dfc->txn->dbs[FREE_DBI].items == 0; }
+
+static uint64_t defrag_notify(dfc_t *dfc) {
+  uint64_t now_cache = 0;
   if (dfc->user_callback) {
     MDBX_defrag_result_t progress;
-    /* now_cache = */ defrag_result(dfc, &progress, now_cache);
-    if (dfc->user_callback(dfc->user_ctx, &progress) != MDBX_SUCCESS) {
-      dfc->stopping_reasons |= MDBX_defrag_user_break;
-      return false;
-    }
+    now_cache = defrag_result(dfc, &progress, now_cache);
+    const int feedback = dfc->user_callback(dfc->user_ctx, &progress);
+    if (feedback != 0)
+      dfc->stopping_reasons |= (feedback > 0) ? MDBX_defrag_discontinued : MDBX_defrag_aborted;
   }
-  return true;
+  return now_cache;
 }
 
 static void defrag_stumble(dfc_t *dfc, const da_t *at, const char *reason_prefix, ptrdiff_t reason_value,
@@ -17027,39 +17044,30 @@ static void defrag_stumble(dfc_t *dfc, const da_t *at, const char *reason_prefix
          "[%u], because %s%zi%s.",
          dfc->cycle, dfc->cycle_pages_moved, dfc->cycle_pages_scheduled, at->key_or_pgno, at->npages, reason_prefix,
          reason_value, reason_suffix);
-  defrag_notify(dfc, 0);
+  defrag_milestone(dfc);
 }
 
-static bool defrag_gc_empty(const dfc_t *dfc) { return dfc->txn->dbs[FREE_DBI].items == 0; }
+void defrag_milestone(dfc_t *dfc) { defrag_notify(dfc); }
 
-static bool defrag_progcess(dfc_t *dfc, size_t progress_increment, uint64_t now_cache) {
-  if (progress_increment && likely(((dfc->progress_counter += progress_increment) & dfc->notify_watchmask)))
-    return true;
-  return defrag_notify(dfc, now_cache);
-}
+static void defrag_progcess(dfc_t *dfc, size_t progress_increment) {
+  uint64_t now_cache = (progress_increment && ((dfc->progress_counter += progress_increment) & dfc->notify_watchmask))
+                           ? 0
+                           : defrag_notify(dfc);
 
-bool defrag_should_continue(dfc_t *dfc, size_t progress_increment) {
-  if (unlikely(dfc->stopping_reasons & (MDBX_defrag_error | MDBX_defrag_time_limit | MDBX_defrag_enough_theshold |
-                                        MDBX_defrag_user_break | MDBX_defrag_laggard_reader)))
-    return false;
-
-  uint64_t now_cache = 0;
-  if (dfc->defrag_atleast < (dfc->txn ? dfc->txn->geo.first_unallocated : dfc->before_defrag))
-    return defrag_progcess(dfc, progress_increment, now_cache);
-
-  if (dfc->defrag_enough >= (dfc->txn ? dfc->txn->geo.first_unallocated : dfc->before_defrag)) {
-    if (!dfc->wallclock_atleast || (now_cache = defrag_now(now_cache)) >= dfc->wallclock_atleast) {
-      dfc->stopping_reasons |= MDBX_defrag_enough_theshold;
-      return false;
-    }
+  if (dfc->stopping_reasons < MDBX_defrag_discontinued && dfc->txn &&
+      dfc->defrag_atleast >= dfc->txn->geo.first_unallocated) {
+    if (dfc->defrag_enough >= dfc->txn->geo.first_unallocated) {
+      if (!dfc->wallclock_atleast || (now_cache = defrag_now(now_cache)) >= dfc->wallclock_atleast)
+        dfc->stopping_reasons |= MDBX_defrag_enough_theshold;
+    } else if (dfc->wallclock_detent && ++dfc->wallclock_trottle % 64 == 0 &&
+               (now_cache = defrag_now(now_cache)) >= dfc->wallclock_detent)
+      dfc->stopping_reasons |= MDBX_defrag_time_limit;
   }
+}
 
-  if (dfc->wallclock_detent == 0 || ++dfc->wallclock_trottle % 64 ||
-      (now_cache = defrag_now(now_cache)) < dfc->wallclock_detent)
-    return defrag_progcess(dfc, progress_increment, now_cache);
-
-  dfc->stopping_reasons |= MDBX_defrag_time_limit;
-  return false;
+static bool defrag_should_continue(dfc_t *dfc, size_t progress_increment) {
+  defrag_progcess(dfc, progress_increment);
+  return !defrag_discontinued(dfc);
 }
 
 uint64_t defrag_score(dfc_t *dfc, size_t allocated_pages) {
@@ -17162,9 +17170,10 @@ static int defrag_clear_reclaimed(dfc_t *dfc) {
   MDBX_txn *const txn = dfc->txn;
   if (!rkl_empty(&txn->wr.gc.reclaimed)) {
     MDBX_cursor *const gc = gc_cursor_init(txn);
-    if (txn->dbs[FREE_DBI].items == rkl_len(&txn->wr.gc.reclaimed) + rkl_len(&txn->wr.gc.ready4reuse)) {
+    if (txn->dbs[FREE_DBI].items == rkl_len(&txn->wr.gc.reclaimed)) {
       rc = tbl_purge(gc);
       if (likely(rc == MDBX_SUCCESS)) {
+        defrag_progcess(dfc, /* TODO? */ rkl_len(&txn->wr.gc.reclaimed));
         rc = rkl_merge(&txn->wr.gc.reclaimed, &txn->wr.gc.ready4reuse, false);
         rkl_clear(&txn->wr.gc.reclaimed);
       }
@@ -17204,7 +17213,8 @@ static int defrag_clear_reclaimed(dfc_t *dfc) {
           break;
         txn_refund(txn);
 
-        if (!defrag_should_continue(dfc, 1)) {
+        defrag_progcess(dfc, /* TODO? */ 1);
+        if (defrag_aborted(dfc)) {
           rc = MDBX_RESULT_TRUE;
           break;
         }
@@ -17739,20 +17749,22 @@ __hot static int defrag_provide_span(dfc_t *const dfc, const size_t npages) {
 
 int defrag_cycle(dfc_t *dfc) {
   MDBX_txn *const txn = dfc->txn;
-  dfc->stopping_reasons &= ~MDBX_defrag_large_chunk;
   if (dfc->cycle) {
+    dfc->stopping_reasons &= ~(MDBX_defrag_large_chunk | MDBX_defrag_step_size);
     dfc->progress_counter = 0;
     dfc->cycle_pages_scheduled = 0;
     dfc->cycle_pages_moved = 0;
+    dfc->cycle_preprogress = 0;
     dfc->cycle += 1;
   }
-  defrag_progcess(dfc, 0, 0);
+  if (!defrag_should_continue(dfc, 0))
+    return MDBX_RESULT_TRUE;
 
   int rc = defrag_load_gc(dfc);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  defrag_progcess(dfc, 0, 0);
+  defrag_milestone(dfc);
   rc = txn_basal_update_tbl_roots(txn);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -17772,7 +17784,7 @@ int defrag_cycle(dfc_t *dfc) {
   const size_t pending_pages =
       txn->wr.loose_count + pnl_size(txn->wr.repnl) + (pnl_size(txn->wr.retired_pages) - /* retired_stored */ 0);
   if (dfc->payload_pages + gc_pages + pending_pages != txn->geo.first_unallocated) {
-    ERROR("page usage mismatch (payload %zu + gc %zu + pending %zu != allocated %zu), "
+    ERROR("page usage mismatch (payload %u + gc %zu + pending %zu != allocated %zu), "
           "please use mdbx_chk tool to check DB integrity",
           dfc->payload_pages, gc_pages, pending_pages, (size_t)txn->geo.first_unallocated);
     return LOG_IFERR(MDBX_PROBLEM);
@@ -17786,7 +17798,7 @@ int defrag_cycle(dfc_t *dfc) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  defrag_progcess(dfc, 0, 0);
+  defrag_milestone(dfc);
   uint64_t score = defrag_score(dfc, dfc->txn->geo.first_unallocated);
   VERBOSE("after-%s: %u => %u (%i), GC-score %" PRIu64, "GC-clean", dfc->before_defrag, dfc->txn->geo.first_unallocated,
           dfc->before_defrag - dfc->txn->geo.first_unallocated, score);
@@ -17867,11 +17879,12 @@ int defrag_cycle(dfc_t *dfc) {
     return MDBX_SUCCESS;
 
   if (!dfc->cycle) {
-    defrag_progcess(dfc, 0, 0);
+    defrag_milestone(dfc);
     dfc->progress_counter = 0;
     dfc->cycle = 1;
-    defrag_progcess(dfc, 0, 0);
   }
+  dfc->cycle_preprogress = dfc->progress_counter;
+  defrag_milestone(dfc);
   assert(dfc->cycle_pages_scheduled == 0 && dfc->cycle_pages_moved == 0);
 
   /* После сортировки в начале массива dfc->arcs[] располагается некоторое количество пар целевая-родительская
@@ -17917,9 +17930,8 @@ int defrag_cycle(dfc_t *dfc) {
     lp = dml_search_exact(dfc->arcs, dfc->lp_backlog);
     assert(lp != nullptr);
     if (lp) {
-      size_t npages = lp->npages;
-      assert(npages > 1);
-      pgno_t pgno = pnl_get_best_sequence(dfc->txn->wr.repnl, npages, dfc->defrag_enough);
+      assert(lp->npages > 1);
+      pgno_t pgno = pnl_get_best_sequence(dfc->txn->wr.repnl, lp->npages, dfc->defrag_enough);
       if (pgno) {
         int err = defrag_schedule(dfc, lp, pgno);
         if (err == MDBX_SUCCESS)
@@ -17930,9 +17942,7 @@ int defrag_cycle(dfc_t *dfc) {
     }
   }
 
-  for (da_t *i = begin;
-       i != end && i->key_or_pgno >= dfc->retreat_edge && dfc->cycle_pages_scheduled < dfc->move_batch_size && !lp;
-       ++i) {
+  for (da_t *i = begin; !defrag_discontinued(dfc) && i != end && i->key_or_pgno >= dfc->retreat_edge && !lp; ++i) {
     if (i->key_or_pgno < dfc->remapped_edge) {
       defrag_stumble(dfc, i,
                      "all the unused pages suitable for defragmentation have been used up, the re-mapped edge is ",
@@ -17980,11 +17990,14 @@ int defrag_cycle(dfc_t *dfc) {
       VERBOSE("turn-%s %+i, %u => %u", "crop", npages, dfc->defrag_edge, dfc->defrag_edge - npages);
       dfc->defrag_edge -= npages;
     }
-    if (!defrag_should_continue(dfc, 1))
-      return MDBX_RESULT_TRUE;
+    defrag_progcess(dfc, i->npages);
+    if (dfc->cycle_pages_scheduled >= dfc->move_batch_size) {
+      dfc->stopping_reasons |= MDBX_defrag_step_size;
+      break;
+    }
   }
 
-  if (lp || (dfc->stopping_reasons & MDBX_defrag_large_chunk)) {
+  if (lp || dfc->stopping_reasons == MDBX_defrag_large_chunk) {
     /* Для быстрой дефрагментации требуется использовать имеющиеся последовательности свободных страниц максимально
      * эффективно:
      *  - с одной стороны, нет смысла перемещать ближние куски раньше дальних, иначе дефрагментация всё равно
@@ -18000,45 +18013,46 @@ int defrag_cycle(dfc_t *dfc) {
      *     только large/overflow-страницами.
      *  3. Для каждой large/overflow-странице пытаемся найти наиболее подходящую последовательность свободных страниц,
      *     а при отсутствии подготавливаем интервал свободных страниц для перемещения на следующем цикле. */
+    defrag_milestone(dfc);
     for (da_t *i = lp ? lp : begin;
-         dfc->cycle_pages_scheduled < dfc->move_batch_size && i != end && dfc->largepage_amountleft &&
+         !defrag_discontinued(dfc) && i != end && dfc->largepage_amountleft &&
          pnl_size(dfc->txn->wr.repnl) > dfc->largepage_amountleft && i->key_or_pgno > dfc->remapped_edge &&
          i->key_or_pgno > MDBX_PNL_LEAST(dfc->txn->wr.repnl);
-         ++i) {
-      const size_t npages = i->npages;
-      if (!defrag_should_continue(dfc, npages))
-        return MDBX_RESULT_TRUE;
-      if (i->mapped || npages == 1)
-        continue;
-
-      assert(dfc->largepage_amountleft >= npages);
-      if (i != lp) {
-        pgno_t pgno = pnl_get_best_sequence(dfc->txn->wr.repnl, npages, dfc->defrag_enough);
-        if (pgno) {
-          int err = defrag_schedule(dfc, i, pgno);
-          if (unlikely(err != MDBX_SUCCESS)) {
-            if (err == MDBX_RESULT_TRUE)
-              break;
-            return err;
+         defrag_milestone(dfc), ++i) {
+      if (!i->mapped && i->npages > 1) {
+        assert(dfc->largepage_amountleft >= i->npages);
+        if (i != lp) {
+          pgno_t pgno = pnl_get_best_sequence(dfc->txn->wr.repnl, i->npages, dfc->defrag_enough);
+          if (pgno) {
+            int err = defrag_schedule(dfc, i, pgno);
+            if (unlikely(err != MDBX_SUCCESS)) {
+              if (err == MDBX_RESULT_TRUE)
+                break;
+              return err;
+            }
           }
-          defrag_progcess(dfc, 0, 0);
-          continue;
+        }
+        if (!i->mapped) {
+          int err = defrag_provide_span(dfc, i->npages);
+          if (err != MDBX_SUCCESS) {
+            if (unlikely(err != MDBX_RESULT_TRUE))
+              return err;
+            break;
+          }
+          dfc->largepage_amountleft -= i->npages;
+          dfc->lp_backlog = (dfc->lp_backlog < i->key_or_pgno) ? i->key_or_pgno : dfc->lp_backlog;
+        }
+        defrag_progcess(dfc, i->npages);
+        if (dfc->cycle_pages_scheduled >= dfc->move_batch_size) {
+          dfc->stopping_reasons |= MDBX_defrag_step_size;
+          break;
         }
       }
-
-      int err = defrag_provide_span(dfc, npages);
-      if (err != MDBX_SUCCESS) {
-        if (unlikely(err != MDBX_RESULT_TRUE))
-          return err;
-        break;
-      }
-      dfc->largepage_amountleft -= npages;
-      dfc->lp_backlog = (dfc->lp_backlog < i->key_or_pgno) ? i->key_or_pgno : dfc->lp_backlog;
-      defrag_progcess(dfc, 0, 0);
     }
   }
 
   score = defrag_score(dfc, dfc->defrag_edge);
+  defrag_milestone(dfc);
   VERBOSE("after-%s: %u => %u (%i), GC-score %" PRIu64, "tree-sift", dfc->before_defrag, dfc->defrag_edge,
           dfc->before_defrag - dfc->defrag_edge, score);
   if (dfc->lp_reserve) {
@@ -18058,12 +18072,15 @@ int defrag_cycle(dfc_t *dfc) {
       rc = pnl_append_span(&txn->wr.retired_pages, i->key_or_pgno, i->npages);
       if (unlikely(rc != MDBX_SUCCESS))
         break;
-      if (!defrag_should_continue(dfc, i->npages) && (dfc->stopping_reasons & MDBX_defrag_user_break) != 0) {
-        rc = MDBX_RESULT_TRUE;
-        break;
-      }
+    }
+    defrag_progcess(dfc, i->npages);
+    if (defrag_aborted(dfc)) {
+      rc = MDBX_RESULT_TRUE;
+      break;
     }
   }
+
+  defrag_milestone(dfc);
   if (rc != MDBX_SUCCESS) {
     txn->flags |= MDBX_TXN_ERROR;
     return rc;
@@ -18089,6 +18106,7 @@ int defrag_cycle(dfc_t *dfc) {
   }
 
   score = defrag_score(dfc, dfc->txn->geo.first_unallocated);
+  defrag_milestone(dfc);
   VERBOSE("after-%s: %u => %u (%i), GC-score %" PRIu64, "move-pages", dfc->before_defrag, txn->geo.first_unallocated,
           dfc->before_defrag - txn->geo.first_unallocated, score);
 
@@ -18198,7 +18216,7 @@ int defrag_init(dfc_t *dfc, MDBX_txn *txn, size_t defrag_atleast_pages, size_t s
   while (dfc->notify_watchmask < (hi >> 10) && dfc->notify_watchmask < (lo >> 7) && dfc->notify_watchmask < 500)
     dfc->notify_watchmask += dfc->notify_watchmask + 1;
 
-  return defrag_progcess(dfc, 0, 0) ? MDBX_SUCCESS : MDBX_RESULT_TRUE;
+  return defrag_should_continue(dfc, 0) ? MDBX_SUCCESS : MDBX_RESULT_TRUE;
 }
 
 static inline size_t dml_size2bytes(ptrdiff_t size) {
@@ -18933,7 +18951,7 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
   return MDBX_SUCCESS;
 }
 
-__cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno, const pgno_t size_pgno, pgno_t limit_pgno,
+__cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pgno_t size_pgno, pgno_t limit_pgno,
                       const enum resize_mode mode) {
   /* Acquire guard to avoid collision between read and write txns
    * around geo_in_bytes and dxb_mmap */
@@ -18952,7 +18970,7 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno, const pgno_t 
   const size_t prev_limit = env->dxb_mmap.limit;
   const pgno_t prev_limit_pgno = bytes2pgno(env, prev_limit);
   eASSERT(env, limit_pgno >= size_pgno);
-  eASSERT(env, size_pgno >= used_pgno);
+  eASSERT(env, size_pgno >= allocated_pgno);
   if (mode < explicit_resize && size_pgno <= prev_limit_pgno) {
     /* The actual mapsize may be less since the geo.upper may be changed
      * by other process. Avoids remapping until it necessary. */
@@ -19038,7 +19056,7 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno, const pgno_t 
   if (mresize_flags & (MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE)) {
     env_clear_incore_cache(env);
     if ((env->flags & MDBX_WRITEMAP) && env->lck->unsynced_pages.weak) {
-      rc = dxb_msync(env, used_pgno, MDBX_SYNC_KICK);
+      rc = dxb_msync(env, allocated_pgno, MDBX_SYNC_KICK);
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
     }
@@ -19387,8 +19405,8 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
   }
 
   size_t expected_filesize = 0;
-  const size_t used_bytes = pgno2bytes(env, header.geometry.first_unallocated);
-  const size_t used_aligned2os_bytes = ceil_powerof2(used_bytes, globals.sys_allocation_granularity);
+  const size_t allocated_bytes = pgno2bytes(env, header.geometry.first_unallocated);
+  const size_t allocated_aligned2os_bytes = ceil_powerof2(allocated_bytes, globals.sys_allocation_granularity);
   if ((env->flags & MDBX_RDONLY)    /* readonly */
       || lck_rc != MDBX_RESULT_TRUE /* not exclusive */
       || /* recovery mode */ env->stuck_meta >= 0) {
@@ -19403,10 +19421,10 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
     }
   } else if (env->geo_in_bytes.now) {
     /* silently growth to last used page */
-    if (env->geo_in_bytes.now < used_aligned2os_bytes)
-      env->geo_in_bytes.now = used_aligned2os_bytes;
-    if (env->geo_in_bytes.upper < used_aligned2os_bytes)
-      env->geo_in_bytes.upper = used_aligned2os_bytes;
+    if (env->geo_in_bytes.now < allocated_aligned2os_bytes)
+      env->geo_in_bytes.now = allocated_aligned2os_bytes;
+    if (env->geo_in_bytes.upper < allocated_aligned2os_bytes)
+      env->geo_in_bytes.upper = allocated_aligned2os_bytes;
 
     /* apply preconfigured params, but only if substantial changes:
      *  - upper or lower limit changes
@@ -19417,9 +19435,9 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
         bytes_ceil2os_bytes(env, env->geo_in_bytes.shrink) != pgno2bytes(env, pv2pages(header.geometry.shrink_pv)) ||
         bytes_ceil2os_bytes(env, env->geo_in_bytes.grow) != pgno2bytes(env, pv2pages(header.geometry.grow_pv))) {
 
-      if (env->geo_in_bytes.shrink && env->geo_in_bytes.now > used_bytes)
+      if (env->geo_in_bytes.shrink && env->geo_in_bytes.now > allocated_bytes)
         /* pre-shrink if enabled */
-        env->geo_in_bytes.now = used_bytes + env->geo_in_bytes.shrink - used_bytes % env->geo_in_bytes.shrink;
+        env->geo_in_bytes.now = allocated_bytes + env->geo_in_bytes.shrink - allocated_bytes % env->geo_in_bytes.shrink;
 
       /* сейчас БД еще не открыта, поэтому этот вызов не изменит геометрию, но проверит и скорректирует параметры
        * с учетом реального размера страницы. */
@@ -19457,7 +19475,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
     env->geo_in_bytes.shrink = pgno_ceil2os_bytes(env, pv2pages(header.geometry.shrink_pv));
   }
 
-  ENSURE(env, env->geo_in_bytes.now >= used_bytes);
+  ENSURE(env, env->geo_in_bytes.now >= allocated_bytes);
   if (!expected_filesize)
     expected_filesize = env->geo_in_bytes.now;
   const uint64_t filesize_before = env->dxb_mmap.filesize;
@@ -19471,7 +19489,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
       if (filesize_before != expected_filesize)
         WARNING("filesize mismatch (expect %" PRIuSIZE "b/%" PRIaPGNO "p, have %" PRIu64 "b/%" PRIu64 "p)",
                 expected_filesize, bytes2pgno(env, expected_filesize), filesize_before, filesize_before >> env->ps2ln);
-      if (filesize_before < used_bytes) {
+      if (filesize_before < allocated_bytes) {
         ERROR("last-page beyond end-of-file (last %" PRIaPGNO ", have %" PRIaPGNO ")",
               header.geometry.first_unallocated, bytes2pgno(env, (size_t)filesize_before));
         return MDBX_CORRUPTED;
@@ -19495,7 +19513,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
 
   /* calculate readahead hint before mmap with zero redundant pages */
   const bool readahead =
-      !(env->flags & MDBX_NORDAHEAD) && mdbx_is_readahead_reasonable(used_bytes, 0) == MDBX_RESULT_TRUE;
+      !(env->flags & MDBX_NORDAHEAD) && mdbx_is_readahead_reasonable(allocated_bytes, 0) == MDBX_RESULT_TRUE;
 
   err = osal_mmap(env->flags, &env->dxb_mmap, env->geo_in_bytes.now, env->geo_in_bytes.upper,
                   (lck_rc && env->stuck_meta < 0) ? MMAP_OPTION_SETLENGTH : 0, env->pathname.dxb);
@@ -19522,11 +19540,12 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
   env->valgrind_handle = VALGRIND_CREATE_BLOCK(env->dxb_mmap.base, env->dxb_mmap.limit, "mdbx");
 #endif /* ENABLE_MEMCHECK */
 
-  eASSERT(env, used_bytes >= pgno2bytes(env, NUM_METAS) && used_bytes <= env->dxb_mmap.limit);
+  eASSERT(env, allocated_bytes >= pgno2bytes(env, NUM_METAS) && allocated_bytes <= env->dxb_mmap.limit);
 #if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
-  if (env->dxb_mmap.filesize > used_bytes && env->dxb_mmap.filesize < env->dxb_mmap.limit) {
-    VALGRIND_MAKE_MEM_NOACCESS(ptr_disp(env->dxb_mmap.base, used_bytes), env->dxb_mmap.filesize - used_bytes);
-    MDBX_ASAN_POISON_MEMORY_REGION(ptr_disp(env->dxb_mmap.base, used_bytes), env->dxb_mmap.filesize - used_bytes);
+  if (env->dxb_mmap.filesize > allocated_bytes && env->dxb_mmap.filesize < env->dxb_mmap.limit) {
+    VALGRIND_MAKE_MEM_NOACCESS(ptr_disp(env->dxb_mmap.base, allocated_bytes), env->dxb_mmap.filesize - allocated_bytes);
+    MDBX_ASAN_POISON_MEMORY_REGION(ptr_disp(env->dxb_mmap.base, allocated_bytes),
+                                   env->dxb_mmap.filesize - allocated_bytes);
   }
   env->poison_edge =
       bytes2pgno(env, (env->dxb_mmap.filesize < env->dxb_mmap.limit) ? env->dxb_mmap.filesize : env->dxb_mmap.limit);
@@ -19660,7 +19679,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
   if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
     //-------------------------------------------------- shrink DB & update geo
     /* re-check size after mmap */
-    if (floor_powerof2(env->dxb_mmap.current, globals.sys_pagesize) < used_bytes) {
+    if (floor_powerof2(env->dxb_mmap.current, globals.sys_pagesize) < allocated_bytes) {
       ERROR("unacceptable/unexpected datafile size %" PRIuPTR, env->dxb_mmap.current);
       return MDBX_PROBLEM;
     }
@@ -19714,7 +19733,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
       }
     }
 
-    atomic_store32(&env->lck->discarded_tail, bytes2pgno(env, used_aligned2os_bytes), mo_Relaxed);
+    atomic_store32(&env->lck->discarded_tail, bytes2pgno(env, allocated_aligned2os_bytes), mo_Relaxed);
 
     if ((env->flags & MDBX_RDONLY) == 0 && env->stuck_meta < 0 &&
         (globals.runtime_flags & MDBX_DBG_DONT_UPGRADE) == 0) {
@@ -19743,14 +19762,14 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
   } /* lck exclusive, lck_rc == MDBX_RESULT_TRUE */
 
   //---------------------------------------------------- setup madvise/readahead
-  if (used_aligned2os_bytes < env->dxb_mmap.current) {
+  if (allocated_aligned2os_bytes < env->dxb_mmap.current) {
 #if defined(MADV_REMOVE)
     if (lck_rc && (env->flags & MDBX_WRITEMAP) != 0 &&
         /* not recovery mode */ env->stuck_meta < 0) {
       NOTICE("open-MADV_%s %u..%u", "REMOVE (deallocate file space)", env->lck->discarded_tail.weak,
              bytes2pgno(env, env->dxb_mmap.current));
-      err = madvise(ptr_disp(env->dxb_mmap.base, used_aligned2os_bytes), env->dxb_mmap.current - used_aligned2os_bytes,
-                    MADV_REMOVE)
+      err = madvise(ptr_disp(env->dxb_mmap.base, allocated_aligned2os_bytes),
+                    env->dxb_mmap.current - allocated_aligned2os_bytes, MADV_REMOVE)
                 ? ignore_enosys_and_eagain(errno)
                 : MDBX_SUCCESS;
       if (unlikely(MDBX_IS_ERROR(err)))
@@ -19759,26 +19778,26 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
 #endif /* MADV_REMOVE */
 #if defined(MADV_DONTNEED)
     NOTICE("open-MADV_%s %u..%u", "DONTNEED", env->lck->discarded_tail.weak, bytes2pgno(env, env->dxb_mmap.current));
-    err = madvise(ptr_disp(env->dxb_mmap.base, used_aligned2os_bytes), env->dxb_mmap.current - used_aligned2os_bytes,
-                  MADV_DONTNEED)
+    err = madvise(ptr_disp(env->dxb_mmap.base, allocated_aligned2os_bytes),
+                  env->dxb_mmap.current - allocated_aligned2os_bytes, MADV_DONTNEED)
               ? ignore_enosys_and_eagain(errno)
               : MDBX_SUCCESS;
     if (unlikely(MDBX_IS_ERROR(err)))
       return err;
 #elif defined(POSIX_MADV_DONTNEED)
-    err = ignore_enosys(posix_madvise(ptr_disp(env->dxb_mmap.base, used_aligned2os_bytes),
-                                      env->dxb_mmap.current - used_aligned2os_bytes, POSIX_MADV_DONTNEED));
+    err = ignore_enosys(posix_madvise(ptr_disp(env->dxb_mmap.base, allocated_aligned2os_bytes),
+                                      env->dxb_mmap.current - allocated_aligned2os_bytes, POSIX_MADV_DONTNEED));
     if (unlikely(MDBX_IS_ERROR(err)))
       return err;
 #elif defined(POSIX_FADV_DONTNEED)
-    err = ignore_enosys(posix_fadvise(env->lazy_fd, used_aligned2os_bytes,
-                                      env->dxb_mmap.current - used_aligned2os_bytes, POSIX_FADV_DONTNEED));
+    err = ignore_enosys(posix_fadvise(env->lazy_fd, allocated_aligned2os_bytes,
+                                      env->dxb_mmap.current - allocated_aligned2os_bytes, POSIX_FADV_DONTNEED));
     if (unlikely(MDBX_IS_ERROR(err)))
       return err;
 #endif /* MADV_DONTNEED */
   }
 
-  err = dxb_set_readahead(env, bytes2pgno(env, used_bytes), readahead, true);
+  err = dxb_set_readahead(env, bytes2pgno(env, allocated_bytes), readahead, true);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
@@ -26809,20 +26828,20 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
     return MDBX_CORRUPTED;
   }
 
-  const uint64_t used_bytes = meta->geometry.first_unallocated * (uint64_t)meta->pagesize;
-  if (unlikely(used_bytes > env->dxb_mmap.filesize)) {
+  const uint64_t allocated_bytes = meta->geometry.first_unallocated * (uint64_t)meta->pagesize;
+  if (unlikely(allocated_bytes > env->dxb_mmap.filesize)) {
     /* Here could be a race with DB-shrinking performed by other process */
     int err = osal_filesize(env->lazy_fd, &env->dxb_mmap.filesize);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
-    if (unlikely(used_bytes > env->dxb_mmap.filesize)) {
-      WARNING("meta[%u] used-bytes (%" PRIu64 ") beyond filesize (%" PRIu64 "), skip it", meta_number, used_bytes,
-              env->dxb_mmap.filesize);
+    if (unlikely(allocated_bytes > env->dxb_mmap.filesize)) {
+      WARNING("meta[%u] allocated-bytes (%" PRIu64 ") beyond filesize (%" PRIu64 "), skip it", meta_number,
+              allocated_bytes, env->dxb_mmap.filesize);
       return MDBX_CORRUPTED;
     }
   }
-  if (unlikely(meta->geometry.first_unallocated - 1 > MAX_PAGENO || used_bytes > MAX_MAPSIZE)) {
-    WARNING("meta[%u] has too large used-space (%" PRIu64 "), skip it", meta_number, used_bytes);
+  if (unlikely(meta->geometry.first_unallocated - 1 > MAX_PAGENO || allocated_bytes > MAX_MAPSIZE)) {
+    WARNING("meta[%u] has too large allocated-space (%" PRIu64 "), skip it", meta_number, allocated_bytes);
     return MDBX_TOO_LARGE;
   }
 
@@ -26833,10 +26852,10 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
   STATIC_ASSERT((uint64_t)(MAX_PAGENO + 1) * MDBX_MIN_PAGESIZE % (4ul << 20) == 0);
   if (unlikely(mapsize_min < MIN_MAPSIZE || mapsize_min > MAX_MAPSIZE)) {
     if (MAX_MAPSIZE != MAX_MAPSIZE64 && mapsize_min > MAX_MAPSIZE && mapsize_min <= MAX_MAPSIZE64) {
-      eASSERT(env, meta->geometry.first_unallocated - 1 <= MAX_PAGENO && used_bytes <= MAX_MAPSIZE);
+      eASSERT(env, meta->geometry.first_unallocated - 1 <= MAX_PAGENO && allocated_bytes <= MAX_MAPSIZE);
       WARNING("meta[%u] has too large min-mapsize (%" PRIu64 "), "
-              "but size of used space still acceptable (%" PRIu64 ")",
-              meta_number, mapsize_min, used_bytes);
+              "but size of allocated space still acceptable (%" PRIu64 ")",
+              meta_number, mapsize_min, allocated_bytes);
       geo_lower = (pgno_t)((mapsize_min = MAX_MAPSIZE) / meta->pagesize);
       if (geo_lower > MAX_PAGENO + 1) {
         geo_lower = MAX_PAGENO + 1;
@@ -26862,10 +26881,10 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
       return MDBX_VERSION_MISMATCH;
     }
     /* allow to open large DB from a 32-bit environment */
-    eASSERT(env, meta->geometry.first_unallocated - 1 <= MAX_PAGENO && used_bytes <= MAX_MAPSIZE);
+    eASSERT(env, meta->geometry.first_unallocated - 1 <= MAX_PAGENO && allocated_bytes <= MAX_MAPSIZE);
     WARNING("meta[%u] has too large max-mapsize (%" PRIu64 "), "
-            "but size of used space still acceptable (%" PRIu64 ")",
-            meta_number, mapsize_max, used_bytes);
+            "but size of allocated space still acceptable (%" PRIu64 ")",
+            meta_number, mapsize_max, allocated_bytes);
     geo_upper = (pgno_t)((mapsize_max = MAX_MAPSIZE) / meta->pagesize);
     if (geo_upper > MAX_PAGENO + 1) {
       geo_upper = MAX_PAGENO + 1;
@@ -39715,10 +39734,10 @@ __dll_export
         0,
         14,
         1,
-        473,
+        477,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.473 */
-        {"2026-03-19T02:14:19+03:00", "30d66c066c5a790698bf3c7a841786bda056d75c", "79d02de667adc242a8cb0e6e3cc2496e895cf023", "v0.14.1-473-g79d02de6"},
+                                        0.14.1.477 */
+        {"2026-03-20T06:30:27+03:00", "27b0aaea4bda4436bf8f7fad00661cca07368130", "051b7437a2cfc1e3c71132579728970490d6ad98", "v0.14.1-477-g051b7437"},
         sourcery};
 
 __dll_export

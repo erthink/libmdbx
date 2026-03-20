@@ -1,4 +1,4 @@
-/** This file is part of the libmdbx amalgamated source code (v0.14.1-473-g79d02de6 at 2026-03-19T02:14:19+03:00).
+/** This file is part of the libmdbx amalgamated source code (v0.14.1-477-g051b7437 at 2026-03-20T06:30:27+03:00).
 
 \file mdbx.h
 \brief The libmdbx C API header file.
@@ -7303,12 +7303,17 @@ LIBMDBX_API int mdbx_gc_info(MDBX_txn *txn, MDBX_gc_info_t *info, size_t bytes, 
  * \see mdbx_env_defrag() */
 typedef enum MDBX_defrag_stopping_reasons {
   MDBX_defrag_noobstacles = 0,
-  MDBX_defrag_enough_theshold = 1,
-  MDBX_defrag_time_limit = 2,
-  MDBX_defrag_laggard_reader = 4,
-  MDBX_defrag_large_chunk = 8,
-  MDBX_defrag_user_break = 16,
-  MDBX_defrag_error = 32
+  MDBX_defrag_step_size = 1,        /**< Step transaction size limit reached */
+  MDBX_defrag_large_chunk = 2,      /**< Preliminary movement is necessary to form
+                                         a sufficient sequence of adjacent free pages in order to
+                                         then move the revealed Large/Overflow page on a next cycle */
+  MDBX_defrag_discontinued = 4,     /**< Discontinued by user */
+  MDBX_defrag_laggard_reader = 8,   /**< At least one process performing a reading transaction
+                                         prevents further defragmentation */
+  MDBX_defrag_enough_theshold = 16, /**< The defragmentation goal set by the user has been achieved */
+  MDBX_defrag_time_limit = 32,      /**< The specified limit on the duration of defragmentation has been reached */
+  MDBX_defrag_aborted = 64,         /**< Aborted by user */
+  MDBX_defrag_error = 128           /**< An error occurred during defragmentation */
 } MDBX_defrag_stopping_reasons_t;
 DEFINE_ENUM_FLAG_OPERATORS(MDBX_defrag_stopping_reasons)
 
@@ -7368,7 +7373,7 @@ typedef struct MDBX_defrag_result {
   unsigned stopping_reasons;
 
   /** The time elapsed since the beginning of defragmentation in a 1/65536 second fractions. */
-  unsigned spent_time_16dot16;
+  size_t spent_time_dot16;
 } MDBX_defrag_result_t;
 
 /** \brief A callback function to notify an application about the progress of defragmentation.
@@ -7384,7 +7389,12 @@ typedef struct MDBX_defrag_result {
  * \param [in] progress  A pointer to the \ref MDBX_defrag_result_t structure filled in to reflects
  *                       the current state of database defragmentation.
  *
- * \returns Any non-zero value will indicates a "user break" condition to abort defragmentation immediately. */
+ * \returns A signed integer value that allows you to control the continuation of defragmentation:
+ * \retval    0  To continue defragmentation.
+ * \retval   -1  To abort defragmentation immediately,
+ *               see \ref MDBX_defrag_aborted.
+ * \retval    1  To discontinue defragmentation with completion scheduled operations,
+ *               see \ref MDBX_defrag_discontinued. */
 typedef int (*MDBX_defrag_notify_func)(void *ctx, const MDBX_defrag_result_t *progress) MDBX_CXX17_NOEXCEPT;
 
 /** \brief Performs database defragmentation.
@@ -7426,7 +7436,7 @@ typedef int (*MDBX_defrag_notify_func)(void *ctx, const MDBX_defrag_result_t *pr
  *                                   Must be less or equal to `defrag_enough`.
  *                                   Specify zero if in doubt or not known, this will mean no lower bound.
  *
- * \param [in] time_atleast_16dot16  The time by a wall clock in 1/65536 unit of second that should be spent to
+ * \param [in] time_atleast_dot16    The time by a wall clock in 1/65536 unit of second that should be spent to
  *                                   defragment more, even if the goals given via other parameters have already
  *                                   been reached. Must be less or equal to `time_limit_16dot16`.
  *                                   Specify zero if in doubt or not known, this will mean no lower bound.
@@ -7436,10 +7446,10 @@ typedef int (*MDBX_defrag_notify_func)(void *ctx, const MDBX_defrag_result_t *pr
  *                                   Must be greater or equal to `defrag_atleast`.
  *                                   Specify zero if in doubt or not known, this will mean no limit.
  *
- * \param [in] time_limit_16dot16    The time limit by a wall clock in 1/65536 unit of second that could be spent to
+ * \param [in] time_limit_dot16      The time limit by a wall clock in 1/65536 unit of second that could be spent to
  *                                   defragment. When the specified limit is reached, defragmentation will not
  *                                   continue, but the stage of writing the moved pages that has already begun
- *                                   will be completed. Must be greater or equal to `time_atleast_16dot16`.
+ *                                   will be completed. Must be greater or equal to `time_atleast_dot16`.
  *                                   Specify zero if in doubt or not known, this will mean no limit.
  *
  * \param [in] acceptable_backlash   Defragmentation stops if a next cycle will unable to shrink database by the
@@ -7476,8 +7486,8 @@ typedef int (*MDBX_defrag_notify_func)(void *ctx, const MDBX_defrag_result_t *pr
  * \retval MDBX_RESULT_TRUE     It was not possible to complete defragmentation or achieve the goals
  *                              specified by the parameters due to the given limits or other obstacles,
  *                              that can be knew from the \ref MDBX_defrag_result_t structure. */
-LIBMDBX_API int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atleast_16dot16, size_t defrag_enough,
-                                size_t time_limit_16dot16, intptr_t acceptable_backlash, intptr_t preferred_batch,
+LIBMDBX_API int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atleast_dot16, size_t defrag_enough,
+                                size_t time_limit_dot16, intptr_t acceptable_backlash, intptr_t preferred_batch,
                                 MDBX_defrag_notify_func progress_callback, void *ctx, MDBX_defrag_result_t *result);
 
 /** end of c_api @} */

@@ -23,6 +23,7 @@ BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3N
  - [Артёму Воротникову](https://github.com/vorot93) за сообщение об ошибках и тестировании [призязок для Rust](https://github.com/vorot93/libmdbx-rs).
  - [Stefan de Konink](https://github.com/skinkie) for fixing [Python bindings](https://github.com/wtdcode/mdbx-py) and documentation improvement.
  - [Cosmin Apreutesei](https://github.com/capr) за сообщение об ошибках и тестирование.
+ - [Segwaz at Axeinos](https://github.com/Segwaz) for fuzzing and bug reporing.
 
 Новое:
 
@@ -32,7 +33,7 @@ BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3N
 
    Объём накладных расходов теперь более пропорционален объему совершаемых операций. Поэтому, в большинстве сценариев накладные расходы чуть меньше, но наоборот чуть больше при отмене вложенных транзакций.
 
- - Реализована поддержка дефрагментации/уплотнения БД и добавлена утилита `mdbx_defrag`.
+ - Реализована поддержка дефрагментации/уплотнения БД и добавлена утилита `mdbx_defrag` с набором опций командной строки позволяющих определять ключевые параметры и лимиты дефрагментации.
 
  - Расширение API:
 
@@ -114,6 +115,8 @@ BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3N
  - Устранены лишние операции синхронизации данных с диском при выделении страниц при почти полном заполнении БД.
 
  - В утилите `mdbx_load` устранены ошибки загрузки значений нулевой длины и обмен параметров shrink/growth в геометрии БД.
+
+ - Исправлено падение `SIGSEGV` в случае, когда все мета-страницы не полностью пригодны для использования.
 
 Изменение поведения:
 
