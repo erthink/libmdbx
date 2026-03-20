@@ -10,7 +10,7 @@ This guide explains how to build, run, and test fuzzers locally using OSS-Fuzz.
 - Clang
 
 ~~~ sh
-git clone https://github.com/Segwaz/oss-fuzz.git
+git clone https://github.com/Segwaz/oss-fuzz.git -b libmdbx
 cd oss-fuzz
 ~~~
 

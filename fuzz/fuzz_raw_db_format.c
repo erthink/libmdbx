@@ -79,8 +79,8 @@ static void       do_fuzz_open(const char *db_path, const uint8_t dbi_mode)
         try_dbi(txn, dbi_name, dbi_flags);
         mdbx_txn_abort(txn);
       }
+      mdbx_env_close(env);
     }
-    mdbx_env_close(env);
   }
 }
 
