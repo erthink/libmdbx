@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-469-gebb8b55f at 2026-03-16T19:34:46+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-477-g051b7437 at 2026-03-20T06:30:27+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -561,7 +561,7 @@ int main(int argc, char *argv[]) {
       if (freopen(optarg, "r", stdin) == nullptr) {
         if (!quiet)
           fprintf(stderr, "%s: %s: open: %s\n", prog, optarg, mdbx_strerror(errno));
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
       }
       break;
     case 'n':
@@ -589,15 +589,14 @@ int main(int argc, char *argv[]) {
       if (sscanf(optarg, "%zu", &batch_items) != 1) {
         if (!quiet)
           fprintf(stderr, "%s: %s option: expecting %s, but got '%s'\n", prog, "-b", "unsigned integer value", optarg);
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
       }
       break;
     case 'L':
       if (sscanf(optarg, "%zu", &dirty_limit) != 1) {
         if (!quiet)
           fprintf(stderr, "%s: %s option: expecting %s, but got '%s'\n", prog, "-L", "unsigned integer value", optarg);
-        exit(EXIT_FAILURE);
-        dirty_limit = (dirty_limit > SIZE_MAX >> 20) ? /* unlimited */ 0 : dirty_limit << /* megabytes  to bytes */ 20;
+        return EXIT_FAILURE;
       }
       break;
     case 'd':
@@ -605,7 +604,7 @@ int main(int argc, char *argv[]) {
         if (!quiet)
           fprintf(stderr, "%s: %s option: expecting %s, but got '%s'\n", prog, "-d",
                   "unsigned integer value in range between 50 and 100", optarg);
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
       }
       break;
     case 'G':
@@ -614,7 +613,7 @@ int main(int argc, char *argv[]) {
         if (!quiet)
           fprintf(stderr, "%s: %s option: expecting %s, but got '%s'\n", prog, "-G",
                   "five numbers delimitied by a colon", optarg);
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
       }
       override_geometry = true;
       break;
@@ -741,6 +740,7 @@ int main(int argc, char *argv[]) {
     goto bailout;
   }
 
+  dirty_limit = (dirty_limit > SIZE_MAX >> 20) ? /* unlimited */ 0 : dirty_limit << /* megabytes to bytes */ 20;
   while (err == MDBX_SUCCESS) {
     if (user_break) {
       err = MDBX_EINTR;
