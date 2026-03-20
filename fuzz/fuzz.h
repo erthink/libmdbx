@@ -27,13 +27,17 @@
 
 #include <mdbx.h>
 
-struct              dbi_mode_desc
+
+typedef struct      dbi_mode_desc
 {
     const char      *seed_name;
     const char      *dbi_name;
     MDBX_db_flags_t flags;
-};
+} dbi_mode_desc_t;
 
-void logger(MDBX_log_level_t level, const char *function, int line, const char *fmt, va_list args);
+extern const dbi_mode_desc_t g_modes[];
+
+void logger(MDBX_log_level_t level, const char *function, int line,
+        const char *fmt, va_list args);
 
 #endif

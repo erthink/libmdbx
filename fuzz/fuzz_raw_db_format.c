@@ -32,17 +32,6 @@
 
 #include <fuzz.h>
 
-static const struct dbi_mode_desc raw_db_modes[] = {
-    { "mode0_default",  NULL,       MDBX_DB_DEFAULTS },
-    { "mode1_named",    "named",    MDBX_DB_DEFAULTS },
-    { "mode2_rev",      "rev",      MDBX_REVERSEKEY },
-    { "mode3_dup",      "dup",      MDBX_DUPSORT },
-    { "mode4_dupfixed", "dupfixed", MDBX_DUPSORT | MDBX_DUPFIXED },
-    { "mode5_intkey",   "intkey",   MDBX_INTEGERKEY },
-    { "mode6_intdup",   "intdup",   MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP },
-    { "mode7_revdup",   "revdup",   MDBX_DUPSORT | MDBX_REVERSEDUP },
-};
-
 static void cleanup_dir(const char *dir, const char *db_path, const char *lock_path)
 {
     if (db_path)
@@ -85,8 +74,8 @@ static void       do_fuzz_open(const char *db_path, const uint8_t dbi_mode)
     {
       if (mdbx_txn_begin(env, NULL, MDBX_TXN_RDONLY, &txn) == MDBX_SUCCESS)
       {
-        dbi_flags = raw_db_modes[dbi_mode % 7].flags;
-        const char *dbi_name = raw_db_modes[dbi_mode % 7].dbi_name;
+        dbi_flags = g_modes[dbi_mode % 7].flags;
+        const char *dbi_name = g_modes[dbi_mode % 7].dbi_name;
         try_dbi(txn, dbi_name, dbi_flags);
         mdbx_txn_abort(txn);
       }
