@@ -19717,7 +19717,14 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
                header.geometry.lower, header.geometry.now, header.geometry.upper, pv2pages(header.geometry.shrink_pv),
                pv2pages(header.geometry.grow_pv), next_txnid);
 
-        ENSURE(env, header.unsafe_txnid == recent.txnid);
+        if (unlikely(header.unsafe_txnid != recent.txnid))
+        {
+          const pgno_t recent_pgno = bytes2pgno(env, ptr_dist(recent.ptr_c, env->dxb_mmap.base));
+          ERROR("meta[%u] recent steady txnid %" PRIaTXN " != header txnid %" PRIaTXN
+                ", manual recovery needed",
+                recent_pgno, recent.txnid, header.unsafe_txnid);
+          return MDBX_CORRUPTED;
+        }
         meta_set_txnid(env, &header, next_txnid);
         err = dxb_sync_locked(env, env->flags | txn_shrink_allowed, &header, &troika);
         if (err) {
