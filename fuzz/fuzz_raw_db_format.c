@@ -79,8 +79,8 @@ static void       do_fuzz_open(const char *db_path, const uint8_t dbi_mode)
         try_dbi(txn, dbi_name, dbi_flags);
         mdbx_txn_abort(txn);
       }
-      mdbx_env_close(env);
     }
+    mdbx_env_close(env);
   }
 }
 
@@ -94,7 +94,7 @@ int         LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
   
   if (size < 1)
     return (0);
-#ifdef MDBX_DEBUG  
+#ifdef MDBX_FUZZ_DEBUG  
   mdbx_setup_debug(
       MDBX_LOG_TRACE, MDBX_DBG_DUMP | MDBX_DBG_ASSERT | MDBX_DBG_AUDIT
     | MDBX_DBG_LEGACY_OVERLAP | MDBX_DBG_DONT_UPGRADE, logger);

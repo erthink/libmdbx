@@ -27,6 +27,7 @@
 
 #include <mdbx.h>
 
+#define MDBX_FUZZ_DEBUG
 
 typedef struct      dbi_mode_desc
 {
