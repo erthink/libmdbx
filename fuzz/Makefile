@@ -8,7 +8,7 @@ CC := clang
 CXX := clang++
 CFLAGS := -Wall -Wextra
 CXXFLAGS := -Wall -Wextra
-LIBFUZZER := -fsanitize=fuzzer,address -fno-omit-frame-pointer
+LIBFUZZER := -fsanitize=fuzzer,address -fno-omit-frame-pointer -ggdb
 INCLUDE := -I. -I..
 
 LIBMDBX_NORMAL := obj/libmdbx.normal.a
