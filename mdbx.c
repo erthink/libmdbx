@@ -31030,10 +31030,12 @@ __cold static bin128_t osal_bootid(void) {
           case KSTAT_DATA_UINT32:
             bootid_collect(&uuid, &kn->value, sizeof(int32_t));
             got_boottime = true;
+            break;
           case KSTAT_DATA_INT64:
           case KSTAT_DATA_UINT64:
             bootid_collect(&uuid, &kn->value, sizeof(int64_t));
             got_boottime = true;
+            break;
           }
         }
       }
