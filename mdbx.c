@@ -14347,6 +14347,12 @@ static __always_inline int cursor_bring(const bool inner, const bool tend2first,
   }
 
   const node_t *__restrict node = page_node(mp, ki);
+  if (!MDBX_DISABLE_VALIDATION &&
+      unlikely((const uint8_t *)node + NODESIZE > (const uint8_t *)mp + mc->txn->env->ps)) {
+    ERROR("node offset 0x%04x out of page #%" PRIaPGNO " bounds (ps=%u)",
+          mp->entries[ki], mp->pgno, mc->txn->env->ps);
+    return MDBX_CORRUPTED;
+  }
   if (!inner && (node_flags(node) & N_DUP)) {
     int err = cursor_dupsort_setup(mc, node, mp);
     if (unlikely(err != MDBX_SUCCESS))
