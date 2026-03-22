@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-477-g051b7437 at 2026-03-20T06:30:27+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-490-gcc4dadfd at 2026-03-22T18:24:09+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -24,7 +24,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY bd049221a76b67334b3d40a56c63c0aff3e758a205c7fd0fe6eb1868ab9062c8_v0_14_1_477_g051b7437
+#define MDBX_BUILD_SOURCERY 1b1947c5a5bfc0b74df7d01001b14cc811e466e90ceeb8c7b02e99da3e22dc40_v0_14_1_490_gcc4dadfd
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -916,6 +916,42 @@ __extern_C key_t ftok(const char *, int);
 #define ASAN_POISON_MEMORY_REGION(addr, size) ((void)(addr), (void)(size))
 #define ASAN_UNPOISON_MEMORY_REGION(addr, size) ((void)(addr), (void)(size))
 #endif /* __SANITIZE_ADDRESS__ */
+
+/*----------------------------------------------------------------------------*/
+/* DTrace dynamic tracing framework */
+
+#if defined(ENABLE_DTRACE) || defined(ENABLE_SYSTEMTAP)
+#include <sys/sdt.h>
+#else
+#define DTRACE_PROBE(provider, probe) __noop
+#define DTRACE_PROBE1(provider, probe, parm1) __noop
+#define DTRACE_PROBE2(provider, probe, parm1, parm2) __noop
+#define DTRACE_PROBE3(provider, probe, parm1, parm2, parm3) __noop
+#define DTRACE_PROBE4(provider, probe, parm1, parm2, parm3, parm4) __noop
+#define DTRACE_PROBE5(provider, probe, parm1, parm2, parm3, parm4, parm5) __noop
+#define DTRACE_PROBE6(provider, probe, parm1, parm2, parm3, parm4, parm5, parm6) __noop
+#define DTRACE_PROBE7(provider, probe, parm1, parm2, parm3, parm4, parm5, parm6, parm7) __noop
+#define DTRACE_PROBE8(provider, probe, parm1, parm2, parm3, parm4, parm5, parm6, parm7, parm8) __noop
+#define DTRACE_PROBE9(provider, probe, parm1, parm2, parm3, parm4, parm5, parm6, parm7, parm8, parm9) __noop
+#endif /* ENABLE_DTRACE || ENABLE_SYSTEMTAP */
+
+#define MDBX_DTRACE_PROVIDER mdbx
+#define MDBX_DTRACE(probe) DTRACE_PROBE(MDBX_DTRACE_PROVIDER, probe)
+#define MDBX_DTRACE1(probe, parm1) DTRACE_PROBE1(MDBX_DTRACE_PROVIDER, probe, parm1)
+#define MDBX_DTRACE2(probe, parm1, parm2) DTRACE_PROBE2(MDBX_DTRACE_PROVIDER, probe, parm1, parm2)
+#define MDBX_DTRACE3(probe, parm1, parm2, parm3) DTRACE_PROBE3(MDBX_DTRACE_PROVIDER, probe, parm1, parm2, parm3)
+#define MDBX_DTRACE4(probe, parm1, parm2, parm3, parm4)                                                                \
+  DTRACE_PROBE4(MDBX_DTRACE_PROVIDER, probe, parm1, parm2, parm3, parm4)
+#define MDBX_DTRACE5(probe, parm1, parm2, parm3, parm4, parm5)                                                         \
+  DTRACE_PROBE5(MDBX_DTRACE_PROVIDER, probe, parm1, parm2, parm3, parm4, parm5)
+#define MDBX_DTRACE6(probe, parm1, parm2, parm3, parm4, parm5, parm6)                                                  \
+  DTRACE_PROBE6(MDBX_DTRACE_PROVIDER, probe, parm1, parm2, parm3, parm4, parm5, parm6)
+#define MDBX_DTRACE7(probe, parm1, parm2, parm3, parm4, parm5, parm6, parm7)                                           \
+  DTRACE_PROBE7(MDBX_DTRACE_PROVIDER, probe, parm1, parm2, parm3, parm4, parm5, parm6, parm7)
+#define MDBX_DTRACE8(probe, parm1, parm2, parm3, parm4, parm5, parm6, parm7, parm8)                                    \
+  DTRACE_PROBE8(MDBX_DTRACE_PROVIDER, probe, parm1, parm2, parm3, parm4, parm5, parm6, parm7, parm8)
+#define MDBX_DTRACE9(probe, parm1, parm2, parm3, parm4, parm5, parm6, parm7, parm8, parm9)                             \
+  DTRACE_PROBE9(MDBX_DTRACE_PROVIDER, probe, parm1, parm2, parm3, parm4, parm5, parm6, parm7, parm8, parm9)
 
 /*----------------------------------------------------------------------------*/
 
@@ -3137,6 +3173,32 @@ MDBX_MAYBE_UNUSED static inline int log_if_error(const int err, const char *func
 }
 
 #define LOG_IFERR(err) log_if_error((err), __func__, __LINE__)
+
+struct MDBX_panic_point {
+  const char *const function;
+  const char *const msg;
+  unsigned line;
+};
+
+MDBX_MAYBE_UNUSED MDBX_NORETURN MDBX_INTERNAL void panic_at(const struct MDBX_panic_point *const at);
+MDBX_MAYBE_UNUSED MDBX_NORETURN MDBX_INTERNAL void panic_ex_at(const struct MDBX_panic_point *const at,
+                                                               const void *ctx);
+
+#define MDBX_PANIC(msg_text)                                                                                           \
+  do {                                                                                                                 \
+    const unsigned source_line = __LINE__;                                                                             \
+    static const char panic_msg[] = msg_text;                                                                          \
+    static const struct MDBX_panic_point panic_point = {__func__, panic_msg, source_line};                             \
+    panic_at(&panic_point);                                                                                            \
+  } while (0)
+
+#define MDBX_PANIC_EX(msg_text, ctx)                                                                                   \
+  do {                                                                                                                 \
+    const unsigned source_line = __LINE__;                                                                             \
+    static const char panic_msg[] = msg_text;                                                                          \
+    static const struct MDBX_panic_point panic_point = {__func__, panic_msg, source_line};                             \
+    panic_ex_at(&panic_point, ctx);                                                                                    \
+  } while (0)
 
 #endif /* !__cplusplus */
 

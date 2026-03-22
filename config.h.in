@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-477-g051b7437 at 2026-03-20T06:30:27+03:00),
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-490-gcc4dadfd at 2026-03-22T18:24:09+03:00),
  * it is the template for libmdbx's config.h
  ******************************************************************************/
 
@@ -9,6 +9,8 @@
 #cmakedefine ENABLE_MEMCHECK
 #cmakedefine ENABLE_GPROF
 #cmakedefine ENABLE_GCOV
+#cmakedefine ENABLE_DTRACE
+#cmakedefine ENABLE_SYSTEMTAP
 #cmakedefine ENABLE_ASAN
 #cmakedefine ENABLE_UBSAN
 #cmakedefine01 MDBX_FORCE_ASSERTIONS

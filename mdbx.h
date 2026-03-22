@@ -1,4 +1,4 @@
-/** This file is part of the libmdbx amalgamated source code (v0.14.1-477-g051b7437 at 2026-03-20T06:30:27+03:00).
+/** This file is part of the libmdbx amalgamated source code (v0.14.1-490-gcc4dadfd at 2026-03-22T18:24:09+03:00).
 
 \file mdbx.h
 \brief The libmdbx C API header file.
@@ -1022,6 +1022,9 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf, cons
 
 /** \brief Panics with message and causes abnormal process termination. */
 MDBX_NORETURN LIBMDBX_API void mdbx_panic(const char *fmt, ...) MDBX_PRINTF_ARGS(1, 2);
+
+/** \brief Panics with message and causes abnormal process termination with some extra information. */
+MDBX_NORETURN LIBMDBX_API void mdbx_panic_ex(const void* handle, const char *fmt, ...) MDBX_PRINTF_ARGS(2, 3);
 
 /** \brief Panics with asserton failed message and causes abnormal process
  * termination. */

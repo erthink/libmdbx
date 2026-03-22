@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-477-g051b7437 at 2026-03-20T06:30:27+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-490-gcc4dadfd at 2026-03-22T18:24:09+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -19717,13 +19717,12 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
                header.geometry.lower, header.geometry.now, header.geometry.upper, pv2pages(header.geometry.shrink_pv),
                pv2pages(header.geometry.grow_pv), next_txnid);
 
-        if (unlikely(header.unsafe_txnid != recent.txnid))
-        {
+        if (unlikely(header.unsafe_txnid != recent.txnid)) {
           const pgno_t recent_pgno = bytes2pgno(env, ptr_dist(recent.ptr_c, env->dxb_mmap.base));
           ERROR("meta[%u] recent steady txnid %" PRIaTXN " != header txnid %" PRIaTXN
-                ", manual recovery needed",
+                ", this is too unexpected and requires manual analysis.",
                 recent_pgno, recent.txnid, header.unsafe_txnid);
-          return MDBX_CORRUPTED;
+          return MDBX_PROBLEM;
         }
         meta_set_txnid(env, &header, next_txnid);
         err = dxb_sync_locked(env, env->flags | txn_shrink_allowed, &header, &troika);
@@ -24088,11 +24087,11 @@ __dll_export
     "-" MDBX_BUILD_TYPE
 #endif /* MDBX_BUILD_TYPE */
     ,
-    "MDBX_DEBUG=" MDBX_STRINGIFY(MDBX_DEBUG)
+    "DEBUG=" MDBX_STRINGIFY(MDBX_DEBUG)
 #ifdef ENABLE_GPROF
     " ENABLE_GPROF"
 #endif /* ENABLE_GPROF */
-    " MDBX_WORDBITS=" MDBX_STRINGIFY(MDBX_WORDBITS)
+    " WORDBITS=" MDBX_STRINGIFY(MDBX_WORDBITS)
     " BYTE_ORDER="
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     "LITTLE_ENDIAN"
@@ -24101,30 +24100,35 @@ __dll_export
 #else
     #error "FIXME: Unsupported byte order"
 #endif /* __BYTE_ORDER__ */
-    " MDBX_ENABLE_BIGFOOT=" MDBX_STRINGIFY(MDBX_ENABLE_BIGFOOT)
-    " MDBX_ENV_CHECKPID=" MDBX_ENV_CHECKPID_CONFIG
-    " MDBX_TXN_CHECKOWNER=" MDBX_TXN_CHECKOWNER_CONFIG
-    " MDBX_64BIT_ATOMIC=" MDBX_64BIT_ATOMIC_CONFIG
-    " MDBX_64BIT_CAS=" MDBX_64BIT_CAS_CONFIG
-    " MDBX_TRUST_RTC=" MDBX_TRUST_RTC_CONFIG
-    " MDBX_AVOID_MSYNC=" MDBX_STRINGIFY(MDBX_AVOID_MSYNC)
-    " MDBX_ENABLE_REFUND=" MDBX_STRINGIFY(MDBX_ENABLE_REFUND)
-    " MDBX_USE_MINCORE=" MDBX_STRINGIFY(MDBX_USE_MINCORE)
-    " MDBX_ENABLE_PGOP_STAT=" MDBX_STRINGIFY(MDBX_ENABLE_PGOP_STAT)
-    " MDBX_ENABLE_PROFGC=" MDBX_STRINGIFY(MDBX_ENABLE_PROFGC)
-    " MDBX_ENABLE_PGET_STAT=" MDBX_STRINGIFY(MDBX_ENABLE_PGET_STAT)
+    " ENABLE_BIGFOOT=" MDBX_STRINGIFY(MDBX_ENABLE_BIGFOOT)
+    " ENV_CHECKPID=" MDBX_ENV_CHECKPID_CONFIG
+    " TXN_CHECKOWNER=" MDBX_TXN_CHECKOWNER_CONFIG
+    " 64BIT_ATOMIC=" MDBX_64BIT_ATOMIC_CONFIG
+    " 64BIT_CAS=" MDBX_64BIT_CAS_CONFIG
+    " TRUST_RTC=" MDBX_TRUST_RTC_CONFIG
+    " AVOID_MSYNC=" MDBX_STRINGIFY(MDBX_AVOID_MSYNC)
+    " ENABLE_REFUND=" MDBX_STRINGIFY(MDBX_ENABLE_REFUND)
+    " USE_MINCORE=" MDBX_STRINGIFY(MDBX_USE_MINCORE)
+    " ENABLE_PGOP_STAT=" MDBX_STRINGIFY(MDBX_ENABLE_PGOP_STAT)
+    " ENABLE_PROFGC=" MDBX_STRINGIFY(MDBX_ENABLE_PROFGC)
+    " ENABLE_PGET_STAT=" MDBX_STRINGIFY(MDBX_ENABLE_PGET_STAT)
 #if MDBX_DISABLE_VALIDATION
-    " MDBX_DISABLE_VALIDATION=YES"
+    " DISABLE_VALIDATION=YES"
 #endif /* MDBX_DISABLE_VALIDATION */
 #ifdef __SANITIZE_ADDRESS__
     " SANITIZE_ADDRESS=YES"
 #endif /* __SANITIZE_ADDRESS__ */
 #ifdef ENABLE_MEMCHECK
-    " ENABLE_MEMCHECK=YES"
+    " MEMCHECK=YES"
 #endif /* ENABLE_MEMCHECK */
 #if MDBX_FORCE_ASSERTIONS
-    " MDBX_FORCE_ASSERTIONS=YES"
+    " FORCE_ASSERTIONS=YES"
 #endif /* MDBX_FORCE_ASSERTIONS */
+#ifdef ENABLE_SYSTEMTAP
+    " SYSTEMTAP=YES"
+#elif defined(ENABLE_DTRACE)
+    " DTRACE=YES"
+#endif /* ENABLE_DTRACE || ENABLE_SYSTEMTAP */
 #ifdef _GNU_SOURCE
     " _GNU_SOURCE=YES"
 #else
@@ -24134,23 +24138,23 @@ __dll_export
     " MDBX_APPLE_SPEED_INSTEADOF_DURABILITY=" MDBX_STRINGIFY(MDBX_APPLE_SPEED_INSTEADOF_DURABILITY)
 #endif /* MacOS */
 #if defined(_WIN32) || defined(_WIN64)
-    " MDBX_WITHOUT_MSVC_CRT=" MDBX_STRINGIFY(MDBX_WITHOUT_MSVC_CRT)
-    " MDBX_BUILD_SHARED_LIBRARY=" MDBX_STRINGIFY(MDBX_BUILD_SHARED_LIBRARY)
+    " WITHOUT_MSVC_CRT=" MDBX_STRINGIFY(MDBX_WITHOUT_MSVC_CRT)
+    " BUILD_SHARED_LIBRARY=" MDBX_STRINGIFY(MDBX_BUILD_SHARED_LIBRARY)
 #if !MDBX_BUILD_SHARED_LIBRARY
-    " MDBX_MANUAL_MODULE_HANDLER=" MDBX_STRINGIFY(MDBX_MANUAL_MODULE_HANDLER)
+    " MANUAL_MODULE_HANDLER=" MDBX_STRINGIFY(MDBX_MANUAL_MODULE_HANDLER)
 #endif
     " WINVER=" MDBX_STRINGIFY(WINVER)
 #else /* Windows */
-    " MDBX_LOCKING=" MDBX_LOCKING_CONFIG
-    " MDBX_USE_OFDLOCKS=" MDBX_USE_OFDLOCKS_CONFIG
-    " MDBX_USE_FALLOCATE=" MDBX_USE_FALLOCATE_CONFIG
+    " LOCKING=" MDBX_LOCKING_CONFIG
+    " USE_OFDLOCKS=" MDBX_USE_OFDLOCKS_CONFIG
+    " USE_FALLOCATE=" MDBX_USE_FALLOCATE_CONFIG
 #endif /* !Windows */
-    " MDBX_CACHELINE_SIZE=" MDBX_STRINGIFY(MDBX_CACHELINE_SIZE)
-    " MDBX_CPU_WRITEBACK_INCOHERENT=" MDBX_STRINGIFY(MDBX_CPU_WRITEBACK_INCOHERENT)
-    " MDBX_MMAP_INCOHERENT_CPU_CACHE=" MDBX_STRINGIFY(MDBX_MMAP_INCOHERENT_CPU_CACHE)
-    " MDBX_MMAP_INCOHERENT_FILE_WRITE=" MDBX_STRINGIFY(MDBX_MMAP_INCOHERENT_FILE_WRITE)
-    " MDBX_UNALIGNED_OK=" MDBX_STRINGIFY(MDBX_UNALIGNED_OK)
-    " MDBX_PNL_ASCENDING=" MDBX_STRINGIFY(MDBX_PNL_ASCENDING)
+    " CACHELINE_SIZE=" MDBX_STRINGIFY(MDBX_CACHELINE_SIZE)
+    " CPU_WRITEBACK_INCOHERENT=" MDBX_STRINGIFY(MDBX_CPU_WRITEBACK_INCOHERENT)
+    " MMAP_INCOHERENT_CPU_CACHE=" MDBX_STRINGIFY(MDBX_MMAP_INCOHERENT_CPU_CACHE)
+    " MMAP_INCOHERENT_FILE_WRITE=" MDBX_STRINGIFY(MDBX_MMAP_INCOHERENT_FILE_WRITE)
+    " UNALIGNED_OK=" MDBX_STRINGIFY(MDBX_UNALIGNED_OK)
+    " PNL_ASCENDING=" MDBX_STRINGIFY(MDBX_PNL_ASCENDING)
     ,
 #ifdef MDBX_BUILD_COMPILER
     MDBX_BUILD_COMPILER
@@ -26351,6 +26355,16 @@ __cold void page_list(page_t *mp) {
           total, page_room(mp));
 }
 
+__cold __noinline void panic_ex_at(const struct MDBX_panic_point *const at, const void *ctx) {
+  const char *const function = at->function;
+  const char *const msg = at->msg;
+  const unsigned line = at->line;
+  MDBX_DTRACE3(panic, function, line, msg);
+  mdbx_panic_ex(ctx, "%s:%u %s", function, line, msg);
+}
+
+__cold __noinline void panic_at(const struct MDBX_panic_point *const at) { panic_ex_at(at, nullptr); }
+
 typedef struct meta_snap {
   uint64_t txnid;
   size_t is_steady;
@@ -28046,18 +28060,23 @@ __cold void assert_fail(const char *msg, const char *func, unsigned line) {
   }
 }
 
-__cold void mdbx_panic(const char *fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-
+MDBX_NORETURN __cold static void panic_va_list(const void *ptr, const char *fmt, va_list ap) {
   char *message = nullptr;
   const int num = osal_vasprintf(&message, fmt, ap);
-  va_end(ap);
   const char *const const_message =
       unlikely(num < 1 || !message) ? "<troubles with panic-message preparation>" : message;
 
+  if (ptr) {
+    /* TODO:
+     * - check ptr is valid and readable;
+     * - check signature to determine a type of the object (cursor, txn, env);
+     * - try to dump useful information if debugger or logger is attached.
+     */
+  }
+
+  const char *const nl = (num > 0 && const_message[num - 1] == '\n') ? "" : "\n";
   if (globals.logger.ptr)
-    debug_log(MDBX_LOG_FATAL, "mdbx-panic", 0, "%s", const_message);
+    debug_log(MDBX_LOG_FATAL, "mdbx-panic", 0, "%s%s", const_message, nl);
 
   while (1) {
 #if defined(_WIN32) || defined(_WIN64)
@@ -28066,6 +28085,8 @@ __cold void mdbx_panic(const char *fmt, ...) {
 #else
     OutputDebugStringA("\r\nMDBX-PANIC: ");
     OutputDebugStringA(const_message);
+    if (*nl)
+      OutputDebugStringA("\r\n");
 #endif
     if (IsDebuggerPresent())
       DebugBreak();
@@ -28075,6 +28096,20 @@ __cold void mdbx_panic(const char *fmt, ...) {
     abort();
 #endif
   }
+}
+
+__cold void mdbx_panic(const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  panic_va_list(nullptr, fmt, ap);
+  va_end(ap);
+}
+
+__cold void mdbx_panic_ex(const void *ptr, const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  panic_va_list(ptr, fmt, ap);
+  va_end(ap);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -39743,10 +39778,10 @@ __dll_export
         0,
         14,
         1,
-        477,
+        490,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.477 */
-        {"2026-03-20T06:30:27+03:00", "27b0aaea4bda4436bf8f7fad00661cca07368130", "051b7437a2cfc1e3c71132579728970490d6ad98", "v0.14.1-477-g051b7437"},
+                                        0.14.1.490 */
+        {"2026-03-22T18:24:09+03:00", "d42c9209ba712a1e42854ccb8af9a5489d5af3e2", "cc4dadfd90cf847157c9e04c7e4e1cf4511f89d2", "v0.14.1-490-gcc4dadfd"},
         sourcery};
 
 __dll_export

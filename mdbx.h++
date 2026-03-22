@@ -1,4 +1,4 @@
-﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-477-g15f1ce1f at 2026-03-20T00:51:59+03:00).
+﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-490-gcc4dadfd at 2026-03-22T18:24:09+03:00).
 /// \file mdbx.h++
 /// \brief The libmdbx C++ API header file.
 ///

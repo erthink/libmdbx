@@ -2,10 +2,13 @@
 TODO
 ----
 
+ - preserve/restore cursors state during `mdbx_txn_checkpoint()`, `mdbx_txn_amend()` and `mdbx_txn_commit_embark_read()`.
+ - man-page for `mdbx_defrag`.
  - Предоставление информации о размере рагруженной/кешируемой в ОЗУ части БД и её использование для управления упреждающим чтением.
  - split ASSERT() to CHECK{0,1,2,3} and basal `assert()`.
  - [SWIG](https://www.swig.org/).
  - Интеграция c DTrace и аналогами.
+ - LTTng for tracing.
  - Новый стиль обработки ошибок с записью "трассы" и причин.
  - Формирование отладочной информации посредством gdb.
  - Поддержка WASM.
@@ -16,15 +19,16 @@ TODO
  - [Support for RAW devices](https://libmdbx.dqdkfa.ru/dead-github/issues/124).
  - [Support MessagePack for Keys & Values](https://libmdbx.dqdkfa.ru/dead-github/issues/115).
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
+ - Extended example of using the C++ API, which can also be used as a simple smoke-test.
 
 In development
 --------------
- - Extended example of using the C++ API, which can also be used as a simple smoke-test.
  - Ultra-fast deletion of consecutive elements by cutting off b-tree branches.
- - add CLI-options to mdbx_defrag and mdbx_load.
+ - Refine/simplify assertion-like errors handling.
 
 Done
 ----
+ - CLI-options to mdbx_defrag and mdbx_load.
  - Optional page-get operation statistics for transactions.
  - digging/refactoring/optimizing page splitting and tree rebalance.
  - Явная уплотнение/дефрагментация и mdbx_defrag.

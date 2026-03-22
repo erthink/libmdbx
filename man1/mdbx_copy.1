@@ -2,7 +2,7 @@
 .\" Copyright 2015,2016 Peter-Service R&D LLC <http://billing.ru/>.
 .\" Copyright 2012-2015 Howard Chu, Symas Corp. All Rights Reserved.
 .\" Copying restrictions apply.  See COPYRIGHT/LICENSE.
-.TH MDBX_COPY 1 "2025-01-14" "MDBX 0.14"
+.TH MDBX_COPY 1 "2026-03-20" "MDBX 0.14"
 .SH NAME
 mdbx_copy \- MDBX environment copy tool
 .SH SYNOPSIS
@@ -21,6 +21,10 @@ mdbx_copy \- MDBX environment copy tool
 .BR \-p ]
 [\c
 .BR \-n ]
+[\c
+.BR \-u ]
+[\c
+.BR \-U ]
 .B src_path
 [\c
 .BR dest_path ]
@@ -97,4 +101,4 @@ free during copying cannot be reused until the copy is done.
 .BR mdbx_drop (1)
 .SH AUTHOR
 Howard Chu of Symas Corporation <http://www.symas.com>,
-Leonid Yuriev <https://gitflic.ru/user/erthink>
+Leonid Yuriev <https://libmdbx.dqdkfa.ru>
