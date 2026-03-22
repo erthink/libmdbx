@@ -18,7 +18,7 @@
 /// \copyright SPDX-License-Identifier: Apache-2.0
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
-#define MDBX_BUILD_SOURCERY 8dbfc8a5af5ce8a83983586b2d8f88f4740984f5e9cf8594298f94a1aaf9003b_v0_13_11_8_g7b53a155
+#define MDBX_BUILD_SOURCERY 3956f2d46374917d931df49124ecf9a0a7f4370fefc16017136b5c27e86ada33_v0_13_11_14_ga1c58703
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -3516,7 +3516,6 @@ int main(int argc, char *argv[]) {
   signal(SIGTERM, signal_handler);
 #endif /* !WINDOWS */
 
-  envname = argv[optind];
   envname = argv[optind];
   if (!quiet) {
     printf("mdbx_stat %s (%s, T-%s)\nRunning for %s...\n", mdbx_version.git.describe, mdbx_version.git.datetime,

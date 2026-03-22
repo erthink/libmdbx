@@ -16,7 +16,8 @@ The supporting release of a stable branch with bug fixes.
 Appreciations:
 
  - [Erigon](https://erigon.tech/) for sponsorship.
- - [@Segwaz](https://github.com/Segwaz) for fuzzing and bug reporing.
+ - [Chloe Cano](https://github.com/Segwaz) for fuzzing, bug reporing and fixes.
+ - [Weixie Cui](https://github.com/cuiweixie) for bug fixing through pull-requests.
 
 Fixes:
 
@@ -25,6 +26,10 @@ Fixes:
  - Fixed swapping the shrink/growth parameters in a DB-geometry in the `mdbx_load` utility (backport).
 
  - Fixed `SIGSEGV` in the case when all meta pages are not entirely usable (backport).
+
+ - Fixed information collection via `kstat()` for bootid on Solaris and related platforms.
+
+ - Fixed a typo in the `ST_EXPORTED` processing path that broke the build on platforms where the mentioned flag is defined for `fstatvfs()`.
 
 Other:
 

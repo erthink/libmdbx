@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 8dbfc8a5af5ce8a83983586b2d8f88f4740984f5e9cf8594298f94a1aaf9003b_v0_13_11_8_g7b53a155
+#define MDBX_BUILD_SOURCERY 3956f2d46374917d931df49124ecf9a0a7f4370fefc16017136b5c27e86ada33_v0_13_11_14_ga1c58703
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -20549,7 +20549,13 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
                header.geometry.lower, header.geometry.now, header.geometry.upper, pv2pages(header.geometry.shrink_pv),
                pv2pages(header.geometry.grow_pv), next_txnid);
 
-        ENSURE(env, header.unsafe_txnid == recent.txnid);
+        if (unlikely(header.unsafe_txnid != recent.txnid)) {
+          const pgno_t recent_pgno = bytes2pgno(env, ptr_dist(recent.ptr_c, env->dxb_mmap.base));
+          ERROR("meta[%u] recent steady txnid %" PRIaTXN " != header txnid %" PRIaTXN
+                ", this is too unexpected and requires manual analysis.",
+                recent_pgno, recent.txnid, header.unsafe_txnid);
+          return MDBX_PROBLEM;
+        }
         meta_set_txnid(env, &header, next_txnid);
         err = dxb_sync_locked(env, env->flags | txn_shrink_allowed, &header, &troika);
         if (err) {
@@ -29773,7 +29779,7 @@ int osal_check_fs_local(mdbx_filehandle_t handle, int flags) {
 #endif /* ST/MNT_LOCAL */
 
 #ifdef ST_EXPORTED
-  if ((st_flags & ST_EXPORTED) != 0 && !(flags & (MDBX_RDONLY | MDBX_EXCLUSIVE))))
+  if ((st_flags & ST_EXPORTED) != 0 && !(flags & (MDBX_RDONLY | MDBX_EXCLUSIVE)))
     return MDBX_RESULT_TRUE;
 #elif defined(MNT_EXPORTED)
   if ((mnt_flags & MNT_EXPORTED) != 0 && !(flags & (MDBX_RDONLY | MDBX_EXCLUSIVE)))
@@ -30977,10 +30983,12 @@ __cold static bin128_t osal_bootid(void) {
           case KSTAT_DATA_UINT32:
             bootid_collect(&uuid, &kn->value, sizeof(int32_t));
             got_boottime = true;
+            break;
           case KSTAT_DATA_INT64:
           case KSTAT_DATA_UINT64:
             bootid_collect(&uuid, &kn->value, sizeof(int64_t));
             got_boottime = true;
+            break;
           }
         }
       }
@@ -37597,10 +37605,10 @@ __dll_export
         0,
         13,
         11,
-        8,
+        14,
         "", /* pre-release suffix of SemVer
-                                        0.13.11.8 */
-        {"2026-03-19T02:57:06+03:00", "d72043bf2aca1a731ddb5242cd9ae8bda8054e25", "7b53a155438c660670cc7054b1ce7fc5a874c028", "v0.13.11-8-g7b53a155"},
+                                        0.13.11.14 */
+        {"2026-03-22T22:59:14+03:00", "8747bc07aae6395335941ecd5228f72f7770a1b5", "a1c58703d294fdbf0b0bc9d61871bf48578d7840", "v0.13.11-14-ga1c58703"},
         sourcery};
 
 __dll_export
