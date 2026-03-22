@@ -38012,7 +38012,7 @@ static int nested_undo(MDBX_txn *nested) {
 
   nested->flags = MDBX_TXN_FINISHED;
   MDBX_env *const env = nested->env;
-  if (unlikely(parent->geo.upper != nested->geo.upper || parent->geo.now != nested->geo.upper) &&
+  if (unlikely(parent->geo.upper != nested->geo.upper || parent->geo.now != nested->geo.now) &&
       !(parent->flags & MDBX_TXN_ERROR) && !(env->flags & ENV_FATAL_ERROR)) {
     /* undo resize performed by nested txn */
     int err = dxb_resize(env, parent->geo.first_unallocated, parent->geo.now, parent->geo.upper, impilict_shrink);
