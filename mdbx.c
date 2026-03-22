@@ -29826,7 +29826,7 @@ int osal_check_fs_local(mdbx_filehandle_t handle, int flags) {
 #endif /* ST/MNT_LOCAL */
 
 #ifdef ST_EXPORTED
-  if ((st_flags & ST_EXPORTED) != 0 && !(flags & (MDBX_RDONLY | MDBX_EXCLUSIVE))))
+  if ((st_flags & ST_EXPORTED) != 0 && !(flags & (MDBX_RDONLY | MDBX_EXCLUSIVE)))
     return MDBX_RESULT_TRUE;
 #elif defined(MNT_EXPORTED)
   if ((mnt_flags & MNT_EXPORTED) != 0 && !(flags & (MDBX_RDONLY | MDBX_EXCLUSIVE)))
