@@ -3395,7 +3395,7 @@ MDBX_MAYBE_UNUSED static inline bool u128_lt(bin128_t x, bin128_t y) {
 #if defined(__SIZEOF_INT128__) && !MDBX_DEBUG
   r = x.u128 < y.u128;
 #else
-  r = x.h < y.h || (x.h == y.h && x.l > y.l);
+  r = x.h < y.h || (x.h == y.h && x.l < y.l);
 #if MDBX_HAVE_NATIVE_U128
   assert(r == (x.u128 < y.u128));
 #endif
