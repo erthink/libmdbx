@@ -2377,7 +2377,7 @@ typedef enum MDBX_option {
    * cost may be higher in many scenarios.
    *
    * The option value is specified in units of 1/65536 of the page size: minimal 0% (0), maximal 100% (65535),
-   * default is 100% (65355). */
+   * default is 100% (65535). */
   MDBX_opt_subpage_limit,
 
   /** \brief Sets the minimum amount of free space on a leaf page in the absence of which the nested pages are
