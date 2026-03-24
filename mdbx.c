@@ -10839,7 +10839,7 @@ int mdbx_txn_renew(MDBX_txn *txn) {
   if (unlikely((txn->flags & txn_ro_flat) == 0))
     return LOG_IFERR(MDBX_EINVAL);
 
-  if (unlikely((txn->flags & MDBX_TXN_FINISHED)) == 0) {
+  if (unlikely((txn->flags & MDBX_TXN_FINISHED) == 0)) {
     rc = txn_ro_reset(txn);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
