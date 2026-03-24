@@ -30088,7 +30088,7 @@ int osal_munmap(osal_mmap_t *map) {
     NtClose(map->section);
   NTSTATUS rc = NtUnmapViewOfSection(GetCurrentProcess(), map->base);
   if (!NT_SUCCESS(rc))
-    osal_ntstatus2errcode(rc);
+    return osal_ntstatus2errcode(rc);
 #else
   if (unlikely(munmap(map->base, map->limit))) {
     assert(errno != 0);
