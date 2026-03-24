@@ -3436,7 +3436,7 @@ typedef const pgno_t *const_pnl_t;
 #define MDBX_PNL_EDGE(pl) ((pl) + 1)
 #define MDBX_PNL_LEAST(pl) MDBX_PNL_FIRST(pl)
 #define MDBX_PNL_MOST(pl) MDBX_PNL_LAST(pl)
-#define MDBX_PNL_CONTIGUOUS(prev, next, span) ((next) - (prev)) == (span))
+#define MDBX_PNL_CONTIGUOUS(prev, next, span) (((next) - (prev)) == (span))
 #else
 #define MDBX_PNL_ORDERED(first, last) ((first) > (last))
 #define MDBX_PNL_DISORDERED(first, last) ((first) <= (last))
