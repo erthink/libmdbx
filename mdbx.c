@@ -19652,14 +19652,14 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
         meta_troika_dump(env, &troika);
         return MDBX_CORRUPTED;
       }
+    
+    purge_meta_head:
       if (env->flags & MDBX_RDONLY) {
         ERROR("%s and rollback needed: (from head %" PRIaTXN " to steady %" PRIaTXN ")%s",
               "opening after an unclean shutdown", recent.txnid, prefer_steady.txnid, ", but unable in read-only mode");
         meta_troika_dump(env, &troika);
         return MDBX_WANNA_RECOVERY;
       }
-
-    purge_meta_head:
       NOTICE("%s and doing automatic rollback: "
              "purge%s meta[%u] with%s txnid %" PRIaTXN,
              "opening after an unclean shutdown", last_valid ? "" : " invalid", pgno, last_valid ? " weak" : "",
