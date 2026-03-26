@@ -30076,7 +30076,7 @@ int osal_mmap(const int flags, osal_mmap_t *map, size_t size, const size_t limit
   return MDBX_SUCCESS;
 }
 
-int osal_munmap(osal_mmap_t *map) {
+void osal_munmap(osal_mmap_t *map) {
   VALGRIND_MAKE_MEM_NOACCESS(map->base, map->current);
   /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
    * when this memory will re-used by malloc or another mmapping.
@@ -30084,22 +30084,21 @@ int osal_munmap(osal_mmap_t *map) {
   MDBX_ASAN_UNPOISON_MEMORY_REGION(map->base,
                                    (map->filesize && map->filesize < map->limit) ? map->filesize : map->limit);
 #if defined(_WIN32) || defined(_WIN64)
-  if (map->section)
+  if (map->section) {
     NtClose(map->section);
-  NTSTATUS rc = NtUnmapViewOfSection(GetCurrentProcess(), map->base);
-  if (!NT_SUCCESS(rc))
-    osal_ntstatus2errcode(rc);
-#else
-  if (unlikely(munmap(map->base, map->limit))) {
-    assert(errno != 0);
-    return errno;
+    map->section = 0;
   }
+  NTSTATUS err = NtUnmapViewOfSection(GetCurrentProcess(), map->base);
+  if (!NT_SUCCESS(err))
+    ERROR("Unexpected NtUnmapViewOfSection(%p, %zi) error %d", map->base, map->limit, osal_ntstatus2errcode(err));
+#else
+  if (unlikely(munmap(map->base, map->limit)))
+    ERROR("Unexpected munmap(%p, %zi) error %d", map->base, map->limit, errno);
 #endif /* ! Windows */
 
   map->limit = 0;
   map->current = 0;
   map->base = nullptr;
-  return MDBX_SUCCESS;
 }
 
 int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
