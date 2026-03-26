@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 3956f2d46374917d931df49124ecf9a0a7f4370fefc16017136b5c27e86ada33_v0_13_11_14_ga1c58703
+#define MDBX_BUILD_SOURCERY de6cedcd7b863b13f7518133113c835d46bc7972c01bc99242167c115ed11556_v0_13_11_18_gfbd7c62a
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -1485,7 +1485,7 @@ MDBX_INTERNAL int osal_lockfile(mdbx_filehandle_t fd, bool wait);
 #define MMAP_OPTION_SEMAPHORE 2
 MDBX_INTERNAL int osal_mmap(const int flags, osal_mmap_t *map, size_t size, const size_t limit, const unsigned options,
                             const pathchar_t *pathname4logging);
-MDBX_INTERNAL int osal_munmap(osal_mmap_t *map);
+MDBX_INTERNAL void osal_munmap(osal_mmap_t *map);
 #define MDBX_MRESIZE_MAY_MOVE 0x00000100
 #define MDBX_MRESIZE_MAY_UNMAP 0x00000200
 MDBX_INTERNAL int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit);
@@ -20484,14 +20484,14 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
         meta_troika_dump(env, &troika);
         return MDBX_CORRUPTED;
       }
+
+    purge_meta_head:
       if (env->flags & MDBX_RDONLY) {
         ERROR("%s and rollback needed: (from head %" PRIaTXN " to steady %" PRIaTXN ")%s",
               "opening after an unclean shutdown", recent.txnid, prefer_steady.txnid, ", but unable in read-only mode");
         meta_troika_dump(env, &troika);
         return MDBX_WANNA_RECOVERY;
       }
-
-    purge_meta_head:
       NOTICE("%s and doing automatic rollback: "
              "purge%s meta[%u] with%s txnid %" PRIaTXN,
              "opening after an unclean shutdown", last_valid ? "" : " invalid", pgno, last_valid ? " weak" : "",
@@ -29987,7 +29987,7 @@ int osal_mmap(const int flags, osal_mmap_t *map, size_t size, const size_t limit
   return MDBX_SUCCESS;
 }
 
-int osal_munmap(osal_mmap_t *map) {
+void osal_munmap(osal_mmap_t *map) {
   VALGRIND_MAKE_MEM_NOACCESS(map->base, map->current);
   /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
    * when this memory will re-used by malloc or another mmapping.
@@ -29995,22 +29995,21 @@ int osal_munmap(osal_mmap_t *map) {
   MDBX_ASAN_UNPOISON_MEMORY_REGION(map->base,
                                    (map->filesize && map->filesize < map->limit) ? map->filesize : map->limit);
 #if defined(_WIN32) || defined(_WIN64)
-  if (map->section)
+  if (map->section) {
     NtClose(map->section);
-  NTSTATUS rc = NtUnmapViewOfSection(GetCurrentProcess(), map->base);
-  if (!NT_SUCCESS(rc))
-    osal_ntstatus2errcode(rc);
-#else
-  if (unlikely(munmap(map->base, map->limit))) {
-    assert(errno != 0);
-    return errno;
+    map->section = 0;
   }
+  NTSTATUS err = NtUnmapViewOfSection(GetCurrentProcess(), map->base);
+  if (!NT_SUCCESS(err))
+    ERROR("Unexpected NtUnmapViewOfSection(%p, %zi) error %d", map->base, map->limit, osal_ntstatus2errcode(err));
+#else
+  if (unlikely(munmap(map->base, map->limit)))
+    ERROR("Unexpected munmap(%p, %zi) error %d", map->base, map->limit, errno);
 #endif /* ! Windows */
 
   map->limit = 0;
   map->current = 0;
   map->base = nullptr;
-  return MDBX_SUCCESS;
 }
 
 int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
@@ -37605,10 +37604,10 @@ __dll_export
         0,
         13,
         11,
-        14,
+        18,
         "", /* pre-release suffix of SemVer
-                                        0.13.11.14 */
-        {"2026-03-22T22:59:14+03:00", "8747bc07aae6395335941ecd5228f72f7770a1b5", "a1c58703d294fdbf0b0bc9d61871bf48578d7840", "v0.13.11-14-ga1c58703"},
+                                        0.13.11.18 */
+        {"2026-03-26T13:39:04+03:00", "a7a58f1f6b27afc9e72ff50333f726d4ed24e7e7", "fbd7c62a19d5e77f72cf7760428d348ed8dbec46", "v0.13.11-18-gfbd7c62a"},
         sourcery};
 
 __dll_export

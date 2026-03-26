@@ -2,7 +2,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 /* clang-format off */
 
-#define MDBX_BUILD_SOURCERY 3956f2d46374917d931df49124ecf9a0a7f4370fefc16017136b5c27e86ada33_v0_13_11_14_ga1c58703
+#define MDBX_BUILD_SOURCERY de6cedcd7b863b13f7518133113c835d46bc7972c01bc99242167c115ed11556_v0_13_11_18_gfbd7c62a
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -1483,7 +1483,7 @@ MDBX_INTERNAL int osal_lockfile(mdbx_filehandle_t fd, bool wait);
 #define MMAP_OPTION_SEMAPHORE 2
 MDBX_INTERNAL int osal_mmap(const int flags, osal_mmap_t *map, size_t size, const size_t limit, const unsigned options,
                             const pathchar_t *pathname4logging);
-MDBX_INTERNAL int osal_munmap(osal_mmap_t *map);
+MDBX_INTERNAL void osal_munmap(osal_mmap_t *map);
 #define MDBX_MRESIZE_MAY_MOVE 0x00000100
 #define MDBX_MRESIZE_MAY_UNMAP 0x00000200
 MDBX_INTERNAL int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit);
