@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-490-gcc4dadfd at 2026-03-22T18:24:09+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-507-gd8f035e0 at 2026-03-28T10:36:50+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -57,11 +57,6 @@ typedef struct page_get_result {
   page_t *page;
   int err;
 } pgr_t;
-
-typedef struct node_search_result {
-  node_t *node;
-  bool exact;
-} nsr_t;
 
 typedef struct bind_reader_slot_result {
   int err;
@@ -915,10 +910,22 @@ struct dpl {
 /*----------------------------------------------------------------------------*/
 /* Internal structures */
 
+typedef struct search_foliage_result {
+  node_t *node;
+  bool exact;
+} sfr_t;
+
+typedef size_t (*MDBX_search_branch)(const MDBX_cursor *mc, const MDBX_val *key);
+typedef sfr_t (*MDBX_search_foliage)(MDBX_cursor *mc, const MDBX_val *key);
+
 /* Comparing/ordering and length constraints */
 typedef struct clc {
   MDBX_cmp_func cmp; /* comparator */
   size_t lmin, lmax; /* min/max length constraints */
+  MDBX_search_branch search_branch;
+  MDBX_search_foliage search_foliage;
+  void *reserve_node_add;
+  void *reserve_node_del;
 } clc_t;
 
 /* Вспомогательная информация о table.
@@ -945,7 +952,7 @@ typedef struct clc {
  *    а clc[1] для значений, причем компаратор значений для dupsort-курсора
  *    будет попадать на MDBX_val с именем, что приведет к SIGSEGV при попытке
  *    использования такого компаратора.
- *  - размер kvx_t становится равным 8 словам.
+ *  - размер kvx_t становится равным 8 словам (16 словам после добавление функций поиска и т.п).
  *
  * Трюки и прочая экономия на спичках:
  *  - не храним dbi внутри курсора, вместо этого вычисляем его как разницу между
@@ -954,13 +961,13 @@ typedef struct clc {
  *    так как dbi требуется для последующего доступа к массивам в транзакции,
  *    т.е. при вычислении dbi разыменовывается тот-же указатель на txn
  *    и читается та же кэш-линия с указателями. */
-typedef struct clc2 {
+typedef struct clc_couple {
   clc_t k; /* для ключей */
   clc_t v; /* для значений */
-} clc2_t;
+} clc_couple_t;
 
 struct kvx {
-  clc2_t clc;
+  clc_couple_t clc;
   MDBX_val name; /* имя table */
 };
 
@@ -1133,13 +1140,28 @@ struct MDBX_cursor {
   /* Указывает на tree->dbs[] для DBI этого курсора. */
   tree_t *tree;
   /* Указывает на env->kvs[] для DBI этого курсора. */
-  clc2_t *clc;
+  clc_couple_t *clc;
   subcur_t *__restrict subcur;
   page_t *pg[CURSOR_STACK_SIZE]; /* stack of pushed pages */
   indx_t ki[CURSOR_STACK_SIZE];  /* stack of page indices */
   MDBX_cursor *next;
   /* Состояние на момент старта вложенной транзакции */
   MDBX_cursor *backup;
+#ifndef MDBX_DEBUG_SEARCH_DISPATCHING
+#define MDBX_DEBUG_SEARCH_DISPATCHING MDBX_DEBUG
+#endif /* MDBX_DEBUG_SEARCH_DISPATCHING */
+
+#if MDBX_DEBUG_SEARCH_DISPATCHING
+  unsigned search_step_counter;
+#define MDBX_CURSOR_STC_INC(cursor)                                                                                    \
+  do                                                                                                                   \
+    ((MDBX_cursor *)(cursor))->search_step_counter += 1;                                                               \
+  while (0)
+#define MDBX_CURSOR_STC_GET(cursor) ((cursor)->search_step_counter)
+#else
+#define MDBX_CURSOR_STC_INC(cursor) __noop
+#define MDBX_CURSOR_STC_GET(cursor) (0)
+#endif /* MDBX_DEBUG_SEARCH_DISPATCHING */
 };
 
 struct inner_cursor {
@@ -1386,10 +1408,10 @@ MDBX_MAYBE_UNUSED static void static_checks(void) {
   STATIC_ASSERT(NODESIZE == offsetof(node_t, payload));
   STATIC_ASSERT(PAGEHDRSZ == offsetof(page_t, entries));
 #endif /* FLEXIBLE_ARRAY_MEMBERS */
-  STATIC_ASSERT(sizeof(clc_t) == 3 * sizeof(void *));
-  STATIC_ASSERT(sizeof(kvx_t) == 8 * sizeof(void *));
+  STATIC_ASSERT(sizeof(clc_t) == 7 * sizeof(void *));
+  STATIC_ASSERT(sizeof(kvx_t) == 16 * sizeof(void *));
 
-#define KVX_SIZE_LN2 MDBX_WORDBITS_LN2
+#define KVX_SIZE_LN2 (MDBX_WORDBITS_LN2 + 1)
   STATIC_ASSERT(sizeof(kvx_t) == (1u << KVX_SIZE_LN2));
 }
 #endif /* Disabled for MSVC 19.0 (VisualStudio 2015) */
@@ -1504,6 +1526,27 @@ MDBX_INTERNAL void env_options_init(MDBX_env *env);
 MDBX_INTERNAL void env_options_adjust_defaults(MDBX_env *env);
 MDBX_INTERNAL void env_options_adjust_dp_limit(MDBX_env *env);
 MDBX_INTERNAL pgno_t default_dp_limit(const MDBX_env *env);
+
+MDBX_INTERNAL int __must_check_result tree_search_continue(MDBX_cursor *mc, const MDBX_val *key, int flags);
+MDBX_INTERNAL int tree_search_lowest(MDBX_cursor *mc);
+MDBX_INTERNAL size_t tree_search_branch_configure(const MDBX_cursor *mc, const MDBX_val *key);
+MDBX_INTERNAL sfr_t tree_search_foliage_configure(MDBX_cursor *mc, const MDBX_val *key);
+
+enum page_search_flags {
+  Z_MODIFY = 1,
+  Z_ROOTONLY = 2,
+  Z_FIRST = 4,
+  Z_LAST = 8,
+};
+MDBX_INTERNAL int __must_check_result tree_search(MDBX_cursor *mc, const MDBX_val *key, int flags);
+
+static inline size_t tree_search_branch(const MDBX_cursor *mc, const MDBX_val *key) {
+  return mc->clc->k.search_branch(mc, key);
+}
+
+static inline sfr_t tree_search_foliage(MDBX_cursor *mc, const MDBX_val *key) {
+  return mc->clc->k.search_foliage(mc, key);
+}
 
 MDBX_INTERNAL int tree_drop(MDBX_cursor *mc, const bool may_have_tables);
 MDBX_INTERNAL int __must_check_result tree_rebalance(MDBX_cursor *mc);
@@ -1634,8 +1677,6 @@ static inline int __must_check_result node_read(MDBX_cursor *mc, const node_t *n
 }
 
 /*----------------------------------------------------------------------------*/
-
-MDBX_INTERNAL nsr_t node_search(MDBX_cursor *mc, const MDBX_val *key);
 
 MDBX_INTERNAL int __must_check_result node_add_branch(MDBX_cursor *mc, size_t indx, const MDBX_val *key, pgno_t pgno);
 
@@ -2135,22 +2176,74 @@ MDBX_NOTHROW_PURE_FUNCTION static inline MDBX_val page_dupfix_key(const page_t *
 
 /*----------------------------------------------------------------------------*/
 
-MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_int_unaligned(const MDBX_val *a, const MDBX_val *b);
+MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_uint32_unchecked(const size_t expected_alignment,
+                                                                           const MDBX_val *a, const MDBX_val *b) {
+  assert(a->iov_len == 4 && b->iov_len == 4);
+  return CMP2INT(unaligned_peek_u32(expected_alignment, a->iov_base),
+                 unaligned_peek_u32(expected_alignment, b->iov_base));
+}
+
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static __always_inline int
+cmp_uint32_unaligned_unchecked(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint32_unchecked(1, a, b);
+}
+
+MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_uint64_unchecked(const size_t expected_alignment,
+                                                                           const MDBX_val *a, const MDBX_val *b) {
+  assert(a->iov_len == 8 && b->iov_len == 8);
+  return CMP2INT(unaligned_peek_u64(expected_alignment, a->iov_base),
+                 unaligned_peek_u64(expected_alignment, b->iov_base));
+}
+
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static __always_inline int
+cmp_uint64_unaligned_unchecked(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint64_unchecked(1, a, b);
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint_unaligned(const MDBX_val *a, const MDBX_val *b);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint32_unaligned(const MDBX_val *a, const MDBX_val *b);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint64_unaligned(const MDBX_val *a, const MDBX_val *b);
 
 #if MDBX_UNALIGNED_OK < 2 || (MDBX_DEBUG || MDBX_FORCE_ASSERTIONS || !defined(NDEBUG))
-MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int
 /* Compare two items pointing at 2-byte aligned unsigned int's. */
-cmp_int_align2(const MDBX_val *a, const MDBX_val *b);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint_align2(const MDBX_val *a, const MDBX_val *b);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint32_align2(const MDBX_val *a, const MDBX_val *b);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint64_align2(const MDBX_val *a, const MDBX_val *b);
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_uint32_align2_unchecked(const MDBX_val *a,
+                                                                                                    const MDBX_val *b) {
+  return cmp_uint32_unchecked(2, a, b);
+}
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_uint64_align2_unchecked(const MDBX_val *a,
+                                                                                                    const MDBX_val *b) {
+  return cmp_uint64_unchecked(2, a, b);
+}
 #else
-#define cmp_int_align2 cmp_int_unaligned
+#define cmp_uint_align2 cmp_uint_unaligned
+#define cmp_uint32_align2 cmp_uint_unaligned
+#define cmp_uint64_align2 cmp_uint_unaligned
+#define cmp_uint32_align2_unchecked cmp_uint32_unaligned_unchecked
+#define cmp_uint64_align2_unchecked cmp_uint64_unaligned_unchecked
 #endif /* !MDBX_UNALIGNED_OK || debug */
 
 #if MDBX_UNALIGNED_OK < 4 || (MDBX_DEBUG || MDBX_FORCE_ASSERTIONS || !defined(NDEBUG))
-MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int
 /* Compare two items pointing at 4-byte aligned unsigned int's. */
-cmp_int_align4(const MDBX_val *a, const MDBX_val *b);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint_align4(const MDBX_val *a, const MDBX_val *b);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint32_align4(const MDBX_val *a, const MDBX_val *b);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint64_align4(const MDBX_val *a, const MDBX_val *b);
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_uint32_align4_unchecked(const MDBX_val *a,
+                                                                                                    const MDBX_val *b) {
+  return cmp_uint32_unchecked(4, a, b);
+}
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_uint64_align4_unchecked(const MDBX_val *a,
+                                                                                                    const MDBX_val *b) {
+  return cmp_uint64_unchecked(4, a, b);
+}
 #else
-#define cmp_int_align4 cmp_int_unaligned
+#define cmp_uint_align4 cmp_uint_unaligned
+#define cmp_uint32_align4 cmp_uint32_unaligned
+#define cmp_uint64_align4 cmp_uint64_unaligned
+#define cmp_uint32_align4_unchecked cmp_uint32_unaligned_unchecked
+#define cmp_uint64_align4_unchecked cmp_uint64_unaligned_unchecked
 #endif /* !MDBX_UNALIGNED_OK || debug */
 
 /* Compare two items lexically */
@@ -2173,14 +2266,19 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_equal_or_greater(const MDBX_val
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_equal_or_wrong(const MDBX_val *a, const MDBX_val *b);
 
 static inline MDBX_cmp_func builtin_keycmp(MDBX_db_flags_t flags) {
-  return (flags & MDBX_REVERSEKEY) ? cmp_reverse : (flags & MDBX_INTEGERKEY) ? cmp_int_align2 : cmp_lexical;
+  return (flags & MDBX_REVERSEKEY) ? cmp_reverse : (flags & MDBX_INTEGERKEY) ? cmp_uint_align2 : cmp_lexical;
 }
 
 static inline MDBX_cmp_func builtin_datacmp(MDBX_db_flags_t flags) {
   return !(flags & MDBX_DUPSORT)
              ? cmp_lenfast
-             : ((flags & MDBX_INTEGERDUP) ? cmp_int_unaligned
+             : ((flags & MDBX_INTEGERDUP) ? cmp_uint_unaligned
                                           : ((flags & MDBX_REVERSEDUP) ? cmp_reverse : cmp_lexical));
+}
+
+static inline void clc_reset_methods(volatile clc_t *clc) {
+  clc->search_branch = tree_search_branch_configure;
+  clc->search_foliage = tree_search_foliage_configure;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -2404,7 +2502,7 @@ MDBX_MAYBE_UNUSED static inline void osal_flush_incoherent_mmap(const void *addr
  *    только в самом конце при отсутстви ошибок.
  *  - Повторное позиционирование first/last может начинаться
  *    с установки/обнуления только top без сброса flags, что позволяет работать
- *    быстрому пути внутри tree_search_finalize().
+ *    быстрому пути внутри tree_search().
  *
  *  - Заморочки с концом данных:
  *     - mdbx_cursor_get(NEXT) выполняет две операции (перемещение и чтение),
@@ -3354,18 +3452,6 @@ static inline int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0, const si
 
   return spill_slowpath(txn, m0, wanna_spill_entries, wanna_spill_npages, need);
 }
-
-MDBX_INTERNAL int __must_check_result tree_search_finalize(MDBX_cursor *mc, const MDBX_val *key, int flags);
-MDBX_INTERNAL int tree_search_lowest(MDBX_cursor *mc);
-MDBX_INTERNAL size_t tree_search_branch(MDBX_cursor *mc, const MDBX_val *key);
-
-enum page_search_flags {
-  Z_MODIFY = 1,
-  Z_ROOTONLY = 2,
-  Z_FIRST = 4,
-  Z_LAST = 8,
-};
-MDBX_INTERNAL int __must_check_result tree_search(MDBX_cursor *mc, const MDBX_val *key, int flags);
 
 #define MDBX_SPLIT_REPLACE MDBX_APPENDDUP /* newkey is not new */
 MDBX_INTERNAL int __must_check_result page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *const newdata,
@@ -4729,7 +4815,7 @@ __cold static int compacting_walk(ctx_t *ctx, MDBX_cursor *mc, pgno_t *const par
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  rc = tree_search_finalize(mc, nullptr, Z_FIRST);
+  rc = tree_search_continue(mc, nullptr, Z_FIRST);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -8605,7 +8691,7 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
     if (mp->txnid < entry->trunk_txnid) {
       /* Попали на более старую страницу, такое может быть только при "схлопывании" b-tree,
        * когда целевой ключ был удален вместе с ведущими к нему branch-страницами. */
-      tASSERT(txn, !node_search(&cx.outer, &aligned.key).exact);
+      tASSERT(txn, !tree_search_foliage(&cx.outer, &aligned.key).exact);
       goto notfound_elevate_trunk;
     }
 
@@ -8625,24 +8711,24 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
      * В зоне branch-страниц дерева следовало-бы продолжить поиск, но в случае листовой страницы можно
      * быть уверенным что ключ отсутствует, так он больше последнего ключа на этой странице и меньше
      * первого на следующей, а таких ключей нет физически. */
-    tASSERT(txn, !node_search(&cx.outer, &aligned.key).exact);
+    tASSERT(txn, !tree_search_foliage(&cx.outer, &aligned.key).exact);
     goto notfound_elevate_trunk;
   }
 
   trunk_txnid = mp->txnid;
-  struct node_search_result nsr = node_search(&cx.outer, &aligned.key);
-  if (!nsr.exact) {
+  sfr_t sfr = tree_search_foliage(&cx.outer, &aligned.key);
+  if (!sfr.exact) {
     tASSERT(txn, !entry->offset || trunk_txnid > entry->trunk_txnid);
     goto not_found;
   }
 
-  if (unlikely(node_flags(nsr.node) & N_DUP)) {
+  if (unlikely(node_flags(sfr.node) & N_DUP)) {
     /* TODO: It is possible to implement support for multivalues, but need to think through the usage scenarios. */
     err = MDBX_EMULTIVAL;
     return cache_error(LOG_IFERR(err));
   }
 
-  err = node_read(&cx.outer, nsr.node, data, mp);
+  err = node_read(&cx.outer, sfr.node, data, mp);
   if (unlikely(err != MDBX_SUCCESS))
     return cache_error(LOG_IFERR(err));
 
@@ -9006,7 +9092,7 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result, uint64_t in
          *  - при обновлении maindb.sequence высталяется DBI_DIRTY, что приведет
          *    к обновлению meta.maindb.mod_txnid = current_txnid;
          *  - однако, если в само дерево maindb обновление не вносились и оно
-         *    не пустое, то корневая страницы останеться с прежним txnid и из-за
+         *    не пустое, то корневая страницы останется с прежним txnid и из-за
          *    этого ложно сработает coherency_check().
          *
          * Временное (текущее) решение: Принудительно обновляем корневую
@@ -13440,48 +13526,85 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION pgno_t pgno_ceil2os_pgno(const MDBX
 
 /*----------------------------------------------------------------------------*/
 
-MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_int_inline(const size_t expected_alignment, const MDBX_val *a,
-                                                                     const MDBX_val *b) {
+MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_uint_inline(const size_t expected_alignment,
+                                                                      const MDBX_val *a, const MDBX_val *b) {
   if (likely(a->iov_len == b->iov_len)) {
     if (sizeof(size_t) > 7 && likely(a->iov_len == 8))
-      return CMP2INT(unaligned_peek_u64(expected_alignment, a->iov_base),
-                     unaligned_peek_u64(expected_alignment, b->iov_base));
+      return cmp_uint64_unchecked(expected_alignment, a, b);
     if (likely(a->iov_len == 4))
-      return CMP2INT(unaligned_peek_u32(expected_alignment, a->iov_base),
-                     unaligned_peek_u32(expected_alignment, b->iov_base));
+      return cmp_uint32_unchecked(expected_alignment, a, b);
     if (sizeof(size_t) < 8 && likely(a->iov_len == 8))
-      return CMP2INT(unaligned_peek_u64(expected_alignment, a->iov_base),
-                     unaligned_peek_u64(expected_alignment, b->iov_base));
+      return cmp_uint64_unchecked(expected_alignment, a, b);
   }
   ERROR("mismatch and/or invalid size %p.%zu/%p.%zu for INTEGERKEY/INTEGERDUP", a->iov_base, a->iov_len, b->iov_base,
         b->iov_len);
   return 0;
 }
 
-MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_int_unaligned(const MDBX_val *a, const MDBX_val *b) {
-  return cmp_int_inline(1, a, b);
+MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_uint32_inline(const size_t expected_alignment,
+                                                                        const MDBX_val *a, const MDBX_val *b) {
+  if (likely(a->iov_len == b->iov_len && a->iov_len == 4))
+    return cmp_uint32_unchecked(expected_alignment, a, b);
+  ERROR("mismatch and/or invalid size %p.%zu/%p.%zu for INTEGERKEY/INTEGERDUP", a->iov_base, a->iov_len, b->iov_base,
+        b->iov_len);
+  return 0;
 }
 
-#ifndef cmp_int_align2
+MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_uint64_inline(const size_t expected_alignment,
+                                                                        const MDBX_val *a, const MDBX_val *b) {
+  if (likely(a->iov_len == b->iov_len && a->iov_len == 8))
+    return cmp_uint64_unchecked(expected_alignment, a, b);
+  ERROR("mismatch and/or invalid size %p.%zu/%p.%zu for INTEGERKEY/INTEGERDUP", a->iov_base, a->iov_len, b->iov_base,
+        b->iov_len);
+  return 0;
+}
+
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_uint_unaligned(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint_inline(1, a, b);
+}
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_uint32_unaligned(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint32_inline(1, a, b);
+}
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_uint64_unaligned(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint64_inline(1, a, b);
+}
+
+#ifndef cmp_uint_align2
 /* Compare two items pointing at 2-byte aligned unsigned int's. */
-MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_int_align2(const MDBX_val *a, const MDBX_val *b) {
-  return cmp_int_inline(2, a, b);
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_uint_align2(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint_inline(2, a, b);
 }
-#endif /* cmp_int_align2 */
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_uint32_align2(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint32_inline(2, a, b);
+}
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_uint64_align2(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint64_inline(2, a, b);
+}
+#endif /* cmp_uint_align2 */
 
-#ifndef cmp_int_align4
+#ifndef cmp_uint_align4
 /* Compare two items pointing at 4-byte aligned unsigned int's. */
-MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_int_align4(const MDBX_val *a, const MDBX_val *b) {
-  return cmp_int_inline(4, a, b);
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_uint_align4(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint_inline(4, a, b);
 }
-#endif /* cmp_int_align4 */
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_uint32_align4(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint32_inline(4, a, b);
+}
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_uint64_align4(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint64_inline(4, a, b);
+}
+#endif /* cmp_uint_align4 */
+
+MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_len(size_t a, size_t b) {
+  const intptr_t diff_len = a - b;
+  assert(diff_len == (int)diff_len);
+  /* кастинг допустим, так как длина ключей проверяется и не должна превышать MAX_INT. */
+  return (int)diff_len;
+}
 
 /* Compare two items lexically */
 MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_lexical(const MDBX_val *a, const MDBX_val *b) {
-  if (a->iov_len == b->iov_len)
-    return a->iov_len ? memcmp(a->iov_base, b->iov_base, a->iov_len) : 0;
-
-  const int diff_len = (a->iov_len < b->iov_len) ? -1 : 1;
+  const int diff_len = cmp_len(a->iov_len, b->iov_len);
   const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
   int diff_data = shortest ? memcmp(a->iov_base, b->iov_base, shortest) : 0;
   return likely(diff_data) ? diff_data : diff_len;
@@ -13546,12 +13669,12 @@ MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_reverse(const MDBX_val *a, const MDBX_v
         return (xa < xb) ? -1 : 1;
     }
   }
-  return CMP2INT(a->iov_len, b->iov_len);
+  return cmp_len(a->iov_len, b->iov_len);
 }
 
 /* Fast non-lexically comparator */
 MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_lenfast(const MDBX_val *a, const MDBX_val *b) {
-  int diff = CMP2INT(a->iov_len, b->iov_len);
+  int diff = cmp_len(a->iov_len, b->iov_len);
   return (likely(diff) || a->iov_len == 0) ? diff : memcmp(a->iov_base, b->iov_base, a->iov_len);
 }
 
@@ -15322,6 +15445,8 @@ __hot int cursor_put_checklen(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *da
       cASSERT(mc, !"key-size is invalid for MDBX_INTEGERKEY");
       return MDBX_BAD_VALSIZE;
     }
+    if (unlikely(mc->clc->k.lmin != mc->clc->k.lmax))
+      mc->clc->k.lmin = mc->clc->k.lmax = key->iov_len;
   }
   if (mc->tree->flags & MDBX_INTEGERDUP) {
     if (data->iov_len == 8) {
@@ -15353,6 +15478,8 @@ __hot int cursor_put_checklen(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *da
       cASSERT(mc, !"data-size is invalid for MDBX_INTEGERKEY");
       return MDBX_BAD_VALSIZE;
     }
+    if (unlikely(mc->clc->v.lmin != mc->clc->v.lmax))
+      mc->clc->v.lmin = mc->clc->v.lmax = data->iov_len;
   }
   return cursor_put(mc, key, data, flags);
 }
@@ -15690,9 +15817,9 @@ continue_other_pages:
 
 search_node:
   cASSERT(mc, is_pointed(mc) && !inner_pointed(mc));
-  struct node_search_result nsr = node_search(mc, &aligned.key);
-  node = nsr.node;
-  ret.exact = nsr.exact;
+  sfr_t sr = tree_search_foliage(mc, &aligned.key);
+  node = sr.node;
+  ret.exact = sr.exact;
   if (!ret.exact) {
     if (op < MDBX_SET_RANGE)
       goto target_not_found;
@@ -16509,8 +16636,8 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags, MDBX_cmp_func
       const uint32_t seq = dbi_seq_next(env, dbi);
       const uint16_t db_flags = user_flags & DB_PERSISTENT_FLAGS;
       eASSERT(env, txn->dbs[dbi].height == 0 && txn->dbs[dbi].items == 0 && txn->dbs[dbi].root == P_INVALID);
-      env->kvs[dbi].clc.k.cmp = keycmp ? keycmp : builtin_keycmp(user_flags);
-      env->kvs[dbi].clc.v.cmp = datacmp ? datacmp : builtin_datacmp(user_flags);
+      env->kvs[dbi].clc.k.cmp = keycmp;
+      env->kvs[dbi].clc.v.cmp = datacmp;
       txn->dbs[dbi].flags = db_flags;
       txn->dbs[dbi].dupfix_size = 0;
       if (unlikely(tbl_setup(env, &env->kvs[dbi], &txn->dbs[dbi]))) {
@@ -16524,6 +16651,7 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags, MDBX_cmp_func
       txn->dbi_seqs[dbi] = seq;
       txn->dbi_state[dbi] = DBI_LINDO | DBI_VALID | DBI_CREAT | DBI_DIRTY;
       txn->flags |= MDBX_TXN_DIRTY;
+      return MDBX_SUCCESS;
     }
   }
 
@@ -16533,6 +16661,7 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags, MDBX_cmp_func
     if (env->dbs_flags[dbi] & DB_VALID)
       return MDBX_EINVAL;
     env->kvs[dbi].clc.k.cmp = keycmp;
+    clc_reset_methods(&env->kvs[dbi].clc.k);
   }
 
   if (!datacmp)
@@ -16541,6 +16670,7 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags, MDBX_cmp_func
     if (env->dbs_flags[dbi] & DB_VALID)
       return MDBX_EINVAL;
     env->kvs[dbi].clc.v.cmp = datacmp;
+    clc_reset_methods(&env->kvs[dbi].clc.v);
   }
 
   return MDBX_SUCCESS;
@@ -19390,11 +19520,13 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
     return MDBX_INCOMPATIBLE;
   }
   env->dbs_flags[FREE_DBI] = DB_VALID | MDBX_INTEGERKEY;
-  env->kvs[FREE_DBI].clc.k.cmp = cmp_int_align4; /* aligned MDBX_INTEGERKEY */
+  env->kvs[FREE_DBI].clc.k.cmp = cmp_uint_align4; /* aligned MDBX_INTEGERKEY */
   env->kvs[FREE_DBI].clc.k.lmax = env->kvs[FREE_DBI].clc.k.lmin = 8;
   env->kvs[FREE_DBI].clc.v.cmp = cmp_lenfast;
   env->kvs[FREE_DBI].clc.v.lmin = 4;
   env->kvs[FREE_DBI].clc.v.lmax = mdbx_env_get_maxvalsize_ex(env, MDBX_INTEGERKEY);
+  clc_reset_methods(&env->kvs[FREE_DBI].clc.k);
+  clc_reset_methods(&env->kvs[FREE_DBI].clc.v);
 
   if (env->ps != header.pagesize)
     env_setup_pagesize(env, header.pagesize);
@@ -19652,7 +19784,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
         meta_troika_dump(env, &troika);
         return MDBX_CORRUPTED;
       }
-    
+
     purge_meta_head:
       if (env->flags & MDBX_RDONLY) {
         ERROR("%s and rollback needed: (from head %" PRIaTXN " to steady %" PRIaTXN ")%s",
@@ -27741,87 +27873,6 @@ node_t *node_shrink(page_t *mp, size_t indx, node_t *node) {
   return ptr_disp(node, delta);
 }
 
-__hot struct node_search_result node_search(MDBX_cursor *mc, const MDBX_val *key) {
-  page_t *mp = mc->pg[mc->top];
-  const intptr_t nkeys = page_numkeys(mp);
-  DKBUF_DEBUG;
-
-  DEBUG("searching %zu keys in %s %spage %" PRIaPGNO, nkeys, is_leaf(mp) ? "leaf" : "branch",
-        is_subpage(mp) ? "sub-" : "", mp->pgno);
-
-  struct node_search_result ret;
-  ret.exact = false;
-  STATIC_ASSERT(P_BRANCH == 1);
-  intptr_t low = mp->flags & P_BRANCH;
-  intptr_t high = nkeys - 1;
-  if (unlikely(high < low)) {
-    mc->ki[mc->top] = 0;
-    ret.node = nullptr;
-    return ret;
-  }
-
-  intptr_t i;
-  MDBX_cmp_func cmp = mc->clc->k.cmp;
-  MDBX_val nodekey;
-  if (unlikely(is_dupfix_leaf(mp))) {
-    cASSERT(mc, mp->dupfix_ksize == mc->tree->dupfix_size);
-    nodekey.iov_len = mp->dupfix_ksize;
-    do {
-      i = (low + high) >> 1;
-      nodekey.iov_base = page_dupfix_ptr(mp, i, nodekey.iov_len);
-      cASSERT(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(nodekey.iov_base, nodekey.iov_len));
-      int cr = cmp(key, &nodekey);
-      DEBUG("found leaf index %zu [%s], rc = %i", i, DKEY_DEBUG(&nodekey), cr);
-      if (cr > 0)
-        low = ++i;
-      else if (cr < 0)
-        high = i - 1;
-      else {
-        ret.exact = true;
-        break;
-      }
-    } while (likely(low <= high));
-
-    /* store the key index */
-    mc->ki[mc->top] = (indx_t)i;
-    ret.node = (i < nkeys) ? /* fake for DUPFIX */ (node_t *)(intptr_t)-1
-                           : /* There is no entry larger or equal to the key. */ nullptr;
-    return ret;
-  }
-
-  if (MDBX_UNALIGNED_OK < 4 && is_branch(mp) && cmp == cmp_int_align2)
-    /* Branch pages have no data, so if using integer keys,
-     * alignment is guaranteed. Use faster cmp_int_align4(). */
-    cmp = cmp_int_align4;
-
-  node_t *node;
-  do {
-    i = (low + high) >> 1;
-    node = page_node(mp, i);
-    nodekey.iov_len = node_ks(node);
-    nodekey.iov_base = node_key(node);
-    cASSERT(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(nodekey.iov_base, nodekey.iov_len));
-    int cr = cmp(key, &nodekey);
-    if (is_leaf(mp))
-      DEBUG("found leaf index %zu [%s], rc = %i", i, DKEY_DEBUG(&nodekey), cr);
-    else
-      DEBUG("found branch index %zu [%s -> %" PRIaPGNO "], rc = %i", i, DKEY_DEBUG(&nodekey), node_pgno(node), cr);
-    if (cr > 0)
-      low = ++i;
-    else if (cr < 0)
-      high = i - 1;
-    else {
-      ret.exact = true;
-      break;
-    }
-  } while (likely(low <= high));
-
-  /* store the key index */
-  mc->ki[mc->top] = (indx_t)i;
-  ret.node = (i < nkeys) ? page_node(mp, i) : /* There is no entry larger or equal to the key. */ nullptr;
-  return ret;
-}
-
 #if defined(_WIN32) || defined(_WIN64)
 
 #include <psapi.h>
@@ -35662,6 +35713,8 @@ int tbl_setup(const MDBX_env *env, volatile kvx_t *const kvx, const tree_t *cons
 
   kvx->clc.k.lmin = keysize_min(db->flags);
   kvx->clc.k.lmax = env_keysize_max(env, db->flags);
+  clc_reset_methods(&kvx->clc.k);
+  clc_reset_methods(&kvx->clc.v);
   if (unlikely(!kvx->clc.k.cmp)) {
     kvx->clc.v.cmp = builtin_datacmp(db->flags);
     kvx->clc.k.cmp = builtin_keycmp(db->flags);
@@ -35688,8 +35741,8 @@ int tbl_fetch(MDBX_txn *txn, MDBX_cursor *mc, size_t dbi, const MDBX_val *name, 
     return err;
   }
 
-  struct node_search_result nsr = node_search(mc, name);
-  if (unlikely(!nsr.exact)) {
+  sfr_t sr = tree_search_foliage(mc, name);
+  if (unlikely(!sr.exact)) {
   notfound:
     if (dbi < txn->env->n_dbi && (txn->env->dbs_flags[dbi] & DB_VALID) && !(wanna_flags & MDBX_CREATE))
       NOTICE("dbi %zu refs to non-existing table `%.*s` for txn %" PRIaTXN " (err %d)", dbi, (int)name->iov_len,
@@ -35697,14 +35750,14 @@ int tbl_fetch(MDBX_txn *txn, MDBX_cursor *mc, size_t dbi, const MDBX_val *name, 
     return MDBX_NOTFOUND;
   }
 
-  if (unlikely((node_flags(nsr.node) & (N_DUP | N_TREE)) != N_TREE)) {
+  if (unlikely((node_flags(sr.node) & (N_DUP | N_TREE)) != N_TREE)) {
     NOTICE("dbi %zu refs to not a named table `%.*s` for txn %" PRIaTXN " (%s)", dbi, (int)name->iov_len,
            (const char *)name->iov_base, txn->txnid, "wrong node-flags");
     return MDBX_INCOMPATIBLE /* not a named DB */;
   }
 
   MDBX_val data;
-  err = node_read(mc, nsr.node, &data, mc->pg[mc->top]);
+  err = node_read(mc, sr.node, &data, mc->pg[mc->top]);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
@@ -36826,12 +36879,10 @@ int tree_propagate_key(MDBX_cursor *mc, const MDBX_val *key) {
   return MDBX_SUCCESS;
 }
 
-/* Search for the lowest key under the current branch page.
- * This just bypasses a numkeys check in the current page
- * before calling tree_search_finalize(), because the callers
- * are all in situations where the current page is known to
- * be underfilled. */
-__hot int tree_search_lowest(MDBX_cursor *mc) {
+/* Search for the lowest key under the current branch page. This just bypasses a numkeys check in the current page
+ * before calling tree_search_continue(), because the callers are all in situations where the current page is known
+ * to be underfilled. */
+__hot __noinline int tree_search_lowest(MDBX_cursor *mc) {
   cASSERT(mc, mc->top >= 0);
   page_t *mp = mc->pg[mc->top];
   cASSERT(mc, is_branch(mp));
@@ -36845,7 +36896,7 @@ __hot int tree_search_lowest(MDBX_cursor *mc) {
   err = cursor_push(mc, mp, 0);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
-  return tree_search_finalize(mc, nullptr, Z_FIRST);
+  return tree_search_continue(mc, nullptr, Z_FIRST);
 }
 
 __hot int tree_search(MDBX_cursor *mc, const MDBX_val *key, int flags) {
@@ -36904,46 +36955,10 @@ __hot int tree_search(MDBX_cursor *mc, const MDBX_val *key, int flags) {
   if (flags & Z_ROOTONLY)
     return MDBX_SUCCESS;
 
-  return tree_search_finalize(mc, key, flags);
+  return tree_search_continue(mc, key, flags);
 }
 
-__hot __noinline size_t tree_search_branch(MDBX_cursor *mc, const MDBX_val *key) {
-  page_t *mp = mc->pg[mc->top];
-  cASSERT(mc, (page_type(mp) & P_TYPE) == P_BRANCH);
-  const size_t nkeys = page_numkeys(mp);
-  cASSERT(mc, nkeys >= 2);
-  DKBUF_DEBUG;
-  DEBUG("searching %zu keys in branch-page %" PRIaPGNO, nkeys, mp->pgno);
-
-  MDBX_cmp_func comparator = mc->clc->k.cmp;
-  if (MDBX_UNALIGNED_OK < 4 && comparator == cmp_int_align2)
-    /* Branch pages have no data, so if using integer keys,
-     * alignment is guaranteed. Use faster cmp_int_align4(). */
-    comparator = cmp_int_align4;
-
-  if (unlikely(nkeys < 2))
-    return 0;
-
-  size_t lo = 1 /* mc->top != 0 */, size = nkeys - lo;
-  do {
-    const size_t half_floor = size >> 1;
-    const size_t half_ceil = (size + 1) >> 1;
-    const size_t it = lo + half_floor;
-    MDBX_val node_key = get_key(page_node(mp, it));
-    cASSERT(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(node_key.iov_base, node_key.iov_len));
-    intptr_t cmp = comparator(&node_key, key);
-    DEBUG("search-step branch %zu [%s -> %" PRIaPGNO "], cmp %zi", it, DKEY_DEBUG(&node_key),
-          node_pgno(page_node(mp, it)), cmp);
-    if (cmp == 0)
-      return it;
-    cmp >>= CHAR_BIT * sizeof(cmp) - 1;
-    lo += half_ceil & cmp;
-    size -= half_ceil;
-  } while (size);
-  return lo - 1;
-}
-
-__hot __noinline int tree_search_finalize(MDBX_cursor *mc, const MDBX_val *key, int flags) {
+__hot __noinline int tree_search_continue(MDBX_cursor *mc, const MDBX_val *key, int flags) {
   cASSERT(mc, !is_poor(mc));
   DKBUF_DEBUG;
   int err;
@@ -36993,6 +37008,487 @@ __hot __noinline int tree_search_finalize(MDBX_cursor *mc, const MDBX_val *key, 
      be_filled(mc); */
   return MDBX_SUCCESS;
 }
+
+/* ---------------------------------------------------------------------------------------------------- */
+
+#if defined(__GNUC__) && !(defined(__e2k__) || defined(__elbrus__))
+#define CLEAR_VALUE_PROPAGATION(VAR) __asm__ __volatile__("" : "+r"(cmp))
+#else
+#define CLEAR_VALUE_PROPAGATION(VAR)                                                                                   \
+  do {                                                                                                                 \
+  } while (0)
+#endif
+
+#define BINARY_BRANCHLESS_SEARCH_CYCLE_BEGIN(IT, CMP, LOWER, SIZE)                                                     \
+  intptr_t adjust = SIZE - 1, half = adjust >> 1;                                                                      \
+  adjust &= 1;                                                                                                         \
+  IT = LOWER + half
+
+#define BINARY_BRANCHLESS_SEARCH_CYCLE_END(IT, CMP, LOWER, SIZE)                                                       \
+  CMP >>= CHAR_BIT * sizeof(CMP) - 1;                                                                                  \
+  CLEAR_VALUE_PROPAGATION(CMP);                                                                                        \
+  LOWER += (half + 1) & CMP;                                                                                           \
+  SIZE = half + (CMP & adjust)
+
+static int null_comparator(const MDBX_val *a, const MDBX_val *b) {
+  (void)a;
+  (void)b;
+  MDBX_PANIC("must not be called");
+  return 0;
+}
+
+#define SEARCH_FOLIAGE(NAME, BRANCH_COMPARATOR, LEAF_COMPARATOR, BOOL_DIFFERENT_COMPARATORS, BOOL_DUPFIXED)            \
+  MDBX_NOTHROW_PURE_FUNCTION __hot static sfr_t search_foliage_##NAME(MDBX_cursor *mc, const MDBX_val *key) {          \
+    page_t *mp = mc->pg[mc->top];                                                                                      \
+    const intptr_t nkeys = page_numkeys(mp);                                                                           \
+    DEBUG("searching %zu keys in %s %spage %" PRIaPGNO, nkeys, is_leaf(mp) ? "leaf" : "branch",                        \
+          is_subpage(mp) ? "sub-" : "", mp->pgno);                                                                     \
+                                                                                                                       \
+    sfr_t ret;                                                                                                         \
+    ret.exact = false;                                                                                                 \
+    STATIC_ASSERT(P_BRANCH == 1);                                                                                      \
+    intptr_t lo = mp->flags & P_BRANCH;                                                                                \
+    intptr_t hi = nkeys - 1;                                                                                           \
+    if (unlikely(hi < lo)) {                                                                                           \
+      mc->ki[mc->top] = 0;                                                                                             \
+      ret.node = nullptr;                                                                                              \
+      return ret;                                                                                                      \
+    }                                                                                                                  \
+                                                                                                                       \
+    intptr_t scope = nkeys - lo, cmp, it;                                                                              \
+    node_t *node = (node_t *)(intptr_t)-1;                                                                             \
+    MDBX_val node_key;                                                                                                 \
+    if ((BOOL_DIFFERENT_COMPARATORS | BOOL_DUPFIXED) && lo == 0) {                                                     \
+      assert(is_leaf(mp));                                                                                             \
+      if (BOOL_DUPFIXED) {                                                                                             \
+        cASSERT(mc, is_dupfix_leaf(mp));                                                                               \
+        cASSERT(mc, mp->dupfix_ksize == mc->tree->dupfix_size);                                                        \
+        node_key.iov_len = mp->dupfix_ksize;                                                                           \
+        TRACE(">> %s lo %zu, size %zu, nkeys %zu", "leaf-dupfix", lo, scope, nkeys);                                   \
+        do {                                                                                                           \
+          MDBX_CURSOR_STC_INC(mc);                                                                                     \
+          BINARY_BRANCHLESS_SEARCH_CYCLE_BEGIN(it, cmp, lo, scope);                                                    \
+          node_key.iov_base = page_dupfix_ptr(mp, it, node_key.iov_len);                                               \
+          cASSERT(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(node_key.iov_base, node_key.iov_len));                \
+          cmp = LEAF_COMPARATOR(&node_key, key);                                                                       \
+          TRACE("== i %zu, cmp %zi", it, cmp);                                                                         \
+          if (cmp == 0)                                                                                                \
+            goto found;                                                                                                \
+          BINARY_BRANCHLESS_SEARCH_CYCLE_END(it, cmp, lo, scope);                                                      \
+          TRACE("== lo %zi, size %zi", lo, scope);                                                                     \
+        } while (scope > 0);                                                                                           \
+                                                                                                                       \
+        it += cmp & 1;                                                                                                 \
+        /* store the key index */                                                                                      \
+        mc->ki[mc->top] = (indx_t)it;                                                                                  \
+        ret.node =                                                                                                     \
+            (it < nkeys) ? /* fake for DUPFIX */ node : /* There is no entry larger or equal to the key. */ nullptr;   \
+        TRACE("<< lo %zu, size %zu, nkeys %zu, i %zu, %c", lo, scope, nkeys, it, 'N');                                 \
+        return ret;                                                                                                    \
+      } else {                                                                                                         \
+        cASSERT(mc, !is_dupfix_leaf(mp));                                                                              \
+        TRACE(">> %s lo %zu, size %zu, nkeys %zu", "leaf", lo, scope, nkeys);                                          \
+        do {                                                                                                           \
+          MDBX_CURSOR_STC_INC(mc);                                                                                     \
+          BINARY_BRANCHLESS_SEARCH_CYCLE_BEGIN(it, cmp, lo, scope);                                                    \
+          node = page_node(mp, it);                                                                                    \
+          node_key = get_key(node);                                                                                    \
+          cASSERT(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(node_key.iov_base, node_key.iov_len));                \
+          cmp = LEAF_COMPARATOR(&node_key, key);                                                                       \
+          TRACE("== i %zu, cmp %zi", it, cmp);                                                                         \
+          if (cmp == 0)                                                                                                \
+            goto found;                                                                                                \
+          BINARY_BRANCHLESS_SEARCH_CYCLE_END(it, cmp, lo, scope);                                                      \
+          TRACE("== lo %zi, size %zi", lo, scope);                                                                     \
+        } while (scope > 0);                                                                                           \
+                                                                                                                       \
+        it += cmp & 1;                                                                                                 \
+        /* store the key index */                                                                                      \
+        mc->ki[mc->top] = (indx_t)it;                                                                                  \
+        ret.node = (it < nkeys) ? page_node(mp, it) : /* There is no entry larger or equal to the key. */ nullptr;     \
+        TRACE("<< lo %zu, size %zu, nkeys %zu, i %zu, %c", lo, scope, nkeys, it, 'N');                                 \
+        return ret;                                                                                                    \
+      }                                                                                                                \
+    }                                                                                                                  \
+                                                                                                                       \
+    TRACE(">> %s lo %zu, size %zu, nkeys %zu", "branch", lo, scope, nkeys);                                            \
+    assert(!is_dupfix_leaf(mp));                                                                                       \
+    assert(is_branch(mp) || !(BOOL_DIFFERENT_COMPARATORS | BOOL_DUPFIXED));                                            \
+    do {                                                                                                               \
+      MDBX_CURSOR_STC_INC(mc);                                                                                         \
+      BINARY_BRANCHLESS_SEARCH_CYCLE_BEGIN(it, cmp, lo, scope);                                                        \
+      node = page_node(mp, it);                                                                                        \
+      node_key = get_key(node);                                                                                        \
+      cASSERT(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(node_key.iov_base, node_key.iov_len));                    \
+      cmp = BRANCH_COMPARATOR(&node_key, key);                                                                         \
+      TRACE("== i %zu, cmp %zi", it, cmp);                                                                             \
+      if (cmp == 0)                                                                                                    \
+        goto found;                                                                                                    \
+      BINARY_BRANCHLESS_SEARCH_CYCLE_END(it, cmp, lo, scope);                                                          \
+      TRACE("== lo %zi, size %zi", lo, scope);                                                                         \
+    } while (scope > 0);                                                                                               \
+                                                                                                                       \
+    it += cmp & 1;                                                                                                     \
+    /* store the key index */                                                                                          \
+    mc->ki[mc->top] = (indx_t)it;                                                                                      \
+    ret.node = (it < nkeys) ? page_node(mp, it) : /* There is no entry larger or equal to the key. */ nullptr;         \
+    TRACE("<< lo %zu, size %zu, nkeys %zu, i %zu, %c", lo, scope, nkeys, it, 'N');                                     \
+    return ret;                                                                                                        \
+                                                                                                                       \
+  found:                                                                                                               \
+    TRACE("<< lo %zu, size %zu, nkeys %zu, i %zu, %c", lo, scope, nkeys, it, 'Y');                                     \
+    mc->ki[mc->top] = (indx_t)it;                                                                                      \
+    ret.node = node;                                                                                                   \
+    ret.exact = true;                                                                                                  \
+    return ret;                                                                                                        \
+  }
+
+SEARCH_FOLIAGE(lexical_usual, cmp_lexical, null_comparator, false, false)
+SEARCH_FOLIAGE(reverse_usual, cmp_reverse, null_comparator, false, false)
+SEARCH_FOLIAGE(lenfast_usual, cmp_lenfast, null_comparator, false, false)
+SEARCH_FOLIAGE(custom_usual, mc->clc->k.cmp, null_comparator, false, false)
+
+#if defined(cmp_uint_align4)
+SEARCH_FOLIAGE(ordinal_usual, cmp_uint_align4, null_comparator, false, false)
+#else
+SEARCH_FOLIAGE(ordinal_usual, cmp_uint_align4, cmp_uint_unaligned, true, false)
+#endif
+
+#if defined(cmp_uint32_align4_unchecked)
+SEARCH_FOLIAGE(uint32_usual, cmp_uint32_align4_unchecked, null_comparator, false, false)
+#else
+SEARCH_FOLIAGE(uint32_usual, cmp_uint32_align4_unchecked, cmp_uint32_unaligned_unchecked, true, false)
+#endif
+
+#if defined(cmp_uint64_align4_unchecked)
+SEARCH_FOLIAGE(uint64_usual, cmp_uint64_align4_unchecked, null_comparator, false, false)
+#else
+SEARCH_FOLIAGE(uint64_usual, cmp_uint64_align4_unchecked, cmp_uint64_unaligned_unchecked, true, false)
+#endif
+
+SEARCH_FOLIAGE(lexical_dupfix, cmp_lexical, cmp_lexical, false, true)
+SEARCH_FOLIAGE(reverse_dupfix, cmp_reverse, cmp_reverse, false, true)
+SEARCH_FOLIAGE(lenfast_dupfix, cmp_lenfast, cmp_lenfast, false, true)
+SEARCH_FOLIAGE(custom_dupfix, mc->clc->k.cmp, mc->clc->k.cmp, false, true)
+
+SEARCH_FOLIAGE(ordinal_dupfix, cmp_uint_align4, cmp_uint_unaligned, true, true)
+SEARCH_FOLIAGE(uint32_dupfix, cmp_uint32_align4_unchecked, cmp_uint32_unaligned_unchecked, true, true)
+SEARCH_FOLIAGE(uint64_dupfix, cmp_uint64_align4_unchecked, cmp_uint64_unaligned_unchecked, true, true)
+
+#if MDBX_DEBUG_SEARCH_DISPATCHING
+
+MDBX_MAYBE_UNUSED __cold static sfr_t old_node_search(MDBX_cursor *mc, const MDBX_val *key) {
+  page_t *mp = mc->pg[mc->top];
+  const intptr_t nkeys = page_numkeys(mp);
+  DEBUG("searching %zu keys in %s %spage %" PRIaPGNO, nkeys, is_leaf(mp) ? "leaf" : "branch",
+        is_subpage(mp) ? "sub-" : "", mp->pgno);
+
+  sfr_t ret;
+  ret.exact = false;
+  STATIC_ASSERT(P_BRANCH == 1);
+  intptr_t lo = mp->flags & P_BRANCH;
+  intptr_t hi = nkeys - 1;
+  if (unlikely(hi < lo)) {
+    mc->ki[mc->top] = 0;
+    ret.node = nullptr;
+    return ret;
+  }
+
+  intptr_t i;
+  MDBX_cmp_func comparator = mc->clc->k.cmp;
+  MDBX_val nodekey;
+  if (unlikely(is_dupfix_leaf(mp))) {
+    cASSERT(mc, mp->dupfix_ksize == mc->tree->dupfix_size);
+    nodekey.iov_len = mp->dupfix_ksize;
+    TRACE(">> lo %zi, hi %zi, size %zi, nkeys %zu", lo, hi, hi - lo + 1, nkeys);
+    do {
+      MDBX_CURSOR_STC_INC(mc);
+      i = (lo + hi) >> 1;
+      nodekey.iov_base = page_dupfix_ptr(mp, i, nodekey.iov_len);
+      cASSERT(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(nodekey.iov_base, nodekey.iov_len));
+      int cmp = comparator(key, &nodekey);
+      TRACE("== i %zu, cmp %i", i, cmp);
+      if (cmp > 0)
+        lo = ++i;
+      else if (cmp < 0)
+        hi = i - 1;
+      else {
+        ret.exact = true;
+        break;
+      }
+      TRACE("== lo %zi, hi %zi, size %zi", lo, hi, hi - lo + 1);
+    } while (likely(lo <= hi));
+
+    TRACE("<< lo %zi, hi %zi, size %zi, nkeys %zu, i %zu, %c", lo, hi, hi - lo + 1, nkeys, i, ret.exact ? 'Y' : 'N');
+
+    /* store the key index */
+    mc->ki[mc->top] = (indx_t)i;
+    ret.node = (i < nkeys) ? /* fake for DUPFIX */ (node_t *)(intptr_t)-1
+                           : /* There is no entry larger or equal to the key. */ nullptr;
+    return ret;
+  }
+
+  if (MDBX_UNALIGNED_OK < 4 && is_branch(mp) && comparator == cmp_uint_align2)
+    /* Branch pages have no data, so if using integer keys,
+     * alignment is guaranteed. Use faster cmp_uint_align4(). */
+    comparator = cmp_uint_align4;
+
+  node_t *node;
+  TRACE(">> lo %zi, hi %zi, size %zi, nkeys %zu", lo, hi, hi - lo + 1, nkeys);
+  do {
+    MDBX_CURSOR_STC_INC(mc);
+    i = (lo + hi) >> 1;
+    node = page_node(mp, i);
+    nodekey.iov_len = node_ks(node);
+    nodekey.iov_base = node_key(node);
+    cASSERT(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(nodekey.iov_base, nodekey.iov_len));
+    int cmp = comparator(key, &nodekey);
+    TRACE("== i %zu, cmp %i", i, cmp);
+    if (cmp > 0)
+      lo = ++i;
+    else if (cmp < 0)
+      hi = i - 1;
+    else {
+      ret.exact = true;
+      break;
+    }
+    TRACE("== lo %zi, hi %zi, size %zi", lo, hi, hi - lo + 1);
+  } while (likely(lo <= hi));
+
+  TRACE("<< lo %zi, hi %zi, size %zi, nkeys %zu, i %zu, %c", lo, hi, hi - lo + 1, nkeys, i, ret.exact ? 'Y' : 'N');
+
+  /* store the key index */
+  mc->ki[mc->top] = (indx_t)i;
+  ret.node = (i < nkeys) ? page_node(mp, i) : /* There is no entry larger or equal to the key. */ nullptr;
+  return ret;
+}
+
+MDBX_MAYBE_UNUSED __cold static size_t old_branch_search(MDBX_cursor *mc, const MDBX_val *key) {
+  sfr_t nsr = old_node_search(mc, key);
+  size_t indx = page_numkeys(mc->pg[mc->top]) - 1;
+  if (likely(nsr.node))
+    indx = mc->ki[mc->top] + (intptr_t)nsr.exact - 1;
+  return indx;
+}
+
+#endif /* MDBX_DEBUG_SEARCH_DISPATCHING */
+
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot static MDBX_search_foliage
+cursor_to_search_foliage(const MDBX_cursor *mc) {
+  MDBX_cmp_func comparator = mc->clc->k.cmp;
+  assert(comparator != nullptr);
+
+  if ((mc->tree->flags & MDBX_DUPFIXED) && is_inner(mc)) {
+
+    if (comparator == cmp_lexical)
+      return search_foliage_lexical_dupfix;
+    if (comparator == cmp_reverse)
+      return search_foliage_reverse_dupfix;
+    if (comparator == cmp_lenfast)
+      return search_foliage_lenfast_dupfix;
+
+    if (mc->tree->flags & MDBX_INTEGERKEY) {
+      size_t ordinal = 0, keylen = mc->tree->dupfix_size;
+      cASSERT(mc, mc->clc->k.lmax == mc->clc->k.lmin && mc->clc->k.lmax == keylen && (keylen == 4 || keylen == 8));
+#ifndef cmp_uint_align2
+      if (comparator == cmp_uint_align2)
+        ordinal = keylen;
+#endif /* cmp_uint_align2 */
+#ifndef cmp_uint_align4
+      if (comparator == cmp_uint_align4)
+        ordinal = keylen;
+#endif /* cmp_uint_align4 */
+      if (comparator == cmp_uint_unaligned)
+        ordinal = keylen;
+      if (ordinal) {
+        if ((mc->txn->env->flags & MDBX_VALIDATION) == 0) {
+          if (ordinal == 4)
+            return search_foliage_uint32_dupfix;
+          if (ordinal == 8)
+            return search_foliage_uint64_dupfix;
+        }
+        return search_foliage_ordinal_dupfix;
+      }
+    }
+
+    return search_foliage_custom_dupfix;
+  }
+
+  if (comparator == cmp_lexical)
+    return search_foliage_lexical_usual;
+  if (comparator == cmp_reverse)
+    return search_foliage_reverse_usual;
+  if (comparator == cmp_lenfast)
+    return search_foliage_lenfast_usual;
+
+  if (mc->tree->flags & MDBX_INTEGERKEY) {
+    size_t ordinal = 0, keylen = mc->clc->k.lmax;
+    cASSERT(mc, mc->clc->k.lmax == mc->clc->k.lmin && (keylen == 4 || keylen == 8));
+#ifndef cmp_uint_align2
+    if (comparator == cmp_uint_align2)
+      ordinal = keylen;
+#endif /* cmp_uint_align2 */
+#ifndef cmp_uint_align4
+    if (comparator == cmp_uint_align4)
+      ordinal = keylen;
+#endif /* cmp_uint_align4 */
+    if (comparator == cmp_uint_unaligned)
+      ordinal = keylen;
+    if (ordinal) {
+      if ((mc->txn->env->flags & MDBX_VALIDATION) == 0 && ordinal == mc->clc->k.lmin) {
+        if (ordinal == 4)
+          return search_foliage_uint32_usual;
+        if (ordinal == 8)
+          return search_foliage_uint64_usual;
+      }
+      return search_foliage_ordinal_usual;
+    }
+  }
+
+  return search_foliage_custom_usual;
+}
+
+__hot sfr_t tree_search_foliage_configure(MDBX_cursor *mc, const MDBX_val *key) {
+  MDBX_search_foliage search_foliage = cursor_to_search_foliage(mc);
+#if MDBX_DEBUG_SEARCH_DISPATCHING
+  const size_t snap_1 = MDBX_CURSOR_STC_GET(mc);
+  sfr_t old = old_node_search(mc, key);
+  int old_i = mc->ki[mc->top];
+  const size_t snap_2 = MDBX_CURSOR_STC_GET(mc);
+  const size_t old_steps = snap_2 - snap_1;
+
+  sfr_t new = search_foliage(mc, key);
+  int new_i = mc->ki[mc->top];
+  const size_t snap_3 = MDBX_CURSOR_STC_GET(mc);
+  const size_t new_steps = snap_3 - snap_2;
+
+  if (new_i != old_i || new.exact != old.exact || new.node != old.node || new_steps > old_steps) {
+    globals.loglevel = MDBX_LOG_TRACE;
+    WARNING("\nfoliage-search-issue: new %i, %c, %p, steps %zu | old %i, %c, %p, steps %zu | retry to debug...", new_i,
+            new.exact ? 'Y' : 'N', (void *)new.node, new_steps, old_i, old.exact ? 'Y' : 'N', (void *)old.node,
+            old_steps);
+    old_node_search((MDBX_cursor *)mc, key);
+    search_foliage(mc, key);
+    mdbx_panic_ex(mc, "new %i, %c, %p, steps %zu | old %i, %c, %p, steps %zu", new_i, new.exact ? 'Y' : 'N',
+                  (void *)new.node, new_steps, old_i, old.exact ? 'Y' : 'N', (void *)old.node, old_steps);
+  }
+  return new;
+#else
+  mc->clc->k.search_foliage = search_foliage;
+  return search_foliage(mc, key);
+#endif /* MDBX_DEBUG_SEARCH_DISPATCHING */
+}
+
+/* ---------------------------------------------------------------------------------------------------- */
+
+#define SEARCH_BRANCH(NAME, COMPARATOR)                                                                                \
+  MDBX_NOTHROW_PURE_FUNCTION __hot static size_t search_branch_##NAME(const MDBX_cursor *mc, const MDBX_val *key) {    \
+    page_t *mp = mc->pg[mc->top];                                                                                      \
+    assert(is_branch(mp));                                                                                             \
+    const size_t nkeys = page_numkeys(mp);                                                                             \
+    cASSERT(mc, nkeys >= 2);                                                                                           \
+    TRACE("searching %zu keys in branch-page %" PRIaPGNO, nkeys, mp->pgno);                                            \
+    intptr_t lo = 1, scope = nkeys - lo, it, cmp;                                                                      \
+    TRACE(">> lo %zu, size %zu, nkeys %zu", lo, scope, nkeys);                                                         \
+    if (likely(nkeys > 1))                                                                                             \
+      do {                                                                                                             \
+        MDBX_CURSOR_STC_INC(mc);                                                                                       \
+        BINARY_BRANCHLESS_SEARCH_CYCLE_BEGIN(it, cmp, lo, scope);                                                      \
+        MDBX_val node_key = get_key(page_node(mp, it));                                                                \
+        cASSERT(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(node_key.iov_base, node_key.iov_len));                  \
+        cmp = COMPARATOR(&node_key, key);                                                                              \
+        TRACE("== i %zu, cmp %zi", it, cmp);                                                                           \
+        if (unlikely(cmp == 0)) {                                                                                      \
+          TRACE("<< lo %zu, size %zu, nkeys %zu, i %zu, %c", lo, scope, nkeys, it, 'Y');                               \
+          return it;                                                                                                   \
+        }                                                                                                              \
+        BINARY_BRANCHLESS_SEARCH_CYCLE_END(it, cmp, lo, scope);                                                        \
+        TRACE("== lo %zi, size %zi", lo, scope);                                                                       \
+      } while (likely(scope > 0));                                                                                     \
+    it = lo - 1;                                                                                                       \
+    TRACE("<< lo %zu, size %zu, nkeys %zu, i %zu, %c", lo, scope, nkeys, it, 'N');                                     \
+    return it;                                                                                                         \
+  }
+
+/* Branch pages have no data, so if using integer keys, alignment is guaranteed. Use faster cmp_uint_align4(). */
+SEARCH_BRANCH(ordinal, cmp_uint_align4)
+SEARCH_BRANCH(uint32, cmp_uint32_align4_unchecked)
+SEARCH_BRANCH(uint64, cmp_uint64_align4_unchecked)
+SEARCH_BRANCH(lexical, cmp_lexical)
+SEARCH_BRANCH(reverse, cmp_reverse)
+SEARCH_BRANCH(lenfast, cmp_lenfast)
+SEARCH_BRANCH(custom, mc->clc->k.cmp)
+
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot static MDBX_search_branch
+cursor_to_search_branch(const MDBX_cursor *mc) {
+  MDBX_cmp_func comparator = mc->clc->k.cmp;
+  assert(comparator != nullptr);
+
+  if (comparator == cmp_lexical)
+    return search_branch_lexical;
+  if (comparator == cmp_reverse)
+    return search_branch_reverse;
+  if (comparator == cmp_lenfast)
+    return search_branch_lenfast;
+
+  if (mc->tree->flags & MDBX_INTEGERKEY) {
+    size_t ordinal = 0, keylen = mc->clc->k.lmax;
+#ifndef cmp_uint_align2
+    if (comparator == cmp_uint_align2)
+      ordinal = keylen;
+#endif /* cmp_uint_align2 */
+#ifndef cmp_uint_align4
+    if (comparator == cmp_uint_align4)
+      ordinal = keylen;
+#endif /* cmp_uint_align4 */
+    if (comparator == cmp_uint_unaligned)
+      ordinal = keylen;
+    if (ordinal) {
+      if ((mc->txn->env->flags & MDBX_VALIDATION) == 0 && ordinal == mc->clc->k.lmin) {
+        if (ordinal == 4)
+          return search_branch_uint32;
+        if (ordinal == 8)
+          return search_branch_uint64;
+      }
+      return search_branch_ordinal;
+    }
+  }
+
+  return search_branch_custom;
+}
+
+size_t tree_search_branch_configure(const MDBX_cursor *mc, const MDBX_val *key) {
+  MDBX_search_branch search_branch = cursor_to_search_branch(mc);
+#if MDBX_DEBUG_SEARCH_DISPATCHING
+  const size_t snap_1 = MDBX_CURSOR_STC_GET(mc);
+  size_t old_i = old_branch_search((MDBX_cursor *)mc, key);
+  const size_t snap_2 = MDBX_CURSOR_STC_GET(mc);
+  const size_t old_steps = snap_2 - snap_1;
+
+  size_t new_i = search_branch(mc, key);
+  const size_t snap_3 = MDBX_CURSOR_STC_GET(mc);
+  const size_t new_steps = snap_3 - snap_2;
+
+  if (new_i != old_i || new_steps > old_steps) {
+    globals.loglevel = MDBX_LOG_TRACE;
+    WARNING("\nbranch-search-issue: new %zi, steps %zu | old %zi, steps %zu | retry to debug...", new_i, new_steps,
+            old_i, old_steps);
+    old_branch_search((MDBX_cursor *)mc, key);
+    search_branch(mc, key);
+    mdbx_panic_ex(mc, "new %zi, steps %zu | old %zi, steps %zu", new_i, new_steps, old_i, old_steps);
+  }
+  return new_i;
+#else
+  mc->clc->k.search_branch = search_branch;
+  return search_branch(mc, key);
+#endif /* MDBX_DEBUG_SEARCH_DISPATCHING */
+}
+
+#undef CLEAR_VALUE_PROPAGATION
+#undef BINARY_BRANCHLESS_SEARCH_CYCLE_BEGIN
+#undef BINARY_BRANCHLESS_SEARCH_CYCLE_END
+#undef SEARCH_BRANCH
+#undef SEARCH_FOLIAGE
 
 static inline size_t txl_size2bytes(const size_t size) {
   assert(size > 0 && size <= txl_max * 2);
@@ -39777,10 +40273,10 @@ __dll_export
         0,
         14,
         1,
-        490,
+        507,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.490 */
-        {"2026-03-22T18:24:09+03:00", "d42c9209ba712a1e42854ccb8af9a5489d5af3e2", "cc4dadfd90cf847157c9e04c7e4e1cf4511f89d2", "v0.14.1-490-gcc4dadfd"},
+                                        0.14.1.507 */
+        {"2026-03-28T10:36:50+03:00", "01ca26cf36105639570786a4b840c9130779e448", "d8f035e05c65a227c1504c3371a638f75f91db45", "v0.14.1-507-gd8f035e0"},
         sourcery};
 
 __dll_export

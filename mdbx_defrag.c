@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-490-gcc4dadfd at 2026-03-22T18:24:09+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-507-gd8f035e0 at 2026-03-28T10:36:50+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight

@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-490-gcc4dadfd at 2026-03-22T18:24:09+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-507-gd8f035e0 at 2026-03-28T10:36:50+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -24,7 +24,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 1b1947c5a5bfc0b74df7d01001b14cc811e466e90ceeb8c7b02e99da3e22dc40_v0_14_1_490_gcc4dadfd
+#define MDBX_BUILD_SOURCERY 8b2838370e03f79ac1efeac2c62882d195d15f7428102fd4491e18d3fa5de97c_v0_14_1_507_gd8f035e0
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -3186,17 +3186,15 @@ MDBX_MAYBE_UNUSED MDBX_NORETURN MDBX_INTERNAL void panic_ex_at(const struct MDBX
 
 #define MDBX_PANIC(msg_text)                                                                                           \
   do {                                                                                                                 \
-    const unsigned source_line = __LINE__;                                                                             \
     static const char panic_msg[] = msg_text;                                                                          \
-    static const struct MDBX_panic_point panic_point = {__func__, panic_msg, source_line};                             \
+    static const struct MDBX_panic_point panic_point = {__func__, panic_msg, __LINE__};                                \
     panic_at(&panic_point);                                                                                            \
   } while (0)
 
 #define MDBX_PANIC_EX(msg_text, ctx)                                                                                   \
   do {                                                                                                                 \
-    const unsigned source_line = __LINE__;                                                                             \
     static const char panic_msg[] = msg_text;                                                                          \
-    static const struct MDBX_panic_point panic_point = {__func__, panic_msg, source_line};                             \
+    static const struct MDBX_panic_point panic_point = {__func__, panic_msg, __LINE__};                                \
     panic_ex_at(&panic_point, ctx);                                                                                    \
   } while (0)
 
