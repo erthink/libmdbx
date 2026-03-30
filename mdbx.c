@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-507-gd8f035e0 at 2026-03-28T10:36:50+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-513-g35671b1e at 2026-03-30T16:10:26+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -1422,6 +1422,9 @@ MDBX_MAYBE_UNUSED static void static_checks(void) {
 
 /* Internal prototypes */
 
+MDBX_INTERNAL int MDBX_PRINTF_ARGS(2, 3) bad_page(const page_t *mp, const char *fmt, ...);
+MDBX_INTERNAL void MDBX_PRINTF_ARGS(2, 3) poor_page(const page_t *mp, const char *fmt, ...);
+
 /* audit.c */
 MDBX_INTERNAL int audit_ex(MDBX_txn *txn, size_t retired_stored, bool dont_filter_gc);
 
@@ -1671,8 +1674,35 @@ MDBX_INTERNAL int __must_check_result node_read_bigdata(MDBX_cursor *mc, const n
 static inline int __must_check_result node_read(MDBX_cursor *mc, const node_t *node, MDBX_val *data, const page_t *mp) {
   data->iov_len = node_ds(node);
   data->iov_base = node_data(node);
-  if (likely(node_flags(node) != N_BIG))
+  if (likely(node_flags(node) != N_BIG)) {
+#if 0
+    /* This is an example of a code that checks out-of-bounds by an incorrect/bad/crafted node.
+     * Such checks look useful, but they are unreasonable really:
+     *  - an each such check catches some damage case of the structure, apparently in one of the hot execution paths,
+     *    but LEAVES several dozen more aside;
+     *  - the overhead increases slightly,
+     *    but there is also NO CERTAINTY that all or most of the corruption cases will be solved;
+     *  - libmdbx already has a fairly complete page content validation mode by MDBX_VALIDATION, which leads
+     *    calling the page_check() for each page from all page_get_xxx() variants, excepts page_get_unchecked();
+     *  = So, the MDBX_VALIDATION must be used to work with untrusted data,
+     *    but such checks are not necessary for trusted data.
+     *
+     * Thus, libmdbx allows a user, if necessary, to enable control of the database structure at the cost of reduced
+     * performance. On the other hand, such approach allows not to lose productivity unnecessarily.
+     *
+     * Related issues:
+     *  - https://sourcecraft.dev/dqdkfa/libmdbx/issues/290
+     *  - https://github.com/Mithril-mine/libmdbx/pull/306
+     */
+    const char *data_end = ptr_disp(data->iov_base, data->iov_len);
+    const char *page_tail = (const char *)((intptr_t)mp | /* Using the OR operation to get the tail of a real page
+                                                             in case here is a dupsort nested sub-page even. */
+                                           (intptr_t)(mc->txn->env->ps - 1));
+    if (!MDBX_DISABLE_VALIDATION && unlikely(data_end > page_tail))
+      return bad_page(mp, "node-data (size %zu bytes) beyond the end of page", data->iov_len);
+#endif /* code example */
     return MDBX_SUCCESS;
+  }
   return node_read_bigdata(mc, node, data, mp);
 }
 
@@ -3458,10 +3488,6 @@ MDBX_INTERNAL int __must_check_result page_split(MDBX_cursor *mc, const MDBX_val
                                                  pgno_t newpgno, const unsigned naf);
 
 /*----------------------------------------------------------------------------*/
-
-MDBX_INTERNAL int MDBX_PRINTF_ARGS(2, 3) bad_page(const page_t *mp, const char *fmt, ...);
-
-MDBX_INTERNAL void MDBX_PRINTF_ARGS(2, 3) poor_page(const page_t *mp, const char *fmt, ...);
 
 MDBX_NOTHROW_PURE_FUNCTION static inline bool is_frozen(const MDBX_txn *txn, const page_t *mp) {
   return mp->txnid < txn->txnid;
@@ -26982,6 +27008,7 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
   }
 
   const uint64_t allocated_bytes = meta->geometry.first_unallocated * (uint64_t)meta->pagesize;
+  const uint64_t dxbsize_pages = env->dxb_mmap.filesize / (uint64_t)meta->pagesize;
   if (unlikely(allocated_bytes > env->dxb_mmap.filesize)) {
     /* Here could be a race with DB-shrinking performed by other process */
     int err = osal_filesize(env->lazy_fd, &env->dxb_mmap.filesize);
@@ -27024,11 +27051,12 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
     }
   }
 
+  /* It has already been verified above that the size of the allocated space does not exceed the file size. */
   pgno_t geo_upper = meta->geometry.upper;
   uint64_t mapsize_max = geo_upper * (uint64_t)meta->pagesize;
   STATIC_ASSERT(MIN_MAPSIZE < MAX_MAPSIZE);
   if (unlikely(mapsize_max > MAX_MAPSIZE ||
-               (MAX_PAGENO + 1) < ceil_powerof2((size_t)mapsize_max, globals.sys_pagesize) / (size_t)meta->pagesize)) {
+               (MAX_PAGENO + 1) < (mapsize_max + globals.sys_pagesize - 1) / meta->pagesize)) {
     if (mapsize_max > MAX_MAPSIZE64) {
       WARNING("meta[%u] has invalid max-mapsize (%" PRIu64 "), skip it", meta_number, mapsize_max);
       return MDBX_VERSION_MISMATCH;
@@ -27039,30 +27067,40 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
             "but size of allocated space still acceptable (%" PRIu64 ")",
             meta_number, mapsize_max, allocated_bytes);
     geo_upper = (pgno_t)((mapsize_max = MAX_MAPSIZE) / meta->pagesize);
-    if (geo_upper > MAX_PAGENO + 1) {
+    if (geo_upper > MAX_PAGENO + 1)
       geo_upper = MAX_PAGENO + 1;
-      mapsize_max = geo_upper * (uint64_t)meta->pagesize;
-    }
+  }
+
+  if (geo_upper < meta->geometry.first_unallocated) {
+    WARNING("meta[%u] has too less max-mapsize (%" PRIu64 "), "
+            "but size of allocated space still acceptable (%" PRIu64 ")",
+            meta_number, mapsize_max, allocated_bytes);
+    geo_upper = meta->geometry.first_unallocated;
+  }
+  if (meta->geometry.upper != geo_upper) {
     WARNING("meta[%u] consider get-%s pageno is %" PRIaPGNO " instead of wrong %" PRIaPGNO
             ", will be corrected on next commit(s)",
             meta_number, "upper", geo_upper, meta->geometry.upper);
     meta->geometry.upper = geo_upper;
+    mapsize_max = geo_upper * (uint64_t)meta->pagesize;
   }
 
   /* LY: check and silently put geometry.now into [geo.lower...geo.upper].
    *
-   * Copy-with-compaction by old version of libmdbx could produce DB-file
-   * less than meta.geo.lower bound, in case actual filling is low or no data
-   * at all. This is not a problem as there is no damage or loss of data.
-   * Therefore it is better not to consider such situation as an error, but
-   * silently correct it. */
+   * It has already been verified above that the size of the allocated space does not exceed the file size.
+   *
+   * Copy-with-compaction by old version of libmdbx could produce DB-file less than meta.geo.lower bound, in case actual
+   * filling is low or no data at all. This is not a problem as there is no damage or loss of data. Therefore it is
+   * better not to consider such situation as an error, but silently correct it. */
   pgno_t geo_now = meta->geometry.now;
   if (geo_now < geo_lower)
     geo_now = geo_lower;
-  if (geo_now > geo_upper && meta->geometry.first_unallocated <= geo_upper)
+  if (geo_now < dxbsize_pages)
+    geo_now = dxbsize_pages;
+  if (geo_now > geo_upper)
     geo_now = geo_upper;
 
-  if (unlikely(meta->geometry.first_unallocated > geo_now)) {
+  if (unlikely(/* paranoid */ meta->geometry.first_unallocated > geo_now)) {
     WARNING("meta[%u] next-pageno (%" PRIaPGNO ") is beyond end-pgno (%" PRIaPGNO "), skip it", meta_number,
             meta->geometry.first_unallocated, geo_now);
     return MDBX_CORRUPTED;
@@ -27081,7 +27119,7 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
       WARNING("meta[%u] has false-empty %s, skip it", meta_number, "GC");
       return MDBX_CORRUPTED;
     }
-  } else if (unlikely(meta->trees.gc.root >= meta->geometry.first_unallocated)) {
+  } else if (unlikely(meta->trees.gc.root >= meta->geometry.first_unallocated || meta->trees.gc.root < NUM_METAS)) {
     WARNING("meta[%u] has invalid %s-root %" PRIaPGNO ", skip it", meta_number, "GC", meta->trees.gc.root);
     return MDBX_CORRUPTED;
   }
@@ -27093,7 +27131,7 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
       WARNING("meta[%u] has false-empty %s", meta_number, "MainDB");
       return MDBX_CORRUPTED;
     }
-  } else if (unlikely(meta->trees.main.root >= meta->geometry.first_unallocated)) {
+  } else if (unlikely(meta->trees.main.root >= meta->geometry.first_unallocated || meta->trees.main.root < NUM_METAS)) {
     WARNING("meta[%u] has invalid %s-root %" PRIaPGNO ", skip it", meta_number, "MainDB", meta->trees.main.root);
     return MDBX_CORRUPTED;
   }
@@ -40273,10 +40311,10 @@ __dll_export
         0,
         14,
         1,
-        507,
+        513,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.507 */
-        {"2026-03-28T10:36:50+03:00", "01ca26cf36105639570786a4b840c9130779e448", "d8f035e05c65a227c1504c3371a638f75f91db45", "v0.14.1-507-gd8f035e0"},
+                                        0.14.1.513 */
+        {"2026-03-30T16:10:26+03:00", "d4b852e4f7ee2ceaa956301792f8e147bbfbadf0", "35671b1ec40d4ee2a995e5bbf770a54242e8026b", "v0.14.1-513-g35671b1e"},
         sourcery};
 
 __dll_export

@@ -25,6 +25,7 @@ BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3N
  - [Cosmin Apreutesei](https://github.com/capr) за сообщение об ошибках и тестирование.
  - [Chloe Cano](https://github.com/Segwaz) for fuzzing, bug reporing and fixes.
  - [Weixie Cui](https://github.com/cuiweixie) for bug fixing through many pull-requests.
+ - [Александру Кельчину](https://serebrium.ru/) (Компания Серебриум) за сообщения об ошибках и прототипы эксплоитов.
 
 Новое:
 
