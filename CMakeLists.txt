@@ -448,7 +448,7 @@ endif()
 # ~~~
 # ######################################################################################################################
 
-set(MDBX_BUILD_OPTIONS ENABLE_UBSAN ENABLE_ASAN ENABLE_MEMCHECK ENABLE_GPROF ENABLE_GCOV)
+set(MDBX_BUILD_OPTIONS ENABLE_UBSAN ENABLE_ASAN ENABLE_MEMCHECK ENABLE_GPROF ENABLE_GCOV MDBX_DEBUG MDBX_CHECKING)
 
 if(IOS)
   set(MDBX_BUILD_TOOLS_DEFAULT OFF)
@@ -498,7 +498,6 @@ add_option(MDBX LOCKING "Locking method (Windows=-1, SystemV=5, POSIX=1988, POSI
 mark_as_advanced(MDBX_LOCKING)
 add_option(MDBX TRUST_RTC "Does a system have battery-backed Real-Time Clock or just a fake" AUTO)
 mark_as_advanced(MDBX_TRUST_RTC)
-add_option(MDBX FORCE_ASSERTIONS "Force enable assertion checking" OFF)
 add_option(
   MDBX DISABLE_VALIDATION
   "Disable some checks to reduce an overhead and detection probability of database corruption to a values closer to the LMDB"
@@ -517,6 +516,40 @@ add_option(MDBX USE_FALLOCATE "Using posix_fallocate() or fcntl(F_PREALLOCATE) o
 mark_as_advanced(MDBX_USE_FALLOCATE)
 add_option(MDBX ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS "Enables fake nested read-only transactions, which are much cheaper but do not restore the state of cursors in case of transaction abortion." OFF)
 mark_as_advanced(MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS)
+
+if(DEFINED MDBX_FORCE_ASSERTIONS)
+  message(WARNING "The `MDBX_FORCE_ASSERTIONS` is obsolete, please use `MDBX_CHECKING=2` instead")
+  if(DEFINED MDBX_CHECKING)
+    message(
+      WARNING
+        "The `MDBX_FORCE_ASSERTIONS=${MDBX_FORCE_ASSERTIONS}` option was ignored in favour of `MDBX_CHECKING=${MDBX_CHECKING}`"
+    )
+  elseif(MDBX_FORCE_ASSERTIONS)
+    set(MDBX_CHECKING 2)
+  endif()
+endif()
+
+if(NOT DEFINED MDBX_CHECKING OR MDBX_CHECKING STREQUAL "OFF")
+  set(MDBX_CHECKING 0)
+elseif(NOT MDBX_CHECKING MATCHES "^(-1|0|1|2|3|ON)$")
+  message(
+    FATAL_ERROR
+      "The `MDBX_CHECKING` should defined as an integer number in range -1..3, the given value `MDBX_CHECKING=${MDBX_CHECKING}` is invalid."
+  )
+elseif(MDBX_CHECKING STREQUAL "ON")
+  set(MDBX_CHECKING 2)
+endif()
+
+if(NOT DEFINED MDBX_DEBUG OR MDBX_DEBUG STREQUAL "OFF")
+  set(MDBX_DEBUG 0)
+elseif(NOT MDBX_DEBUG MATCHES "^(-1|0|1|2|3|ON)$")
+  message(
+    FATAL_ERROR
+      "The `MDBX_DEBUG` should defined as an integer number in range -1..3, the given value `MDBX_DEBUG=${MDBX_DEBUG}` is invalid."
+  )
+elseif(MDBX_DEBUG STREQUAL "ON")
+  set(MDBX_DEBUG 1)
+endif()
 
 if((MDBX_BUILD_TOOLS OR MDBX_ENABLE_TESTS) AND MDBX_BUILD_SHARED_LIBRARY)
   add_option(MDBX LINK_TOOLS_NONSTATIC "Link MDBX tools with non-static libmdbx" OFF)

@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-513-g35671b1e at 2026-03-30T16:10:26+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-521-gb2ff247e at 2026-03-30T18:07:04+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -24,7 +24,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 759991ce4e1044c522bbbe1068423725945e2e679e2673275083358c87fc2488_v0_14_1_513_g35671b1e
+#define MDBX_BUILD_SOURCERY dd6dc4dddf390f4be49005e8dac1a89625c8902afb2bc1838666815bed5e24cf_v0_14_1_521_gb2ff247e
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -38,15 +38,6 @@
 
 #ifdef MDBX_CONFIG_H
 #include MDBX_CONFIG_H
-#endif
-
-/* Undefine the NDEBUG if debugging is enforced by MDBX_DEBUG */
-#if (defined(MDBX_DEBUG) && MDBX_DEBUG > 0) || (defined(MDBX_FORCE_ASSERTIONS) && MDBX_FORCE_ASSERTIONS)
-#undef NDEBUG
-#ifndef MDBX_DEBUG
-/* Чтобы избежать включения отладки только из-за включения assert-проверок */
-#define MDBX_DEBUG 0
-#endif
 #endif
 
 /*----------------------------------------------------------------------------*/
@@ -871,7 +862,7 @@ __extern_C key_t ftok(const char *, int);
 #define MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(warn_id) __pragma(warning(suppress : warn_id))
 #endif
 #else
-#define MDBX_ANALYSIS_ASSUME(expr) assert(expr)
+#define MDBX_ANALYSIS_ASSUME(expr) ASSERT(expr)
 #define MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(warn_id)
 #endif /* MDBX_GOOFY_MSVC_STATIC_ANALYZER */
 
@@ -972,8 +963,6 @@ template <typename T, size_t N> char (&__ArraySizeHelper(T (&array)[N]))[N];
 #define XCONCAT(a, b) CONCAT(a, b)
 
 #define MDBX_TETRAD(a, b, c, d) ((uint32_t)(a) << 24 | (uint32_t)(b) << 16 | (uint32_t)(c) << 8 | (d))
-
-#define MDBX_STRING_TETRAD(str) MDBX_TETRAD(str[0], str[1], str[2], str[3])
 
 #define FIXME "FIXME: " __FILE__ ", " MDBX_STRINGIFY(__LINE__)
 
@@ -1652,6 +1641,8 @@ MDBX_MAYBE_UNUSED static inline uint32_t osal_monotime_to_16dot16_noUnderflow(ui
   return seconds_16dot16 ? seconds_16dot16 : /* fix underflow */ (monotime > 0);
 }
 
+MDBX_NORETURN MDBX_INTERNAL void osal_panic(const char *msg, const char *func, unsigned line);
+
 /*----------------------------------------------------------------------------*/
 
 MDBX_INTERNAL void osal_ctor(void);
@@ -1919,7 +1910,8 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t osal_bswap32
 #error MDBX_ENVCOPY_WRITEBUF must be defined in range 65536..1073741824 and be multiple of 65536
 #endif /* MDBX_ENVCOPY_WRITEBUF */
 
-/** Forces assertion checking. */
+/** Forces assertion checking corresponding to define \ref MDBX_CHECKING as 2.
+ * \deprecated Please use \ref MDBX_CHECKING instead. */
 #ifndef MDBX_FORCE_ASSERTIONS
 #define MDBX_FORCE_ASSERTIONS 0
 #elif !(MDBX_FORCE_ASSERTIONS == 0 || MDBX_FORCE_ASSERTIONS == 1)
@@ -2261,46 +2253,75 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t osal_bswap32
 #ifndef MDBX_BUILD_METADATA
 #define MDBX_BUILD_METADATA ""
 #endif /* MDBX_BUILD_METADATA */
-/** @} end of build options */
-/*******************************************************************************
- *******************************************************************************
- ******************************************************************************/
 
-#ifndef DOXYGEN
-
-/* In case the MDBX_DEBUG is undefined set it corresponding to NDEBUG */
-#ifndef MDBX_DEBUG
-#ifdef NDEBUG
-#define MDBX_DEBUG 0
-#else
-#define MDBX_DEBUG 1
-#endif
-#endif
-#if MDBX_DEBUG < 0 || MDBX_DEBUG > 2
-#error "The MDBX_DEBUG must be defined to 0, 1 or 2"
-#endif /* MDBX_DEBUG */
-
-#else
-
+#ifdef DOXYGEN
 /* !!! Actually this is a fake definitions for Doxygen !!! */
 
-/** Controls enabling of debugging features.
+/** Controls enabling of debugging features,
+ * Mostly controls logging but also assertion checking via defining default value of `MDBX_CHECKING` option.
  *
- *  - `MDBX_DEBUG = 0` (by default) Disables any debugging features at all,
+ *  - `MDBX_DEBUG = 0` (by default) Disables any debugging features,
  *                     including logging and assertion controls.
  *                     Logging level and corresponding debug flags changing
- *                     by \ref mdbx_setup_debug() will not have effect.
+ *                     by \ref mdbx_setup_debug() has no effect.
  *  - `MDBX_DEBUG > 0` Enables code for the debugging features (logging,
  *                     assertions checking and internal audit).
  *                     Simultaneously sets the default logging level
  *                     to the `MDBX_DEBUG` value.
- *                     Also enables \ref MDBX_DBG_AUDIT if `MDBX_DEBUG >= 2`.
+ *                     Also enables \ref MDBX_DBG_AUDIT if `MDBX_DEBUG >= 3`.
+ *  - `MDBX_DEBUG < 0` Disables logging and error reporting at all, including any critical cases.
  *
  * \ingroup build_option */
-#define MDBX_DEBUG 0...2
+#define MDBX_DEBUG 0...3
+
+/** Controls enabling of all kind of assertion-like checks.
+ * By default `MDBX_CHECKING` defined same as `MDBX_DEBUG`, but can be overridden just by a definition.
+ *
+ *  - `MDBX_CHECKING = 0` Disables all assertion-like checks except those enforced using ENSURE() macros.
+ *                        Debug flags \ref MDBX_DBG_ASSERT and \ref MDBX_DBG_AUDIT changing
+ *                        by \ref mdbx_setup_debug() has no effect.
+ *  - `MDBX_CHECKING = 1` Enables lite-costs checks by `CHECK0()` and `ASSERT()` macros, which are then
+ *                        always active in code and NOT controlled by the \ref MDBX_DBG_ASSERT flag,
+ *                        since the cost of such control is comparable to a checks itself.
+ *                        Debug flags \ref MDBX_DBG_ASSERT and \ref MDBX_DBG_AUDIT
+ *                        changing by \ref mdbx_setup_debug() has no effect.
+ *  - `MDBX_CHECKING = 2` Additionally to `MDBX_CHECKING=1` enables medium-costs checks by `CHECK1()`,
+ *                        which are then could be activated either disabled by the \ref MDBX_DBG_ASSERT flag.
+ *  - `MDBX_CHECKING = 3` Additionally to `MDBX_CHECKING=2` enables high-costs checks by `CHECK2()`,
+ *                        which are then could be activated either disabled by the \ref MDBX_DBG_ASSERT flag.
+ *  - `MDBX_CHECKING < 0` Explicitly disables all checks, including `ENSURE()` macros.
+ *                        Debug flags \ref MDBX_DBG_ASSERT and \ref MDBX_DBG_AUDIT changing
+ *                        by \ref mdbx_setup_debug() has no effect.
+ *
+ * \ingroup build_option */
+#define MDBX_CHECKING -1...3
 
 /** Disables using of GNU libc extensions. */
 #define MDBX_DISABLE_GNU_SOURCE 0 or 1
+
+/** @} end of build options */
+/********************************************************************************/
+#else /* DOXYGEN */
+
+#ifndef MDBX_DEBUG
+#define MDBX_DEBUG 0
+#elif MDBX_DEBUG < -1 || MDBX_DEBUG > 3
+#error "The MDBX_DEBUG must be defined to -1, 0, 1, 2 or 3"
+#endif /* MDBX_DEBUG */
+
+#ifndef MDBX_CHECKING
+#if MDBX_FORCE_ASSERTIONS && MDBX_DEBUG < 2
+#define MDBX_CHECKING 2
+#else
+#define MDBX_CHECKING MDBX_DEBUG
+#endif
+#elif MDBX_CHECKING < -1 || MDBX_DEBUG > 3
+#error "The MDBX_CHECKING must be defined to -1, 0, 1, 2 or 3"
+#endif /* MDBX_CHECKING */
+
+#if MDBX_FORCE_ASSERTIONS && MDBX_CHECKING < 2
+#error "Please use one of MDBX_CHECKING either MDBX_FORCE_ASSERTIONS build options, but not both"
+#endif
 
 #endif /* DOXYGEN */
 
@@ -3005,6 +3026,7 @@ struct libmdbx_globals {
   osal_fastmutex_t debug_lock;
   size_t logger_buffer_size;
   char *logger_buffer;
+  MDBX_panic_func panic_func; /*  Callback for assertion failures */
 };
 
 #ifdef __cplusplus
@@ -3021,27 +3043,153 @@ MDBX_MAYBE_UNUSED static inline const void *__Wpedantic_format_voidptr(const voi
 #define __Wpedantic_format_voidptr(ARG) __Wpedantic_format_voidptr(ARG)
 #endif /* __Wpedantic_format_voidptr */
 
+/* --------------------------------------------------------------------------------------------------------------- */
+
+MDBX_PRINTF_ARGS(2, 3) static inline const void *panic_fmt_checker(const void *obj, const char *fmt, ...) {
+  (void)fmt;
+  return obj;
+}
+
+#if MDBX_CHECKING < 0
+
+#define panic(msg_text) __noop
+#define panic_obj(obj, msg_text) __noop
+#define panic_fmt(obj, msg_text, ...) __noop
+
+#else
+
+struct MDBX_panic_point {
+  const char *const function;
+  const char *const msg;
+  unsigned line;
+};
+
+__extern_C MDBX_NORETURN void panic_at(const struct MDBX_panic_point *const at);
+__extern_C MDBX_NORETURN void panic_at_obj(const struct MDBX_panic_point *const at, const void *obj);
+__extern_C MDBX_NORETURN void panic_at_fmt(const struct MDBX_panic_point *const at, const void *obj, ...);
+
+#define panic(msg_text)                                                                                                \
+  do {                                                                                                                 \
+    static const char panic_msg[] = msg_text;                                                                          \
+    static const struct MDBX_panic_point panic_point = {__func__, panic_msg, __LINE__};                                \
+    panic_at(&panic_point);                                                                                            \
+  } while (0)
+
+#define panic_obj(obj, msg_text)                                                                                       \
+  do {                                                                                                                 \
+    static const char panic_msg[] = msg_text;                                                                          \
+    static const struct MDBX_panic_point panic_point = {__func__, panic_msg, __LINE__};                                \
+    panic_at_obj(&panic_point, obj);                                                                                   \
+  } while (0)
+
+#define panic_fmt(obj, msg_text, ...)                                                                                  \
+  do {                                                                                                                 \
+    static const char panic_msg[] = msg_text;                                                                          \
+    static const struct MDBX_panic_point panic_point = {__func__, panic_msg, __LINE__};                                \
+    panic_at_fmt(&panic_point, panic_fmt_checker(obj, msg_text, __VA_ARGS__), __VA_ARGS__);                            \
+  } while (0)
+
+#endif /* MDBX_CHECKING < 0 */
+
+#define ENSURE_MSG(expr, msg)                                                                                          \
+  do {                                                                                                                 \
+    if (unlikely(!(expr)))                                                                                             \
+      panic(msg);                                                                                                      \
+  } while (0)
+
+#define ENSURE_OBJ(obj, expr)                                                                                          \
+  do {                                                                                                                 \
+    if (unlikely(!(expr)))                                                                                             \
+      panic_obj(obj, #expr);                                                                                           \
+  } while (0)
+
+#define ENSURE(expr) ENSURE_MSG(expr, #expr)
+
+/* --------------------------------------------------------------------------------------------------------------- */
+
+#if MDBX_CHECKING < 1
+#define CHECKS0_ENABLED() (0)
+#else
+#define CHECKS0_ENABLED() (1)
+#endif
+#if MDBX_CHECKING < 2
+#define CHECKS1_ENABLED() (0)
+#else
+#define CHECKS1_ENABLED() (globals.runtime_flags & (unsigned)MDBX_DBG_ASSERT)
+#endif
+#if MDBX_CHECKING < 3
+#define CHECKS2_ENABLED() (0)
+#else
+#define CHECKS2_ENABLED() (unlikely(globals.runtime_flags & (unsigned)MDBX_DBG_AUDIT))
+#endif
+
+#if MDBX_DEBUG < 0
+#define LOG_ENABLED(LVL) (0)
+#elif MDBX_DEBUG > 0
+#define LOG_ENABLED(LVL) unlikely(LVL <= globals.loglevel)
+#else
+#define LOG_ENABLED(LVL) (LVL < MDBX_LOG_VERBOSE && LVL <= globals.loglevel)
+#endif /* MDBX_DEBUG */
+
+/* --------------------------------------------------------------------------------------------------------------- */
+
+/* lite-costs checks */
+#define CHECK0(expr)                                                                                                   \
+  do {                                                                                                                 \
+    if (CHECKS0_ENABLED())                                                                                             \
+      ENSURE(expr);                                                                                                    \
+  } while (0)
+
+#define CHECK0_OBJ(obj, expr)                                                                                          \
+  do {                                                                                                                 \
+    if (CHECKS0_ENABLED())                                                                                             \
+      ENSURE_OBJ(obj, expr);                                                                                           \
+  } while (0)
+
+/* medium-costs checks */
+#define CHECK1(expr)                                                                                                   \
+  do {                                                                                                                 \
+    if (CHECKS1_ENABLED())                                                                                             \
+      ENSURE(expr);                                                                                                    \
+  } while (0)
+
+#define CHECK1_OBJ(obj, expr)                                                                                          \
+  do {                                                                                                                 \
+    if (CHECKS1_ENABLED())                                                                                             \
+      ENSURE_OBJ(obj, expr);                                                                                           \
+  } while (0)
+
+/* high-costs checks */
+#define CHECK2(expr)                                                                                                   \
+  do {                                                                                                                 \
+    if (CHECKS2_ENABLED())                                                                                             \
+      ENSURE(expr);                                                                                                    \
+  } while (0)
+
+#define CHECK2_OBJ(obj, expr)                                                                                          \
+  do {                                                                                                                 \
+    if (CHECKS2_ENABLED())                                                                                             \
+      ENSURE_OBJ(obj, expr);                                                                                           \
+  } while (0)
+
+#define ASSERT(expr) CHECK0(expr)
+#define eASSERT0(env, expr) CHECK0_OBJ(env, expr)
+#define eASSERT1(env, expr) CHECK1_OBJ(env, expr)
+#define eASSERT2(env, expr) CHECK2_OBJ(env, expr)
+#define tASSERT0(txn, expr) CHECK0_OBJ(txn, expr)
+#define tASSERT1(txn, expr) CHECK1_OBJ(txn, expr)
+#define tASSERT2(txn, expr) CHECK2_OBJ(txn, expr)
+#define cASSERT0(mc, expr) CHECK0_OBJ(mc, expr)
+#define cASSERT1(mc, expr) CHECK1_OBJ(mc, expr)
+#define cASSERT2(mc, expr) CHECK2_OBJ(mc, expr)
+
+/* --------------------------------------------------------------------------------------------------------------- */
+
 #ifndef __cplusplus
 
 MDBX_INTERNAL void MDBX_PRINTF_ARGS(4, 5) debug_log(int level, const char *function, int line, const char *fmt, ...)
     MDBX_PRINTF_ARGS(4, 5);
 MDBX_INTERNAL void debug_log_va(int level, const char *function, int line, const char *fmt, va_list args);
-
-#if MDBX_DEBUG
-#define LOG_ENABLED(LVL) unlikely(LVL <= globals.loglevel)
-#define AUDIT_ENABLED() unlikely((globals.runtime_flags & (unsigned)MDBX_DBG_AUDIT))
-#else /* MDBX_DEBUG */
-#define LOG_ENABLED(LVL) (LVL < MDBX_LOG_VERBOSE && LVL <= globals.loglevel)
-#define AUDIT_ENABLED() (0)
-#endif /* LOG_ENABLED() & AUDIT_ENABLED() */
-
-#if MDBX_FORCE_ASSERTIONS
-#define ASSERT_ENABLED() (1)
-#elif MDBX_DEBUG
-#define ASSERT_ENABLED() likely((globals.runtime_flags & (unsigned)MDBX_DBG_ASSERT))
-#else
-#define ASSERT_ENABLED() (0)
-#endif /* ASSERT_ENABLED() */
 
 #define DEBUG_EXTRA(fmt, ...)                                                                                          \
   do {                                                                                                                 \
@@ -3096,48 +3244,8 @@ MDBX_INTERNAL void debug_log_va(int level, const char *function, int line, const
 
 #define FATAL(fmt, ...) debug_log(MDBX_LOG_FATAL, __func__, __LINE__, fmt "\n", __VA_ARGS__);
 
-#if MDBX_DEBUG
-#define ASSERT_FAIL(env, msg, func, line) mdbx_assert_fail(env, msg, func, line)
-#else /* MDBX_DEBUG */
-#if !((defined(_WIN32) || defined(_WIN64)) && defined(_DEBUG) && !MDBX_WITHOUT_MSVC_CRT)
-MDBX_NORETURN
-#endif
-__cold void assert_fail(const char *msg, const char *func, unsigned line);
-#define ASSERT_FAIL(env, msg, func, line)                                                                              \
-  do {                                                                                                                 \
-    (void)(env);                                                                                                       \
-    assert_fail(msg, func, line);                                                                                      \
-  } while (0)
-#endif /* MDBX_DEBUG */
-
-#define ENSURE_MSG(env, expr, msg)                                                                                     \
-  do {                                                                                                                 \
-    if (unlikely(!(expr)))                                                                                             \
-      ASSERT_FAIL(env, msg, __func__, __LINE__);                                                                       \
-  } while (0)
-
-#define ENSURE(env, expr) ENSURE_MSG(env, expr, #expr)
-
-/* assert(3) variant in environment context */
-#define eASSERT(env, expr)                                                                                             \
-  do {                                                                                                                 \
-    if (ASSERT_ENABLED())                                                                                              \
-      ENSURE(env, expr);                                                                                               \
-  } while (0)
-
-/* assert(3) variant in cursor context */
-#define cASSERT(mc, expr) eASSERT((mc)->txn->env, expr)
-
-/* assert(3) variant in transaction context */
-#define tASSERT(txn, expr) eASSERT((txn)->env, expr)
-
-#ifndef xMDBX_TOOLS /* Avoid using internal eASSERT() */
-#undef assert
-#define assert(expr) eASSERT(nullptr, expr)
-#endif
-
 MDBX_MAYBE_UNUSED static inline void jitter4testing(bool tiny) {
-#if MDBX_DEBUG
+#if MDBX_DEBUG > 0
   if (globals.runtime_flags & (unsigned)MDBX_DBG_JITTER)
     osal_jitter(tiny);
 #else
@@ -3154,7 +3262,7 @@ MDBX_INTERNAL const char *pagetype_caption(const uint8_t type, char buf4unknown[
 #define DKEY(x) mdbx_dump_val(x, dbg_kbuf, DKBUF_MAX * 2 + 1)
 #define DVAL(x) mdbx_dump_val(x, dbg_kbuf + DKBUF_MAX * 2 + 1, DKBUF_MAX * 2 + 1)
 
-#if MDBX_DEBUG
+#if MDBX_DEBUG > 0
 #define DKBUF_DEBUG DKBUF
 #define DKEY_DEBUG(x) DKEY(x)
 #define DVAL_DEBUG(x) DVAL(x)
@@ -3173,30 +3281,6 @@ MDBX_MAYBE_UNUSED static inline int log_if_error(const int err, const char *func
 }
 
 #define LOG_IFERR(err) log_if_error((err), __func__, __LINE__)
-
-struct MDBX_panic_point {
-  const char *const function;
-  const char *const msg;
-  unsigned line;
-};
-
-MDBX_MAYBE_UNUSED MDBX_NORETURN MDBX_INTERNAL void panic_at(const struct MDBX_panic_point *const at);
-MDBX_MAYBE_UNUSED MDBX_NORETURN MDBX_INTERNAL void panic_ex_at(const struct MDBX_panic_point *const at,
-                                                               const void *ctx);
-
-#define MDBX_PANIC(msg_text)                                                                                           \
-  do {                                                                                                                 \
-    static const char panic_msg[] = msg_text;                                                                          \
-    static const struct MDBX_panic_point panic_point = {__func__, panic_msg, __LINE__};                                \
-    panic_at(&panic_point);                                                                                            \
-  } while (0)
-
-#define MDBX_PANIC_EX(msg_text, ctx)                                                                                   \
-  do {                                                                                                                 \
-    static const char panic_msg[] = msg_text;                                                                          \
-    static const struct MDBX_panic_point panic_point = {__func__, panic_msg, __LINE__};                                \
-    panic_ex_at(&panic_point, ctx);                                                                                    \
-  } while (0)
 
 #endif /* !__cplusplus */
 
@@ -3237,7 +3321,7 @@ MDBX_MAYBE_UNUSED MDBX_NORETURN MDBX_INTERNAL void panic_ex_at(const struct MDBX
   } while (0)
 
 MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline size_t branchless_abs(intptr_t value) {
-  assert(value > INT_MIN);
+  ASSERT(value > INT_MIN);
   const size_t expanded_sign = (size_t)(value >> (sizeof(value) * CHAR_BIT - 1));
   return ((size_t)value + expanded_sign) ^ expanded_sign;
 }
@@ -3252,7 +3336,7 @@ MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline intptr_t min_signed(
 
 MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline intptr_t clamp_signed(intptr_t v, intptr_t min,
                                                                                   intptr_t max) {
-  assert(min <= max);
+  ASSERT(min <= max);
   return min_signed(max_signed(v, min), max);
 }
 
@@ -3265,14 +3349,14 @@ MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline size_t min_unsigned(
 }
 
 MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline size_t clamp_unsigned(size_t v, size_t min, size_t max) {
-  assert(min <= max);
+  ASSERT(min <= max);
   return min_unsigned(max_unsigned(v, min), max);
 }
 
 MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline bool is_powerof2(size_t x) { return (x & (x - 1)) == 0; }
 
 MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline size_t floor_powerof2(size_t value, size_t granularity) {
-  assert(is_powerof2(granularity));
+  ASSERT(is_powerof2(granularity));
   return value & ~(granularity - 1);
 }
 
@@ -3322,7 +3406,7 @@ MDBX_INTERNAL bin128_t mul64x64_128_fallback(uint64_t x, uint64_t y);
 #endif /* MSVC ARM64 */
 
 MDBX_MAYBE_UNUSED static inline bool u128_eq(bin128_t x, bin128_t y) {
-#if defined(__SIZEOF_INT128__) && !MDBX_DEBUG
+#if defined(__SIZEOF_INT128__) && MDBX_CHECKING < 1
   return x.u128 == y.u128;
 #else
   return x.l == y.l && x.h == y.h;
@@ -3331,30 +3415,30 @@ MDBX_MAYBE_UNUSED static inline bool u128_eq(bin128_t x, bin128_t y) {
 
 MDBX_MAYBE_UNUSED static inline bin128_t mul64x64_128(uint64_t x, uint64_t y) {
   bin128_t r;
-#if MDBX_HAVE_NATIVE_U128 && !MDBX_DEBUG
+#if MDBX_HAVE_NATIVE_U128 && MDBX_CHECKING < 1
   r.u128 = x;
   r.u128 *= y;
-#elif defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IA64) || defined(_M_AMD64)) && !MDBX_DEBUG
+#elif defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IA64) || defined(_M_AMD64)) && MDBX_CHECKING < 1
   r.l = _umul128(x, y, &r.h);
-#elif defined(_MSC_VER) && defined(_M_ARM64) && !MDBX_DEBUG
+#elif defined(_MSC_VER) && defined(_M_ARM64) && MDBX_CHECKING < 1
   r.l = x * y;
   r.h = __umulh(x, y);
 #else
   r = mul64x64_128_fallback(x, y);
 #endif
-  assert(u128_eq(r, mul64x64_128_fallback(y, x)));
+  ASSERT(u128_eq(r, mul64x64_128_fallback(y, x)));
   return r;
 }
 
 MDBX_MAYBE_UNUSED static inline bin128_t u128_add(bin128_t x, bin128_t y) {
   bin128_t r;
-#if MDBX_HAVE_NATIVE_U128 && !MDBX_DEBUG
+#if MDBX_HAVE_NATIVE_U128 && MDBX_CHECKING < 1
   r.u128 = x.u128 + y.u128;
 #else
   r.l = x.l + y.l;
   r.h = x.h + y.h + /* carry */ (r.l < x.l);
 #if MDBX_HAVE_NATIVE_U128
-  assert(r.u128 == x.u128 + y.u128);
+  ASSERT(r.u128 == x.u128 + y.u128);
 #endif
 #endif
   return r;
@@ -3362,14 +3446,14 @@ MDBX_MAYBE_UNUSED static inline bin128_t u128_add(bin128_t x, bin128_t y) {
 
 MDBX_MAYBE_UNUSED static inline int u128_cmp(bin128_t x, bin128_t y) {
   int r;
-#if defined(__SIZEOF_INT128__) && !MDBX_DEBUG
+#if defined(__SIZEOF_INT128__) && MDBX_CHECKING < 1
   r = CMP2INT(x.u128, y.u128);
 #else
   const uint64_t a = (x.h != y.h) ? x.h : x.l;
   const uint64_t b = (x.h != y.h) ? y.h : y.l;
   r = CMP2INT(a, b);
 #if MDBX_HAVE_NATIVE_U128
-  assert(r == CMP2INT(x.u128, y.u128));
+  ASSERT(r == CMP2INT(x.u128, y.u128));
 #endif
 #endif
   return r;
@@ -3377,12 +3461,12 @@ MDBX_MAYBE_UNUSED static inline int u128_cmp(bin128_t x, bin128_t y) {
 
 MDBX_MAYBE_UNUSED static inline bool u128_gt(bin128_t x, bin128_t y) {
   bool r;
-#if defined(__SIZEOF_INT128__) && !MDBX_DEBUG
+#if defined(__SIZEOF_INT128__) && MDBX_CHECKING < 1
   r = x.u128 > y.u128;
 #else
   r = x.h > y.h || (x.h == y.h && x.l > y.l);
 #if MDBX_HAVE_NATIVE_U128
-  assert(r == (x.u128 > y.u128));
+  ASSERT(r == (x.u128 > y.u128));
 #endif
 #endif
   return r;
@@ -3390,12 +3474,12 @@ MDBX_MAYBE_UNUSED static inline bool u128_gt(bin128_t x, bin128_t y) {
 
 MDBX_MAYBE_UNUSED static inline bool u128_lt(bin128_t x, bin128_t y) {
   bool r;
-#if defined(__SIZEOF_INT128__) && !MDBX_DEBUG
+#if defined(__SIZEOF_INT128__) && MDBX_CHECKING < 1
   r = x.u128 < y.u128;
 #else
   r = x.h < y.h || (x.h == y.h && x.l < y.l);
 #if MDBX_HAVE_NATIVE_U128
-  assert(r == (x.u128 < y.u128));
+  ASSERT(r == (x.u128 < y.u128));
 #endif
 #endif
   return r;
@@ -3406,7 +3490,7 @@ MDBX_MAYBE_UNUSED static inline bin128_t u128(uint64_t v) {
   r.l = v;
   r.h = 0;
 #if defined(__SIZEOF_INT128__)
-  assert(r.u128 == v);
+  ASSERT(r.u128 == v);
 #endif
   return r;
 }
@@ -3458,7 +3542,7 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline size_t pnl_alloclen(c
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline size_t pnl_size(const const_pnl_t pnl) { return pnl[0]; }
 
 MDBX_MAYBE_UNUSED static inline void pnl_setsize(pnl_t pnl, size_t len) {
-  assert(len < INT_MAX);
+  ASSERT(len < INT_MAX);
   pnl[0] = (pgno_t)len;
 }
 
@@ -3469,7 +3553,7 @@ MDBX_MAYBE_UNUSED static inline void pnl_clear(pnl_t pnl) { pnl_setsize(pnl, 0);
 
 MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline pgno_t pnl_bytes2size(const size_t bytes) {
   size_t size = bytes / sizeof(pgno_t);
-  assert(size > 3 && size <= PAGELIST_LIMIT + /* alignment gap */ 65536);
+  ASSERT(size > 3 && size <= PAGELIST_LIMIT + /* alignment gap */ 65536);
   size -= 3;
 #if MDBX_PNL_PREALLOC_FOR_RADIXSORT
   size >>= 1;
@@ -3479,7 +3563,7 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline pgno_t pnl_bytes2size
 
 MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline size_t pnl_size2bytes(size_t wanna_size) {
   size_t size = wanna_size;
-  assert(size > 0 && size <= PAGELIST_LIMIT);
+  ASSERT(size > 0 && size <= PAGELIST_LIMIT);
 #if MDBX_PNL_PREALLOC_FOR_RADIXSORT
   size += size;
 #endif /* MDBX_PNL_PREALLOC_FOR_RADIXSORT */
@@ -3489,7 +3573,7 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline size_t pnl_size2bytes
   size_t bytes =
       ceil_powerof2(MDBX_ASSUME_MALLOC_OVERHEAD + sizeof(pgno_t) * (size + 3), MDBX_PNL_GRANULATE * sizeof(pgno_t)) -
       MDBX_ASSUME_MALLOC_OVERHEAD;
-  assert(pnl_bytes2size(bytes) >= wanna_size);
+  ASSERT(pnl_bytes2size(bytes) >= wanna_size);
   return bytes;
 }
 
@@ -3503,8 +3587,8 @@ MDBX_INTERNAL int pnl_reserve(pnl_t __restrict *__restrict ppnl, const size_t wa
 
 MDBX_MAYBE_UNUSED static inline int __must_check_result pnl_need(pnl_t __restrict *__restrict ppnl, size_t more) {
   if (likely(*ppnl)) {
-    assert(pnl_size(*ppnl) <= PAGELIST_LIMIT && pnl_alloclen(*ppnl) >= pnl_size(*ppnl));
-    assert(more <= PAGELIST_LIMIT);
+    ASSERT(pnl_size(*ppnl) <= PAGELIST_LIMIT && pnl_alloclen(*ppnl) >= pnl_size(*ppnl));
+    ASSERT(more <= PAGELIST_LIMIT);
     more += pnl_size(*ppnl);
     if (likely(pnl_alloclen(*ppnl) >= more))
       return MDBX_SUCCESS;
@@ -3513,10 +3597,10 @@ MDBX_MAYBE_UNUSED static inline int __must_check_result pnl_need(pnl_t __restric
 }
 
 MDBX_MAYBE_UNUSED static inline void pnl_append_prereserved(__restrict pnl_t pnl, pgno_t pgno) {
-  assert(pnl_size(pnl) < pnl_alloclen(pnl));
-  if (AUDIT_ENABLED()) {
+  ASSERT(pnl_size(pnl) < pnl_alloclen(pnl));
+  if (CHECKS2_ENABLED()) {
     for (size_t i = pnl_size(pnl); i > 0; --i)
-      assert(pgno != pnl[i]);
+      ASSERT(pgno != pnl[i]);
   }
   *pnl += 1;
   MDBX_PNL_LAST(pnl) = pgno;
@@ -3551,20 +3635,20 @@ MDBX_MAYBE_UNUSED static inline bool pnl_check_allocated(const const_pnl_t pnl, 
 
 MDBX_MAYBE_UNUSED static inline void pnl_sort(pnl_t pnl, size_t limit4check) {
   pnl_sort_nochk(pnl);
-  assert(pnl_check(pnl, limit4check));
+  ASSERT(pnl_check(pnl, limit4check));
   (void)limit4check;
 }
 
 MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline size_t pnl_search(const const_pnl_t pnl, pgno_t pgno,
                                                                              size_t limit) {
-  assert(pnl_check_allocated(pnl, limit));
+  ASSERT(pnl_check_allocated(pnl, limit));
   if (MDBX_HAVE_CMOV) {
     /* cmov-ускоренный бинарный поиск может читать (но не использовать) один
      * элемент за концом данных, этот элемент в пределах выделенного участка
      * памяти, но не инициализирован. */
     VALGRIND_MAKE_MEM_DEFINED(MDBX_PNL_END(pnl), sizeof(pgno_t));
   }
-  assert(pgno < limit);
+  ASSERT(pgno < limit);
   (void)limit;
   size_t n = pnl_search_nochk(pnl, pgno);
   if (MDBX_HAVE_CMOV) {
@@ -3600,7 +3684,7 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pnl_maxspan(co
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline size_t pnl_scan_span(const const_pnl_t pnl,
                                                                                 const size_t from) {
   size_t span = 1;
-  assert(from > 0 && from <= pnl_size(pnl));
+  ASSERT(from > 0 && from <= pnl_size(pnl));
   while (from + span <= pnl_size(pnl) && MDBX_PNL_CONTIGUOUS(pnl[from], pnl[from + span], span))
     ++span;
   return span;

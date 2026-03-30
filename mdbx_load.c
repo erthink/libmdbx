@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-513-g35671b1e at 2026-03-30T16:10:26+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-521-gb2ff247e at 2026-03-30T18:07:04+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -22,7 +22,7 @@
 
 /* clang-format off */
 
-#define xMDBX_TOOLS /* Avoid using internal eASSERT(), etc */
+#define xMDBX_TOOLS /* Avoid using internal ASSERT(), etc */
 #include "mdbx-internals.h"
 
 #include <ctype.h>
@@ -877,14 +877,14 @@ int main(int argc, char *argv[]) {
       goto bailout;
     }
     if (subname) {
-      assert(dbi != MAIN_DBI);
+      ASSERT(dbi != MAIN_DBI);
       err = mdbx_dbi_close(env, dbi);
       if (unlikely(err != MDBX_SUCCESS)) {
         error("mdbx_dbi_close", err);
         goto bailout;
       }
     } else {
-      assert(dbi == MAIN_DBI);
+      ASSERT(dbi == MAIN_DBI);
     }
 
     /* try read next header */

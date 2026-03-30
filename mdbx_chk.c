@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-513-g35671b1e at 2026-03-30T16:10:26+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-521-gb2ff247e at 2026-03-30T18:07:04+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -22,7 +22,7 @@
 
 /* clang-format off */
 
-#define xMDBX_TOOLS /* Avoid using internal eASSERT(), etc */
+#define xMDBX_TOOLS /* Avoid using internal ASSERT(), etc */
 #include "mdbx-internals.h"
 
 #include <ctype.h>
@@ -222,10 +222,10 @@ static void logger(MDBX_log_level_t level, const char *function, int line, const
   if (level < MDBX_LOG_VERBOSE)
     flush();
   if (level == MDBX_LOG_FATAL) {
-#if !MDBX_DEBUG && !MDBX_FORCE_ASSERTIONS
-    exit(EXIT_FAILURE_MDBX);
+#if MDBX_CHECKING > 0
+    panic("fatal-error");
 #endif
-    abort();
+    exit(EXIT_FAILURE_MDBX);
   }
 }
 
