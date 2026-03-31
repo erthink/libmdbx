@@ -1,4 +1,4 @@
-﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-521-gb2ff247e at 2026-03-30T18:07:04+03:00).
+﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-526-g858186d2 at 2026-03-31T11:46:22+03:00).
 /// \file mdbx.h++
 /// \brief The libmdbx C++ API header file.
 ///
@@ -219,22 +219,6 @@
 #else
 #define MDBX_CONSTEXPR_ASSERT(expr) ((expr) ? void(0) : [] { assert(!#expr); }())
 #endif /* MDBX_CONSTEXPR_ASSERT */
-
-#ifndef MDBX_LIKELY
-#if defined(DOXYGEN) || (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
-#define MDBX_LIKELY(cond) __builtin_expect(!!(cond), 1)
-#else
-#define MDBX_LIKELY(x) (x)
-#endif
-#endif /* MDBX_LIKELY */
-
-#ifndef MDBX_UNLIKELY
-#if defined(DOXYGEN) || (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
-#define MDBX_UNLIKELY(cond) __builtin_expect(!!(cond), 0)
-#else
-#define MDBX_UNLIKELY(x) (x)
-#endif
-#endif /* MDBX_UNLIKELY */
 
 /** Workaround for old compilers without properly support for C++20 `if constexpr`. */
 #if defined(DOXYGEN)
