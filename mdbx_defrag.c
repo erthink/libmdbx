@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-526-g858186d2 at 2026-03-31T11:46:22+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-532-g6fe748e5 at 2026-04-01T01:47:30+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -320,8 +320,7 @@ int main(int argc, char *argv[]) {
             mdbx_version.git.datetime, mdbx_version.git.tree, db_pathname);
     if (verbosity > MDBX_LOG_VERBOSE && MDBX_DEBUG < 1)
       printf("Verbosity level %u exposures only to"
-             " a debug/extra-logging-enabled builds (with NDEBUG undefined"
-             " or MDBX_DEBUG > 0)\n",
+             " a debug/extra-logging-enabled builds (MDBX_DEBUG > 0)\n",
              verbosity);
     mdbx_setup_debug(verbosity, MDBX_DBG_DONTCHANGE, logger);
     fflush(nullptr);
@@ -354,12 +353,12 @@ int main(int argc, char *argv[]) {
     rc = mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn);
 
   MDBX_envinfo info_env;
-  memset(&info_env, 0, sizeof(info_env)); /* zap `uninitialized`warning */
+  memset(&info_env, 0, sizeof(info_env)); /* zap `uninitialized` warning */
   if (rc == MDBX_SUCCESS)
     rc = mdbx_env_info_ex(env, txn, &info_env, sizeof(info_env));
 
   MDBX_gc_info_t info_gc;
-  memset(&info_gc, 0, sizeof(info_gc)); /* zap `uninitialized`warning */
+  memset(&info_gc, 0, sizeof(info_gc)); /* zap `uninitialized` warning */
   if (rc == MDBX_SUCCESS)
     rc = mdbx_gc_info(txn, &info_gc, sizeof(info_gc), nullptr, nullptr);
 
@@ -377,7 +376,8 @@ int main(int argc, char *argv[]) {
     if (!quiet) {
       printf(" - space usage in pages: %zu allocated, payload %zu, unused/GC %zu, pagesize %u\n",
              info_gc.pages_allocated, payload_pages, info_gc.pages_gc, info_env.mi_dxb_pagesize);
-      printf(" - defragmentation: target %u%% (shrink %zu pages), cycles ", wanna_defrag_percent, defrag_enough);
+      printf(" - defragmentation: target %u%% (shrink %zu pages), cycles ", wanna_defrag_percent,
+             defrag_enough ? defrag_enough : info_gc.pages_gc);
       if (cycles_limit)
         printf("limit %u", cycles_limit);
       else

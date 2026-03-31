@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-526-g858186d2 at 2026-03-31T11:46:22+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-532-g6fe748e5 at 2026-04-01T01:47:30+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -17785,39 +17785,34 @@ __hot static int defrag_provide_span(dfc_t *const dfc, const size_t npages) {
 #error "FIXME: Since 2026-04-01 alternatives to MDBX_PNL_ASCENDING = 0 are no longer supported."
 #else
   for (size_t span, i = len; i > 0 && pnl[i] <= dfc->defrag_enough - npages;) {
-    for (span = 1; i > span && pnl[i - span] < dfc->defrag_enough && MDBX_PNL_CONTIGUOUS(pnl[i - span], pnl[i], span);
-         ++span)
-      ;
+    span = 1;
+    while (unlikely(MDBX_PNL_CONTIGUOUS(pnl[i - span], pnl[i], span)) &&
+           likely((intptr_t)(i - span) > 0 && pnl[i - span] < dfc->defrag_enough))
+      ++span;
 
-    const pgno_t base = pnl[i];
+    pgno_t begin = pnl[i], end = begin + span;
     i -= span;
-    pgno_t begin = base, end = begin + span;
     size_t cost = 0;
     size_t cost_left = defrag_move_cost(dfc, begin - 1, npages);
     size_t cost_right = defrag_move_cost(dfc, end, npages);
     do {
       if (cost_left < cost_right) {
         cost += cost_left;
-        begin -= 1;
-        cost_left = defrag_move_cost(dfc, begin - 1, npages);
+        cost_left = defrag_move_cost(dfc, --begin - 1, npages);
       } else if (cost_right < INT_MAX) {
         cost += cost_right;
-        end += 1;
-        cost_right = defrag_move_cost(dfc, end, npages);
+        cost_right = defrag_move_cost(dfc, ++end, npages);
       } else {
-        while (!MDBX_PNL_ASCENDING && i > 0 && pnl[i] < end)
+        while (pnl[i] < end && likely(i > 0))
           --i;
-        while (MDBX_PNL_ASCENDING && i <= len && pnl[i] < end)
-          ++i;
         break;
       }
     } while (cost < best_cost && end - begin < npages);
 
-    if (end - begin == npages &&
-        (cost < best_cost || (!MDBX_PNL_ASCENDING && cost == best_cost && begin < best_begin))) {
+    if (unlikely(end - begin == npages && cost < best_cost)) {
       best_cost = cost;
       best_begin = begin;
-      if (!MDBX_PNL_ASCENDING && !best_cost)
+      if (!best_cost)
         break;
     }
   }
@@ -17935,7 +17930,7 @@ int defrag_cycle(dfc_t *dfc) {
     return MDBX_RESULT_TRUE;
   }
 
-#if MDBX_CHECKING > 0
+#if MDBX_CHECKING > 1
   dfc->repnl_clone = pnl_clone(txn->wr.repnl);
 #endif /* MDBX_CHECKING > 0 */
 
@@ -19496,11 +19491,11 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
     if (unlikely(err != MDBX_SUCCESS))
       return err;
 
-#ifndef NDEBUG /* just for checking */
+#if MDBX_CHECKING > 0 || MDBX_DEBUG > 0
     err = dxb_read_header(env, &header, lck_rc, mode_bits);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
-#endif
+#endif /* MDBX_CHECKING > 0 || MDBX_DEBUG > 0 */
   }
 
   VERBOSE("header: root %" PRIaPGNO "/%" PRIaPGNO ", geo %" PRIaPGNO "/%" PRIaPGNO "-%" PRIaPGNO "/%" PRIaPGNO
@@ -20167,14 +20162,14 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
       /* LY: 'invalidate' the meta. */
       meta_update_begin(env, target, pending->unsafe_txnid);
       unaligned_poke_u64(4, target->sign, DATASIGN_WEAK);
-#ifndef NDEBUG
+#if MDBX_CHECKING > 0 || MDBX_DEBUG > 0
       /* debug: provoke failure to catch a violators, but don't touch pagesize
        * to allow readers catch actual pagesize. */
       void *provoke_begin = &target->trees.gc.root;
       void *provoke_end = &target->sign;
       memset(provoke_begin, 0xCC, ptr_dist(provoke_end, provoke_begin));
       jitter4testing(false);
-#endif
+#endif /* MDBX_CHECKING > 0 || MDBX_DEBUG > 0 */
 
       /* LY: update info */
       target->geometry = pending->geometry;
@@ -23866,10 +23861,10 @@ static void mdbx_fini(void);
 #if defined(_WIN32) || defined(_WIN64)
 
 #if MDBX_BUILD_SHARED_LIBRARY
-#if MDBX_WITHOUT_MSVC_CRT && defined(NDEBUG)
+#if MDBX_WITHOUT_MSVC_CRT && !defined(_DEBUG)
 /* DEBUG/CHECKED builds still require MSVC's CRT for runtime checks.
  *
- * Define dll's entry point only for Release build when NDEBUG is defined and
+ * Define dll's entry point only for Release build when _DEBUG is not defined and
  * MDBX_WITHOUT_MSVC_CRT=ON. if the entry point isn't defined then MSVC's will
  * automatically use DllMainCRTStartup() from CRT library, which also
  * automatically call DllMain() from our mdbx.dll */
@@ -26506,7 +26501,8 @@ MDBX_NORETURN static void fuckup(const char *msg, const char *func, unsigned lin
   const MDBX_panic_func panic_func = globals.panic_func;
   if (panic_func)
     panic_func(msg, func, line, obj, obj_class);
-  debug_log(MDBX_LOG_FATAL, func, line, "\r\nMDBX-ASSERTION: %s (%s %p)\r\n", msg, obj_class, (void *)obj);
+  debug_log(MDBX_LOG_FATAL, func, line, obj ? "MDBX-ASSERTION: %s (%s %p)\n" : "MDBX-ASSERTION: %s\n", msg, obj_class,
+            (void *)obj);
   osal_panic(msg, func, line);
 }
 
@@ -33730,11 +33726,12 @@ __hot pgno_t pnl_get_best_sequence(const pnl_t pnl, const size_t seq, const pgno
 #else
   size_t len = pnl_size(pnl);
   for (size_t span, i = len; i >= seq && pnl[i] <= defrag_detent - seq; i -= span) {
-    for (span = 1; i - span > 0 && MDBX_PNL_CONTIGUOUS(pnl[i - span], pnl[i], span); ++span)
-      ;
-    if (span >= seq) {
+    span = 1;
+    while (unlikely(MDBX_PNL_CONTIGUOUS(pnl[i - span], pnl[i], span)) && likely((intptr_t)(i - span) > 0))
+      ++span;
+    if (unlikely(span >= seq)) {
       size_t extra = span - seq;
-      if (extra < best_extra) {
+      if (unlikely(extra < best_extra)) {
         best_pos = i;
         best_extra = extra;
         if (best_extra == 0)
@@ -40257,10 +40254,10 @@ __dll_export
         0,
         14,
         1,
-        526,
+        532,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.526 */
-        {"2026-03-31T11:46:22+03:00", "17d6a976bcf0b731edd51d0ad6dd04c1d51aea46", "858186d27ac192fd89dba41c4afd970b45f99048", "v0.14.1-526-g858186d2"},
+                                        0.14.1.532 */
+        {"2026-04-01T01:47:30+03:00", "e5b876256be2217dff3eb926ea1ddd1ae262ab4f", "6fe748e569b3fda2470079405179c53ebfb53002", "v0.14.1-532-g6fe748e5"},
         sourcery};
 
 __dll_export

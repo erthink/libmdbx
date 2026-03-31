@@ -5,7 +5,6 @@ TODO
  - preserve/restore cursors state during `mdbx_txn_checkpoint()`, `mdbx_txn_amend()` and `mdbx_txn_commit_embark_read()`.
  - man-page for `mdbx_defrag`.
  - Предоставление информации о размере рагруженной/кешируемой в ОЗУ части БД и её использование для управления упреждающим чтением.
- - split ASSERT() to CHECK{0,1,2,3} and basal `assert()`.
  - [SWIG](https://www.swig.org/).
  - Интеграция c DTrace и аналогами.
  - LTTng for tracing.
@@ -24,10 +23,11 @@ TODO
 In development
 --------------
  - Ultra-fast deletion of consecutive elements by cutting off b-tree branches.
- - Refine/simplify assertion-like errors handling.
 
 Done
 ----
+ - split ASSERT() to CHECK{0,1,2} and basal `assert()`.
+ - Refine/simplify assertion-like errors handling.
  - CLI-options to mdbx_defrag and mdbx_load.
  - Optional page-get operation statistics for transactions.
  - digging/refactoring/optimizing page splitting and tree rebalance.

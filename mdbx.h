@@ -1,4 +1,4 @@
-/** This file is part of the libmdbx amalgamated source code (v0.14.1-526-g858186d2 at 2026-03-31T11:46:22+03:00).
+/** This file is part of the libmdbx amalgamated source code (v0.14.1-532-g6fe748e5 at 2026-04-01T01:47:30+03:00).
 
 \file mdbx.h
 \brief The libmdbx C API header file.
@@ -162,7 +162,7 @@ as a duplicates or as like a multiple values corresponds to keys.
 #include <stdint.h>
 #if !defined(assert)
 #include <assert.h>
-#endif /* NDEBUG */
+#endif /* assert */
 
 #if defined(_WIN32) || defined(_WIN64)
 #include <windows.h>

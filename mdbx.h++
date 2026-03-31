@@ -1,4 +1,4 @@
-﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-526-g858186d2 at 2026-03-31T11:46:22+03:00).
+﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-532-g6fe748e5 at 2026-04-01T01:47:30+03:00).
 /// \file mdbx.h++
 /// \brief The libmdbx C++ API header file.
 ///
@@ -214,7 +214,7 @@
 /** Workaround for old compilers without support assertion inside `constexpr` functions. */
 #if defined(CONSTEXPR_ASSERT)
 #define MDBX_CONSTEXPR_ASSERT(expr) CONSTEXPR_ASSERT(expr)
-#elif defined NDEBUG
+#elif defined(NDEBUG) && (!defined(MDBX_CHECKING) || !MDBX_CHECKING) && (!defined(MDBX_DEBUG) || !MDBX_DEBUG)
 #define MDBX_CONSTEXPR_ASSERT(expr) void(0)
 #else
 #define MDBX_CONSTEXPR_ASSERT(expr) ((expr) ? void(0) : [] { assert(!#expr); }())
@@ -5230,7 +5230,7 @@ inline env &env::operator=(env &&other) noexcept {
 inline env::env(env &&other) noexcept : handle_(other.handle_) { other.handle_ = nullptr; }
 
 inline env::~env() noexcept {
-#ifndef NDEBUG
+#if (defined(MDBX_CHECKING) && MDBX_CHECKING > 0) || (defined(MDBX_DEBUG) && MDBX_DEBUG > 0)
   handle_ = reinterpret_cast<MDBX_env *>(uintptr_t(0xDeadBeef));
 #endif
 }
@@ -5618,7 +5618,7 @@ inline txn &txn::operator=(txn &&other) noexcept {
 inline txn::txn(txn &&other) noexcept : handle_(other.handle_) { other.handle_ = nullptr; }
 
 inline txn::~txn() noexcept {
-#ifndef NDEBUG
+#if (defined(MDBX_CHECKING) && MDBX_CHECKING > 0) || (defined(MDBX_DEBUG) && MDBX_DEBUG > 0)
   handle_ = reinterpret_cast<MDBX_txn *>(uintptr_t(0xDeadBeef));
 #endif
 }
@@ -6134,7 +6134,7 @@ inline cursor &cursor::operator=(cursor &&other) noexcept {
 inline cursor::cursor(cursor &&other) noexcept : handle_(other.handle_) { other.handle_ = nullptr; }
 
 inline cursor::~cursor() noexcept {
-#ifndef NDEBUG
+#if (defined(MDBX_CHECKING) && MDBX_CHECKING > 0) || (defined(MDBX_DEBUG) && MDBX_DEBUG > 0)
   handle_ = reinterpret_cast<MDBX_cursor *>(uintptr_t(0xDeadBeef));
 #endif
 }
