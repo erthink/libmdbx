@@ -18,6 +18,7 @@ Appreciations:
  - [Erigon](https://erigon.tech/) for sponsorship.
  - [Chloe Cano](https://github.com/Segwaz) for fuzzing, bug reporing and fixes.
  - [Weixie Cui](https://github.com/cuiweixie) for bug fixing through pull-requests.
+ - [Alexander Kelchin](https://serebrium.ru /) (Serebrium Company) for bug reporting and prototypes of exploits.
 
 Fixes:
 
@@ -92,6 +93,11 @@ Other:
  - Using hex dump of `mdbx::slice` instead of base58 in C++ API.
 
  - Added link to [`mdbxmou`](https://github.com/ikonopistsev/mdbxmou) bindings for NodeJS.
+
+ - Added in-code example of fix out-of-bounds read via corrupted leaf-node with comments.
+   See `node_read()` inside the source code.
+
+ - Refined a handling of bad/corrupted/crafted database geometry in a meta-pages, corresponding behaviour and logged messages.
 
 --------------------------------------------------------------------------------
 
