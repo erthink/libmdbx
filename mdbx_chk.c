@@ -1,10 +1,10 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-533-gde55f253 at 2026-04-01T13:09:05+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-535-g2ea4d615 at 2026-04-04T21:15:47+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
  * solutions.  Please visit https://libmdbx.dqdkfa.ru for more information, changelog, documentation, C++ API description
  * and links to the original git repo with the source code.  Questions, feedback and suggestions are welcome to the
- * Telegram' group https://t.me/libmdbx.
+ * Telegram' group https://t.me/libmdbx, MAX' chat https://max.ru/join/dKckvyuARxp1vRK-wnPur8zYCEkbR3OUOmpPWkWxp78.
  *
  * The libmdbx code will forever remain open and with high-quality free support, as far as the life circumstances of the
  * project participants allow. Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`,
@@ -65,18 +65,17 @@ static void signal_handler(int sig) {
 #define EXIT_FAILURE_CHECK_MAJOR (EXIT_FAILURE + 1)
 #define EXIT_FAILURE_CHECK_MINOR EXIT_FAILURE
 
-MDBX_env_flags_t env_flags = MDBX_RDONLY | MDBX_EXCLUSIVE | MDBX_VALIDATION;
-MDBX_env *env;
-MDBX_txn *txn;
-unsigned verbosity = 0;
-bool quiet;
-MDBX_val only_table;
-int stuck_meta = -1;
-MDBX_chk_context_t chk;
-bool turn_meta = false;
-bool force_turn_meta = false;
-MDBX_chk_flags_t chk_flags = MDBX_CHK_DEFAULTS;
-MDBX_chk_stage_t chk_stage = MDBX_chk_none;
+static MDBX_env_flags_t env_flags = MDBX_RDONLY | MDBX_EXCLUSIVE | MDBX_VALIDATION;
+static MDBX_env *env;
+static unsigned verbosity = 0;
+static bool quiet;
+static MDBX_val only_table;
+static int stuck_meta = -1;
+static MDBX_chk_context_t chk;
+static bool turn_meta = false;
+static bool force_turn_meta = false;
+static MDBX_chk_flags_t chk_flags = MDBX_CHK_DEFAULTS;
+static MDBX_chk_stage_t chk_stage = MDBX_chk_none;
 
 static MDBX_chk_line_t line_struct;
 static size_t anchor_cookie;

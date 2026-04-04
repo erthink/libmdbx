@@ -5,7 +5,7 @@
 # open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
 # solutions.  Please visit https://libmdbx.dqdkfa.ru for more information, changelog, documentation, C++ API description
 # and links to the original git repo with the source code.  Questions, feedback and suggestions are welcome to the
-# Telegram' group https://t.me/libmdbx.
+# Telegram' group https://t.me/libmdbx, MAX' chat https://max.ru/join/dKckvyuARxp1vRK-wnPur8zYCEkbR3OUOmpPWkWxp78.
 #
 # The libmdbx code will forever remain open and with high-quality free support, as far as the life circumstances of the
 # project participants allow. Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`,

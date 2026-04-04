@@ -1,10 +1,10 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-533-gde55f253 at 2026-04-01T13:09:05+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-535-g2ea4d615 at 2026-04-04T21:15:47+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
  * solutions.  Please visit https://libmdbx.dqdkfa.ru for more information, changelog, documentation, C++ API description
  * and links to the original git repo with the source code.  Questions, feedback and suggestions are welcome to the
- * Telegram' group https://t.me/libmdbx.
+ * Telegram' group https://t.me/libmdbx, MAX' chat https://max.ru/join/dKckvyuARxp1vRK-wnPur8zYCEkbR3OUOmpPWkWxp78.
  *
  * The libmdbx code will forever remain open and with high-quality free support, as far as the life circumstances of the
  * project participants allow. Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`,
@@ -40254,10 +40254,10 @@ __dll_export
         0,
         14,
         1,
-        533,
+        535,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.533 */
-        {"2026-04-01T13:09:05+03:00", "2246084c2bb7d04e5a122f74233f024f79eec311", "de55f253d48c428658065b07fb512a9a215b8426", "v0.14.1-533-gde55f253"},
+                                        0.14.1.535 */
+        {"2026-04-04T21:15:47+03:00", "d11775e028ddfd5d09923796876f0595b4e62968", "2ea4d6158a2e61552d6fce0be86f83abc027a12f", "v0.14.1-535-g2ea4d615"},
         sourcery};
 
 __dll_export
