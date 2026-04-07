@@ -336,7 +336,7 @@ mdbx_modern_example: mdbx.h ut_and_examples/example-mdbx.c++ libmdbx.$(SO_SUFFIX
 MAN_SRCDIR := man1/
 
 dist:
-	@echo '  Starting 2026 libmdbx is distrubuted in an amalgamated source code form.'
+	@echo '  Starting 2026 libmdbx is distributed in an amalgamated source code form.'
 	@echo '  So amalgamation is no longer required. Please update your build scripts.'
 
 config-gnumake.h: @buildflags.tag mdbx.c $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT

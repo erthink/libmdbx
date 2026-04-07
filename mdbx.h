@@ -1,4 +1,4 @@
-/** This file is part of the libmdbx amalgamated source code (v0.14.1-535-g2ea4d615 at 2026-04-04T21:15:47+03:00).
+/** This file is part of the libmdbx amalgamated source code (v0.14.1-539-g290121f9 at 2026-04-07T09:49:22+03:00).
 
 \file mdbx.h
 \brief The libmdbx C API header file.
@@ -1417,7 +1417,7 @@ typedef enum MDBX_env_flags {
    *    a steady commit-point to resume reuse pages, each time there is
    *    insufficient space and before increasing the size of the file on disk.
    *
-   * In other words, with `MDBX_SAFE_NOSYNC` flag MDBX insures you from the
+   * In other words, with `MDBX_SAFE_NOSYNC` flag MDBX ensures you from the
    * whole database corruption, at the cost increasing database size and/or
    * number of disk IOPs. So, `MDBX_SAFE_NOSYNC` flag could be used with
    * \ref mdbx_env_sync() as alternatively for batch committing or nested
@@ -7319,17 +7319,17 @@ LIBMDBX_API int mdbx_gc_info(MDBX_txn *txn, MDBX_gc_info_t *info, size_t bytes, 
  * \see mdbx_env_defrag() */
 typedef enum MDBX_defrag_stopping_reasons {
   MDBX_defrag_noobstacles = 0,
-  MDBX_defrag_step_size = 1,        /**< Step transaction size limit reached */
-  MDBX_defrag_large_chunk = 2,      /**< Preliminary movement is necessary to form
-                                         a sufficient sequence of adjacent free pages in order to
-                                         then move the revealed Large/Overflow page on a next cycle */
-  MDBX_defrag_discontinued = 4,     /**< Discontinued by user */
-  MDBX_defrag_laggard_reader = 8,   /**< At least one process performing a reading transaction
-                                         prevents further defragmentation */
-  MDBX_defrag_enough_theshold = 16, /**< The defragmentation goal set by the user has been achieved */
-  MDBX_defrag_time_limit = 32,      /**< The specified limit on the duration of defragmentation has been reached */
-  MDBX_defrag_aborted = 64,         /**< Aborted by user */
-  MDBX_defrag_error = 128           /**< An error occurred during defragmentation */
+  MDBX_defrag_step_size = 1,         /**< Step transaction size limit reached */
+  MDBX_defrag_large_chunk = 2,       /**< Preliminary movement is necessary to form
+                                          a sufficient sequence of adjacent free pages in order to
+                                          then move the revealed Large/Overflow page on a next cycle */
+  MDBX_defrag_discontinued = 4,      /**< Discontinued by user */
+  MDBX_defrag_laggard_reader = 8,    /**< At least one process performing a reading transaction
+                                          prevents further defragmentation */
+  MDBX_defrag_enough_threshold = 16, /**< The defragmentation goal set by the user has been achieved */
+  MDBX_defrag_time_limit = 32,       /**< The specified limit on the duration of defragmentation has been reached */
+  MDBX_defrag_aborted = 64,          /**< Aborted by user */
+  MDBX_defrag_error = 128            /**< An error occurred during defragmentation */
 } MDBX_defrag_stopping_reasons_t;
 DEFINE_ENUM_FLAG_OPERATORS(MDBX_defrag_stopping_reasons)
 

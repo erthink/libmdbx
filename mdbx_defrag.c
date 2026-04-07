@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-535-g2ea4d615 at 2026-04-04T21:15:47+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-539-g290121f9 at 2026-04-07T09:49:22+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -53,7 +53,7 @@ static void signal_handler(int sig) {
 static char *prog;
 static void usage(void) {
   fprintf(stderr,
-          "usage: %s [-V] [-q] [-c] [-d] [-p] [-u|U] db_pathname\n"
+          "usage: %s [-V] [-v[v[v...]]] [-q] [-1..9] [-t seconds] [-f percent] [-r percent] [-s megabytes] [-c] [-u|U] db_pathname\n"
           "  -V\t\tprint version and exit\n"
           "  -v\t\tmore verbose, could be repeated for extra details from debug-enabled builds.\n"
           "  -q\t\tbe quiet.\n"
@@ -143,8 +143,8 @@ static const char *stop_reason(const MDBX_defrag_result_t *progress) {
     return "aborted by user";
   if (progress->stopping_reasons & MDBX_defrag_discontinued)
     return "discontinued by user";
-  if (progress->stopping_reasons & MDBX_defrag_enough_theshold)
-    return "enough theshold";
+  if (progress->stopping_reasons & MDBX_defrag_enough_threshold)
+    return "enough threshold";
   if (progress->stopping_reasons & MDBX_defrag_time_limit)
     return "time limit reached";
   if (progress->stopping_reasons & MDBX_defrag_laggard_reader)

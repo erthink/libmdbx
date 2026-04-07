@@ -23,7 +23,7 @@ _libmdbx_ is an extremely fast, compact, powerful, embedded, transactional [key-
 
 Historically, _libmdbx_ is a deeply revised and extended descendant of the legendary [Lightning Memory-Mapped Database](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database). _libmdbx_ inherits all benefits from _LMDB_, but resolves some issues and adds [a large set of improvements](#improvements-beyond-lmdb).
 
-[![Чат в МАКС](https://libmdbx.dqdkfa.ru/img/MAX-24x24.png)](https://max.ru/join/dKckvyuARxp1vRK-wnPur8zYCEkbR3OUOmpPWkWxp78)|[![Telergam: Support | Discussions | News](https://img.shields.io/endpoint?color=scarlet&logo=telegram&label=Support%20%7C%20Discussions%20%7C%20News&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Flibmdbx)](https://t.me/libmdbx)
+[![Чат в МАКС](https://libmdbx.dqdkfa.ru/img/MAX-24x24.png)](https://max.ru/join/dKckvyuARxp1vRK-wnPur8zYCEkbR3OUOmpPWkWxp78)|[![Telegram: Support | Discussions | News](https://img.shields.io/endpoint?color=scarlet&logo=telegram&label=Support%20%7C%20Discussions%20%7C%20News&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Flibmdbx)](https://t.me/libmdbx)
 
 > Please refer to the online [official libmdbx documentation site](https://libmdbx.dqdkfa.ru) with [`C` API description](https://libmdbx.dqdkfa.ru/group__c__api.html) and pay attention to the [`C++` API](https://sourcecraft.dev/dqdkfa/libmdbx/blob?file=mdbx.h%2B%2B#line-num-1). Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`,
 BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3NDMyS5wXJgfeMTmJznRi`.
@@ -306,7 +306,7 @@ Usage
 Since December 2025 _libmdbx_ is available only in an amalgamated source code form like [SQLite](https://www.sqlite.org/amalgamation.html), without additional dependencies and internal resources needed only for development of _libmdbx_ itself. Packages support for common Linux distributions is planned in the future, since release the version `1.0`.
 
 The source code is available on [SourceCraft](https://sourcecraft.dev/dqdkfa/libmdbx) and mirrors on [AltSpace](https://altlinux.space/DQDKFA.RU/libmdbx.git), [Github](https://github.com/erthink/libmdbx), [abf.io](https://abf.io/erthink/libmdbx) and [GitFlic](https://gitflic.ru/project/erthink/libmdbx).
-Please use the `stable` branch or the latest release for production environment through stagging and the `master` branch for development a derivative projects.
+Please use the `stable` branch or the latest release for production environment through staging and the `master` branch for development a derivative projects.
 
 ## Building and Testing
 

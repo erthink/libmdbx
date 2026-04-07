@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-535-g2ea4d615 at 2026-04-04T21:15:47+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-539-g290121f9 at 2026-04-07T09:49:22+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -14756,6 +14756,12 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
         if (likely(cmp > 0)) {
           mc->ki[mc->top]++; /* step forward for appending */
           rc = MDBX_NOTFOUND;
+#ifdef MDBX_EVENBUG20260405_FIX
+          /* 2026-04-05: Здесь занятный эффект чётности унаследованных от LMDB багов. Исправлять один без другого
+           * нельзя. Однако, оба исправления увеличивают исполнимый код и накладные расходы. Поэтому решено поместить
+           * исправление под #ifdef до появления явной необходимости в них. */
+          inner_gone(mc);
+#endif /* MDBX_EVENBUG20260405_FIX */
         } else if (unlikely(cmp != 0)) {
           /* new-key < last-key */
           return MDBX_EKEYMISMATCH;
@@ -17182,7 +17188,7 @@ static void defrag_progcess(dfc_t *dfc, size_t progress_increment) {
       dfc->defrag_atleast >= dfc->txn->geo.first_unallocated) {
     if (dfc->defrag_enough >= dfc->txn->geo.first_unallocated) {
       if (!dfc->wallclock_atleast || (now_cache = defrag_now(now_cache)) >= dfc->wallclock_atleast)
-        dfc->stopping_reasons |= MDBX_defrag_enough_theshold;
+        dfc->stopping_reasons |= MDBX_defrag_enough_threshold;
     } else if (dfc->wallclock_detent && ++dfc->wallclock_trottle % 64 == 0 &&
                (now_cache = defrag_now(now_cache)) >= dfc->wallclock_detent)
       dfc->stopping_reasons |= MDBX_defrag_time_limit;
@@ -24043,7 +24049,7 @@ __cold static void mdbx_init(void) {
                           (getenv_bool("MDBX_DBG_LEGACY_MULTIOPEN", false) ? MDBX_DBG_LEGACY_MULTIOPEN : 0) |
                           (getenv_bool("MDBX_DBG_LEGACY_OVERLAP", false) ? MDBX_DBG_LEGACY_OVERLAP : 0) |
                           (getenv_bool("MDBX_DBG_DONT_UPGRADE", false) ? MDBX_DBG_DONT_UPGRADE : 0);
-  globals.loglevel = MDBX_LOG_FATAL;
+  globals.loglevel = MDBX_LOG_NOTICE;
   ENSURE(osal_fastmutex_init(&globals.debug_lock) == 0);
   osal_ctor();
   ASSERT(globals.sys_pagesize > 0 && (globals.sys_pagesize & (globals.sys_pagesize - 1)) == 0);
@@ -32400,6 +32406,27 @@ __hot int page_touch_unmodifable(MDBX_txn *txn, MDBX_cursor *mc, const page_t *c
 done:
   /* Adjust cursors pointing to mp */
   mc->pg[mc->top] = np;
+#ifdef MDBX_EVENBUG20260405_FIX
+  if (is_leaf(np) && inner_pointed(mc))
+    /* 2026-04-05: Нашёлся занятный баг, унаследованный от LMDB -- Отсутствовало обновление вложенного dupsort-курсора.
+     *
+     * С одной стороны, отсутствие этого обновления не приводило к проблемам, так как во всех существовавших путях
+     * выполнения вложенный курсор затем инициализировался заново.
+     *
+     * С другой стороны, такое обновление выполняется во всех остальных случаях, при условии что он связан с
+     * dupsort-узлом на текущей/обновлённой странице, указывающем на sub-страницу, а не отдельное дерево. Причем во
+     * многих вариантах развития событий, такая корректировка блокировалась явным присвоением `mc->pg[mc->top] = np`
+     * выше.
+     *
+     * Однако, исправление "всё сломало", буквально из-за нарушения чётности багов.
+     * В пути обработки put(append), позиция основного/внешнего курсора инкрементируется для последующей append-вставки,
+     * но вложенный курсор при этом не сбрасывается. В результате, состояние курсорной пары становилось несогласованным.
+     * При обновлении в отладочных сборках срабатывал assert, а в не-отладочных в dupsort-курсор записывалась чушь.
+     *
+     * По совокупности плюсов/минусов решено добавить это пояснение и оставить исправление под #ifdef, а обнаруженную
+     * специфику учитывать при последующей разработке. */
+    cursor_inner_refresh(mc, np, mc->ki[mc->top]);
+#endif /* MDBX_EVENBUG20260405_FIX */
   MDBX_cursor *m2 = txn->cursors[cursor_dbi(mc)];
   if (mc->flags & z_inner) {
     for (; m2; m2 = m2->next) {
@@ -40254,10 +40281,10 @@ __dll_export
         0,
         14,
         1,
-        535,
+        539,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.535 */
-        {"2026-04-04T21:15:47+03:00", "d11775e028ddfd5d09923796876f0595b4e62968", "2ea4d6158a2e61552d6fce0be86f83abc027a12f", "v0.14.1-535-g2ea4d615"},
+                                        0.14.1.539 */
+        {"2026-04-07T09:49:22+03:00", "d26cd58e9bc9f02b717754b743462931af6fe464", "290121f9216ecb36e69c13c54822710352479736", "v0.14.1-539-g290121f9"},
         sourcery};
 
 __dll_export
