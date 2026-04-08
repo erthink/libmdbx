@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-539-g290121f9 at 2026-04-07T09:49:22+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-540-g975dfaab at 2026-04-08T12:45:14+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -31164,7 +31164,7 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages, intpt
   if (unlikely(pagesize < MDBX_MIN_PAGESIZE || !is_powerof2(pagesize)))
     return LOG_IFERR(MDBX_INCOMPATIBLE);
 
-  MDBX_MAYBE_UNUSED const int log2page = log2n_powerof2(pagesize);
+  const int log2page = log2n_powerof2(pagesize);
   ASSERT(pagesize == (INT64_C(1) << log2page));
   (void)log2page;
 
@@ -40281,10 +40281,10 @@ __dll_export
         0,
         14,
         1,
-        539,
+        540,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.539 */
-        {"2026-04-07T09:49:22+03:00", "d26cd58e9bc9f02b717754b743462931af6fe464", "290121f9216ecb36e69c13c54822710352479736", "v0.14.1-539-g290121f9"},
+                                        0.14.1.540 */
+        {"2026-04-08T12:45:14+03:00", "09c0f2aa0fc61acf7ce5852bba62383b7430ef5a", "975dfaab5a5a17a29bd8fdac3189a70f542c0bb9", "v0.14.1-540-g975dfaab"},
         sourcery};
 
 __dll_export
