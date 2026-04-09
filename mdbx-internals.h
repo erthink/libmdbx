@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-540-g975dfaab at 2026-04-08T12:45:14+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-549-g80cecf04 at 2026-04-09T23:32:20+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -24,7 +24,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 6b1bac36437a1cd702166b94a12005e956f8c81698eae790a1b473638d86d89d_v0_14_1_540_g975dfaab
+#define MDBX_BUILD_SOURCERY 69e7465a90bc26718ed4bee887c8e49ceb083b8481bc29b356847efbe5e99294_v0_14_1_549_g80cecf04
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -2029,7 +2029,7 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t osal_bswap32
 #else
 #define MDBX_LOCKING MDBX_LOCKING_POSIX2001
 #endif
-#elif defined(__sun) || defined(__SVR4) || defined(__svr4__)
+#elif defined(__sun) || defined(__SVR4) || defined(__svr4__) || defined(__HAIKU__)
 #define MDBX_LOCKING MDBX_LOCKING_POSIX1988
 #else
 #define MDBX_LOCKING MDBX_LOCKING_SYSV
