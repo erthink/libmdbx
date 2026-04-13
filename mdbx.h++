@@ -1,4 +1,4 @@
-﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-548-gbd93810c at 2026-04-09T15:45:45+03:00).
+﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-569-ge0e63816 at 2026-04-13T16:13:04+03:00).
 /// \file mdbx.h++
 /// \brief The libmdbx C++ API header file.
 ///
@@ -2432,11 +2432,19 @@ public:
   template <class CHAR, class T> buffer &operator=(const ::std::basic_string_view<CHAR, T> &view) noexcept {
     return assign(view.begin(), view.length());
   }
+
+  template <class CHAR, class T> buffer &append(const ::std::basic_string_view<CHAR, T> &view) {
+    return append(view.data(), view.size());
+  }
 #endif /* __cpp_lib_string_view >= 201606L */
 
   template <class CHAR, class T, class A>
   MDBX_CXX20_CONSTEXPR explicit operator ::std::basic_string<CHAR, T, A>() const {
     return as_string<CHAR, T, A>();
+  }
+
+  template <class CHAR, class T, class A> buffer &append(const ::std::basic_string<CHAR, T, A> &str) {
+    return append(str.data(), str.size());
   }
 
   /// \brief Clears the contents and storage.
@@ -2754,6 +2762,11 @@ public:
     other.reset();
   }
   void reset() noexcept { mdbx_cache_init(this); }
+  MDBX_CXX20_CONSTEXPR cache_entry(const MDBX_cache_entry_t &ce) noexcept { mdbx::memcpy(this, &ce, sizeof(*this)); }
+  MDBX_CXX20_CONSTEXPR cache_entry &operator=(const MDBX_cache_entry_t &ce) noexcept {
+    mdbx::memcpy(this, &ce, sizeof(*this));
+    return *this;
+  };
 };
 
 //------------------------------------------------------------------------------
@@ -2966,11 +2979,13 @@ public:
   inline env(env &&) noexcept;
   inline ~env() noexcept;
 
-  MDBX_CXX14_CONSTEXPR operator bool() const noexcept;
-  MDBX_CXX14_CONSTEXPR operator const MDBX_env *() const;
-  MDBX_CXX14_CONSTEXPR operator MDBX_env *();
-  friend MDBX_CXX11_CONSTEXPR bool operator==(const env &a, const env &b) noexcept;
-  friend MDBX_CXX11_CONSTEXPR bool operator!=(const env &a, const env &b) noexcept;
+  MDBX_CXX14_CONSTEXPR operator bool() const noexcept { return handle_ != nullptr; };
+  MDBX_CXX14_CONSTEXPR operator const MDBX_env *() const noexcept { return handle_; }
+  MDBX_CXX14_CONSTEXPR operator MDBX_env *() noexcept { return handle_; }
+  MDBX_CXX14_CONSTEXPR const MDBX_env *handle() const noexcept { return handle_; }
+  MDBX_CXX14_CONSTEXPR MDBX_env *handle() noexcept { return handle_; };
+  friend MDBX_CXX11_CONSTEXPR bool operator==(const env &a, const env &b) noexcept { return a.handle_ == b.handle_; }
+  friend MDBX_CXX11_CONSTEXPR bool operator!=(const env &a, const env &b) noexcept { return a.handle_ != b.handle_; }
 
   //----------------------------------------------------------------------------
 
@@ -3693,11 +3708,13 @@ public:
   inline txn(txn &&) noexcept;
   inline ~txn() noexcept;
 
-  MDBX_CXX14_CONSTEXPR operator bool() const noexcept;
-  MDBX_CXX14_CONSTEXPR operator const MDBX_txn *() const;
-  MDBX_CXX14_CONSTEXPR operator MDBX_txn *();
-  friend MDBX_CXX11_CONSTEXPR bool operator==(const txn &a, const txn &b) noexcept;
-  friend MDBX_CXX11_CONSTEXPR bool operator!=(const txn &a, const txn &b) noexcept;
+  MDBX_CXX14_CONSTEXPR operator bool() const noexcept { return handle_ != nullptr; };
+  MDBX_CXX14_CONSTEXPR operator const MDBX_txn *() const noexcept { return handle_; }
+  MDBX_CXX14_CONSTEXPR operator MDBX_txn *() noexcept { return handle_; }
+  MDBX_CXX14_CONSTEXPR const MDBX_txn *handle() const noexcept { return handle_; }
+  MDBX_CXX14_CONSTEXPR MDBX_txn *handle() noexcept { return handle_; };
+  friend MDBX_CXX11_CONSTEXPR bool operator==(const txn &a, const txn &b) noexcept { return a.handle_ == b.handle_; }
+  friend MDBX_CXX11_CONSTEXPR bool operator!=(const txn &a, const txn &b) noexcept { return a.handle_ != b.handle_; }
 
   /// \brief Returns the transaction's environment.
   inline ::mdbx::env env() const noexcept;
@@ -4142,11 +4159,17 @@ public:
   inline cursor(cursor &&) noexcept;
   inline ~cursor() noexcept;
   inline cursor_managed clone(void *your_context = nullptr) const;
-  MDBX_CXX14_CONSTEXPR operator bool() const noexcept;
-  MDBX_CXX14_CONSTEXPR operator const MDBX_cursor *() const;
-  MDBX_CXX14_CONSTEXPR operator MDBX_cursor *();
-  friend MDBX_CXX11_CONSTEXPR bool operator==(const cursor &a, const cursor &b) noexcept;
-  friend MDBX_CXX11_CONSTEXPR bool operator!=(const cursor &a, const cursor &b) noexcept;
+  MDBX_CXX14_CONSTEXPR operator bool() const noexcept { return handle_ != nullptr; };
+  MDBX_CXX14_CONSTEXPR operator const MDBX_cursor *() const noexcept { return handle_; }
+  MDBX_CXX14_CONSTEXPR operator MDBX_cursor *() noexcept { return handle_; }
+  MDBX_CXX14_CONSTEXPR const MDBX_cursor *handle() const noexcept { return handle_; }
+  MDBX_CXX14_CONSTEXPR MDBX_cursor *handle() noexcept { return handle_; };
+  friend MDBX_CXX11_CONSTEXPR bool operator==(const cursor &a, const cursor &b) noexcept {
+    return a.handle_ == b.handle_;
+  }
+  friend MDBX_CXX11_CONSTEXPR bool operator!=(const cursor &a, const cursor &b) noexcept {
+    return a.handle_ != b.handle_;
+  }
 
   friend inline int compare_position_nothrow(const cursor &left, const cursor &right, bool ignore_nested) noexcept;
   friend inline int compare_position(const cursor &left, const cursor &right, bool ignore_nested);
@@ -5235,16 +5258,6 @@ inline env::~env() noexcept {
 #endif
 }
 
-MDBX_CXX14_CONSTEXPR env::operator bool() const noexcept { return handle_ != nullptr; }
-
-MDBX_CXX14_CONSTEXPR env::operator const MDBX_env *() const { return handle_; }
-
-MDBX_CXX14_CONSTEXPR env::operator MDBX_env *() { return handle_; }
-
-MDBX_CXX11_CONSTEXPR bool operator==(const env &a, const env &b) noexcept { return a.handle_ == b.handle_; }
-
-MDBX_CXX11_CONSTEXPR bool operator!=(const env &a, const env &b) noexcept { return a.handle_ != b.handle_; }
-
 inline env::geometry &env::geometry::make_fixed(intptr_t size) noexcept {
   size_lower = size_now = size_upper = size;
   growth_step = shrink_threshold = 0;
@@ -5622,16 +5635,6 @@ inline txn::~txn() noexcept {
   handle_ = reinterpret_cast<MDBX_txn *>(uintptr_t(0xDeadBeef));
 #endif
 }
-
-MDBX_CXX14_CONSTEXPR txn::operator bool() const noexcept { return handle_ != nullptr; }
-
-MDBX_CXX14_CONSTEXPR txn::operator const MDBX_txn *() const { return handle_; }
-
-MDBX_CXX14_CONSTEXPR txn::operator MDBX_txn *() { return handle_; }
-
-MDBX_CXX11_CONSTEXPR bool operator==(const txn &a, const txn &b) noexcept { return a.handle_ == b.handle_; }
-
-MDBX_CXX11_CONSTEXPR bool operator!=(const txn &a, const txn &b) noexcept { return a.handle_ != b.handle_; }
 
 inline void *txn::get_context() const noexcept { return mdbx_txn_get_userctx(handle_); }
 
@@ -6138,16 +6141,6 @@ inline cursor::~cursor() noexcept {
   handle_ = reinterpret_cast<MDBX_cursor *>(uintptr_t(0xDeadBeef));
 #endif
 }
-
-MDBX_CXX14_CONSTEXPR cursor::operator bool() const noexcept { return handle_ != nullptr; }
-
-MDBX_CXX14_CONSTEXPR cursor::operator const MDBX_cursor *() const { return handle_; }
-
-MDBX_CXX14_CONSTEXPR cursor::operator MDBX_cursor *() { return handle_; }
-
-MDBX_CXX11_CONSTEXPR bool operator==(const cursor &a, const cursor &b) noexcept { return a.handle_ == b.handle_; }
-
-MDBX_CXX11_CONSTEXPR bool operator!=(const cursor &a, const cursor &b) noexcept { return a.handle_ != b.handle_; }
 
 inline int compare_position_nothrow(const cursor &left, const cursor &right, bool ignore_nested = false) noexcept {
   return mdbx_cursor_compare(left.handle_, right.handle_, ignore_nested);

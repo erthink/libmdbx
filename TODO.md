@@ -22,10 +22,11 @@ TODO
 
 In development
 --------------
- - Ultra-fast deletion of consecutive elements by cutting off b-tree branches.
+ - v0.14.2 miletone
 
 Done
 ----
+ - Ultra-fast deletion of consecutive elements by cutting off b-tree branches.
  - split ASSERT() to CHECK{0,1,2} and basal `assert()`.
  - Refine/simplify assertion-like errors handling.
  - CLI-options to mdbx_defrag and mdbx_load.
