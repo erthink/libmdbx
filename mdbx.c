@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY d322e1310776fdd5ab6c5ba8015b6a4a2f4250a238fbfd0da1bc091c5ba1f237_v0_13_11_23_gb46e9fda
+#define MDBX_BUILD_SOURCERY 82d2adb10adb4d2952bf375face1f4c1ac7dcdab07fb442cb7925d8c9de1c43e_v0_13_11_24_g53b010b4
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -26921,7 +26921,11 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
   uint64_t mapsize_max = geo_upper * (uint64_t)meta->pagesize;
   STATIC_ASSERT(MIN_MAPSIZE < MAX_MAPSIZE);
   if (unlikely(mapsize_max > MAX_MAPSIZE ||
-               (MAX_PAGENO + 1) < (mapsize_max + globals.sys_pagesize - 1) / meta->pagesize)) {
+               (MAX_PAGENO + 1) < ceil_powerof2((/* допустимо, так как уже проверили что mapsize_max <= MAX_MAPSIZE,
+                                                  * а следовательно mapsize_max помещается в size_t */
+                                                 size_t)mapsize_max,
+                                                globals.sys_allocation_granularity) /
+                                      meta->pagesize)) {
     if (mapsize_max > MAX_MAPSIZE64) {
       WARNING("meta[%u] has invalid max-mapsize (%" PRIu64 "), skip it", meta_number, mapsize_max);
       return MDBX_VERSION_MISMATCH;
@@ -37642,10 +37646,10 @@ __dll_export
         0,
         13,
         11,
-        23,
+        24,
         "", /* pre-release suffix of SemVer
-                                        0.13.11.23 */
-        {"2026-03-31T16:00:35+03:00", "03d9248ad276bce72d82cc911d295e4e98970f22", "b46e9fda724ac26b76acde17ce2650563748e3c2", "v0.13.11-23-gb46e9fda"},
+                                        0.13.11.24 */
+        {"2026-04-13T20:23:10+03:00", "93ad3d0f5c0675abb8f24bddf7a68204e2896cac", "53b010b41686a2ede44c7cc4859854c989d21f38", "v0.13.11-24-g53b010b4"},
         sourcery};
 
 __dll_export
