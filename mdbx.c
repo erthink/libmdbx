@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-569-ge0e63816 at 2026-04-13T16:13:04+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-571-g562d63be at 2026-04-13T19:52:03+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -9551,7 +9551,9 @@ void env_options_init(MDBX_env *env) {
   env->options.rp_augment_limit = default_rp_augment_limit(env);
   env->options.dp_reserve_limit = default_dp_reserve_limit(env);
   env->options.dp_initial = default_dp_initial(env);
-  env->options.dp_limit = default_dp_limit(env);
+  env->options.dp_limit = (/* just to avoid extra syscalls and because dp_limit will be adjusted later */ true)
+                              ? env->options.dp_initial * 42
+                              : default_dp_limit(env);
   env->options.spill_max_denominator = default_spill_max_denominator(env);
   env->options.spill_min_denominator = default_spill_min_denominator(env);
   env->options.spill_parent4child_denominator = default_spill_parent4child_denominator(env);
@@ -27235,7 +27237,11 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
   uint64_t mapsize_max = geo_upper * (uint64_t)meta->pagesize;
   STATIC_ASSERT(MIN_MAPSIZE < MAX_MAPSIZE);
   if (unlikely(mapsize_max > MAX_MAPSIZE ||
-               (MAX_PAGENO + 1) < (mapsize_max + globals.sys_pagesize - 1) / meta->pagesize)) {
+               (MAX_PAGENO + 1) < ceil_powerof2((/* допустимо, так как уже проверили что mapsize_max <= MAX_MAPSIZE,
+                                                  * а следовательно mapsize_max помещается в size_t */
+                                                 size_t)mapsize_max,
+                                                globals.sys_allocation_granularity) /
+                                      meta->pagesize)) {
     if (mapsize_max > MAX_MAPSIZE64) {
       WARNING("meta[%u] has invalid max-mapsize (%" PRIu64 "), skip it", meta_number, mapsize_max);
       return MDBX_VERSION_MISMATCH;
@@ -41095,10 +41101,10 @@ __dll_export
         0,
         14,
         1,
-        569,
+        571,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.569 */
-        {"2026-04-13T16:13:04+03:00", "6067558cb14428ae1e17b3caa42af332a7fc5f75", "e0e63816a60dace924cd5f9c0938faff83f6c999", "v0.14.1-569-ge0e63816"},
+                                        0.14.1.571 */
+        {"2026-04-13T19:52:03+03:00", "04c6843494894ba2497b71d5b387bad3bfd5f60e", "562d63be0d49bb1a5c1e50e9b488eaec80a3b4b5", "v0.14.1-571-g562d63be"},
         sourcery};
 
 __dll_export
