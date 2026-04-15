@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-571-g562d63be at 2026-04-13T19:52:03+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-573-g8464f6c2 at 2026-04-16T01:58:52+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -16461,11 +16461,16 @@ int cursor_check(const MDBX_cursor *mc, int txn_bad_bits) {
     return (txn_bad_bits > MDBX_TXN_FINISHED) ? MDBX_EINVAL : MDBX_SUCCESS;
   }
 
-  /* проверяем что курсор в связанном списке для отслеживания,
-   * исключение допускается только для read-only операций для служебных/временных курсоров на стеке. */
+#if !defined(__SANITIZE_ADDRESS__)
+  /* Проверяем что курсор в связанном списке для отслеживания.
+   * Исключение допускается только для read-only операций для служебных/временных курсоров на стеке.
+   * Но при включении ASAN и LTO компилятор может выносить размещение курсоров со стека очень далеко,
+   * из-за чего эта проверка может ложно срабатывать.
+   * Например, при вызове mdbx_estimate_distance() из mdbx_estimate_range(). */
   MDBX_MAYBE_UNUSED char stack_top[sizeof(void *)];
   ENSURE_OBJ(mc, cursor_is_tracked(mc) || (!(txn_bad_bits & txn_ro_flat) && stack_top < (char *)mc &&
                                            (char *)mc - stack_top < (ptrdiff_t)globals.sys_pagesize * 4));
+#endif /* __SANITIZE_ADDRESS__ */
 
   if (txn_bad_bits) {
     int rc = check_txn(mc->txn, txn_bad_bits & ~MDBX_TXN_HAS_CHILD);
@@ -38116,8 +38121,13 @@ cursor_to_search_foliage(const MDBX_cursor *mc) {
       return search_foliage_lenfast_dupfix;
 
     if (mc->tree->flags & MDBX_INTEGERKEY) {
-      size_t ordinal = 0, keylen = mc->tree->dupfix_size;
-      cASSERT0(mc, mc->clc->k.lmax == mc->clc->k.lmin && mc->clc->k.lmax == keylen && (keylen == 4 || keylen == 8));
+      const size_t keylen = mc->tree->dupfix_size;
+      cASSERT0(mc, keylen >= mc->clc->k.lmin && keylen <= mc->clc->k.lmax && (keylen == 4 || keylen == 8));
+      if (/* paranoia */ keylen >= mc->clc->k.lmin && keylen <= mc->clc->k.lmax && (keylen == 4 || keylen == 8)) {
+        mc->clc->k.lmin = keylen;
+        mc->clc->k.lmax = keylen;
+      }
+      size_t ordinal = 0;
 #ifndef cmp_uint_align2
       if (comparator == cmp_uint_align2)
         ordinal = keylen;
@@ -38129,7 +38139,7 @@ cursor_to_search_foliage(const MDBX_cursor *mc) {
       if (comparator == cmp_uint_unaligned)
         ordinal = keylen;
       if (ordinal) {
-        if ((mc->txn->env->flags & MDBX_VALIDATION) == 0) {
+        if ((mc->txn->env->flags & MDBX_VALIDATION) == 0 && ordinal == mc->clc->k.lmin && ordinal == mc->clc->k.lmax) {
           if (ordinal == 4)
             return search_foliage_uint32_dupfix;
           if (ordinal == 8)
@@ -38150,8 +38160,16 @@ cursor_to_search_foliage(const MDBX_cursor *mc) {
     return search_foliage_lenfast_usual;
 
   if (mc->tree->flags & MDBX_INTEGERKEY) {
-    size_t ordinal = 0, keylen = mc->clc->k.lmax;
-    cASSERT0(mc, mc->clc->k.lmax == mc->clc->k.lmin && (keylen == 4 || keylen == 8));
+    cASSERT0(mc, mc->top >= 0);
+    page_t *mp = mc->pg[mc->top];
+    cASSERT0(mc, !is_dupfix_leaf(mp) && page_numkeys(mp) > 0);
+    const size_t keylen = node_ks(page_node(mp, 0));
+    cASSERT0(mc, keylen >= mc->clc->k.lmin && keylen <= mc->clc->k.lmax && (keylen == 4 || keylen == 8));
+    if (/* paranoia */ keylen >= mc->clc->k.lmin && keylen <= mc->clc->k.lmax && (keylen == 4 || keylen == 8)) {
+      mc->clc->k.lmin = keylen;
+      mc->clc->k.lmax = keylen;
+    }
+    size_t ordinal = 0;
 #ifndef cmp_uint_align2
     if (comparator == cmp_uint_align2)
       ordinal = keylen;
@@ -38163,7 +38181,7 @@ cursor_to_search_foliage(const MDBX_cursor *mc) {
     if (comparator == cmp_uint_unaligned)
       ordinal = keylen;
     if (ordinal) {
-      if ((mc->txn->env->flags & MDBX_VALIDATION) == 0 && ordinal == mc->clc->k.lmin) {
+      if ((mc->txn->env->flags & MDBX_VALIDATION) == 0 && ordinal == mc->clc->k.lmin && ordinal == mc->clc->k.lmax) {
         if (ordinal == 4)
           return search_foliage_uint32_usual;
         if (ordinal == 8)
@@ -38260,7 +38278,17 @@ cursor_to_search_branch(const MDBX_cursor *mc) {
     return search_branch_lenfast;
 
   if (mc->tree->flags & MDBX_INTEGERKEY) {
-    size_t ordinal = 0, keylen = mc->clc->k.lmax;
+    cASSERT0(mc, mc->top >= 0);
+    page_t *mp = mc->pg[mc->top];
+    cASSERT0(mc, page_numkeys(mp) > 0);
+    STATIC_ASSERT(P_BRANCH == 1);
+    const size_t keylen = is_dupfix_leaf(mp) ? mp->dupfix_ksize : node_ks(page_node(mp, mp->flags & P_BRANCH));
+    cASSERT0(mc, keylen >= mc->clc->k.lmin && keylen <= mc->clc->k.lmax && (keylen == 4 || keylen == 8));
+    if (/* paranoia */ keylen >= mc->clc->k.lmin && keylen <= mc->clc->k.lmax && (keylen == 4 || keylen == 8)) {
+      mc->clc->k.lmin = keylen;
+      mc->clc->k.lmax = keylen;
+    }
+    size_t ordinal = 0;
 #ifndef cmp_uint_align2
     if (comparator == cmp_uint_align2)
       ordinal = keylen;
@@ -38272,7 +38300,7 @@ cursor_to_search_branch(const MDBX_cursor *mc) {
     if (comparator == cmp_uint_unaligned)
       ordinal = keylen;
     if (ordinal) {
-      if ((mc->txn->env->flags & MDBX_VALIDATION) == 0 && ordinal == mc->clc->k.lmin) {
+      if ((mc->txn->env->flags & MDBX_VALIDATION) == 0 && ordinal == mc->clc->k.lmin && ordinal == mc->clc->k.lmax) {
         if (ordinal == 4)
           return search_branch_uint32;
         if (ordinal == 8)
@@ -41101,10 +41129,10 @@ __dll_export
         0,
         14,
         1,
-        571,
+        573,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.571 */
-        {"2026-04-13T19:52:03+03:00", "04c6843494894ba2497b71d5b387bad3bfd5f60e", "562d63be0d49bb1a5c1e50e9b488eaec80a3b4b5", "v0.14.1-571-g562d63be"},
+                                        0.14.1.573 */
+        {"2026-04-16T01:58:52+03:00", "2b98d5434d62e5f19cfde35367cf9f9f7e312970", "8464f6c27b3ff7e53ca9aae04af8083d55af2b16", "v0.14.1-573-g8464f6c2"},
         sourcery};
 
 __dll_export
