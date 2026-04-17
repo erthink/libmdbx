@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-573-g8464f6c2 at 2026-04-16T01:58:52+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-574-g936b8871 at 2026-04-17T22:16:01+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -6744,8 +6744,8 @@ __cold int mdbx_dbi_stat(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest, siz
   if (unlikely(bytes != sizeof(MDBX_stat)) && bytes != size_before_modtxnid)
     return LOG_IFERR(MDBX_EINVAL);
 
-  dest->ms_psize = txn->env->ps;
   stat_get(&txn->dbs[dbi], dest, bytes);
+  dest->ms_psize = txn->env->ps;
   return MDBX_SUCCESS;
 }
 
@@ -6794,6 +6794,7 @@ __cold int mdbx_enumerate_tables(const MDBX_txn *txn, MDBX_table_enum_func func,
 
     MDBX_stat stat;
     stat_get(tree, &stat, sizeof(stat));
+    stat.ms_psize = txn->env->ps;
     rc = func(ctx, txn, &name, tree->flags, &stat, dbi);
     if (rc != MDBX_SUCCESS)
       goto bailout;
@@ -41129,10 +41130,10 @@ __dll_export
         0,
         14,
         1,
-        573,
+        574,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.573 */
-        {"2026-04-16T01:58:52+03:00", "2b98d5434d62e5f19cfde35367cf9f9f7e312970", "8464f6c27b3ff7e53ca9aae04af8083d55af2b16", "v0.14.1-573-g8464f6c2"},
+                                        0.14.1.574 */
+        {"2026-04-17T22:16:01+03:00", "ffd05a8a91d1a81857b6c9a2cd81e48358577610", "936b887140b277574ddd74dea0b66af938f9935d", "v0.14.1-574-g936b8871"},
         sourcery};
 
 __dll_export
