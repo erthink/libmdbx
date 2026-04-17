@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 82d2adb10adb4d2952bf375face1f4c1ac7dcdab07fb442cb7925d8c9de1c43e_v0_13_11_24_g53b010b4
+#define MDBX_BUILD_SOURCERY 20e978046254f666a9f51e7604a66c5ed9a0beceb3877fb8b8d4ce11e7f41bf1_v0_13_11_26_g6b493c04
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -9292,8 +9292,8 @@ __cold int mdbx_dbi_stat(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest, siz
   if (unlikely(bytes != sizeof(MDBX_stat)) && bytes != size_before_modtxnid)
     return LOG_IFERR(MDBX_EINVAL);
 
-  dest->ms_psize = txn->env->ps;
   stat_get(&txn->dbs[dbi], dest, bytes);
+  dest->ms_psize = txn->env->ps;
   return MDBX_SUCCESS;
 }
 
@@ -9342,6 +9342,7 @@ __cold int mdbx_enumerate_tables(const MDBX_txn *txn, MDBX_table_enum_func *func
 
     MDBX_stat stat;
     stat_get(tree, &stat, sizeof(stat));
+    stat.ms_psize = txn->env->ps;
     rc = func(ctx, txn, &name, tree->flags, &stat, dbi);
     if (rc != MDBX_SUCCESS)
       goto bailout;
@@ -37646,10 +37647,10 @@ __dll_export
         0,
         13,
         11,
-        24,
+        26,
         "", /* pre-release suffix of SemVer
-                                        0.13.11.24 */
-        {"2026-04-13T20:23:10+03:00", "93ad3d0f5c0675abb8f24bddf7a68204e2896cac", "53b010b41686a2ede44c7cc4859854c989d21f38", "v0.13.11-24-g53b010b4"},
+                                        0.13.11.26 */
+        {"2026-04-17T22:46:27+03:00", "f5e91cfb09b522ea6e672d6442358d2cc616058e", "6b493c0416f68af716bf63065174514957be37e0", "v0.13.11-26-g6b493c04"},
         sourcery};
 
 __dll_export
