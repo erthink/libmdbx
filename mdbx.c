@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-574-g936b8871 at 2026-04-17T22:16:01+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-576-gadae1965 at 2026-04-18T23:47:05+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -9292,7 +9292,7 @@ __cold const char *mdbx_liberr2str(int errnum) {
       nullptr /* MDBX_TLS_FULL (-30789): unused in MDBX */,
       "MDBX_TXN_FULL: Transaction has too many dirty pages,"
       " i.e transaction is too big",
-      "MDBX_CURSOR_FULL: Cursor stack limit reachedn - this usually indicates"
+      "MDBX_CURSOR_FULL: Cursor stack limit reached - this usually indicates"
       " corruption, i.e branch-pages loop",
       "MDBX_PAGE_FULL: Internal error - Page has no more space",
       "MDBX_UNABLE_EXTEND_MAPSIZE: Database engine was unable to extend"
@@ -37290,8 +37290,8 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   cASSERT0(cdst, cdst->top > 0);
   page_t *const top_page = cdst->pg[cdst->top];
   const indx_t top_indx = cdst->ki[cdst->top];
-  const int save_top = cdst->top;
   const uint16_t save_height = cdst->tree->height;
+  const int save_top = cdst->top;
   cursor_pop(cdst);
   rc = tree_rebalance(cdst);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -37309,9 +37309,10 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   }
 
   cASSERT0(cdst, page_numkeys(top_page) == dst_nkeys + src_nkeys);
-
+  const int new_top = save_top - save_height + cdst->tree->height;
   if (unlikely(pagetype != page_type(top_page))) {
     /* LY: LEAF-page becomes BRANCH, unable restore cursor's stack */
+    ERROR("unexpected top-page type 0x%x, expect 0x%x", page_type(top_page), pagetype);
     goto bailout;
   }
 
@@ -37322,9 +37323,10 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
     return MDBX_SUCCESS;
   }
 
-  const int new_top = save_top - save_height + cdst->tree->height;
   if (unlikely(new_top < 0 || new_top >= cdst->tree->height)) {
     /* LY: out of range, unable restore cursor's stack */
+    ERROR("cursor top-new %i is out of range %u..%u (top-before %i, height-before %i, height-new %i)", new_top, 0,
+          cdst->tree->height, save_top, save_height, cdst->tree->height);
     goto bailout;
   }
 
@@ -37337,10 +37339,7 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
     return MDBX_SUCCESS;
   }
 
-  page_t *const stub_page = (page_t *)(~(uintptr_t)top_page);
-  const indx_t stub_indx = top_indx;
-  if (save_height > cdst->tree->height && ((cdst->pg[save_top] == top_page && cdst->ki[save_top] == top_indx) ||
-                                           (cdst->pg[save_top] == stub_page && cdst->ki[save_top] == stub_indx))) {
+  if (save_height > cdst->tree->height && cdst->pg[save_top] == top_page && cdst->ki[save_top] == top_indx) {
     /* LY: restore cursor stack */
     cdst->pg[new_top] = top_page;
     cdst->ki[new_top] = top_indx;
@@ -37355,7 +37354,12 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   }
 
 bailout:
-  /* LY: unable restore cursor's stack */
+  ERROR("unable restore %scursor stack after merge; "
+        " new: height %i top %i top-idx %i top-page %p;"
+        " before: height %i top %i, top-indx %i top-page %p",
+        is_inner(cdst) ? "sub-" : "", cdst->tree->height, new_top, cdst->ki[save_top],
+        __Wpedantic_format_voidptr(cdst->pg[save_top]), save_height, save_top, top_indx,
+        __Wpedantic_format_voidptr(top_page));
   be_poor(cdst);
   return MDBX_CURSOR_FULL;
 }
@@ -41130,10 +41134,10 @@ __dll_export
         0,
         14,
         1,
-        574,
+        576,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.574 */
-        {"2026-04-17T22:16:01+03:00", "ffd05a8a91d1a81857b6c9a2cd81e48358577610", "936b887140b277574ddd74dea0b66af938f9935d", "v0.14.1-574-g936b8871"},
+                                        0.14.1.576 */
+        {"2026-04-18T23:47:05+03:00", "912fd0366d9808683e099ee101d31e49ac24f741", "adae1965975c678bae3ad00a0bcb58eee6e16c11", "v0.14.1-576-gadae1965"},
         sourcery};
 
 __dll_export
