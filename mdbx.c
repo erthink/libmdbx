@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 20e978046254f666a9f51e7604a66c5ed9a0beceb3877fb8b8d4ce11e7f41bf1_v0_13_11_26_g6b493c04
+#define MDBX_BUILD_SOURCERY 8f85529c726b14deb4d01178c3725df918fd123ac9fd9b9f092e1cec3aac3577_v0_13_11_30_gb8bc0bb2
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -11289,7 +11289,7 @@ __cold const char *mdbx_liberr2str(int errnum) {
       nullptr /* MDBX_TLS_FULL (-30789): unused in MDBX */,
       "MDBX_TXN_FULL: Transaction has too many dirty pages,"
       " i.e transaction is too big",
-      "MDBX_CURSOR_FULL: Cursor stack limit reachedn - this usually indicates"
+      "MDBX_CURSOR_FULL: Cursor stack limit reached - this usually indicates"
       " corruption, i.e branch-pages loop",
       "MDBX_PAGE_FULL: Internal error - Page has no more space",
       "MDBX_UNABLE_EXTEND_MAPSIZE: Database engine was unable to extend"
@@ -17652,7 +17652,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
       /* will subtract the final entry later */
       mc->tree->items -= mc->subcur->nested_tree.items - 1;
     } else {
-      if (!(node_flags(node) & N_TREE)) {
+      if ((node_flags(node) & N_TREE) == 0) {
         page_t *sp = node_data(node);
         cASSERT(mc, is_subpage(sp));
         sp->txnid = mp->txnid;
@@ -17667,26 +17667,32 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
           /* update table info */
           mc->subcur->nested_tree.mod_txnid = mc->txn->txnid;
           memcpy(node_data(node), &mc->subcur->nested_tree, sizeof(tree_t));
+          /* fix other sub-DB cursors pointed at the same sub-tree */
+          for (MDBX_cursor *m2 = mc->txn->cursors[cursor_dbi(mc)]; m2; m2 = m2->next) {
+            if (m2->pg[mc->top] == mp && m2->ki[mc->top] == mc->ki[mc->top] && is_related(mc, m2))
+              m2->subcur->nested_tree = mc->subcur->nested_tree;
+          }
         } else {
           /* shrink sub-page */
           node = node_shrink(mp, mc->ki[mc->top], node);
           mc->subcur->cursor.pg[0] = node_data(node);
           /* fix other sub-DB cursors pointed at sub-pages on this page */
           for (MDBX_cursor *m2 = mc->txn->cursors[cursor_dbi(mc)]; m2; m2 = m2->next) {
-            if (!is_related(mc, m2) || m2->pg[mc->top] != mp)
+            if (m2->pg[mc->top] != mp || !is_related(mc, m2))
               continue;
             const node_t *inner = node;
             if (unlikely(m2->ki[mc->top] >= page_numkeys(mp))) {
-              m2->flags = z_poor_mark;
+              m2->flags |= z_eof_hard | z_eof_soft | z_after_delete;
               m2->subcur->nested_tree.root = 0;
               m2->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
               continue;
             }
             if (m2->ki[mc->top] != mc->ki[mc->top]) {
               inner = page_node(mp, m2->ki[mc->top]);
-              if (node_flags(inner) & N_TREE)
+              if (node_flags(inner) != N_DUP)
                 continue;
-            }
+            } else
+              m2->subcur->nested_tree = mc->subcur->nested_tree;
             m2->subcur->cursor.pg[0] = node_data(inner);
           }
         }
@@ -34880,8 +34886,8 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   cASSERT(cdst, cdst->top > 0);
   page_t *const top_page = cdst->pg[cdst->top];
   const indx_t top_indx = cdst->ki[cdst->top];
-  const int save_top = cdst->top;
   const uint16_t save_height = cdst->tree->height;
+  const int save_top = cdst->top;
   cursor_pop(cdst);
   rc = tree_rebalance(cdst);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -34901,9 +34907,10 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   }
 
   cASSERT(cdst, page_numkeys(top_page) == dst_nkeys + src_nkeys);
-
+  const int new_top = save_top - save_height + cdst->tree->height;
   if (unlikely(pagetype != page_type(top_page))) {
     /* LY: LEAF-page becomes BRANCH, unable restore cursor's stack */
+    ERROR("unexpected top-page type 0x%x, expect 0x%x", page_type(top_page), pagetype);
     goto bailout;
   }
 
@@ -34914,9 +34921,10 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
     return MDBX_SUCCESS;
   }
 
-  const int new_top = save_top - save_height + cdst->tree->height;
   if (unlikely(new_top < 0 || new_top >= cdst->tree->height)) {
     /* LY: out of range, unable restore cursor's stack */
+    ERROR("cursor top-new %i is out of range %u..%u (top-before %i, height-before %i, height-new %i)", new_top, 0,
+          cdst->tree->height, save_top, save_height, cdst->tree->height);
     goto bailout;
   }
 
@@ -34929,10 +34937,7 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
     return MDBX_SUCCESS;
   }
 
-  page_t *const stub_page = (page_t *)(~(uintptr_t)top_page);
-  const indx_t stub_indx = top_indx;
-  if (save_height > cdst->tree->height && ((cdst->pg[save_top] == top_page && cdst->ki[save_top] == top_indx) ||
-                                           (cdst->pg[save_top] == stub_page && cdst->ki[save_top] == stub_indx))) {
+  if (save_height > cdst->tree->height && cdst->pg[save_top] == top_page && cdst->ki[save_top] == top_indx) {
     /* LY: restore cursor stack */
     cdst->pg[new_top] = top_page;
     cdst->ki[new_top] = top_indx;
@@ -34947,7 +34952,12 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   }
 
 bailout:
-  /* LY: unable restore cursor's stack */
+  ERROR("unable restore %scursor stack after merge; "
+        " new: height %i top %i top-idx %i top-page %p;"
+        " before: height %i top %i, top-indx %i top-page %p",
+        is_inner(cdst) ? "sub-" : "", cdst->tree->height, new_top, cdst->ki[save_top],
+        __Wpedantic_format_voidptr(cdst->pg[save_top]), save_height, save_top, top_indx,
+        __Wpedantic_format_voidptr(top_page));
   be_poor(cdst);
   return MDBX_CURSOR_FULL;
 }
@@ -37647,10 +37657,10 @@ __dll_export
         0,
         13,
         11,
-        26,
+        30,
         "", /* pre-release suffix of SemVer
-                                        0.13.11.26 */
-        {"2026-04-17T22:46:27+03:00", "f5e91cfb09b522ea6e672d6442358d2cc616058e", "6b493c0416f68af716bf63065174514957be37e0", "v0.13.11-26-g6b493c04"},
+                                        0.13.11.30 */
+        {"2026-04-24T15:51:49+03:00", "f93f94dcd65d52c7fb911bd9bb796c0c00f8d0aa", "b8bc0bb2dea1a7fd77a1601bb013b8dc8898af38", "v0.13.11-30-gb8bc0bb2"},
         sourcery};
 
 __dll_export
