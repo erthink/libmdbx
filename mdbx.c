@@ -4,7 +4,7 @@
 
 #define xMDBX_ALLOY 1  /* alloyed build */
 
-#define MDBX_BUILD_SOURCERY 8f85529c726b14deb4d01178c3725df918fd123ac9fd9b9f092e1cec3aac3577_v0_13_11_30_gb8bc0bb2
+#define MDBX_BUILD_SOURCERY a575a490fc080ca11e89ff6db9f0bd38aa830959905998cac0e45274b9e6bb0e_v0_13_12_0_gf619d43d
 
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
@@ -17669,7 +17669,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
           memcpy(node_data(node), &mc->subcur->nested_tree, sizeof(tree_t));
           /* fix other sub-DB cursors pointed at the same sub-tree */
           for (MDBX_cursor *m2 = mc->txn->cursors[cursor_dbi(mc)]; m2; m2 = m2->next) {
-            if (m2->pg[mc->top] == mp && m2->ki[mc->top] == mc->ki[mc->top] && is_related(mc, m2))
+            if (is_related(mc, m2) && m2->pg[mc->top] == mp && m2->ki[mc->top] == mc->ki[mc->top])
               m2->subcur->nested_tree = mc->subcur->nested_tree;
           }
         } else {
@@ -17678,7 +17678,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
           mc->subcur->cursor.pg[0] = node_data(node);
           /* fix other sub-DB cursors pointed at sub-pages on this page */
           for (MDBX_cursor *m2 = mc->txn->cursors[cursor_dbi(mc)]; m2; m2 = m2->next) {
-            if (m2->pg[mc->top] != mp || !is_related(mc, m2))
+            if (!is_related(mc, m2) || m2->pg[mc->top] != mp)
               continue;
             const node_t *inner = node;
             if (unlikely(m2->ki[mc->top] >= page_numkeys(mp))) {
@@ -37656,11 +37656,11 @@ __dll_export
     const struct MDBX_version_info mdbx_version = {
         0,
         13,
-        11,
-        30,
+        12,
+        0,
         "", /* pre-release suffix of SemVer
-                                        0.13.11.30 */
-        {"2026-04-24T15:51:49+03:00", "f93f94dcd65d52c7fb911bd9bb796c0c00f8d0aa", "b8bc0bb2dea1a7fd77a1601bb013b8dc8898af38", "v0.13.11-30-gb8bc0bb2"},
+                                        0.13.12 */
+        {"2026-04-30T16:36:24+03:00", "f5574b87cc64fa7a3a6b21ba33809258498d5f17", "f619d43dfbc36cbc9a1832503ce43f2e5223996e", "v0.13.12-0-gf619d43d"},
         sourcery};
 
 __dll_export
