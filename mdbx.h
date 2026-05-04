@@ -1,4 +1,4 @@
-/** This file is part of the libmdbx amalgamated source code (v0.14.1-580-g5055775a at 2026-04-24T01:06:56+03:00).
+/** This file is part of the libmdbx amalgamated source code (v0.14.1-594-gda9a3562 at 2026-05-04T11:11:39+03:00).
 
 \file mdbx.h
 \brief The libmdbx C API header file.
@@ -249,7 +249,7 @@ typedef mode_t mdbx_mode_t;
 #define __has_builtin(x) (0)
 #endif /* __has_builtin */
 
-/** \brief The 'pure' function attribute for optimization.
+/** \brief The `pure` function attribute for optimization.
  * \details Many functions have no effects except the return value and their
  * return value depends only on the parameters and/or global variables.
  * Such a function can be subject to common subexpression elimination
@@ -267,7 +267,7 @@ typedef mode_t mdbx_mode_t;
 #define MDBX_PURE_FUNCTION
 #endif /* MDBX_PURE_FUNCTION */
 
-/** \brief The 'pure nothrow' function attribute for optimization.
+/** \brief The `pure nothrow` function attribute for optimization.
  * \details Like \ref MDBX_PURE_FUNCTION with addition `noexcept` restriction
  * that is compatible to CLANG and proposed [[pure]]. */
 #if defined(DOXYGEN)
@@ -286,7 +286,7 @@ typedef mode_t mdbx_mode_t;
 #define MDBX_NOTHROW_PURE_FUNCTION
 #endif /* MDBX_NOTHROW_PURE_FUNCTION */
 
-/** \brief The 'const' function attribute for optimization.
+/** \brief The `const` function attribute for optimization.
  * \details Many functions do not examine any values except their arguments,
  * and have no effects except the return value. Basically this is just
  * slightly more strict class than the PURE attribute, since function
@@ -308,7 +308,7 @@ typedef mode_t mdbx_mode_t;
 #define MDBX_CONST_FUNCTION MDBX_PURE_FUNCTION
 #endif /* MDBX_CONST_FUNCTION */
 
-/** \brief The 'const nothrow' function attribute for optimization.
+/** \brief The `const nothrow` function attribute for optimization.
  * \details Like \ref MDBX_CONST_FUNCTION with addition `noexcept` restriction
  * that is compatible to CLANG and future [[const]]. */
 #if defined(DOXYGEN)
@@ -327,7 +327,7 @@ typedef mode_t mdbx_mode_t;
 #define MDBX_NOTHROW_CONST_FUNCTION MDBX_NOTHROW_PURE_FUNCTION
 #endif /* MDBX_NOTHROW_CONST_FUNCTION */
 
-/** \brief The 'deprecated' attribute to produce warnings when used.
+/** \brief The `deprecated` attribute to produce warnings when used.
  * \note This macro may be predefined as empty to avoid "deprecated" warnings.
  */
 #ifndef MDBX_DEPRECATED
@@ -1026,7 +1026,7 @@ LIBMDBX_API int mdbx_setup_debug_nofmt(MDBX_log_level_t log_level, MDBX_debug_fl
  *                       it could be MDBX_env, MDBX_txn,
  *                       MDBX_cursor or an internal page structure.
  * \param [in] obj_class A value corresponding to the object type:
- *                       'env', 'txn', 'cursor', etc. */
+ *                       `env`, `txn`, `cursor`, etc. */
 typedef void (*MDBX_panic_func)(const char *msg, const char *function, unsigned line, const void *obj,
                                 const char *obj_class) MDBX_CXX17_NOEXCEPT;
 
@@ -2199,7 +2199,7 @@ typedef enum MDBX_option {
   /** \brief Controls the in-process limit to grow a cache of dirty
    * pages for reuse in the current transaction.
    *
-   * \details A 'dirty page' refers to a page that has been updated in memory
+   * \details A `dirty page` refers to a page that has been updated in memory
    * only, the changes to a dirty page are not yet stored on disk.
    * To reduce overhead, it is reasonable to release not all such pages
    * immediately, but to leave some ones in cache for reuse in the current
@@ -2212,7 +2212,7 @@ typedef enum MDBX_option {
   /** \brief Controls the in-process limit of a pre-allocated memory items
    * for dirty pages.
    *
-   * \details A 'dirty page' refers to a page that has been updated in memory
+   * \details A `dirty page` refers to a page that has been updated in memory
    * only, the changes to a dirty page are not yet stored on disk.
    * Without \ref MDBX_WRITEMAP dirty pages are allocated from memory and
    * released when a transaction is committed. To reduce overhead, it is
@@ -2226,7 +2226,7 @@ typedef enum MDBX_option {
   /** \brief Controls the in-process limit of dirty pages
    * for a write transaction.
    *
-   * \details A 'dirty page' refers to a page that has been updated in memory
+   * \details A `dirty page` refers to a page that has been updated in memory
    * only, the changes to a dirty page are not yet stored on disk.
    * Without \ref MDBX_WRITEMAP dirty pages are allocated from memory and will
    * be busy until are written to disk. Therefore for a large transactions is
@@ -4670,7 +4670,7 @@ LIBMDBX_API int mdbx_txn_park(MDBX_txn *txn, bool autounpark);
  *                           either released using \ref mdbx_txn_abort().
  *
  * \retval MDBX_RESULT_TRUE  The reading transaction was ousted but has now been restarted to read recent
- *                           MVCC-snapshot, since `restart_if_ousted` was set to `true'.
+ *                           MVCC-snapshot, since `restart_if_ousted` was set to `true`.
  *
  * \retval MDBX_BAD_TXN      The transaction has already been finished either it has not been started,
  *                           or it is not a reading transaction. */
@@ -4734,7 +4734,7 @@ LIBMDBX_API int mdbx_txn_refresh(MDBX_txn *txn);
  * \see mdbx_canary_get()
  *
  * The `x`, `y` and `z` values could be set by \ref mdbx_canary_put(), while the
- * 'v' will be always set to the transaction number. Updated values becomes
+ * `v` will be always set to the transaction number. Updated values becomes
  * visible outside the current transaction only after it was committed. Current
  * values could be retrieved by \ref mdbx_canary_get(). */
 struct MDBX_canary {
@@ -4753,7 +4753,7 @@ typedef struct MDBX_canary MDBX_canary;
  * \param [in] canary  A optional pointer to \ref MDBX_canary structure for `x`,
  *              `y` and `z` values from.
  *            - If canary is NOT NULL then the `x`, `y` and `z` values will be
- *              updated from given canary argument, but the 'v' be always set
+ *              updated from given canary argument, but the `v` be always set
  *              to the current transaction number if at least one `x`, `y` or
  *              `z` values have changed (i.e. if `x`, `y` and `z` have the same
  *              values as currently present then nothing will be changes or
@@ -6069,13 +6069,13 @@ LIBMDBX_API int mdbx_cursor_scan(MDBX_cursor *cursor, MDBX_predicate_func predic
  *
  * \details The function accepts a cursor, which should be bound to some transaction and a table DBI-descriptor,
  * performs the initial cursor positioning determined by the `from_op` argument, as well as the arguments `from_key`
- * and `from_value'. Next, each key-value pair is probed using the given predicative function `predict`, and then,
+ * and `from_value`. Next, each key-value pair is probed using the given predicative function `predict`, and then,
  * if necessary, move on to the next using the `turn_op` operation, until one of the four events occurs:
  *
  *  - the end of data is reached;
  *  - an error occurs when positioning the cursor;
  *  - the probing function returns \ref MDBX_RESULT_TRUE,
- *    signaling the need to stop further scanning.;
+ *    signaling the need to stop further scanning;
  *  - the probing function returns a value other than \ref MDBX_RESULT_FALSE or \ref MDBX_RESULT_TRUE,
  *    signaling an error.
  *
@@ -6143,7 +6143,7 @@ LIBMDBX_API int mdbx_cursor_scan_from(MDBX_cursor *cursor, MDBX_predicate_func p
  * \ref MDBX_DUPSORT option. For `MDBX_DUPSORT` tables please
  * use \ref MDBX_GET_MULTIPLE and \ref MDBX_NEXT_MULTIPLE.
  *
- * The number of key and value items is returned in the `size_t count`
+ * The number of key and value items is returned in the `count`
  * refers. The addresses and lengths of the keys and values are returned in the
  * array to which `pairs` refers.
  * \see mdbx_cursor_get()
@@ -6309,20 +6309,121 @@ LIBMDBX_API int mdbx_cursor_del(MDBX_cursor *cursor, MDBX_put_flags_t flags);
  * \param [in] end_including        The boolean flag determines whether the end of the given
  *                                  interval should be included in the range to be deleted.
  *
- * \param [out] number_of_affected  Address to store the result
- *                                  number of removed items.
+ * \param [out] number_of_affected  Address to store the result number of removed items.
  *
  * \see mdbx_cursor_bunch_delete()
+ *
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
- * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
- *                               by current thread.
- * \retval MDBX_ENODATA       One or both of the given cursor(s) is not positioned to a data.
- * \retval MDBX_TXN_FULL      The transaction has too many dirty pages.
- * \retval MDBX_EACCES        An attempt was made to write in a read-only transaction.
- * \retval MDBX_EINVAL        An invalid parameter was specified. */
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned by current thread.
+ * \retval MDBX_ENODATA          One or both of the given cursor(s) is not positioned to a data,
+ *                               or position of `begin` cursor is after the `end` cursor.
+ * \retval MDBX_TXN_FULL         The transaction has too many dirty pages.
+ * \retval MDBX_EACCES           An attempt was made to write in a read-only transaction.
+ * \retval MDBX_EINVAL           An invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_delete_range(MDBX_cursor *begin, MDBX_cursor *end, bool end_including,
                                          uint64_t *number_of_affected);
+
+/** \brief Calculates the distance between the cursors at the specified B-tree level.
+ * \ingroup c_cursors
+ *
+ * The value of the `deepness` parameter has a fundamental impact on the result since it limits the level of a B-tree,
+ * at which the difference between the cursor positions is calculated, where zero corresponds to the root of a B-tree
+ * and increases to a leaves. Lower `deepness` values allows to quickly get a rough result, avoiding reading the pages
+ * of a B-tree. Large enough `deepness` values allows to find out the exact number of elements between the cursors, but
+ * this will require reading all the leaf pages between ones. In order for the returned result to match the number of
+ * keys and values, the `deepness` must be at least the height of a B-tree, adding the height of nested B-trees for any
+ * kinds of "dupsort" tables. If in doubt, use a deliberately large value such as `INT_MAX` or just the `42`.
+ *
+ * \param [in] first             Cursor pointing to the first element or NULL to using the begin of a table.
+ *                               Either the `first` or the `last` must not be NULL.
+ *
+ * \param [in] last              Cursor pointing to the end of the range or NULL to using the end of a table.
+ *                               Either the `first` or the `last` must not be NULL.
+ *
+ * \param [out] distance         The address for storing the result calculated distance.
+ *
+ * \param [in] deepness          Limits the level of a B-tree, at which the difference between the cursor positions
+ *                               is calculated, where zero corresponds to the root of a B-tree
+ *                               and increases to a leaves.
+ *
+ * \see mdbx_cursor_scroll()
+ * \see mdbx_cursor_distribute()
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_ENODATA          One or both of the given cursor(s) is not positioned to a data.
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned by current thread.
+ * \retval MDBX_EINVAL           An invalid parameter was specified. */
+LIBMDBX_API int mdbx_cursor_distance(const MDBX_cursor *first, const MDBX_cursor *last, intptr_t *distance,
+                                     unsigned deepness);
+
+/** \brief Scrolls the cursor to the specified number of positions at the specified B-tree level.
+ * \ingroup c_cursors
+ *
+ * The value of the `deepness` parameter has a fundamental effect on the result, since it determines the level of the
+ * B-tree at which the cursor movement steps are performed, where zero corresponds to the root of the B-tree and
+ * increases to a leaves. In order for the performed cursor movement to match the number of keys and values, the
+ * `deepness` must be at least the height of a B-tree, adding the height of nested B-trees for any kinds of "dupsort"
+ * tables. If in doubt, use a deliberately large value such as `INT_MAX` or just the `42`.
+ *
+ * \param [in, out] cursor       The cursor handle to scroll.
+ *
+ * \param [in] amount            The number of logical steps by which the cursor will be moved at the specified
+ *                               level of a b-tree. A positive value corresponds to moving forward in the order
+ *                               of keys and values, to the end of a table, and a negative value means moving
+ *                               in the backward order.
+ *
+ * \param [in] deepness          Defines the level of a B-tree, at which the cursor movement steps are performed,
+ *                               where zero corresponds to the root of a B-tree and increases to a leaves.
+ *
+ * \see mdbx_cursor_distance()
+ * \see mdbx_cursor_distribute()
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_ENODATA          Given cursor is not positioned to a data.
+ * \retval MDBX_NOTFOUND         The end of the data was reached before the cursor moved
+ *                               by the requested number of steps.
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned by current thread.
+ * \retval MDBX_EINVAL           An invalid parameter was specified. */
+LIBMDBX_API int mdbx_cursor_scroll(MDBX_cursor *cursor, intptr_t amount, unsigned deepness);
+
+/** \brief Distributes cursors for multithreaded range scanning.
+ * \ingroup c_cursors
+ *
+ * The value of the `deepness` parameter has a fundamental effect on the result, since it determines the level of the
+ * B-tree at which the cursors distribution are performed, where zero corresponds to the root of the B-tree and
+ * increases to a leaves. In order for the performed cursor movement to match the number of keys and values, the
+ * `deepness` must be at least the height of a B-tree, adding the height of nested B-trees for any kinds of "dupsort"
+ * tables. If in doubt, use a deliberately large value such as `INT_MAX` or just the `42`.
+ *
+ * \param [in] first             Cursor pointing to the first element or NULL to using the begin of a table.
+ *                               Either the `first` or the `last` must not be NULL.
+ *
+ * \param [in] last              Cursor pointing to the end of the range or NULL to using the end of a table.
+ *                               Either the `first` or the `last` must not be NULL.
+ *
+ * \param [in, out] array        The pointer to an array of cursors for distribute over a given range.
+ *
+ * \param [in] count             Number of element in the cursors array.
+ *
+ * \param [in] deepness          Defines the level of a B-tree, at which the cursors distribution is performed,
+ *                               where zero corresponds to the root of a B-tree and increases to a leaves.
+ *
+ * \see mdbx_cursor_distance()
+ * \see mdbx_cursor_scroll()
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_ENODATA          The `first` or `last` cursor(s) is not positioned to a data.
+ * \retval MDBX_RESULT_TRUE      The available positions in the specified range were not enough to distribute
+ *                               over all the cursors, some cursors remained unset and \ref mdbx_cursor_eof()
+ *                               will return \ref MDBX_RESULT_TRUE for ones.
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned by current thread.
+ * \retval MDBX_EINVAL           An invalid parameter was specified. */
+LIBMDBX_API int mdbx_cursor_distribute(const MDBX_cursor *first, const MDBX_cursor *last, MDBX_cursor **array,
+                                       intptr_t count, unsigned deepness);
 
 /** \brief Modes for deleting bunches of neighboring items with self-documenting names.
  *
@@ -6363,7 +6464,7 @@ typedef enum MDBX_bunch_action {
  *          some possible errors are:
  * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
  *                               by current thread.
- * \retval MDBX_ENODATA       The given cursor is not positioned to a data..
+ * \retval MDBX_ENODATA       The given cursor is not positioned to a data.
  * \retval MDBX_TXN_FULL      The transaction has too many dirty pages.
  * \retval MDBX_EACCES        An attempt was made to write in a read-only transaction.
  * \retval MDBX_EINVAL        An invalid parameter was specified. */
@@ -7173,7 +7274,7 @@ typedef struct MDBX_chk_context {
  * integration of application logic that verifies the integrity of a data structure above the key-value level, the
  * preparation and structured output of information about both the progress and the results of verification.
  *
- * All callback functions are optional, unused ones must be set to `nullptr'.
+ * All callback functions are optional, unused ones must be set to `nullptr`.
  *
  * \note This API has not been frozen yet, and there may be improvements and changes in subsequent versions.
  *
@@ -7208,7 +7309,7 @@ typedef struct MDBX_chk_callbacks {
  * \ingroup c_extra
  *
  * \details Interaction with the application code is implemented through callback functions provided by the application
- * using the 'cb` parameter. During such interaction, the application can monitor the verification process, including
+ * using the `cb` parameter. During such interaction, the application can monitor the verification process, including
  * skipping/filtering the processing of individual elements, as well as implement additional verification of the
  * structure and/or information, taking into account the purpose and semantic significance for an application. For
  * example, an application can check its own indexes and the correctness of database entries. It is for this purpose

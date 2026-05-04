@@ -413,6 +413,7 @@ Bindings
 | Ruby    | [ruby-mdbx](https://rubygems.org/gems/mdbx/)          | [Mahlon E. Smith](https://github.com/mahlonsmith) |
 | Zig     | [mdbx-zig](https://github.com/theseyan/lmdbx-zig)     | [Sayan J. Das](https://github.com/theseyan) |
 | NodeJS  | [mdbxmou](https://github.com/ikonopistsev/mdbxmou)    | [Igor Ikonopistsev](https://github.com/ikonopistsev) |
+| .NET    | [libmdbx-dotnet](https://public.git.amsoft.spb.ru/libmdbx/libmdbx-dotnet) | [Anton Maisak](mailto:anton@maisak.ru) |
 
 ##### Obsolete/Outdated/Unsupported:
 

@@ -1,4 +1,4 @@
-﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-580-g5055775a-dirty at 2026-04-24T01:06:56+03:00).
+﻿/// This file is part of the libmdbx amalgamated source code (v0.14.1-594-gda9a3562 at 2026-05-04T11:11:39+03:00).
 /// \file mdbx.h++
 /// \brief The libmdbx C++ API header file.
 ///
@@ -4159,6 +4159,7 @@ public:
   inline cursor(cursor &&) noexcept;
   inline ~cursor() noexcept;
   inline cursor_managed clone(void *your_context = nullptr) const;
+  inline cursor &assign(const cursor &);
   MDBX_CXX14_CONSTEXPR operator bool() const noexcept { return handle_ != nullptr; };
   MDBX_CXX14_CONSTEXPR operator const MDBX_cursor *() const noexcept { return handle_; }
   MDBX_CXX14_CONSTEXPR operator MDBX_cursor *() noexcept { return handle_; }
@@ -4475,6 +4476,34 @@ public:
   inline estimate_result estimate(const slice &key) const;
   inline estimate_result estimate(move_operation operation) const;
   inline estimate_result estimate(move_operation operation, slice &key) const;
+
+  static inline ptrdiff_t distance_between(const cursor from, const cursor to,
+                                           unsigned deepness = /* enough to cover whole tree height */ 42);
+  inline ptrdiff_t distance_from(const cursor from,
+                                 unsigned deepness = /* enough to cover whole tree height */ 42) const {
+    return distance_between(from, *this, deepness);
+  }
+  inline ptrdiff_t distance_to(const cursor to, unsigned deepness = /* enough to cover whole tree height */ 42) const {
+    return distance_between(*this, to, deepness);
+  }
+  inline ptrdiff_t distance_from_first(unsigned deepness = /* enough to cover whole tree height */ 42) const {
+    return distance_between(nullptr, *this, deepness);
+  }
+  inline ptrdiff_t distance_to_end(unsigned deepness = /* enough to cover whole tree height */ 42) const {
+    return distance_between(*this, nullptr, deepness);
+  }
+
+  inline bool scroll(intptr_t distable, unsigned deepness = /* enough to cover whole tree height */ 42,
+                     bool throw_notfound = true);
+
+  static inline bool distribute(const cursor from, const cursor to, cursor *cursors_array, intptr_t cursors_array_size,
+                                unsigned deepness = /* enough to cover whole tree height */ 42);
+
+  static inline bool distribute(const cursor from, const cursor to, const std::vector<cursor> &cursors,
+                                unsigned deepness = /* enough to cover whole tree height */ 42);
+
+  static inline bool distribute(const cursor from, const cursor to, const std::vector<cursor_managed> &cursors,
+                                unsigned deepness = /* enough to cover whole tree height */ 42);
 
   //----------------------------------------------------------------------------
 
@@ -6115,9 +6144,14 @@ inline ptrdiff_t txn::estimate_to_last(map_handle map, const slice &from) const 
 
 MDBX_CXX11_CONSTEXPR cursor::cursor(MDBX_cursor *ptr) noexcept : handle_(ptr) {}
 
+inline cursor &cursor::assign(const cursor &src) {
+  error::success_or_throw(::mdbx_cursor_copy(src.handle_, handle_));
+  return *this;
+}
+
 inline cursor_managed cursor::clone(void *your_context) const {
   cursor_managed clone(your_context);
-  error::success_or_throw(::mdbx_cursor_copy(handle_, clone.handle_));
+  clone.assign(*this);
   return clone;
 }
 
@@ -6405,6 +6439,49 @@ inline size_t cursor::put_multiple_samelength(const slice &key, const size_t val
   return args[1].iov_len /* done item count */;
 }
 
+inline ptrdiff_t cursor::distance_between(const cursor from, const cursor to, unsigned deepness) {
+  intptr_t distance = PTRDIFF_MIN;
+  error::success_or_throw(mdbx_cursor_distance(from, to, &distance, deepness));
+  return distance;
+}
+
+inline bool cursor::scroll(intptr_t distance, unsigned deepness, bool throw_notfound) {
+  const int err = ::mdbx_cursor_scroll(handle_, distance, deepness);
+  switch (err) {
+  case MDBX_SUCCESS:
+    MDBX_CXX20_LIKELY return true;
+  case MDBX_NOTFOUND:
+    if (!throw_notfound)
+      return false;
+    MDBX_CXX17_FALLTHROUGH /* fallthrough */;
+  default:
+    MDBX_CXX20_UNLIKELY error::throw_exception(err);
+  }
+}
+
+inline bool cursor::distribute(const cursor from, const cursor to, cursor *cursors_array, intptr_t cursors_array_size,
+                               unsigned deepness) {
+  static_assert(sizeof(cursors_array[0]) == sizeof(MDBX_cursor *), "oops");
+  const int err = ::mdbx_cursor_distribute(from, to, &cursors_array[0].handle_, cursors_array_size, deepness);
+  return error::boolean_or_throw(err);
+}
+
+inline bool cursor::distribute(const cursor from, const cursor to, const std::vector<cursor> &cursors_array,
+                               unsigned deepness) {
+  static_assert(sizeof(cursor) == sizeof(MDBX_cursor *), "oops");
+  const int err = ::mdbx_cursor_distribute(from, to, const_cast<MDBX_cursor **>(&cursors_array[0].handle_),
+                                           cursors_array.size(), deepness);
+  return error::boolean_or_throw(err);
+}
+
+inline bool cursor::distribute(const cursor from, const cursor to, const std::vector<cursor_managed> &cursors_array,
+                               unsigned deepness) {
+  static_assert(sizeof(cursor_managed) == sizeof(MDBX_cursor *), "oops");
+  const int err = ::mdbx_cursor_distribute(from, to, const_cast<MDBX_cursor **>(&cursors_array[0].handle_),
+                                           cursors_array.size(), deepness);
+  return error::boolean_or_throw(err);
+}
+
 //------------------------------------------------------------------------------
 
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const slice &);
@@ -6431,7 +6508,7 @@ inline ::std::ostream &operator<<(::std::ostream &out, const MDBX_error_t &errco
 
 //------------------------------------------------------------------------------
 
-/// \brief The `std:: namespace part of libmdbx C++ API
+/// \brief The `std` namespace part of libmdbx C++ API
 /// \ingroup cxx_api
 namespace std {
 
