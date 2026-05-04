@@ -1,4 +1,4 @@
-/* This file is part of the libmdbx amalgamated source code (v0.14.1-594-gda9a3562 at 2026-05-04T11:11:39+03:00).
+/* This file is part of the libmdbx amalgamated source code (v0.14.1-595-ge91db90a at 2026-05-04T12:55:04+03:00).
  *
  * libmdbx (aka MDBX) is an extremely fast, compact, powerful, embeddedable, transactional key-value storage engine with
  * open-source code. MDBX has a specific set of properties and capabilities, focused on creating unique lightweight
@@ -41746,10 +41746,10 @@ __dll_export
         0,
         14,
         1,
-        594,
+        595,
         "", /* pre-release suffix of SemVer
-                                        0.14.1.594 */
-        {"2026-05-04T11:11:39+03:00", "b9e37cf77adc825c0f15bc9a3c7f08358a26b859", "da9a3562874875e26492adf08b96009b7ef72fc3", "v0.14.1-594-gda9a3562"},
+                                        0.14.1.595 */
+        {"2026-05-04T12:55:04+03:00", "72248bf301937e615612c28b65538c52e2177d58", "e91db90a8210a3d29d23db915ea628d7e47a4440", "v0.14.1-595-ge91db90a"},
         sourcery};
 
 __dll_export

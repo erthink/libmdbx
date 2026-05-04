@@ -9,7 +9,7 @@ Donations are welcome to ETH `0xD104d8f8B2dC312aaD74899F83EBf3EEBDC1EA3A`,
 BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3NDMyS5wXJgfeMTmJznRi`.
 Всё будет хорошо!
 
-## v0.14.2 в разработке без конкретизации даты выпуска
+## v0.14.2 "Буревестник" (stormy petrel, aka Bourevestnik) запланирован на 2026-05-14
 
 Продолжение развития нового куста/линейки версий с добавлением функционала, расширением API и внутренними переработками.
 
@@ -53,8 +53,9 @@ BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3N
     - добавлена функция `mdbx_gc_info()` для получения информации о GC, использовании страниц, с возможностью итерирования содержимого GC.
     - добавлена функция `mdbx_env_defrag()` для явной дефрагментации БД, а также утилита `mdbx_defrag`.
     - добавлена опция `MDBX_opt_split_reserve` для управления заполненностью страниц дерева при их расщеплении.
+    - добавлены функции `mdbx_cursor_distance()`, `mdbx_cursor_scroll()` и `mdbx_cursor_distribute()` для упрощения многопоточного параллельного сканирования.
 
- - Поддержка Harmony OS (OHOS).
+ - Поддержка Harmony OS (OHOS) и Haiku OS.
 
  - Операции с плавающей точкой больше не используются как внутри библиотеки, так и в утилитах, а из сценариев сборки удалено связывание c `libm`.
 
